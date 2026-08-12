@@ -44,6 +44,11 @@ Nextcloud is not part of the target backend. Radicale remains the CalDAV
 authority, Memos remains the memo authority, and SFTPGo remains the planned
 purpose-built file transfer service where needed.
 
+Backend services should keep independent service-native or KaosGovernor
+namespaces instead of being grouped under a broad `kaosgdd` namespace. The
+`KaosGDD` name is reserved for the retained family-facing application identity,
+especially `family.kaosgdd.net`.
+
 No main personal KaosGDD web application is planned. Its repository may remain
 as reference, and a new personal UI may be considered later only when native
 iOS clients and Discord leave a concrete workflow unmet.
