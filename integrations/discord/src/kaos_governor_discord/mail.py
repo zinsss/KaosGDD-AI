@@ -45,7 +45,7 @@ def _render_mail_summary_candidate(
 ) -> str:
     header = "\n".join(
         (
-            "## Naver Mail",
+            "### Naver Mail",
             f"**Folder** {_escaped(mail.mailbox[:160])}",
             f"**From** {_escaped(_display_sender(mail.sender)[:300])}",
             f"**Date** {_escaped(mail.received_at[:128])}",
@@ -57,7 +57,10 @@ def _render_mail_summary_candidate(
         sections.append("***Attachment:***\n" + "\n".join(attachments))
     preview = "\n".join(mail.preview.splitlines()[:15]).strip() or "(No preview text)"
     if preview_limit:
-        sections.append(_escaped(preview[:preview_limit].rstrip()))
+        escaped_preview = _escaped(preview[:preview_limit].rstrip())
+        sections.append(
+            "\n".join(f"> {line}" if line else ">" for line in escaped_preview.splitlines())
+        )
     return "\n\n".join(sections)
 
 

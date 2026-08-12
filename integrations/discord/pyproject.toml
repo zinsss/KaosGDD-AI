@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kaos-governor-discord"
-version = "0.3.6"
+version = "0.3.7"
 description = "Restricted Discord transport for KaosGovernor"
 requires-python = ">=3.12"
 dependencies = ["discord.py==2.7.1"]
