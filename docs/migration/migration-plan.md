@@ -138,6 +138,8 @@ Rollback:
 
 - Deploy Family KaosGDD as the supported custom web application.
 - Do not deploy the main KaosGDD UI. Retain its repository as reference only.
+  The old `kaosgdd-portal` personal/main route is deprecated; keep only the
+  family portal surface needed for `family.kaosgdd.net`.
 - Deploy Caddy and one cloudflared connector.
 - Route to Family KaosGDD and service-native web applications through private
   addresses.
@@ -198,9 +200,11 @@ Target services that remain:
 - Tailscale
 - internal reverse proxy only if still required
 
-Remove old Brain, any remaining main personal web, adapter, edge, or
-notification containers only after their replacements have passed the
-observation period. Family KaosGDD is retained.
+Rename old `kaosgdd-brain` to transitional `kaosgdd-gov` during the H3 move if
+it still has unported deterministic API duties. Remove `kaosgdd-gov`, any
+remaining main personal web, adapter, edge, or notification containers only
+after their KaosGovernor replacements have passed the observation period.
+Family KaosGDD is retained.
 
 ## Production Cutover Rules
 

@@ -210,14 +210,14 @@ interrupt PACS, DICOM receipt, fax transport, Paperless, or RustDesk.
 | RustDesk | Office Kaos | Stay |
 | Radicale | H3+ | Migrate data/config in controlled write freeze |
 | Memos | H3+ | Migrate SQLite/resources in controlled write freeze |
-| current KaosGDD Brain | H3+ Governor | Port deterministic modules one domain at a time |
+| current KaosGDD Brain / transitional `kaosgdd-gov` | H3+ KaosGovernor | Rename during migration to reflect deterministic-governor duties, then port modules into KaosGovernor one domain at a time |
 | Brain PostgreSQL | H3+ Governor PostgreSQL | Explicit schema/data migration only |
 | calendar adapter | H3+ KaosCalendar | Absorb and retire after parity tests |
 | Governor Discord bot | H3+ | Move state and credentials after live comparison |
 | upstream Memos web | H3+ | Retain as direct service UI; Memos remains authoritative |
 | custom personal Memos web | Retire after parity | Discord plus upstream Memos replace it |
-| main KaosGDD portal | Not deployed | Keep repository as reference; build again only for a demonstrated need |
-| Family KaosGDD | H3+ | Retain as primary family interface |
+| `kaosgdd-portal` personal/main route | Deprecated | Do not carry forward as a personal portal; keep only what is required to serve Family KaosGDD during transition |
+| Family KaosGDD at `family.kaosgdd.net` | H3+ | Retain as the only custom KaosGDD portal and primary family interface |
 | Caddy/cloudflared | H3+ | Move hostname routes one at a time |
 | Vaultwarden | H3+ | Migrate only after export/backup and client verification |
 | SFTPGo | H3+ by default | Verify whether any clinic-only storage should remain office-side |
@@ -343,6 +343,13 @@ The existing main KaosGDD repository may be retained as design and migration
 reference, but it is not deployed as a fallback. A future personal UI starts as
 a separately justified project if native apps and Discord expose a concrete
 workflow gap. This decision does not affect Family KaosGDD.
+
+During the H3 migration, the legacy `kaosgdd-brain` service may be renamed to
+`kaosgdd-gov` to make its deterministic backend role explicit. That name is
+transitional: its remaining domain logic must still move into KaosGovernor
+modules before the legacy service and database are retired. The old
+`kaosgdd-portal` main/personal route is deprecated; `family.kaosgdd.net` is the
+only retained custom KaosGDD portal.
 
 ## 6. Data Ownership
 
@@ -731,8 +738,9 @@ Actions:
 1. Migrate Vaultwarden with export, backup, and client tests.
 2. Migrate SFTPGo after classifying clinic versus personal storage.
 3. Retire RHWP only after confirming Polaris/manual workflows cover all needs.
-4. Stop old Brain, calendar adapter, Telegram, any remaining main personal
-   portal, and bridge containers. Do not stop Family KaosGDD.
+4. Stop transitional `kaosgdd-gov`, calendar adapter, Telegram, any remaining
+   main personal portal, and bridge containers after their KaosGovernor
+   replacements pass observation. Do not stop Family KaosGDD.
 5. Keep archived Compose/config/data through their observation periods.
 
 No PACS, DICOM, Paperless archive, fax spool, or RustDesk migration is included.

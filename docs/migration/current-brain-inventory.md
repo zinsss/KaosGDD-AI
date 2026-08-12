@@ -1,6 +1,11 @@
 # Current Brain Conversion Inventory
 
-The existing `zinsss/KaosGDD` `apps/brain` implementation remains production code until replacements are verified. This document records the intended destination of its current capabilities.
+The existing `zinsss/KaosGDD` `apps/brain` implementation remains production
+code until replacements are verified. During the H3 migration it may be renamed
+from `kaosgdd-brain` to transitional `kaosgdd-gov` so operators do not confuse
+it with the future H4 KaosBrain AI plane. That rename is not the replacement;
+its deterministic modules still need to be ported into KaosGovernor before the
+legacy service and database can be retired.
 
 ## Retain and Convert
 
@@ -37,7 +42,7 @@ The existing `zinsss/KaosGDD` `apps/brain` implementation remains production cod
 
 ## Retire Only After Verified Replacement
 
-- current `kaosgdd-brain` containers
+- transitional `kaosgdd-gov` containers after their deterministic modules are absorbed into KaosGovernor
 - current Brain PostgreSQL
 - Telegram workflow presentation
 - obsolete notification providers
@@ -45,4 +50,6 @@ The existing `zinsss/KaosGDD` `apps/brain` implementation remains production cod
 - old calendar adapter container
 - old fax bridge implementation
 
-Retirement requires a verified replacement, data reconciliation, rollback instructions, and an observation period. A renamed module is not sufficient evidence.
+Retirement requires a verified replacement, data reconciliation, rollback
+instructions, and an observation period. A renamed module is not sufficient
+evidence.
