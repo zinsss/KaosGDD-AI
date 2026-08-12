@@ -31,19 +31,46 @@ class SettingsTests(unittest.TestCase):
         with self.assertRaises(ConfigurationError):
             Settings.from_env({**BASE_ENV, "MAIL_NAVER_ENABLED": "true"})
         with self.assertRaises(ConfigurationError):
-            Settings.from_env({**BASE_ENV, "MAIL_NAVER_ENABLED": "true", "MAIL_DISCORD_CHANNEL_ID": "999"})
+            Settings.from_env(
+                {**BASE_ENV, "MAIL_NAVER_ENABLED": "true", "MAIL_ARCHIVE_DISCORD_CHANNEL_ID": "999"}
+            )
         settings = Settings.from_env(
-            {**BASE_ENV, "MAIL_NAVER_ENABLED": "true", "MAIL_DISCORD_CHANNEL_ID": "300"}
+            {**BASE_ENV, "MAIL_NAVER_ENABLED": "true", "MAIL_ARCHIVE_DISCORD_CHANNEL_ID": "300"}
         )
-        self.assertEqual(settings.mail_channel_id, 300)
+        self.assertEqual(settings.mail_archive_channel_id, 300)
 
     def test_organizer_also_requires_an_allowed_mail_channel(self) -> None:
         with self.assertRaises(ConfigurationError):
             Settings.from_env({**BASE_ENV, "MAIL_ORGANIZER_ENABLED": "true"})
         settings = Settings.from_env(
-            {**BASE_ENV, "MAIL_ORGANIZER_ENABLED": "true", "MAIL_DISCORD_CHANNEL_ID": "300"}
+            {**BASE_ENV, "MAIL_ORGANIZER_ENABLED": "true", "MAIL_ORGANIZER_DISCORD_CHANNEL_ID": "300"}
         )
-        self.assertEqual(settings.mail_channel_id, 300)
+        self.assertEqual(settings.mail_organizer_channel_id, 300)
+
+    def test_archive_and_organizer_can_use_distinct_channels(self) -> None:
+        settings = Settings.from_env(
+            {
+                **BASE_ENV,
+                "MAIL_NAVER_ENABLED": "true",
+                "MAIL_ORGANIZER_ENABLED": "true",
+                "MAIL_ARCHIVE_DISCORD_CHANNEL_ID": "300",
+                "MAIL_ORGANIZER_DISCORD_CHANNEL_ID": "301",
+            }
+        )
+        self.assertEqual(settings.mail_archive_channel_id, 300)
+        self.assertEqual(settings.mail_organizer_channel_id, 301)
+
+    def test_legacy_single_channel_remains_a_compatibility_fallback(self) -> None:
+        settings = Settings.from_env(
+            {
+                **BASE_ENV,
+                "MAIL_NAVER_ENABLED": "true",
+                "MAIL_ORGANIZER_ENABLED": "true",
+                "MAIL_DISCORD_CHANNEL_ID": "300",
+            }
+        )
+        self.assertEqual(settings.mail_archive_channel_id, 300)
+        self.assertEqual(settings.mail_organizer_channel_id, 300)
 
 
 class AccessPolicyTests(unittest.TestCase):

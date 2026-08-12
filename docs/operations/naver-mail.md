@@ -19,7 +19,8 @@ OpenClaw, an LLM, or conversational state.
 
 ## Discord delivery
 
-New mail is sent to the explicitly allowlisted `MAIL_DISCORD_CHANNEL_ID` as a
+New target-folder mail is sent to the explicitly allowlisted
+`MAIL_ARCHIVE_DISCORD_CHANNEL_ID` as a
 Markdown summary followed by eligible attachments. Dynamic mail content is
 escaped and Discord mentions are disabled. Naver remains the only mail source of
 truth; Governor state contains UID checkpoints and delivery IDs, not mail bodies.
@@ -32,7 +33,8 @@ while excluding Sent, Drafts, Trash, Junk, and the configured trash folder.
 Header scans and previews use `BODY.PEEK`; opening or importing a message does
 not mark it read.
 
-Discord uses a paginated select menu because one message can contain at most 25
+The organizer is sent to `MAIL_ORGANIZER_DISCORD_CHANNEL_ID`. Discord uses a
+paginated select menu because one message can contain at most 25
 select options. Actions preserve the legacy behavior:
 
 - `Mark Read` sets `\\Seen` in the source Naver folder.
@@ -77,7 +79,8 @@ MAIL_NAVER_TIMEOUT_SECONDS=20
 MAIL_NAVER_MAX_ATTACHMENT_MB=20
 MAIL_NAVER_PREVIEW_CHARS=2200
 MAIL_NAVER_MARK_EXISTING_ON_FIRST_RUN=true
-MAIL_DISCORD_CHANNEL_ID=
+MAIL_ARCHIVE_DISCORD_CHANNEL_ID=
+MAIL_ORGANIZER_DISCORD_CHANNEL_ID=
 MAIL_ORGANIZER_ENABLED=true
 MAIL_ORGANIZER_STATE_PATH=/data/mail/discord-organizer.json
 MAIL_ORGANIZER_MAX_ITEMS=30

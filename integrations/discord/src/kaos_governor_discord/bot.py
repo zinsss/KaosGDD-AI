@@ -121,8 +121,8 @@ class GovernorBot(discord.Client):
         self.mail_poller = NaverMailPoller(naver_config)
         self.mail_organizer = NaverMailOrganizer(MailOrganizerConfig.from_env(), naver_config)
         self.discord_mail_organizer = (
-            DiscordMailOrganizer(self, self.mail_organizer, self.policy, settings.mail_channel_id)
-            if settings.mail_channel_id is not None
+            DiscordMailOrganizer(self, self.mail_organizer, self.policy, settings.mail_organizer_channel_id)
+            if settings.mail_organizer_channel_id is not None
             else None
         )
         self._health = HealthServer(settings.health_host, settings.health_port, self._health_status)
@@ -344,7 +344,7 @@ class GovernorBot(discord.Client):
             await asyncio.sleep(self.mail_organizer.config.scheduler_poll_seconds)
 
     async def _mail_channel(self) -> discord.abc.Messageable:
-        channel_id = self.settings.mail_channel_id
+        channel_id = self.settings.mail_archive_channel_id
         if channel_id is None:
             raise RuntimeError("mail_channel_not_configured")
         channel = self.get_channel(channel_id) or await self.fetch_channel(channel_id)

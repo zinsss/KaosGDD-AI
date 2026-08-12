@@ -14,10 +14,11 @@ are disabled, and oversized messages fail explicitly instead of being silently
 truncated. Domain adapters should use this renderer rather than assembling
 untrusted Markdown directly.
 
-Version `0.3.0` hosts the first deterministic Governor modules: read-only
+Version `0.3.1` hosts the first deterministic Governor modules: read-only
 Naver IMAP polling with UID checkpointing and Discord Markdown delivery. The mail
 logic lives under `apps/governor`; the Discord package only renders and transports
-the resulting typed mail and attachment objects. It also provides the scheduled
+the resulting typed mail and attachment objects. Archive delivery and organizer
+controls use separate allowlisted channels. It also provides the scheduled
 all-folder unread organizer with paginated controls and confirmed Naver actions.
 
 See [the deployment runbook](../../docs/operations/discord-governor-bot.md).
