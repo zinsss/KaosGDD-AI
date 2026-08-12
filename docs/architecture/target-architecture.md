@@ -1,5 +1,9 @@
 # Target Architecture
 
+The detailed host, service-placement, interaction, security, backup, and
+migration decisions are maintained in the
+[H4 Ultra + H3+ production plan](h4-h3-production-plan.md).
+
 ## Overview
 
 ```text

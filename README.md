@@ -71,6 +71,7 @@ Upstream applications will be referenced using pinned release versions or image 
 ## Documents
 
 - [Target architecture](docs/architecture/target-architecture.md)
+- [Detailed H4/H3 production plan](docs/architecture/h4-h3-production-plan.md)
 - [Planned repository structure](docs/architecture/planned-repository-structure.md)
 - [Security and trust boundaries](docs/architecture/security-boundaries.md)
 - [Current Brain conversion inventory](docs/migration/current-brain-inventory.md)
