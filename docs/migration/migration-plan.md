@@ -140,9 +140,9 @@ Rollback:
 - Do not deploy the main KaosGDD UI. Retain its repository as reference only.
   The old `kaosgdd-portal` personal/main route is deprecated; keep only the
   family portal surface needed for `family.kaosgdd.net`.
-- Keep backend services in independent service-native or KaosGovernor
-  namespaces. Do not rename Radicale, Memos, Vaultwarden, SFTPGo, Caddy, or
-  cloudflared into a `kaosgdd-*` namespace.
+- Keep ready-made backend services under their native operational names. They
+  remain part of the KaosGDD project deployment, but do not rename Radicale,
+  Memos, Vaultwarden, SFTPGo, Caddy, or cloudflared into `kaosgdd-*` services.
 - Deploy Caddy and one cloudflared connector.
 - Route to Family KaosGDD and service-native web applications through private
   addresses.

@@ -150,11 +150,11 @@ Nextcloud is intentionally excluded from the target backend. Do not replace
 Radicale tasks/events or SFTPGo transfer duties with Nextcloud without a new
 stateful-service migration proposal and explicit approval.
 
-Backend service namespaces stay independent from the `KaosGDD` application
-namespace. Use service-native names such as Radicale, Memos, Vaultwarden, and
-SFTPGo, or KaosGovernor-specific names for Governor processes. Reserve
-`KaosGDD` naming for the family-facing application and transitional legacy
-components that have not yet been absorbed into KaosGovernor.
+KaosGDD is the overall project. KaosBrain and KaosGovernor are project-owned
+systems inside it. Ready-made backend services keep service-native operational
+names such as Radicale, Memos, Vaultwarden, SFTPGo, Caddy, and cloudflared.
+They are part of the KaosGDD deployment, but should not be renamed into
+`kaosgdd-*` services.
 
 #### H3 runtime shape
 
