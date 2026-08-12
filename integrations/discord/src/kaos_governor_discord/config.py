@@ -53,6 +53,7 @@ class Settings:
     allowed_user_ids: frozenset[int]
     allowed_channel_ids: frozenset[int]
     system_channel_id: int | None
+    mail_channel_id: int | None
     startup_notification: bool
     health_host: str
     health_port: int
@@ -66,6 +67,13 @@ class Settings:
         system_channel_id = _positive_int(raw_system, "DISCORD_SYSTEM_CHANNEL_ID") if raw_system else None
         if system_channel_id is not None and system_channel_id not in allowed_channels:
             raise ConfigurationError("DISCORD_SYSTEM_CHANNEL_ID must be in DISCORD_ALLOWED_CHANNEL_IDS")
+        raw_mail = source.get("MAIL_DISCORD_CHANNEL_ID", "").strip()
+        mail_channel_id = _positive_int(raw_mail, "MAIL_DISCORD_CHANNEL_ID") if raw_mail else None
+        mail_enabled = _boolean(source, "MAIL_NAVER_ENABLED")
+        if mail_enabled and mail_channel_id is None:
+            raise ConfigurationError("MAIL_DISCORD_CHANNEL_ID is required when MAIL_NAVER_ENABLED=true")
+        if mail_channel_id is not None and mail_channel_id not in allowed_channels:
+            raise ConfigurationError("MAIL_DISCORD_CHANNEL_ID must be in DISCORD_ALLOWED_CHANNEL_IDS")
         health_port = _positive_int(source.get("HEALTH_PORT", "8097"), "HEALTH_PORT")
         if health_port > 65535:
             raise ConfigurationError("HEALTH_PORT must be at most 65535")
@@ -75,6 +83,7 @@ class Settings:
             allowed_user_ids=_id_set(source, "DISCORD_ALLOWED_USER_IDS"),
             allowed_channel_ids=allowed_channels,
             system_channel_id=system_channel_id,
+            mail_channel_id=mail_channel_id,
             startup_notification=_boolean(source, "DISCORD_STARTUP_NOTIFICATION"),
             health_host=source.get("HEALTH_HOST", "0.0.0.0").strip() or "0.0.0.0",
             health_port=health_port,

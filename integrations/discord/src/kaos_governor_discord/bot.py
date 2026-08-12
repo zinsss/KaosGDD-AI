@@ -1,15 +1,20 @@
 from __future__ import annotations
 
+import asyncio
+from contextlib import suppress
+import io
 import logging
 import time
 
 import discord
 from discord import app_commands
+from kaos_governor.mail import Attachment, MailMessage, NaverMailConfig, NaverMailPoller
 
 from . import __version__
 from .access import AccessPolicy
 from .config import Settings
 from .health import HealthServer
+from .mail import render_mail_summary, safe_attachment_filename
 from .markdown import MarkdownField, MarkdownMessage, NO_MENTIONS
 
 LOGGER = logging.getLogger(__name__)
@@ -102,6 +107,8 @@ class GovernorBot(discord.Client):
         self.tree = GovernorCommandTree(self, self.policy)
         self._started_at = time.monotonic()
         self._startup_announced = False
+        self._mail_task: asyncio.Task | None = None
+        self.mail_poller = NaverMailPoller(NaverMailConfig.from_env())
         self._health = HealthServer(settings.health_host, settings.health_port, self._health_status)
         self._register_commands()
 
@@ -120,6 +127,7 @@ class GovernorBot(discord.Client):
                     bullets=(
                         "Discord: connected",
                         "Governor API: not connected (preparation mode)",
+                        f"Naver mail: {'enabled' if self.mail_poller.config.enabled else 'disabled'}",
                     ),
                     footer="Private status visible only to you",
                 ).render(),
@@ -151,6 +159,8 @@ class GovernorBot(discord.Client):
 
     async def on_ready(self) -> None:
         LOGGER.info("Discord ready as %s (%s)", self.user, self.user.id if self.user else None)
+        if self.mail_poller.config.enabled and self._mail_task is None:
+            self._mail_task = asyncio.create_task(self._mail_loop(), name="governor-naver-mail")
         if self.settings.startup_notification and not self._startup_announced and self.settings.system_channel_id:
             self._startup_announced = True
             try:
@@ -169,8 +179,63 @@ class GovernorBot(discord.Client):
                 LOGGER.exception("Failed to send startup notification")
 
     async def close(self) -> None:
+        if self._mail_task is not None:
+            self._mail_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._mail_task
+            self._mail_task = None
         await self._health.stop()
         await super().close()
 
     def _health_status(self) -> dict[str, object]:
-        return {"discordReady": self.is_ready(), "guildId": str(self.settings.guild_id), "version": __version__}
+        return {
+            "discordReady": self.is_ready(),
+            "guildId": str(self.settings.guild_id),
+            "version": __version__,
+            "naverMail": self.mail_poller.status(),
+        }
+
+    async def _mail_loop(self) -> None:
+        loop = asyncio.get_running_loop()
+
+        def await_discord(coroutine):
+            try:
+                return asyncio.run_coroutine_threadsafe(coroutine, loop).result(timeout=60)
+            except Exception as exc:
+                raise OSError("discord_mail_delivery_failed") from exc
+
+        while not self.is_closed():
+            await asyncio.to_thread(
+                self.mail_poller.scan,
+                lambda mail: await_discord(self._send_mail_summary(mail)),
+                lambda attachment: await_discord(self._send_mail_attachment(attachment)),
+            )
+            status = self.mail_poller.status()
+            if status["lastError"]:
+                LOGGER.error("Naver mail scan failed: %s", status["lastError"])
+            await asyncio.sleep(self.mail_poller.config.poll_seconds)
+
+    async def _mail_channel(self) -> discord.abc.Messageable:
+        channel_id = self.settings.mail_channel_id
+        if channel_id is None:
+            raise RuntimeError("mail_channel_not_configured")
+        channel = self.get_channel(channel_id) or await self.fetch_channel(channel_id)
+        if not isinstance(channel, discord.abc.Messageable):
+            raise RuntimeError("mail_channel_not_messageable")
+        return channel
+
+    async def _send_mail_summary(self, mail: MailMessage):
+        channel = await self._mail_channel()
+        return await channel.send(
+            render_mail_summary(mail, self.mail_poller.config.max_attachment_bytes),
+            allowed_mentions=NO_MENTIONS,
+        )
+
+    async def _send_mail_attachment(self, attachment: Attachment):
+        channel = await self._mail_channel()
+        filename = safe_attachment_filename(attachment)
+        return await channel.send(
+            content=f"**Attachment** · {filename}",
+            file=discord.File(io.BytesIO(attachment.content), filename=filename),
+            allowed_mentions=NO_MENTIONS,
+        )

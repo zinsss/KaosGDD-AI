@@ -1,14 +1,17 @@
 services:
   governor-discord:
     build:
-      context: ../../integrations/discord
+      context: ../..
+      dockerfile: integrations/discord/Dockerfile
       target: runtime
-    image: kaosgdd-ai-governor-discord:0.1.1
+    image: kaosgdd-ai-governor-discord:0.2.0
     container_name: kaos-governor-discord
     restart: unless-stopped
     init: true
     env_file: [.env]
     ports: ["127.0.0.1:8097:8097"]
+    volumes:
+      - /srv/kaos/data/kaosgdd-ai/governor/mail:/data/mail
     read_only: true
     tmpfs: ["/tmp:size=16m,mode=1777"]
     cap_drop: [ALL]

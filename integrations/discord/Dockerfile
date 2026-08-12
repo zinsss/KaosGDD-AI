@@ -1,8 +1,9 @@
 FROM python:3.12-slim AS build
 WORKDIR /build
-COPY pyproject.toml ./
-COPY src ./src
-RUN python -m pip install --no-cache-dir --prefix=/install .
+COPY apps/governor ./governor
+RUN python -m pip install --no-cache-dir --prefix=/install ./governor
+COPY integrations/discord ./discord
+RUN PYTHONPATH=/install/lib/python3.12/site-packages python -m pip install --no-cache-dir --prefix=/install ./discord
 
 FROM python:3.12-slim AS runtime
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
@@ -15,5 +16,6 @@ ENTRYPOINT ["kaos-governor-discord"]
 
 FROM build AS test
 ENV PYTHONPATH=/install/lib/python3.12/site-packages
-COPY tests ./tests
-CMD ["python", "-m", "unittest", "discover", "-s", "tests", "-v"]
+COPY apps/governor/tests /tests/governor
+COPY integrations/discord/tests /tests/discord
+CMD ["sh", "-c", "python -m unittest discover -s /tests/governor -v && python -m unittest discover -s /tests/discord -v"]

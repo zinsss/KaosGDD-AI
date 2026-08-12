@@ -57,6 +57,7 @@ Upstream applications will be referenced using pinned release versions or image 
 - [Current Brain conversion inventory](docs/migration/current-brain-inventory.md)
 - [Migration strategies and phased plan](docs/migration/migration-plan.md)
 - [KaosGovernor Discord bot rollout](docs/operations/discord-governor-bot.md)
+- [Naver mail migration](docs/operations/naver-mail.md)
 
 ## Non-Negotiable Principles
 

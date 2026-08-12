@@ -27,6 +27,16 @@ class SettingsTests(unittest.TestCase):
         with self.assertRaises(ConfigurationError):
             Settings.from_env({**BASE_ENV, "DISCORD_ALLOWED_USER_IDS": ""})
 
+    def test_mail_channel_must_be_explicit_and_allowed(self) -> None:
+        with self.assertRaises(ConfigurationError):
+            Settings.from_env({**BASE_ENV, "MAIL_NAVER_ENABLED": "true"})
+        with self.assertRaises(ConfigurationError):
+            Settings.from_env({**BASE_ENV, "MAIL_NAVER_ENABLED": "true", "MAIL_DISCORD_CHANNEL_ID": "999"})
+        settings = Settings.from_env(
+            {**BASE_ENV, "MAIL_NAVER_ENABLED": "true", "MAIL_DISCORD_CHANNEL_ID": "300"}
+        )
+        self.assertEqual(settings.mail_channel_id, 300)
+
 
 class AccessPolicyTests(unittest.TestCase):
     def setUp(self) -> None:

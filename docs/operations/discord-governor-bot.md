@@ -4,7 +4,8 @@ KaosGovernor uses its own deterministic bot for notifications, inbox/fax/mail
 workflows, confirmation buttons, timed jobs, and system operations. KaosBrain
 uses OpenClaw's separate Discord integration. Family chat remains in its PWA.
 
-This initial build intentionally has no Governor API connection.
+The bot has no Governor API connection yet. It temporarily hosts the tested
+KaosMail worker in-process as part of the planned Governor modular monolith.
 
 ## Discord application
 
