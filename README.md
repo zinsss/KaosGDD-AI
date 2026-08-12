@@ -12,7 +12,8 @@ Architecture, deterministic orchestration, AI integrations, and deployment plans
 - **KaosGovernor**: deterministic authority on the H3+ backend. It validates operations, owns domain workflows, records audit history, and calls backend services.
 - **Family AI**: a separately scoped assistant served by H4 or a future optional worker.
 - **Authoritative backends**: Radicale, Memos, Paperless, HylaFAX, and other service-owned data stores.
-- **KaosGDD**: main and family web interfaces. The existing frontend remains in the `zinsss/KaosGDD` repository.
+- **Family KaosGDD**: the retained family web interface and embedded family AI chat. The frontend remains in the `zinsss/KaosGDD` repository.
+- **Personal clients**: Discord for orchestration and native iOS Calendar/Reminders for calendar, tasks, and supplies. The main KaosGDD web UI is optional during migration and may retire after parity is verified.
 
 KaosBrain and Family AI never become sources of truth. They call narrow KaosGovernor tools. KaosGovernor applies deterministic validation before changing an authoritative backend.
 
@@ -21,7 +22,7 @@ KaosBrain and Family AI never become sources of truth. They call narrow KaosGove
 | Host | Planned responsibility |
 | --- | --- |
 | Office H3+ | KaosPACS, KaosPACS-AIO, Paperless, Stirling-PDF, RustDesk, HylaFAX, Tailscale |
-| H3+ 32 GB backend | KaosGovernor, Governor PostgreSQL, Radicale, Memos, Kaos APIs and web deployment support |
+| H3+ 32 GB backend | KaosGovernor, Governor PostgreSQL, Radicale, Memos, Family KaosGDD, and service edge |
 | H4 Ultra | KaosBrain/OpenClaw and separately scoped personal/family AI sessions |
 | Turing Pi 2 / RK1 | Optional future worker pool; never required for normal operation |
 

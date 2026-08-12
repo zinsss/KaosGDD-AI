@@ -68,10 +68,14 @@ KaosGDD-AI/
 
 ### `zinsss/KaosGDD` continues to own
 
-- main KaosGDD web UI
 - Family KaosGDD web UI
-- custom personal/family Memos frontend
-- browser-specific presentation and PWA behavior
+- family browser presentation, embedded AI chat, and PWA behavior
+- the main KaosGDD web UI only while it remains as a migration fallback
+
+The target architecture does not require a custom personal Memos frontend.
+Personal Memos workflows use Discord and the upstream Memos web UI. The family
+frontend may retain its simplified Memos experience because Family KaosGDD
+remains a supported product.
 
 ### Upstream projects continue to own
 

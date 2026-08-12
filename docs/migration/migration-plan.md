@@ -136,10 +136,12 @@ Rollback:
 
 ### Phase 5: Web Edge to H3+
 
-- Deploy main and Family KaosGDD UIs.
-- Deploy custom Memos UI.
+- Deploy Family KaosGDD as the supported custom web application.
+- Keep the main KaosGDD UI only as a migration fallback; do not make it a
+  production dependency.
 - Deploy Caddy and one cloudflared connector.
-- Route to Governor, Family AI, Memos, and Radicale through private addresses.
+- Route to Family KaosGDD and service-native web applications through private
+  addresses.
 - Move hostnames one at a time.
 - Keep native CalDAV requirements separate from interactive Cloudflare Access policy.
 
@@ -174,6 +176,16 @@ Failure must affect only AI chat, not Family KaosGDD or native services.
 - Retire Telegram workflows individually.
 - Keep KaosTelegram service control until an explicitly hardened replacement exists.
 
+### Phase 8.1: Personal UI simplification
+
+- Verify personal events in iOS Calendar.
+- Verify personal and family tasks plus the supplies list in iOS Reminders.
+- Verify Discord covers personal Memos, document, mail, fax, rule, and
+  orchestration workflows.
+- Use upstream service web UIs only when direct backend access is useful.
+- Retire the main KaosGDD web UI only after this parity check and an observation
+  period. Family KaosGDD is explicitly excluded from retirement.
+
 ### Phase 9: Reduce the Office H3+
 
 Target services that remain:
@@ -186,7 +198,9 @@ Target services that remain:
 - Tailscale
 - internal reverse proxy only if still required
 
-Remove old Brain, web, adapter, edge, or notification containers only after their replacements have passed the observation period.
+Remove old Brain, main personal web, adapter, edge, or notification containers
+only after their replacements have passed the observation period. Family
+KaosGDD is retained.
 
 ## Production Cutover Rules
 

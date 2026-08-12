@@ -22,7 +22,10 @@ OpenClaw + main LLM             separately scoped tools
         |           |            |
         v           v            v
      Radicale      Memos      Office services
-     H3+ backend   H3+ backend Paperless/HylaFAX
+        ^           H3+       Paperless/HylaFAX
+        |
+iOS Calendar and Reminders
+(personal, family, supplies)
 ```
 
 KaosBrain communicates with backends only through KaosGovernor. Family AI receives a separate family-scoped Governor credential.
@@ -30,9 +33,16 @@ KaosBrain communicates with backends only through KaosGovernor. Family AI receiv
 Native clients may still use service-native interfaces:
 
 - iOS Calendar and Reminders use Radicale over CalDAV.
-- KaosGDD Memos frontends use the Memos API.
+- Personal events, tasks, and supplies use those native iOS apps as their
+  primary UI.
+- Family KaosGDD remains the custom family UI and uses Governor/service APIs.
+- Memos may be opened through its native web UI when direct editing is useful.
 - Paperless users may use the Paperless UI.
 - HylaFAX continues locally at the office if home AI infrastructure is unavailable.
+
+The main personal KaosGDD web application is not a required runtime component.
+It remains available only during migration until Discord and native iOS clients
+have passed parity and rollback observation.
 
 ## KaosGovernor
 
