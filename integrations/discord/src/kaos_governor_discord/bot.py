@@ -10,16 +10,20 @@ from . import __version__
 from .access import AccessPolicy
 from .config import Settings
 from .health import HealthServer
+from .markdown import MarkdownField, MarkdownMessage, NO_MENTIONS
 
 LOGGER = logging.getLogger(__name__)
 
 
 async def _deny(interaction: discord.Interaction) -> None:
-    message = "KaosGovernor is restricted to its configured server, channels, and users."
+    message = MarkdownMessage(
+        title="Access denied",
+        summary="KaosGovernor is restricted to its configured server, channels, and users.",
+    ).render()
     if interaction.response.is_done():
-        await interaction.followup.send(message, ephemeral=True)
+        await interaction.followup.send(message, ephemeral=True, allowed_mentions=NO_MENTIONS)
     else:
-        await interaction.response.send_message(message, ephemeral=True)
+        await interaction.response.send_message(message, ephemeral=True, allowed_mentions=NO_MENTIONS)
 
 
 class GovernorCommandTree(app_commands.CommandTree):
@@ -51,23 +55,39 @@ class ConfirmationTestView(discord.ui.View):
     async def _finish(self, interaction: discord.Interaction, result: str) -> None:
         for item in self.children:
             item.disabled = True
-        await interaction.response.edit_message(content=result, view=self)
+        await interaction.response.edit_message(content=result, view=self, allowed_mentions=NO_MENTIONS)
         self.stop()
 
     @discord.ui.button(label="Confirm test", style=discord.ButtonStyle.danger)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await self._finish(interaction, "Confirmation transport verified. No action was performed.")
+        await self._finish(
+            interaction,
+            MarkdownMessage(
+                title="Confirmation verified",
+                summary="No Governor operation was performed.",
+            ).render(),
+        )
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await self._finish(interaction, "Confirmation test cancelled.")
+        await self._finish(
+            interaction,
+            MarkdownMessage(title="Confirmation cancelled").render(),
+        )
 
     async def on_timeout(self) -> None:
         for item in self.children:
             item.disabled = True
         if self.message:
             try:
-                await self.message.edit(content="Confirmation test expired.", view=self)
+                await self.message.edit(
+                    content=MarkdownMessage(
+                        title="Confirmation expired",
+                        summary="No Governor operation was performed.",
+                    ).render(),
+                    view=self,
+                    allowed_mentions=NO_MENTIONS,
+                )
             except discord.HTTPException:
                 LOGGER.info("Could not update expired ephemeral confirmation test")
 
@@ -76,7 +96,7 @@ class GovernorBot(discord.Client):
     def __init__(self, settings: Settings) -> None:
         intents = discord.Intents.none()
         intents.guilds = True
-        super().__init__(intents=intents)
+        super().__init__(intents=intents, allowed_mentions=NO_MENTIONS)
         self.settings = settings
         self.policy = AccessPolicy(settings.guild_id, settings.allowed_user_ids, settings.allowed_channel_ids)
         self.tree = GovernorCommandTree(self, self.policy)
@@ -90,14 +110,36 @@ class GovernorBot(discord.Client):
         async def status(interaction: discord.Interaction) -> None:
             uptime = int(time.monotonic() - self._started_at)
             await interaction.response.send_message(
-                f"**KaosGovernor transport**\nVersion: `{__version__}`\nUptime: `{uptime}s`\nDiscord: `connected`\nGovernor API: `not connected (preparation mode)`",
+                MarkdownMessage(
+                    title="KaosGovernor",
+                    summary="Deterministic Discord transport",
+                    fields=(
+                        MarkdownField("Version", __version__),
+                        MarkdownField("Uptime", f"{uptime}s"),
+                    ),
+                    bullets=(
+                        "Discord: connected",
+                        "Governor API: not connected (preparation mode)",
+                    ),
+                    footer="Private status visible only to you",
+                ).render(),
                 ephemeral=True,
+                allowed_mentions=NO_MENTIONS,
             )
 
         @self.tree.command(name="confirmation-test", description="Test an expiring confirmation without performing an action")
         async def confirmation_test(interaction: discord.Interaction) -> None:
             view = ConfirmationTestView(interaction.user.id, self.policy)
-            await interaction.response.send_message("This test expires in 60 seconds and performs no Governor operation.", view=view, ephemeral=True)
+            await interaction.response.send_message(
+                MarkdownMessage(
+                    title="Confirmation test",
+                    summary="Choose an action below. This performs no Governor operation.",
+                    footer="Expires in 60 seconds",
+                ).render(),
+                view=view,
+                ephemeral=True,
+                allowed_mentions=NO_MENTIONS,
+            )
             view.message = await interaction.original_response()
 
     async def setup_hook(self) -> None:
@@ -115,7 +157,14 @@ class GovernorBot(discord.Client):
                 channel = self.get_channel(self.settings.system_channel_id) or await self.fetch_channel(self.settings.system_channel_id)
                 if not isinstance(channel, discord.abc.Messageable):
                     raise TypeError("configured system channel is not messageable")
-                await channel.send(f"KaosGovernor Discord transport `{__version__}` is online.")
+                await channel.send(
+                    MarkdownMessage(
+                        title="KaosGovernor online",
+                        fields=(MarkdownField("Version", __version__),),
+                        bullets=("Discord transport: connected",),
+                    ).render(),
+                    allowed_mentions=NO_MENTIONS,
+                )
             except (discord.HTTPException, TypeError):
                 LOGGER.exception("Failed to send startup notification")
 
