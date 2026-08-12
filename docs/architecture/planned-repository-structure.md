@@ -70,7 +70,10 @@ KaosGDD-AI/
 
 - Family KaosGDD web UI
 - family browser presentation, embedded AI chat, and PWA behavior
-- the main KaosGDD web UI only while it remains as a migration fallback
+
+The main KaosGDD web repository is retained only as reference. It is not part
+of the target deployment. A future personal UI should begin only after a
+specific unmet workflow justifies it.
 
 The target architecture does not require a custom personal Memos frontend.
 Personal Memos workflows use Discord and the upstream Memos web UI. The family

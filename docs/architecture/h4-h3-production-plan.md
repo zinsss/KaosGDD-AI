@@ -11,8 +11,8 @@ Build the next Kaos platform around two new permanent roles:
 Discord becomes the primary personal orchestration surface. Personal events use
 iOS Calendar; personal/family tasks and supplies use iOS Reminders through
 Radicale. The family continues to use `family.kaosgdd.net`, including an
-embedded family-scoped AI chat. The main personal KaosGDD web application is a
-migration fallback, not a required target component.
+embedded family-scoped AI chat. No main personal KaosGDD web application is
+deployed in the target architecture.
 
 Office Kaos remains a separate clinic-critical system. PACS, DICOM, fax
 hardware, Paperless, RustDesk, and other hardware- or clinic-bound services are
@@ -137,7 +137,6 @@ H3+ runs durable, non-AI platform services:
 - Radicale and Memos.
 - Family KaosGDD web deployment and its server-side family gateway.
 - Service-native web applications such as Memos, Vaultwarden, and SFTPGo.
-- The main KaosGDD web deployment only during its migration/rollback period.
 - Caddy and cloudflared.
 - Vaultwarden.
 - SFTPGo, after its data ownership and migration are verified.
@@ -213,7 +212,7 @@ interrupt PACS, DICOM receipt, fax transport, Paperless, or RustDesk.
 | Governor Discord bot | H3+ | Move state and credentials after live comparison |
 | upstream Memos web | H3+ | Retain as direct service UI; Memos remains authoritative |
 | custom personal Memos web | Retire after parity | Discord plus upstream Memos replace it |
-| main KaosGDD portal | Migration fallback | Retire after iOS/Discord parity and observation |
+| main KaosGDD portal | Not deployed | Keep repository as reference; build again only for a demonstrated need |
 | Family KaosGDD | H3+ | Retain as primary family interface |
 | Caddy/cloudflared | H3+ | Move hostname routes one at a time |
 | Vaultwarden | H3+ | Migrate only after export/backup and client verification |
@@ -289,7 +288,7 @@ channel, and user allowlists even when Discord permissions already deny access.
 ### 5.2 Family KaosGDD: primary family interaction
 
 `family.kaosgdd.net` remains a complete family application, not a redirect to
-Discord or the personal portal. It retains:
+Discord. It retains:
 
 - Today/agenda.
 - Family calendar and tasks.
@@ -321,8 +320,8 @@ not the message source of truth.
 
 ### 5.3 Personal native clients and backend UIs
 
-The personal main KaosGDD web application is not required in the target
-architecture. The normal personal interaction model is:
+No personal main KaosGDD web application is planned in the target architecture.
+The normal personal interaction model is:
 
 - iOS Calendar for personal and shared family VEVENT collections
 - iOS Reminders for personal tasks, shared family tasks, and the dedicated
@@ -336,8 +335,10 @@ Native app notifications remain authoritative for calendar and task reminders.
 Governor must not duplicate them through Discord unless the user explicitly
 enables a summary or exceptional notification.
 
-The existing main KaosGDD web UI remains available during migration for parity
-checks and rollback. Retiring it does not retire Family KaosGDD.
+The existing main KaosGDD repository may be retained as design and migration
+reference, but it is not deployed as a fallback. A future personal UI starts as
+a separately justified project if native apps and Discord expose a concrete
+workflow gap. This decision does not affect Family KaosGDD.
 
 ## 6. Data Ownership
 
@@ -491,7 +492,7 @@ version, and expiry. A conversational `yes` alone is insufficient.
 | Route | Policy |
 | --- | --- |
 | `family.kaosgdd.net` | Cloudflare Access with approved Google accounts |
-| `kaosgdd.net` | Migration fallback only; remove route after main UI retirement |
+| `kaosgdd.net` | Reserved; no main portal route unless a future UI is approved |
 | service-native web UIs | Separate least-privilege Access policy or Tailscale-only access |
 | CalDAV endpoint | Native TLS + Radicale credentials; no interactive Access challenge |
 | Vaultwarden endpoint | Native client-compatible HTTPS and Vaultwarden authentication |
@@ -628,11 +629,10 @@ any accepted destination writes.
 Actions:
 
 1. Deploy Family KaosGDD first with existing behavior and no AI dependency.
-2. Keep the main KaosGDD deployment only as a temporary migration fallback.
-3. Expose upstream Memos and other service-native UIs according to their
+2. Expose upstream Memos and other service-native UIs according to their
    individual Access/Tailscale policies.
-4. Deploy Caddy/cloudflared and move one hostname at a time.
-5. Test Family PWA scrolling, Web Push, CalDAV, Vaultwarden clients, and Access
+3. Deploy Caddy/cloudflared and move one hostname at a time.
+4. Test Family PWA scrolling, Web Push, CalDAV, Vaultwarden clients, and Access
    identities.
 
 Exit gate:
@@ -711,8 +711,8 @@ Actions:
 3. Verify iOS Calendar handles personal/shared events and iOS Reminders handles
    personal tasks, family tasks, and supplies without the main web UI.
 4. Verify upstream backend UIs remain directly reachable when needed.
-5. Retire the main KaosGDD UI after its observation period; keep Family
-   KaosGDD.
+5. Confirm no main KaosGDD UI is deployed; keep its repository only as
+   reference. Keep Family KaosGDD deployed.
 6. Retire Telegram-specific workers after observation and archive export.
 
 Exit gate:
@@ -727,8 +727,8 @@ Actions:
 1. Migrate Vaultwarden with export, backup, and client tests.
 2. Migrate SFTPGo after classifying clinic versus personal storage.
 3. Retire RHWP only after confirming Polaris/manual workflows cover all needs.
-4. Stop old Brain, calendar adapter, Telegram, main personal portal, and bridge
-   containers. Do not stop Family KaosGDD.
+4. Stop old Brain, calendar adapter, Telegram, any remaining main personal
+   portal, and bridge containers. Do not stop Family KaosGDD.
 5. Keep archived Compose/config/data through their observation periods.
 
 No PACS, DICOM, Paperless archive, fax spool, or RustDesk migration is included.

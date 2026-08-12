@@ -13,7 +13,7 @@ Architecture, deterministic orchestration, AI integrations, and deployment plans
 - **Family AI**: a separately scoped assistant served by H4 or a future optional worker.
 - **Authoritative backends**: Radicale, Memos, Paperless, HylaFAX, and other service-owned data stores.
 - **Family KaosGDD**: the retained family web interface and embedded family AI chat. The frontend remains in the `zinsss/KaosGDD` repository.
-- **Personal clients**: Discord for orchestration and native iOS Calendar/Reminders for calendar, tasks, and supplies. The main KaosGDD web UI is optional during migration and may retire after parity is verified.
+- **Personal clients**: Discord for orchestration and native iOS Calendar/Reminders for calendar, tasks, and supplies. No main KaosGDD web UI is planned; it may be designed later only if a concrete need appears.
 
 KaosBrain and Family AI never become sources of truth. They call narrow KaosGovernor tools. KaosGovernor applies deterministic validation before changing an authoritative backend.
 

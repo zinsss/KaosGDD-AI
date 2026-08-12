@@ -137,8 +137,7 @@ Rollback:
 ### Phase 5: Web Edge to H3+
 
 - Deploy Family KaosGDD as the supported custom web application.
-- Keep the main KaosGDD UI only as a migration fallback; do not make it a
-  production dependency.
+- Do not deploy the main KaosGDD UI. Retain its repository as reference only.
 - Deploy Caddy and one cloudflared connector.
 - Route to Family KaosGDD and service-native web applications through private
   addresses.
@@ -183,8 +182,9 @@ Failure must affect only AI chat, not Family KaosGDD or native services.
 - Verify Discord covers personal Memos, document, mail, fax, rule, and
   orchestration workflows.
 - Use upstream service web UIs only when direct backend access is useful.
-- Retire the main KaosGDD web UI only after this parity check and an observation
-  period. Family KaosGDD is explicitly excluded from retirement.
+- Confirm the main KaosGDD web UI is not part of the target deployment. Start a
+  future personal UI only if this parity check exposes a concrete unmet need.
+- Family KaosGDD is explicitly retained.
 
 ### Phase 9: Reduce the Office H3+
 
@@ -198,9 +198,9 @@ Target services that remain:
 - Tailscale
 - internal reverse proxy only if still required
 
-Remove old Brain, main personal web, adapter, edge, or notification containers
-only after their replacements have passed the observation period. Family
-KaosGDD is retained.
+Remove old Brain, any remaining main personal web, adapter, edge, or
+notification containers only after their replacements have passed the
+observation period. Family KaosGDD is retained.
 
 ## Production Cutover Rules
 

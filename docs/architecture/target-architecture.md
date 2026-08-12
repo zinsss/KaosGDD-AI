@@ -40,9 +40,9 @@ Native clients may still use service-native interfaces:
 - Paperless users may use the Paperless UI.
 - HylaFAX continues locally at the office if home AI infrastructure is unavailable.
 
-The main personal KaosGDD web application is not a required runtime component.
-It remains available only during migration until Discord and native iOS clients
-have passed parity and rollback observation.
+No main personal KaosGDD web application is planned. Its repository may remain
+as reference, and a new personal UI may be considered later only when native
+iOS clients and Discord leave a concrete workflow unmet.
 
 ## KaosGovernor
 
