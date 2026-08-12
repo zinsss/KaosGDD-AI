@@ -4,7 +4,7 @@ services:
       context: ../..
       dockerfile: integrations/discord/Dockerfile
       target: runtime
-    image: kaosgdd-ai-governor-discord:0.3.4
+    image: kaosgdd-ai-governor-discord:0.4.0
     container_name: kaos-governor-discord
     restart: unless-stopped
     init: true
@@ -12,7 +12,11 @@ services:
     ports: ["127.0.0.1:8097:8097"]
     volumes:
       - /srv/kaos/data/kaosgdd-ai/governor/mail:/data/mail
+      - /srv/kaos/data/kaosgdd-ai/governor/fax:/data/fax
+      - /srv/kaos/data/kaosgdd/brain/fax-outgoing:/integrations/fax-outgoing
+      - /var/spool/hylafax:/integrations/hylafax:ro
+    group_add: ["10", "1000"]
     read_only: true
-    tmpfs: ["/tmp:size=16m,mode=1777"]
+    tmpfs: ["/tmp:size=64m,mode=1777"]
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]

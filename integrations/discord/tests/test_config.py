@@ -77,6 +77,27 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.mail_archive_channel_id, 300)
         self.assertEqual(settings.mail_organizer_channel_id, 300)
 
+    def test_fax_requires_two_allowed_channel_assignments(self) -> None:
+        with self.assertRaises(ConfigurationError):
+            Settings.from_env({**BASE_ENV, "FAX_DISCORD_ENABLED": "true"})
+        settings = Settings.from_env(
+            {
+                **BASE_ENV,
+                "FAX_DISCORD_ENABLED": "true",
+                "FAX_ARCHIVE_DISCORD_CHANNEL_ID": "300",
+                "FAX_NOTIFICATION_DISCORD_CHANNEL_ID": "301",
+            }
+        )
+        self.assertEqual(settings.fax_archive_channel_id, 300)
+        self.assertEqual(settings.fax_notification_channel_id, 301)
+
+    def test_fax_message_intake_is_disabled_by_default(self) -> None:
+        self.assertFalse(Settings.from_env(BASE_ENV).fax_message_intake)
+
+    def test_fax_message_intake_cannot_enable_fax_implicitly(self) -> None:
+        with self.assertRaises(ConfigurationError):
+            Settings.from_env({**BASE_ENV, "FAX_DISCORD_MESSAGE_INTAKE": "true"})
+
 
 class AccessPolicyTests(unittest.TestCase):
     def setUp(self) -> None:

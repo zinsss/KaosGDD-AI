@@ -10,7 +10,9 @@ KaosMail worker in-process as part of the planned Governor modular monolith.
 ## Discord application
 
 1. Create a private Discord application named `KaosGovernor` and add its bot.
-2. Do not enable Message Content intent.
+2. Leave Message Content intent disabled for slash-command-only fax sending.
+   Enable it only when `FAX_DISCORD_MESSAGE_INTAKE=true` is needed for the
+   `upload PDF`, then `reply fax:<number>` workflow.
 3. Install it only in the private Kaos server with `bot` and
    `applications.commands` scopes.
 4. Grant View Channels, Send Messages, Embed Links, Attach Files, Read Message
@@ -45,6 +47,14 @@ Caddy or cloudflared.
    paginated digest whose preview/import/read/delete controls work only for an
    allowlisted user.
 7. `/mail-organizer-schedule 1 09:00` preserves the current daily KST schedule.
+8. `/fax-send 022848302 document.pdf` queues through the existing fax bridge;
+   it never calls the modem directly.
+9. New received and sent fax PDFs appear once in the configured archive
+   channel, while queued/sending/sent/failed notices use the configured
+   notification channel.
+10. With Message Content intent enabled, a PDF uploaded without text receives
+    `Reply directly to this PDF with fax:<number>.` Source upload, command, and
+    prompt messages are deleted only after HylaFAX confirms success.
 
 It may run temporarily on the current Kaos host. Move the same image and `.env`
 to RK1-1 when ready.
@@ -52,5 +62,7 @@ to RK1-1 when ready.
 ## Next boundary
 
 The next step connects this transport to a narrow authenticated Governor API.
-Discord callbacks submit typed commands and confirmation tokens; they never call
-Radicale, Memos, Paperless, HylaFAX, Docker, or databases directly.
+Discord callbacks submit typed commands and confirmation tokens. The temporary
+fax adapter writes only the narrow, versioned bridge manifest contract and reads
+HylaFAX status/archive files; it has no modem, shell, Docker, database, Radicale,
+Memos, or Paperless authority.

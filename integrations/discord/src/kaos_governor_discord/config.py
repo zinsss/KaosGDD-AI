@@ -55,6 +55,9 @@ class Settings:
     system_channel_id: int | None
     mail_archive_channel_id: int | None
     mail_organizer_channel_id: int | None
+    fax_archive_channel_id: int | None
+    fax_notification_channel_id: int | None
+    fax_message_intake: bool
     startup_notification: bool
     health_host: str
     health_port: int
@@ -93,6 +96,31 @@ class Settings:
         ):
             if channel_id is not None and channel_id not in allowed_channels:
                 raise ConfigurationError(f"{name} must be in DISCORD_ALLOWED_CHANNEL_IDS")
+        fax_enabled = _boolean(source, "FAX_DISCORD_ENABLED")
+        fax_message_intake = _boolean(source, "FAX_DISCORD_MESSAGE_INTAKE")
+        if fax_message_intake and not fax_enabled:
+            raise ConfigurationError("FAX_DISCORD_ENABLED must be true when fax message intake is enabled")
+        raw_fax_archive = source.get("FAX_ARCHIVE_DISCORD_CHANNEL_ID", "").strip()
+        raw_fax_notification = source.get("FAX_NOTIFICATION_DISCORD_CHANNEL_ID", "").strip()
+        fax_archive_channel_id = (
+            _positive_int(raw_fax_archive, "FAX_ARCHIVE_DISCORD_CHANNEL_ID") if raw_fax_archive else None
+        )
+        fax_notification_channel_id = (
+            _positive_int(raw_fax_notification, "FAX_NOTIFICATION_DISCORD_CHANNEL_ID")
+            if raw_fax_notification
+            else None
+        )
+        if fax_enabled and (fax_archive_channel_id is None or fax_notification_channel_id is None):
+            raise ConfigurationError(
+                "FAX_ARCHIVE_DISCORD_CHANNEL_ID and FAX_NOTIFICATION_DISCORD_CHANNEL_ID are required "
+                "when FAX_DISCORD_ENABLED=true"
+            )
+        for name, channel_id in (
+            ("FAX_ARCHIVE_DISCORD_CHANNEL_ID", fax_archive_channel_id),
+            ("FAX_NOTIFICATION_DISCORD_CHANNEL_ID", fax_notification_channel_id),
+        ):
+            if channel_id is not None and channel_id not in allowed_channels:
+                raise ConfigurationError(f"{name} must be in DISCORD_ALLOWED_CHANNEL_IDS")
         health_port = _positive_int(source.get("HEALTH_PORT", "8097"), "HEALTH_PORT")
         if health_port > 65535:
             raise ConfigurationError("HEALTH_PORT must be at most 65535")
@@ -104,6 +132,9 @@ class Settings:
             system_channel_id=system_channel_id,
             mail_archive_channel_id=mail_archive_channel_id,
             mail_organizer_channel_id=mail_organizer_channel_id,
+            fax_archive_channel_id=fax_archive_channel_id,
+            fax_notification_channel_id=fax_notification_channel_id,
+            fax_message_intake=fax_message_intake,
             startup_notification=_boolean(source, "DISCORD_STARTUP_NOTIFICATION"),
             health_host=source.get("HEALTH_HOST", "0.0.0.0").strip() or "0.0.0.0",
             health_port=health_port,

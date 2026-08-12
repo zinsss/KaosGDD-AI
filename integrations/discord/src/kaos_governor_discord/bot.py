@@ -16,11 +16,13 @@ from kaos_governor.mail import (
     NaverMailOrganizer,
     NaverMailPoller,
 )
+from kaos_governor.fax import FaxConfig, FaxError, FaxService
 
 from . import __version__
 from .access import AccessPolicy
 from .config import Settings
 from .health import HealthServer
+from .fax import DiscordFaxTransport, rejection_message
 from .mail import render_mail_summary, safe_attachment_filename
 from .markdown import MarkdownField, MarkdownMessage, NO_MENTIONS
 from .organizer import DiscordMailOrganizer
@@ -109,6 +111,8 @@ class GovernorBot(discord.Client):
     def __init__(self, settings: Settings) -> None:
         intents = discord.Intents.none()
         intents.guilds = True
+        intents.guild_messages = settings.fax_message_intake
+        intents.message_content = settings.fax_message_intake
         super().__init__(intents=intents, allowed_mentions=NO_MENTIONS)
         self.settings = settings
         self.policy = AccessPolicy(settings.guild_id, settings.allowed_user_ids, settings.allowed_channel_ids)
@@ -117,6 +121,7 @@ class GovernorBot(discord.Client):
         self._startup_announced = False
         self._mail_task: asyncio.Task | None = None
         self._organizer_task: asyncio.Task | None = None
+        self._fax_task: asyncio.Task | None = None
         naver_config = NaverMailConfig.from_env()
         self.mail_poller = NaverMailPoller(naver_config)
         self.mail_organizer = NaverMailOrganizer(MailOrganizerConfig.from_env(), naver_config)
@@ -129,6 +134,20 @@ class GovernorBot(discord.Client):
                 settings.mail_archive_channel_id,
             )
             if settings.mail_organizer_channel_id is not None and settings.mail_archive_channel_id is not None
+            else None
+        )
+        self.fax_service = FaxService(FaxConfig.from_env())
+        self.discord_fax = (
+            DiscordFaxTransport(
+                self,
+                self.fax_service,
+                self.policy,
+                settings.fax_archive_channel_id,
+                settings.fax_notification_channel_id,
+            )
+            if self.fax_service.config.enabled
+            and settings.fax_archive_channel_id is not None
+            and settings.fax_notification_channel_id is not None
             else None
         )
         self._health = HealthServer(settings.health_host, settings.health_port, self._health_status)
@@ -151,11 +170,45 @@ class GovernorBot(discord.Client):
                         "Governor API: not connected (preparation mode)",
                         f"Naver mail: {'enabled' if self.mail_poller.config.enabled else 'disabled'}",
                         f"Mail organizer: {'enabled' if self.mail_organizer.config.enabled else 'disabled'}",
+                        f"Fax: {'enabled' if self.fax_service.config.enabled else 'disabled'}",
+                        f"Fax message intake: {'enabled' if self.fax_service.config.message_intake else 'disabled'}",
                     ),
                     footer="Private status visible only to you",
                 ).render(),
                 ephemeral=True,
                 allowed_mentions=NO_MENTIONS,
+            )
+
+        @self.tree.command(name="fax-send", description="Send one PDF through the Kaos HylaFAX bridge")
+        @app_commands.describe(destination="Domestic fax number", document="PDF document to send")
+        async def fax_send(
+            interaction: discord.Interaction,
+            destination: str,
+            document: discord.Attachment,
+        ) -> None:
+            if self.discord_fax is None:
+                await interaction.response.send_message("Fax is disabled.", ephemeral=True)
+                return
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            try:
+                job, created = await self.discord_fax.submit_attachment(
+                    document,
+                    destination,
+                    sender=f"discord:{interaction.user.id}",
+                    source_id=f"discord-interaction:{interaction.guild_id}:{interaction.channel_id}:{interaction.id}:{document.id}",
+                    metadata={
+                        "guildId": str(interaction.guild_id or ""),
+                        "channelId": int(interaction.channel_id or 0),
+                        "userId": str(interaction.user.id),
+                        "attachmentId": str(document.id),
+                    },
+                )
+            except (FaxError, discord.HTTPException) as exc:
+                await interaction.edit_original_response(content=rejection_message(exc))
+                return
+            status = "queued" if created else "already queued"
+            await interaction.edit_original_response(
+                content=f"Fax {status} for {job['destination']}: {job['filename']}"
             )
 
         @self.tree.command(name="confirmation-test", description="Test an expiring confirmation without performing an action")
@@ -269,6 +322,9 @@ class GovernorBot(discord.Client):
                     self._mail_organizer_loop(),
                     name="governor-naver-mail-organizer",
                 )
+        if self.discord_fax is not None and self._fax_task is None:
+            await self.discord_fax.cycle()
+            self._fax_task = asyncio.create_task(self._fax_loop(), name="governor-fax")
         if self.settings.startup_notification and not self._startup_announced and self.settings.system_channel_id:
             self._startup_announced = True
             try:
@@ -286,6 +342,10 @@ class GovernorBot(discord.Client):
             except (discord.HTTPException, TypeError):
                 LOGGER.exception("Failed to send startup notification")
 
+    async def on_message(self, message: discord.Message) -> None:
+        if self.discord_fax is not None and self.fax_service.config.message_intake:
+            await self.discord_fax.handle_message(message)
+
     async def close(self) -> None:
         if self._mail_task is not None:
             self._mail_task.cancel()
@@ -297,6 +357,11 @@ class GovernorBot(discord.Client):
             with suppress(asyncio.CancelledError):
                 await self._organizer_task
             self._organizer_task = None
+        if self._fax_task is not None:
+            self._fax_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._fax_task
+            self._fax_task = None
         await self._health.stop()
         await super().close()
 
@@ -307,6 +372,7 @@ class GovernorBot(discord.Client):
             "version": __version__,
             "naverMail": self.mail_poller.status(),
             "naverMailOrganizer": self.mail_organizer.status(),
+            "fax": self.fax_service.status(),
         }
 
     async def _mail_loop(self) -> None:
@@ -348,6 +414,17 @@ class GovernorBot(discord.Client):
                     with suppress(Exception):
                         await asyncio.to_thread(self.mail_organizer.close_digest, str(digest["id"]))
             await asyncio.sleep(self.mail_organizer.config.scheduler_poll_seconds)
+
+    async def _fax_loop(self) -> None:
+        if self.discord_fax is None:
+            return
+        while not self.is_closed():
+            try:
+                await self.discord_fax.cycle()
+            except Exception as exc:
+                self.fax_service.record_error(exc)
+                LOGGER.exception("Fax cycle failed")
+            await asyncio.sleep(self.fax_service.config.poll_seconds)
 
     async def _mail_channel(self) -> discord.abc.Messageable:
         channel_id = self.settings.mail_archive_channel_id
