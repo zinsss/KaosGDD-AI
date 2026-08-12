@@ -4,8 +4,9 @@ KaosGovernor uses its own deterministic bot for notifications, inbox/fax/mail
 workflows, confirmation buttons, timed jobs, and system operations. KaosBrain
 uses OpenClaw's separate Discord integration. Family chat remains in its PWA.
 
-The bot has no Governor API connection yet. It temporarily hosts the tested
-KaosMail worker in-process as part of the planned Governor modular monolith.
+The bot temporarily hosts the tested Governor modules in-process as part of the
+planned modular monolith. The first narrow tool API provides authenticated,
+read-only Memos search and current-content fetch routes.
 
 ## Discord application
 
@@ -36,6 +37,10 @@ docker compose -f compose.discord.yaml logs -f governor-discord
 Never commit `.env`. Port 8097 is loopback-only and must not be routed through
 Caddy or cloudflared.
 
+For Memos search, create a dedicated PAT in the personal Memos account and set
+the variables documented in [Governor Memos search](memos-search.md). Generate
+`GOVERNOR_API_TOKEN` independently; do not reuse the Memos PAT.
+
 ## Verify
 
 1. `curl http://127.0.0.1:8097/health` reports `status: ok`.
@@ -55,14 +60,16 @@ Caddy or cloudflared.
 10. With Message Content intent enabled, a PDF uploaded without text receives
     `Reply directly to this PDF with fax:<number>.` Source upload, command, and
     prompt messages are deleted only after HylaFAX confirms success.
+11. An unauthenticated `POST /api/v1/memos/search` returns `401`; the same call
+    with `GOVERNOR_API_TOKEN` returns creator-scoped live Memos results.
 
 It may run temporarily on the current Kaos host. Move the same image and `.env`
 to RK1-1 when ready.
 
-## Next boundary
+## Boundary
 
-The next step connects this transport to a narrow authenticated Governor API.
-Discord callbacks submit typed commands and confirmation tokens. The temporary
-fax adapter writes only the narrow, versioned bridge manifest contract and reads
-HylaFAX status/archive files; it has no modem, shell, Docker, database, Radicale,
-Memos, or Paperless authority.
+The temporary fax adapter writes only the narrow, versioned bridge manifest
+contract and reads HylaFAX status/archive files; it has no modem, shell, Docker,
+or database authority. The Memos adapter has an account-scoped PAT but exposes
+only read-only search and fetch operations. Radicale and Paperless authority are
+not connected.

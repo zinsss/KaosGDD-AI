@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import os
+from pathlib import Path
 from typing import Mapping
 
 
@@ -46,6 +47,19 @@ def _boolean(env: Mapping[str, str], name: str) -> bool:
     raise ConfigurationError(f"{name} must be true or false")
 
 
+def _secret(env: Mapping[str, str], name: str) -> str:
+    value = env.get(name, "").strip()
+    path = env.get(f"{name}_FILE", "").strip()
+    if value and path:
+        raise ConfigurationError(f"set either {name} or {name}_FILE, not both")
+    if not path:
+        return value
+    try:
+        return Path(path).read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise ConfigurationError(f"unable to read {name}_FILE") from exc
+
+
 @dataclass(frozen=True)
 class Settings:
     token: str
@@ -61,6 +75,7 @@ class Settings:
     startup_notification: bool
     health_host: str
     health_port: int
+    governor_api_token: str
     log_level: str
 
     @classmethod
@@ -124,6 +139,9 @@ class Settings:
         health_port = _positive_int(source.get("HEALTH_PORT", "8097"), "HEALTH_PORT")
         if health_port > 65535:
             raise ConfigurationError("HEALTH_PORT must be at most 65535")
+        governor_api_token = _secret(source, "GOVERNOR_API_TOKEN")
+        if _boolean(source, "MEMOS_SEARCH_ENABLED") and not governor_api_token:
+            raise ConfigurationError("GOVERNOR_API_TOKEN is required when Memos search is enabled")
         return cls(
             token=_required(source, "DISCORD_BOT_TOKEN"),
             guild_id=_positive_int(_required(source, "DISCORD_GUILD_ID"), "DISCORD_GUILD_ID"),
@@ -138,5 +156,6 @@ class Settings:
             startup_notification=_boolean(source, "DISCORD_STARTUP_NOTIFICATION"),
             health_host=source.get("HEALTH_HOST", "0.0.0.0").strip() or "0.0.0.0",
             health_port=health_port,
+            governor_api_token=governor_api_token,
             log_level=source.get("LOG_LEVEL", "INFO").strip().upper() or "INFO",
         )

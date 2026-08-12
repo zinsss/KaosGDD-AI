@@ -1,6 +1,8 @@
 import asyncio
 import logging
 
+from kaos_governor.memos import MemosConfigurationError
+
 from .bot import GovernorBot
 from .config import ConfigurationError, Settings
 
@@ -12,8 +14,12 @@ def main() -> None:
         raise SystemExit(f"Configuration error: {exc}") from exc
     logging.basicConfig(level=getattr(logging, settings.log_level, logging.INFO), format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
-    async def run() -> None:
+    try:
         bot = GovernorBot(settings)
+    except MemosConfigurationError as exc:
+        raise SystemExit(f"Configuration error: {exc}") from exc
+
+    async def run() -> None:
         async with bot:
             await bot.start(settings.token)
 

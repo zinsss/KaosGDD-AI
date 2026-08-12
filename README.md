@@ -58,6 +58,7 @@ Upstream applications will be referenced using pinned release versions or image 
 - [Migration strategies and phased plan](docs/migration/migration-plan.md)
 - [KaosGovernor Discord bot rollout](docs/operations/discord-governor-bot.md)
 - [Naver mail migration](docs/operations/naver-mail.md)
+- [Governor Memos search](docs/operations/memos-search.md)
 
 ## Non-Negotiable Principles
 

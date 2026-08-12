@@ -17,6 +17,7 @@ from kaos_governor.mail import (
     NaverMailPoller,
 )
 from kaos_governor.fax import FaxConfig, FaxError, FaxService
+from kaos_governor.memos import MemosConfig, MemosService
 
 from . import __version__
 from .access import AccessPolicy
@@ -137,6 +138,7 @@ class GovernorBot(discord.Client):
             else None
         )
         self.fax_service = FaxService(FaxConfig.from_env())
+        self.memos = MemosService(MemosConfig.from_env())
         self.discord_fax = (
             DiscordFaxTransport(
                 self,
@@ -150,7 +152,13 @@ class GovernorBot(discord.Client):
             and settings.fax_notification_channel_id is not None
             else None
         )
-        self._health = HealthServer(settings.health_host, settings.health_port, self._health_status)
+        self._health = HealthServer(
+            settings.health_host,
+            settings.health_port,
+            self._health_status,
+            governor_api_token=settings.governor_api_token,
+            memos=self.memos,
+        )
         self._register_commands()
 
     def _register_commands(self) -> None:
@@ -172,6 +180,7 @@ class GovernorBot(discord.Client):
                         f"Mail organizer: {'enabled' if self.mail_organizer.config.enabled else 'disabled'}",
                         f"Fax: {'enabled' if self.fax_service.config.enabled else 'disabled'}",
                         f"Fax message intake: {'enabled' if self.fax_service.config.message_intake else 'disabled'}",
+                        f"Memos search: {'enabled' if self.memos.config.enabled else 'disabled'}",
                     ),
                     footer="Private status visible only to you",
                 ).render(),
@@ -373,6 +382,7 @@ class GovernorBot(discord.Client):
             "naverMail": self.mail_poller.status(),
             "naverMailOrganizer": self.mail_organizer.status(),
             "fax": self.fax_service.status(),
+            "memosSearch": self.memos.status(),
         }
 
     async def _mail_loop(self) -> None:

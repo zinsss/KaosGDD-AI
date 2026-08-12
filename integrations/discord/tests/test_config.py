@@ -1,3 +1,5 @@
+from pathlib import Path
+import tempfile
 import unittest
 
 from kaos_governor_discord.access import AccessPolicy
@@ -97,6 +99,31 @@ class SettingsTests(unittest.TestCase):
     def test_fax_message_intake_cannot_enable_fax_implicitly(self) -> None:
         with self.assertRaises(ConfigurationError):
             Settings.from_env({**BASE_ENV, "FAX_DISCORD_MESSAGE_INTAKE": "true"})
+
+    def test_memos_search_requires_a_governor_api_token(self) -> None:
+        with self.assertRaises(ConfigurationError):
+            Settings.from_env({**BASE_ENV, "MEMOS_SEARCH_ENABLED": "true"})
+        settings = Settings.from_env(
+            {
+                **BASE_ENV,
+                "MEMOS_SEARCH_ENABLED": "true",
+                "GOVERNOR_API_TOKEN": "not-a-real-secret",
+            }
+        )
+        self.assertEqual(settings.governor_api_token, "not-a-real-secret")
+
+    def test_governor_api_token_can_be_loaded_from_a_secret_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            token_file = Path(temporary_directory) / "governor-api-token"
+            token_file.write_text("file-secret\n", encoding="utf-8")
+            settings = Settings.from_env(
+                {
+                    **BASE_ENV,
+                    "MEMOS_SEARCH_ENABLED": "true",
+                    "GOVERNOR_API_TOKEN_FILE": str(token_file),
+                }
+            )
+        self.assertEqual(settings.governor_api_token, "file-secret")
 
 
 class AccessPolicyTests(unittest.TestCase):

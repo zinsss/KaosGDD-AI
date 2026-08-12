@@ -10,13 +10,23 @@ allowlists. It requests Message Content intent only when the optional
 Telegram-compatible fax upload/reply flow is enabled. It has no public HTTP
 route.
 
+Version `0.5.0` also exposes the first narrow Governor tool API on the same
+loopback-bound listener:
+
+- `POST /api/v1/memos/search`
+- `GET /api/v1/memos/{id}`
+
+Both routes require `Authorization: Bearer <GOVERNOR_API_TOKEN>`. They query
+Memos live with a dedicated personal access token and never persist memo
+content. `/health` and `/ready` do not require the tool token.
+
 Bot-authored messages use a shared Discord Markdown renderer for headings,
 fields, lists, quotes, and compact footers. Dynamic values are escaped, mentions
 are disabled, and oversized messages fail explicitly instead of being silently
 truncated. Domain adapters should use this renderer rather than assembling
 untrusted Markdown directly.
 
-Version `0.4.0` hosts the first deterministic Governor modules: read-only
+Version `0.5.0` hosts the first deterministic Governor modules: read-only
 Naver IMAP polling with UID checkpointing and Discord Markdown delivery. The mail
 logic lives under `apps/governor`; the Discord package only renders and transports
 the resulting typed mail and attachment objects. Archive delivery and organizer
