@@ -21,7 +21,7 @@ from . import __version__
 from .access import AccessPolicy
 from .config import Settings
 from .health import HealthServer
-from .mail import render_mail_summary, safe_attachment_filename
+from .mail import render_attachment_label, render_mail_summary, transport_attachment_filename
 from .markdown import MarkdownField, MarkdownMessage, NO_MENTIONS
 from .organizer import DiscordMailOrganizer
 
@@ -367,9 +367,9 @@ class GovernorBot(discord.Client):
 
     async def _send_mail_attachment(self, attachment: Attachment):
         channel = await self._mail_channel()
-        filename = safe_attachment_filename(attachment)
+        filename = transport_attachment_filename(attachment)
         return await channel.send(
-            content=f"**Attachment** · {filename}",
+            content=render_attachment_label(attachment),
             file=discord.File(io.BytesIO(attachment.content), filename=filename),
             allowed_mentions=NO_MENTIONS,
         )

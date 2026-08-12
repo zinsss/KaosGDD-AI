@@ -24,6 +24,10 @@ New target-folder mail is sent to the explicitly allowlisted
 Markdown summary followed by eligible attachments. Dynamic mail content is
 escaped and Discord mentions are disabled. Naver remains the only mail source of
 truth; Governor state contains UID checkpoints and delivery IDs, not mail bodies.
+Discord normalizes uploaded filenames to ASCII, so every attachment message
+renders the original decoded filename as escaped text and uses a stable
+ASCII-only multipart filename. Korean filenames therefore remain visible in all
+Discord clients without changing the source attachment.
 
 ## Daily unread organizer
 
