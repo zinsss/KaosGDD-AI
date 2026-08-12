@@ -8,7 +8,7 @@ import discord
 from kaos_governor.mail import MailOrganizerError, MailMessage, NaverMailOrganizer
 
 from .access import AccessPolicy
-from .mail import render_attachment_label, render_mail_summary, safe_attachment_filename
+from .mail import render_mail_summary, safe_attachment_filename
 from .markdown import MarkdownField, MarkdownMessage, NO_MENTIONS
 
 if TYPE_CHECKING:
@@ -175,7 +175,6 @@ class DiscordMailOrganizer:
                 continue
             filename = safe_attachment_filename(attachment)
             await channel.send(
-                content=render_attachment_label(attachment),
                 file=discord.File(io.BytesIO(attachment.content), filename=filename),
                 allowed_mentions=NO_MENTIONS,
             )

@@ -6,17 +6,13 @@ import re
 import discord
 from kaos_governor.mail import Attachment, MailMessage
 
-from .markdown import DISCORD_MESSAGE_LIMIT, MarkdownMessageTooLong, escape_text
+from .markdown import DISCORD_MESSAGE_LIMIT, MarkdownMessageTooLong
 
 
 def safe_attachment_filename(attachment: Attachment) -> str:
     filename = PurePath(attachment.filename.replace("\\", "/")).name
     cleaned = "".join(character for character in filename if character.isprintable() and character not in "\r\n")
     return cleaned[:180] or "attachment"
-
-
-def render_attachment_label(attachment: Attachment) -> str:
-    return f"**Attachment** · {escape_text(safe_attachment_filename(attachment))}"
 
 
 def _escaped(value: object) -> str:
