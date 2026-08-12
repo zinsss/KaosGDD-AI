@@ -12,7 +12,7 @@ jobs:
   container-tests:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Validate shell scripts
         run: bash -n deploy/h3-backend/kaos-h3
       - name: Render H3 deployment
