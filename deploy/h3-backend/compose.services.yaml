@@ -1,0 +1,183 @@
+services:
+  memos:
+    image: neosmemo/memos@sha256:3e1253477066eb2aefa91145f7f9038bb931ed88c8a3ee05310a933594cdba7d
+    container_name: memos
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:5230:5230"
+    volumes:
+      - ${KAOS_ROOT:-/srv/kaos}/data/memos:/var/opt/memos
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
+  radicale:
+    image: ghcr.io/kozea/radicale@sha256:ff012f461abd60a439eeee983c4b3de73ca477e6045c439a95e0e1bd81e3482e
+    container_name: radicale
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:5232:5232"
+    volumes:
+      - ${KAOS_ROOT:-/srv/kaos}/config/radicale:/etc/radicale:ro
+      - ${KAOS_ROOT:-/srv/kaos}/data/radicale:/var/lib/radicale
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
+  vaultwarden:
+    image: vaultwarden/server@sha256:ebdfe70701c60ac0c28c697e787cea767d7972940b786037b29fe0d507f821e8
+    container_name: vaultwarden
+    restart: unless-stopped
+    env_file:
+      - path: ${KAOS_ROOT:-/srv/kaos}/secrets/vaultwarden.env
+        format: raw
+    ports:
+      - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:8083:80"
+    volumes:
+      - ${KAOS_ROOT:-/srv/kaos}/data/vaultwarden:/data
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
+  sftpgo:
+    image: drakkan/sftpgo@sha256:9011fe608d336d3daf6ed6224b16fd40443aab8f3335e0b20853d6a539c58738
+    container_name: sftpgo
+    restart: unless-stopped
+    environment:
+      SFTPGO_HTTPD__BINDINGS__0__ADDRESS: 0.0.0.0
+      SFTPGO_HTTPD__BINDINGS__0__PORT: "8080"
+      SFTPGO_SFTPD__BINDINGS__0__ADDRESS: 0.0.0.0
+      SFTPGO_SFTPD__BINDINGS__0__PORT: "2022"
+      SFTPGO_DATA_PROVIDER__DRIVER: sqlite
+      SFTPGO_DATA_PROVIDER__NAME: /var/lib/sftpgo/sftpgo.db
+      SFTPGO_DATA_PROVIDER__BACKUPS_PATH: /srv/sftpgo/backups
+      SFTPGO_COMMON__DEFENDER__ENABLED: "true"
+      SFTPGO_COMMON__DEFENDER__BAN_TIME: "15"
+      SFTPGO_COMMON__DEFENDER__BAN_TIME_INCREMENT: "100"
+      SFTPGO_COMMON__DEFENDER__THRESHOLD: "5"
+      SFTPGO_COMMON__DEFENDER__OBSERVATION_TIME: "15"
+    ports:
+      - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:8081:8080"
+      - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:2022:2022"
+    volumes:
+      - ${KAOS_ROOT:-/srv/kaos}/data/sftpgo/config:/etc/sftpgo
+      - ${KAOS_ROOT:-/srv/kaos}/data/sftpgo/state:/var/lib/sftpgo
+      - ${KAOS_ROOT:-/srv/kaos}/data/sftpgo/data:/srv/sftpgo/data
+      - ${KAOS_ROOT:-/srv/kaos}/data/sftpgo/backups:/srv/sftpgo/backups
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
+  family-portal:
+    image: nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
+    container_name: family-portal
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:8090:80"
+    volumes:
+      - ${KAOS_ROOT:-/srv/kaos}/config/family-portal/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${KAOS_ROOT:-/srv/kaos}/data/family-portal:/usr/share/nginx/html:ro
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
+  family-memos-web:
+    image: kaosgdd-memos-web:0.1.5-trusted-host1
+    container_name: family-memos-web
+    restart: unless-stopped
+    profiles: ["family-transition"]
+    environment:
+      APP_NAME: 가족 메모
+      APP_MODE: family
+      MEMOS_BASE_URL: ""
+      KAOSPRINT_URL: ""
+      DEFAULT_EDITOR_MODE: wysiwyg
+      ALLOW_MARKDOWN_MODE: "false"
+      THEME: family
+    ports:
+      - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:8094:80"
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
+  kaosgdd-gov-database:
+    image: postgres:16-alpine@sha256:e013e867e712fec275706a6c51c966f0bb0c93cfa8f51000f85a15f9865a28cb
+    container_name: kaosgdd-gov-database
+    restart: unless-stopped
+    profiles: ["family-transition"]
+    env_file:
+      - path: ${KAOS_ROOT:-/srv/kaos}/secrets/kaosgdd-gov.env
+        format: raw
+    volumes:
+      - ${KAOS_ROOT:-/srv/kaos}/data/kaosgdd-gov/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - backend
+
+  kaosgdd-gov:
+    image: kaosgdd-brain:0.12.11-mail-date1
+    container_name: kaosgdd-gov
+    restart: unless-stopped
+    profiles: ["family-transition"]
+    depends_on:
+      kaosgdd-gov-database:
+        condition: service_healthy
+    env_file:
+      - path: ${KAOS_ROOT:-/srv/kaos}/secrets/kaosgdd-gov.env
+        format: raw
+    environment:
+      BRAIN_PORT: "8092"
+      BRAIN_VERSION: "0.12.11-mail-date1"
+      BRAIN_DB_HOST: "kaosgdd-gov-database"
+      BRAIN_DB_PORT: "5432"
+      CALENDAR_ADAPTER_INTERNAL_URL: "http://calendar-adapter:8091"
+      MEMOS_INTERNAL_URL: "http://memos:5230"
+      FAX_OUTGOING_ENABLED: "false"
+      TELEGRAM_FAX_INTAKE_ENABLED: "false"
+      TELEGRAM_DOCUMENT_INTAKE_ENABLED: "false"
+      MEMOS_TELEGRAM_ARCHIVE_ENABLED: "false"
+    ports:
+      - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:8092:8092"
+    volumes:
+      - ${KAOS_ROOT:-/srv/kaos}/data/kaosgdd-gov/documents:/data/documents
+      - ${KAOS_ROOT:-/srv/kaos}/data/kaosgdd-gov/mail:/data/mail
+      - ${KAOS_ROOT:-/srv/kaos}/data/kaosgdd-gov/memos:/data/memos
+      - ${KAOS_ROOT:-/srv/kaos}/backups/kaosgdd/ledger:/data/ledger/backups
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
+  calendar-adapter:
+    image: python:3.12-alpine@sha256:6d43704baacd1bfbe7c295d7f13079d5d8104ed33568873133f8fc69980419df
+    container_name: calendar-adapter
+    restart: unless-stopped
+    profiles: ["family-transition"]
+    env_file:
+      - path: ${KAOS_ROOT:-/srv/kaos}/secrets/kaosgdd-adapters.env
+        format: raw
+    environment:
+      PORT: "8091"
+    ports:
+      - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:8091:8091"
+    volumes:
+      - ${KAOS_ROOT:-/srv/kaos}/data/calendar-adapter:/app:ro
+    command: ["python", "/app/server.py"]
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
+networks:
+  backend:
+    name: kaosgdd-backend

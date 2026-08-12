@@ -40,11 +40,11 @@ running only to reduce final downtime; that copy is not a valid cutover copy.
 
 ```bash
 rsync -aHAX --numeric-ids --info=progress2 \
-  kaos:/srv/kaos/data/memos/ /srv/kaos/data/memos/
+  kaosclinic:/srv/kaos/data/memos/ /srv/kaos/data/memos/
 rsync -aHAX --numeric-ids --info=progress2 \
-  kaos:/srv/kaos/data/radicale/ /srv/kaos/data/radicale/
+  kaosclinic:/srv/kaos/data/radicale/ /srv/kaos/data/radicale/
 rsync -aHAX --numeric-ids --info=progress2 \
-  kaos:/srv/kaos/config/radicale/ /srv/kaos/config/radicale/
+  kaosclinic:/srv/kaos/config/radicale/ /srv/kaos/config/radicale/
 ```
 
 ## Phase 3: final write freeze

@@ -1,0 +1,31 @@
+services:
+  caddy:
+    image: caddy:2@sha256:844f60b64e4724a5aa8245e019dace0d3f199f7433ce6c57676cb30a920dbad9
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "${EDGE_BIND_ADDRESS:-127.0.0.1}:8080:8080"
+    volumes:
+      - ${KAOS_ROOT:-/srv/kaos}/config/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${KAOS_ROOT:-/srv/kaos}/data/caddy/data:/data
+      - ${KAOS_ROOT:-/srv/kaos}/data/caddy/config:/config
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
+  cloudflared:
+    image: cloudflare/cloudflared@sha256:e39ee8da81ad5e05d77f38d2f51c60ca51bf2a8450ac3abab50c17fdb91d91bf
+    container_name: cloudflared
+    restart: unless-stopped
+    env_file:
+      - ${KAOS_ROOT:-/srv/kaos}/secrets/cloudflared.env
+    command: tunnel run
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
+networks:
+  backend:
+    name: kaosgdd-backend

@@ -77,9 +77,19 @@ kaos-h3 down
 kaos-h3 backends-preflight
 kaos-h3 backends-up
 kaos-h3 backends-down
+kaos-h3 services-preflight
+kaos-h3 services-up
+kaos-h3 services-down
+kaos-h3 family-preflight
+kaos-h3 family-up
+kaos-h3 family-down
+kaos-h3 edge-preflight
+kaos-h3 edge-up
+kaos-h3 edge-down
 ```
 
-`down` and `backends-down` never delete volumes or host data.
+`down`, `backends-down`, `services-down`, `family-down`, and `edge-down` never
+delete volumes or host data.
 
 ## Stateful backends
 
@@ -95,6 +105,14 @@ the current server. It is deliberately excluded from normal `up`.
 Follow [the H3 backend migration runbook](../../docs/migration/h3-backend-cutover.md)
 before using this command. Starting empty services and importing data later is
 not an approved production migration path.
+
+`compose.services.yaml` and `compose.edge.yaml` prepare the broader H3 service
+move for Radicale, Memos, Vaultwarden, SFTPGo, Family portal, Caddy, and
+cloudflared. Use their preflight commands only after data and secrets are
+staged. The transitional `family-*` commands are for temporary legacy family
+APIs only; they are not the final KaosGovernor implementation.
+
+See [the H3 service migration prep note](../../docs/migration/h3-service-migration-prep.md).
 
 ## Rollback
 
