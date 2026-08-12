@@ -8,7 +8,14 @@ import time
 
 import discord
 from discord import app_commands
-from kaos_governor.mail import Attachment, MailMessage, NaverMailConfig, NaverMailPoller
+from kaos_governor.mail import (
+    Attachment,
+    MailMessage,
+    MailOrganizerConfig,
+    NaverMailConfig,
+    NaverMailOrganizer,
+    NaverMailPoller,
+)
 
 from . import __version__
 from .access import AccessPolicy
@@ -16,6 +23,7 @@ from .config import Settings
 from .health import HealthServer
 from .mail import render_mail_summary, safe_attachment_filename
 from .markdown import MarkdownField, MarkdownMessage, NO_MENTIONS
+from .organizer import DiscordMailOrganizer
 
 LOGGER = logging.getLogger(__name__)
 
@@ -108,7 +116,15 @@ class GovernorBot(discord.Client):
         self._started_at = time.monotonic()
         self._startup_announced = False
         self._mail_task: asyncio.Task | None = None
-        self.mail_poller = NaverMailPoller(NaverMailConfig.from_env())
+        self._organizer_task: asyncio.Task | None = None
+        naver_config = NaverMailConfig.from_env()
+        self.mail_poller = NaverMailPoller(naver_config)
+        self.mail_organizer = NaverMailOrganizer(MailOrganizerConfig.from_env(), naver_config)
+        self.discord_mail_organizer = (
+            DiscordMailOrganizer(self, self.mail_organizer, self.policy, settings.mail_channel_id)
+            if settings.mail_channel_id is not None
+            else None
+        )
         self._health = HealthServer(settings.health_host, settings.health_port, self._health_status)
         self._register_commands()
 
@@ -128,6 +144,7 @@ class GovernorBot(discord.Client):
                         "Discord: connected",
                         "Governor API: not connected (preparation mode)",
                         f"Naver mail: {'enabled' if self.mail_poller.config.enabled else 'disabled'}",
+                        f"Mail organizer: {'enabled' if self.mail_organizer.config.enabled else 'disabled'}",
                     ),
                     footer="Private status visible only to you",
                 ).render(),
@@ -150,6 +167,80 @@ class GovernorBot(discord.Client):
             )
             view.message = await interaction.original_response()
 
+        @self.tree.command(name="mail-organizer-now", description="Send the Naver unread-mail organizer now")
+        async def mail_organizer_now(interaction: discord.Interaction) -> None:
+            if not self.mail_organizer.config.enabled or self.discord_mail_organizer is None:
+                await interaction.response.send_message(
+                    MarkdownMessage(title="Mail organizer disabled").render(),
+                    ephemeral=True,
+                    allowed_mentions=NO_MENTIONS,
+                )
+                return
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            digest = None
+            try:
+                digest = await asyncio.to_thread(self.mail_organizer.create_digest)
+                if digest is None:
+                    await asyncio.to_thread(self.mail_organizer.mark_due_sent)
+                    await interaction.edit_original_response(content="No unread Naver mail. Nothing was sent.")
+                    return
+                await self.discord_mail_organizer.publish_digest(digest)
+                await asyncio.to_thread(self.mail_organizer.mark_due_sent)
+                self.mail_organizer.record_manual_digest()
+                await interaction.edit_original_response(
+                    content=f"Organizer sent with {len(digest.get('items', {}))} unread messages."
+                )
+            except Exception as exc:
+                LOGGER.exception("Manual mail organizer failed")
+                if digest is not None:
+                    with suppress(Exception):
+                        await asyncio.to_thread(self.mail_organizer.close_digest, str(digest["id"]))
+                await interaction.edit_original_response(
+                    content=MarkdownMessage(title="Mail organizer failed", summary=type(exc).__name__).render()
+                )
+
+        @self.tree.command(name="mail-organizer-schedule", description="Set the daily Naver organizer schedule")
+        @app_commands.describe(
+            runs_per_day="One or two organizer messages per day",
+            first_time="First KST time in HH:MM, five-minute steps",
+            second_time="Second KST time in HH:MM when runs_per_day is 2",
+        )
+        async def mail_organizer_schedule(
+            interaction: discord.Interaction,
+            runs_per_day: app_commands.Range[int, 1, 2],
+            first_time: str,
+            second_time: str = "17:00",
+        ) -> None:
+            try:
+                schedule = await asyncio.to_thread(
+                    self.mail_organizer.update_schedule,
+                    int(runs_per_day),
+                    first_time,
+                    second_time,
+                )
+            except ValueError as exc:
+                await interaction.response.send_message(
+                    MarkdownMessage(title="Invalid organizer schedule", summary=str(exc)).render(),
+                    ephemeral=True,
+                    allowed_mentions=NO_MENTIONS,
+                )
+                return
+            await interaction.response.send_message(
+                MarkdownMessage(
+                    title="Mail organizer schedule",
+                    fields=(
+                        MarkdownField("Runs per day", schedule["runsPerDay"]),
+                        MarkdownField("First", f"{schedule['firstTime']} KST"),
+                        MarkdownField(
+                            "Second",
+                            f"{schedule['secondTime']} KST" if int(schedule["runsPerDay"]) == 2 else "Disabled",
+                        ),
+                    ),
+                ).render(),
+                ephemeral=True,
+                allowed_mentions=NO_MENTIONS,
+            )
+
     async def setup_hook(self) -> None:
         await self._health.start()
         guild = discord.Object(id=self.settings.guild_id)
@@ -161,6 +252,17 @@ class GovernorBot(discord.Client):
         LOGGER.info("Discord ready as %s (%s)", self.user, self.user.id if self.user else None)
         if self.mail_poller.config.enabled and self._mail_task is None:
             self._mail_task = asyncio.create_task(self._mail_loop(), name="governor-naver-mail")
+        if self.mail_organizer.config.enabled and self._organizer_task is None:
+            if self.discord_mail_organizer is None:
+                LOGGER.error("Mail organizer enabled without a Discord coordinator")
+            else:
+                await self.discord_mail_organizer.prune_expired()
+                restored = self.discord_mail_organizer.restore_views()
+                LOGGER.info("Restored %d mail organizer views", restored)
+                self._organizer_task = asyncio.create_task(
+                    self._mail_organizer_loop(),
+                    name="governor-naver-mail-organizer",
+                )
         if self.settings.startup_notification and not self._startup_announced and self.settings.system_channel_id:
             self._startup_announced = True
             try:
@@ -184,6 +286,11 @@ class GovernorBot(discord.Client):
             with suppress(asyncio.CancelledError):
                 await self._mail_task
             self._mail_task = None
+        if self._organizer_task is not None:
+            self._organizer_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._organizer_task
+            self._organizer_task = None
         await self._health.stop()
         await super().close()
 
@@ -193,6 +300,7 @@ class GovernorBot(discord.Client):
             "guildId": str(self.settings.guild_id),
             "version": __version__,
             "naverMail": self.mail_poller.status(),
+            "naverMailOrganizer": self.mail_organizer.status(),
         }
 
     async def _mail_loop(self) -> None:
@@ -214,6 +322,26 @@ class GovernorBot(discord.Client):
             if status["lastError"]:
                 LOGGER.error("Naver mail scan failed: %s", status["lastError"])
             await asyncio.sleep(self.mail_poller.config.poll_seconds)
+
+    async def _mail_organizer_loop(self) -> None:
+        if self.discord_mail_organizer is None:
+            return
+        while not self.is_closed():
+            digest = None
+            try:
+                await self.discord_mail_organizer.prune_expired()
+                digest = await asyncio.to_thread(self.mail_organizer.due_digest)
+                if digest is not None:
+                    await self.discord_mail_organizer.publish_digest(digest)
+                await asyncio.to_thread(self.mail_organizer.mark_due_sent)
+                self.mail_organizer.record_schedule_result(sent=digest is not None)
+            except Exception as exc:
+                LOGGER.exception("Scheduled mail organizer failed")
+                self.mail_organizer.record_schedule_result(sent=False, error=exc)
+                if digest is not None:
+                    with suppress(Exception):
+                        await asyncio.to_thread(self.mail_organizer.close_digest, str(digest["id"]))
+            await asyncio.sleep(self.mail_organizer.config.scheduler_poll_seconds)
 
     async def _mail_channel(self) -> discord.abc.Messageable:
         channel_id = self.settings.mail_channel_id

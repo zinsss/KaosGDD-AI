@@ -15,7 +15,7 @@ The existing `zinsss/KaosGDD` `apps/brain` implementation remains production cod
 | Memos relay/archive | `governor/memos` | Memos remains authoritative |
 | Paperless/Stirling/document store | `governor/inbox` and adapters | Preserve source-key deduplication and temporary cleanup |
 | HWP handoff | Retire or optional Inbox adapter | Prefer Polaris for manual use unless automation is needed |
-| Mail notifier/archive/organizer | `governor/mail` | Replace Telegram presentation with Discord without changing IMAP logic first |
+| Mail notifier/archive/organizer | `governor/mail` | Ported to Discord with unchanged Naver IMAP authority; retire legacy workers only after live verification |
 | Fax notifier/outgoing/intake/archive | `governor/fax` plus office Fax Connector | HylaFAX remains transport authority |
 | Notification router | `governor/notifications` | Replace Telegram/Pushover/ntfy paths with Discord/Web Push as approved |
 | Telegram access/transient utilities | Discord interaction and transient cleanup utilities | Retain dedupe and cleanup semantics, not Telegram-specific assumptions |

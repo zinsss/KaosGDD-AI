@@ -70,8 +70,11 @@ class Settings:
         raw_mail = source.get("MAIL_DISCORD_CHANNEL_ID", "").strip()
         mail_channel_id = _positive_int(raw_mail, "MAIL_DISCORD_CHANNEL_ID") if raw_mail else None
         mail_enabled = _boolean(source, "MAIL_NAVER_ENABLED")
-        if mail_enabled and mail_channel_id is None:
-            raise ConfigurationError("MAIL_DISCORD_CHANNEL_ID is required when MAIL_NAVER_ENABLED=true")
+        organizer_enabled = _boolean(source, "MAIL_ORGANIZER_ENABLED")
+        if (mail_enabled or organizer_enabled) and mail_channel_id is None:
+            raise ConfigurationError(
+                "MAIL_DISCORD_CHANNEL_ID is required when Naver mail or its organizer is enabled"
+            )
         if mail_channel_id is not None and mail_channel_id not in allowed_channels:
             raise ConfigurationError("MAIL_DISCORD_CHANNEL_ID must be in DISCORD_ALLOWED_CHANNEL_IDS")
         health_port = _positive_int(source.get("HEALTH_PORT", "8097"), "HEALTH_PORT")

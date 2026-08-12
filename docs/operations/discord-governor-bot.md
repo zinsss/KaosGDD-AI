@@ -41,6 +41,10 @@ Caddy or cloudflared.
 3. `/confirmation-test` confirms, cancels, and expires without an action.
 4. Commands are rejected outside the allowlist.
 5. The bot cannot view unrelated Discord channels.
+6. `/mail-organizer-now` sends nothing when Naver has no unread mail, or sends a
+   paginated digest whose preview/import/read/delete controls work only for an
+   allowlisted user.
+7. `/mail-organizer-schedule 1 09:00` preserves the current daily KST schedule.
 
 It may run temporarily on the current Kaos host. Move the same image and `.env`
 to RK1-1 when ready.

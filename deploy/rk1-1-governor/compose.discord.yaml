@@ -4,7 +4,7 @@ services:
       context: ../..
       dockerfile: integrations/discord/Dockerfile
       target: runtime
-    image: kaosgdd-ai-governor-discord:0.2.0
+    image: kaosgdd-ai-governor-discord:0.3.0
     container_name: kaos-governor-discord
     restart: unless-stopped
     init: true

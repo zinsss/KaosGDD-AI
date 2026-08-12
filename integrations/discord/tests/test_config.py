@@ -37,6 +37,14 @@ class SettingsTests(unittest.TestCase):
         )
         self.assertEqual(settings.mail_channel_id, 300)
 
+    def test_organizer_also_requires_an_allowed_mail_channel(self) -> None:
+        with self.assertRaises(ConfigurationError):
+            Settings.from_env({**BASE_ENV, "MAIL_ORGANIZER_ENABLED": "true"})
+        settings = Settings.from_env(
+            {**BASE_ENV, "MAIL_ORGANIZER_ENABLED": "true", "MAIL_DISCORD_CHANNEL_ID": "300"}
+        )
+        self.assertEqual(settings.mail_channel_id, 300)
+
 
 class AccessPolicyTests(unittest.TestCase):
     def setUp(self) -> None:
