@@ -1,0 +1,15 @@
+services:
+  governor-discord:
+    build:
+      context: ../../integrations/discord
+      target: runtime
+    image: kaosgdd-ai-governor-discord:0.1.0
+    container_name: kaos-governor-discord
+    restart: unless-stopped
+    init: true
+    env_file: [.env]
+    ports: ["127.0.0.1:8097:8097"]
+    read_only: true
+    tmpfs: ["/tmp:size=16m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
