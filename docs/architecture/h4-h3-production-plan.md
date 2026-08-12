@@ -146,6 +146,10 @@ H3+ runs durable, non-AI platform services:
 H3+ may call Office Kaos through narrow Tailscale services. It does not mount
 the office HylaFAX spool, DICOM storage, Paperless archive, or Docker socket.
 
+Nextcloud is intentionally excluded from the target backend. Do not replace
+Radicale tasks/events or SFTPGo transfer duties with Nextcloud without a new
+stateful-service migration proposal and explicit approval.
+
 #### H3 runtime shape
 
 KaosGovernor remains a modular monolith. Split processes only where runtime

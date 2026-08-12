@@ -40,6 +40,10 @@ Native clients may still use service-native interfaces:
 - Paperless users may use the Paperless UI.
 - HylaFAX continues locally at the office if home AI infrastructure is unavailable.
 
+Nextcloud is not part of the target backend. Radicale remains the CalDAV
+authority, Memos remains the memo authority, and SFTPGo remains the planned
+purpose-built file transfer service where needed.
+
 No main personal KaosGDD web application is planned. Its repository may remain
 as reference, and a new personal UI may be considered later only when native
 iOS clients and Discord leave a concrete workflow unmet.
