@@ -6,7 +6,7 @@ OpenClaw, an LLM, or conversational state.
 ## Preserved behavior
 
 - Naver IMAP over TLS remains authoritative.
-- `각종공문`, `세무사`, and every descendant folder are discovered using IMAP
+- `세무사`, `영덕군보건소`, and every descendant folder are discovered using IMAP
   modified UTF-7 names.
 - Mailboxes are selected read-only and messages use `BODY.PEEK[]`; polling does
   not mark mail read.
@@ -82,7 +82,7 @@ MAIL_NAVER_HOST=imap.naver.com
 MAIL_NAVER_PORT=993
 MAIL_NAVER_USERNAME=
 MAIL_NAVER_PASSWORD=
-MAIL_NAVER_FOLDERS=각종공문,세무사
+MAIL_NAVER_FOLDERS=세무사,영덕군보건소
 MAIL_NAVER_STATE_PATH=/data/mail/naver-discord.json
 MAIL_NAVER_POLL_SECONDS=60
 MAIL_NAVER_TIMEOUT_SECONDS=20

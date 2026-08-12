@@ -50,7 +50,7 @@ class NaverMailConfig:
         source = os.environ if env is None else env
         roots = tuple(
             value.strip()
-            for value in source.get("MAIL_NAVER_FOLDERS", "각종공문,세무사").split(",")
+            for value in source.get("MAIL_NAVER_FOLDERS", "세무사,영덕군보건소").split(",")
             if value.strip()
         )
         return cls(
