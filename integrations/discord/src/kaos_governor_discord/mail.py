@@ -3,9 +3,10 @@ from __future__ import annotations
 from pathlib import PurePath
 import re
 
+import discord
 from kaos_governor.mail import Attachment, MailMessage
 
-from .markdown import MarkdownField, MarkdownMessage, MarkdownMessageTooLong, escape_text
+from .markdown import DISCORD_MESSAGE_LIMIT, MarkdownMessageTooLong, escape_text
 
 
 def safe_attachment_filename(attachment: Attachment) -> str:
@@ -29,34 +30,59 @@ def render_attachment_label(attachment: Attachment) -> str:
     return f"**Attachment** · {escape_text(safe_attachment_filename(attachment))}"
 
 
-def render_mail_summary(mail: MailMessage, max_attachment_bytes: int) -> str:
-    attachments = []
-    for attachment in mail.attachments[:8]:
+def _escaped(value: object) -> str:
+    return discord.utils.escape_markdown(discord.utils.escape_mentions(str(value)))
+
+
+def _display_sender(sender: str) -> str:
+    return re.sub(r"\s*<([^<>\r\n]+)>", r" \1", sender).strip()
+
+
+def _attachment_lines(mail: MailMessage, max_attachment_bytes: int, limit: int) -> list[str]:
+    attachments: list[str] = []
+    for attachment in mail.attachments[:limit]:
         label = safe_attachment_filename(attachment)
         if not attachment.content:
             label += " (empty)"
         elif len(attachment.content) > max_attachment_bytes:
             label += " (over size limit)"
-        attachments.append(f"Attachment: {label}")
-    if len(mail.attachments) > 8:
-        attachments.append(f"{len(mail.attachments) - 8} more attachments")
+        attachments.append(f"- {_escaped(label)}")
+    if len(mail.attachments) > limit:
+        attachments.append(f"- {_escaped(f'{len(mail.attachments) - limit} more attachments')}")
+    return attachments
 
+
+def _render_mail_summary_candidate(
+    mail: MailMessage,
+    max_attachment_bytes: int,
+    preview_limit: int,
+    attachment_limit: int,
+) -> str:
+    header = "\n".join(
+        (
+            "## Naver Mail",
+            f"**Folder** {_escaped(mail.mailbox[:160])}",
+            f"**From** {_escaped(_display_sender(mail.sender)[:300])}",
+            f"**Date** {_escaped(mail.received_at[:128])}",
+        )
+    )
+    sections = [header, f"### {_escaped(mail.subject[:400])}"]
+    attachments = _attachment_lines(mail, max_attachment_bytes, attachment_limit)
+    if attachments:
+        sections.append("***Attachment:***\n" + "\n".join(attachments))
     preview = "\n".join(mail.preview.splitlines()[:15]).strip() or "(No preview text)"
+    if preview_limit:
+        sections.append(_escaped(preview[:preview_limit].rstrip()))
+    return "\n\n".join(sections)
+
+
+def render_mail_summary(mail: MailMessage, max_attachment_bytes: int) -> str:
     for preview_limit in (900, 600, 300, 0):
-        quote = preview[:preview_limit].rstrip() if preview_limit else None
-        try:
-            return MarkdownMessage(
-                title="Naver Mail",
-                fields=(
-                    MarkdownField("Folder", mail.mailbox[:160]),
-                    MarkdownField("From", mail.sender[:300]),
-                    MarkdownField("Date", mail.received_at[:128]),
-                    MarkdownField("Subject", mail.subject[:400]),
-                ),
-                bullets=tuple(attachments),
-                quote=quote,
-                footer="Fetched read-only by KaosGovernor",
-            ).render()
-        except MarkdownMessageTooLong:
-            continue
+        content = _render_mail_summary_candidate(mail, max_attachment_bytes, preview_limit, 8)
+        if len(content) <= DISCORD_MESSAGE_LIMIT:
+            return content
+    for attachment_limit in (4, 2, 0):
+        content = _render_mail_summary_candidate(mail, max_attachment_bytes, 0, attachment_limit)
+        if len(content) <= DISCORD_MESSAGE_LIMIT:
+            return content
     raise MarkdownMessageTooLong("Naver mail metadata exceeds Discord message limit")
