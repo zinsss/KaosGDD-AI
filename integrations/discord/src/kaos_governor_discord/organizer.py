@@ -8,7 +8,7 @@ import discord
 from kaos_governor.mail import MailOrganizerError, MailMessage, NaverMailOrganizer
 
 from .access import AccessPolicy
-from .mail import render_attachment_label, render_mail_summary, transport_attachment_filename
+from .mail import render_attachment_label, render_mail_summary, safe_attachment_filename
 from .markdown import MarkdownField, MarkdownMessage, NO_MENTIONS
 
 if TYPE_CHECKING:
@@ -173,7 +173,7 @@ class DiscordMailOrganizer:
             key = f"{index}:{attachment.filename}:{len(attachment.content)}"
             if key in uploaded or not attachment.content or len(attachment.content) > self.organizer.naver_config.max_attachment_bytes:
                 continue
-            filename = transport_attachment_filename(attachment)
+            filename = safe_attachment_filename(attachment)
             await channel.send(
                 content=render_attachment_label(attachment),
                 file=discord.File(io.BytesIO(attachment.content), filename=filename),

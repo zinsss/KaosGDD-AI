@@ -5,7 +5,6 @@ from kaos_governor_discord.mail import (
     render_attachment_label,
     render_mail_summary,
     safe_attachment_filename,
-    transport_attachment_filename,
 )
 
 
@@ -37,10 +36,9 @@ class MailRenderingTests(unittest.TestCase):
         attachment = Attachment("../folder/notice\n.pdf", "application/pdf", b"pdf")
         self.assertEqual(safe_attachment_filename(attachment), "notice.pdf")
 
-    def test_korean_filename_is_visible_with_an_ascii_transport_name(self) -> None:
+    def test_korean_filename_is_preserved_for_discord(self) -> None:
         attachment = Attachment("예방접종 안내문.pdf", "application/pdf", b"pdf")
         self.assertEqual(safe_attachment_filename(attachment), "예방접종 안내문.pdf")
-        self.assertEqual(transport_attachment_filename(attachment), "naver-attachment.pdf")
         self.assertEqual(render_attachment_label(attachment), "**Attachment** · 예방접종 안내문.pdf")
 
     def test_attachment_label_escapes_markdown_and_mentions(self) -> None:
@@ -48,7 +46,7 @@ class MailRenderingTests(unittest.TestCase):
         rendered = render_attachment_label(attachment)
         self.assertNotIn("@everyone", rendered)
         self.assertNotIn("**notice**", rendered)
-        self.assertEqual(transport_attachment_filename(attachment), "notice-everyone.pdf")
+        self.assertEqual(safe_attachment_filename(attachment), "**notice** @everyone.pdf")
 
 
 if __name__ == "__main__":

@@ -15,17 +15,6 @@ def safe_attachment_filename(attachment: Attachment) -> str:
     return cleaned[:180] or "attachment"
 
 
-def transport_attachment_filename(attachment: Attachment) -> str:
-    display_name = safe_attachment_filename(attachment)
-    suffix = PurePath(display_name).suffix.lower()
-    if not re.fullmatch(r"\.[a-z0-9]{1,10}", suffix):
-        suffix = ""
-    ascii_stem = PurePath(display_name).stem.encode("ascii", errors="ignore").decode("ascii")
-    ascii_stem = re.sub(r"[^A-Za-z0-9._-]+", "-", ascii_stem).strip("-._")
-    stem = (ascii_stem or "naver-attachment")[: 180 - len(suffix)]
-    return f"{stem}{suffix}"
-
-
 def render_attachment_label(attachment: Attachment) -> str:
     return f"**Attachment** · {escape_text(safe_attachment_filename(attachment))}"
 
