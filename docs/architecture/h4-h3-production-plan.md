@@ -222,7 +222,7 @@ interrupt PACS, DICOM receipt, fax transport, Paperless, or RustDesk.
 | Vaultwarden | H3+ | Migrate only after export/backup and client verification |
 | SFTPGo | H3+ by default | Verify whether any clinic-only storage should remain office-side |
 | RHWP | Retire or Office Kaos | Prefer Polaris/manual workflow unless automation remains necessary |
-| KaosTelegram | Retire | Replace workflows individually with Discord |
+| KaosTelegram | Retire immediately after retained workflows are verified | Do not migrate its service, token, or bot state to H3+ |
 | Playwright test containers | Neither | Remove after confirming they are not active test sessions |
 
 No service is deleted from Office Kaos merely because its replacement has been
@@ -724,7 +724,8 @@ Actions:
 4. Verify upstream backend UIs remain directly reachable when needed.
 5. Confirm no main KaosGDD UI is deployed; keep its repository only as
    reference. Keep Family KaosGDD deployed.
-6. Retire Telegram-specific workers after observation and archive export.
+6. Stop KaosTelegram after retained workflows are verified; archive its
+   Compose/config/state for rollback reference only.
 
 Exit gate:
 
@@ -738,9 +739,10 @@ Actions:
 1. Migrate Vaultwarden with export, backup, and client tests.
 2. Migrate SFTPGo after classifying clinic versus personal storage.
 3. Retire RHWP only after confirming Polaris/manual workflows cover all needs.
-4. Stop transitional `kaosgdd-gov`, calendar adapter, Telegram, any remaining
-   main personal portal, and bridge containers after their KaosGovernor
-   replacements pass observation. Do not stop Family KaosGDD.
+4. Stop transitional `kaosgdd-gov`, calendar adapter, any remaining main
+   personal portal, and bridge containers after their KaosGovernor
+   replacements pass observation. KaosTelegram is retired rather than migrated.
+   Do not stop Family KaosGDD.
 5. Keep archived Compose/config/data through their observation periods.
 
 No PACS, DICOM, Paperless archive, fax spool, or RustDesk migration is included.

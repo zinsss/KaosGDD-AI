@@ -23,7 +23,7 @@ legacy service and database can be retired.
 | Mail notifier/archive/organizer | `governor/mail` | Ported to Discord with unchanged Naver IMAP authority; retire legacy workers only after live verification |
 | Fax notifier/outgoing/intake/archive | `governor/fax` plus office Fax Connector | HylaFAX remains transport authority |
 | Notification router | `governor/notifications` | Replace Telegram/Pushover/ntfy paths with Discord/Web Push as approved |
-| Telegram access/transient utilities | Discord interaction and transient cleanup utilities | Retain dedupe and cleanup semantics, not Telegram-specific assumptions |
+| Telegram access/transient utilities | Retire with KaosTelegram | Reimplement only useful dedupe/cleanup semantics inside Discord/Governor; do not migrate Telegram service state |
 | Ledger | Separate Governor domain module if still required | Preserve deterministic arithmetic and XLSX import/export |
 | Rouny store | `governor/calendar` | Calendar domain owns timetable rules and changes |
 | Database migrations | New Governor migrations | Migrate data through explicit scripts, not manual SQL edits |
@@ -44,7 +44,7 @@ legacy service and database can be retired.
 
 - transitional `kaosgdd-gov` containers after their deterministic modules are absorbed into KaosGovernor
 - current Brain PostgreSQL
-- Telegram workflow presentation
+- KaosTelegram containers, bot tokens, bot state, and workflow presentation
 - obsolete notification providers
 - custom RHWP service if Polaris fully covers the remaining workflow
 - old calendar adapter container

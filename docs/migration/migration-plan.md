@@ -6,7 +6,7 @@
 - Keep PACS, DICOM, Paperless, RustDesk, and HylaFAX stable at the office.
 - Move deterministic orchestration before enabling AI writes.
 - Preserve all Radicale and Memos data.
-- Migrate from Telegram to Discord incrementally.
+- Retire KaosTelegram instead of migrating it to the H3 backend.
 - Keep rollback possible at every cutover.
 
 ## Migration Strategies
@@ -168,14 +168,17 @@ Failure must affect only AI chat, not Family KaosGDD or native services.
 - Start with Memos read/search, then use the same domain order as Governor.
 - Benchmark 7-9B and 14B candidates using real Korean Kaos commands.
 
-### Phase 8: Telegram to Discord
+### Phase 8: Retire KaosTelegram
 
 - Create minimal private Discord channels: `#kaos`, `#inbox`, and `#system`.
-- Dual-deliver non-destructive notifications first.
-- Verify document, mail, fax, confirmation, and cleanup interactions.
-- Move commands only after delivery is reliable.
-- Retire Telegram workflows individually.
-- Keep KaosTelegram service control until an explicitly hardened replacement exists.
+- Verify document, mail, fax, confirmation, and cleanup interactions in
+  Discord or Governor-owned deterministic services where retained.
+- Do not migrate KaosTelegram containers, tokens, bot state, or presentation
+  code to the H3 backend.
+- Stop KaosTelegram once the retained workflows have a verified Discord,
+  Governor, native-app, or manual replacement.
+- Archive its Compose/config/state for rollback reference only; do not restart
+  it automatically during rollback without an explicit decision.
 
 ### Phase 8.1: Personal UI simplification
 
@@ -243,5 +246,5 @@ The migration is complete only when:
 - KaosBrain has only scoped Governor tools
 - Family AI has only family-scoped tools
 - office critical services operate during home/H4 outages
-- Discord workflows are verified before Telegram retirement
+- Discord, Governor, native-app, or manual replacements are verified before KaosTelegram retirement
 - the old Brain and bridge containers are stopped, archived, and removable without losing rollback documentation
