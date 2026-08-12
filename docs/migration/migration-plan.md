@@ -2,7 +2,7 @@
 
 ## Objectives
 
-- Build the new H4/Turing Pi platform beside production.
+- Build the H4 Brain and H3+ backend beside production.
 - Keep PACS, DICOM, Paperless, RustDesk, and HylaFAX stable at the office.
 - Move deterministic orchestration before enabling AI writes.
 - Preserve all Radicale and Memos data.
@@ -28,7 +28,7 @@ Disadvantage:
 
 ### Strategy B: Infrastructure-First Migration
 
-Move Radicale, Memos, web edge, and then the unchanged Brain implementation to RK1 hosts before refactoring Brain into Governor.
+Move Radicale, Memos, and web edge to the H3+ backend before refactoring Brain into Governor.
 
 Advantages:
 
@@ -38,7 +38,7 @@ Advantages:
 Disadvantages:
 
 - moves infrastructure and application behavior at the same time
-- may require temporary ARM packaging of legacy Brain code
+- combines infrastructure movement with application behavior changes
 - gives weaker behavioral isolation
 
 Use Strategy B only for stateless web-edge preparation. Stateful services should still follow the guarded procedure below.
@@ -64,24 +64,23 @@ Exit criteria:
 - initial REST/MCP schemas are reviewable
 - current backups can be restored in a test location
 
-### Phase 1: Prepare Hardware and Base Networking
+### Phase 1: Prepare H3+ and H4 Networking
 
-- Install RK1 operating systems on NVMe.
+- Install the H3+ and H4 operating systems on NVMe.
 - Set fixed internal names and Tailscale identities.
-- Update Turing Pi BMC credentials and firmware.
 - Configure time synchronization, SMART monitoring, log limits, and host backups.
 - Create empty Compose projects with health checks only when implementation starts.
 
 No production service moves in this phase.
 
-### Phase 2: Governor Foundation on RK1-1
+### Phase 2: Governor Foundation on H3+
 
 - Implement Governor API, PostgreSQL migrations, audit, idempotency, operation status, and confirmation tokens.
 - Run only read tools against production adapters initially.
 - Add shadow comparison tests against the current Brain.
 - Do not expose Governor publicly.
 
-Rollback: stop RK1-1. Existing Brain remains authoritative.
+Rollback: stop Governor on H3+. Existing Brain remains authoritative.
 
 ### Phase 3: Migrate Governor Domains
 
@@ -104,7 +103,7 @@ For each domain:
 - observe and reconcile
 - disable, but do not delete, the old writer
 
-### Phase 4: Radicale and Memos to RK1-3
+### Phase 4: Radicale and Memos to H3+
 
 Current production locations at planning time:
 
@@ -114,14 +113,14 @@ Current production locations at planning time:
 
 Procedure:
 
-1. Pin the exact source versions and confirm ARM64 images.
+1. Pin the exact source versions and image digests.
 2. Prepare destination NVMe/SATA storage and permissions.
 3. Take a verified backup and initial online copy.
 4. Stop all Radicale/Memos writers, including Brain/Governor adapters and custom frontends.
 5. Stop Radicale and Memos.
 6. Perform a final archive-preserving `rsync` with numeric ownership.
 7. Compare file inventory and cryptographic checksums.
-8. Start the same application versions on RK1-3.
+8. Start the same application versions on H3+.
 9. Test every user, collection, event, task, journal, memo, tag, resource, create, and edit path.
 10. Switch one route at a time.
 11. Keep original containers stopped and original data untouched through the observation period.
@@ -130,25 +129,25 @@ Memos SQLite WAL files require a clean stop before the final copy. Radicale conf
 
 Rollback:
 
-- stop RK1-3 services
+- stop H3+ destination services
 - restore original routing
 - restart original services against untouched original data
 - reconcile only writes accepted after cutover, if any
 
-### Phase 5: Web Edge to RK1-4
+### Phase 5: Web Edge to H3+
 
 - Deploy main and Family KaosGDD UIs.
 - Deploy custom Memos UI.
 - Deploy Caddy and one cloudflared connector.
-- Route to Governor, Family AI, and RK1-3 through private addresses.
+- Route to Governor, Family AI, Memos, and Radicale through private addresses.
 - Move hostnames one at a time.
 - Keep native CalDAV requirements separate from interactive Cloudflare Access policy.
 
 Rollback: restore the individual Caddy/tunnel route to the office host.
 
-### Phase 6: Family AI on RK1-2
+### Phase 6: Family AI on H4
 
-- Start with a constrained 4B model and one concurrent request.
+- Start with a separately scoped family session and one concurrent request.
 - Add family-only Governor tools.
 - Embed chat in Family KaosGDD.
 - Add SSE response streaming, durable family chat messages, and Web Push.
@@ -209,6 +208,13 @@ Suggested minimums before deletion of old components:
 - mail poller: 7 days
 - fax intake/outbound: successful live inbound and outbound tests plus 7 days
 - AI write capability: evaluation pass plus 14 days of confirmed operation
+
+### Optional Phase 10: RK1 worker pool
+
+- Keep all RK1 nodes outside the required request path.
+- Add only rebuildable background jobs with explicit queues and timeouts.
+- Retry failed or low-confidence worker results on H4.
+- Do not move Governor, Radicale, Memos, or family availability onto RK1.
 
 ## Completion Criteria
 

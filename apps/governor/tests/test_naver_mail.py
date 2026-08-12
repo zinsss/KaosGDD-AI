@@ -24,7 +24,6 @@ class FakeMailboxServer:
             tax: {"uidvalidity": "12", "messages": {}},
         }
         self.fetch_specs: list[str] = []
-
     @staticmethod
     def message(subject: str, *, attachment: bool = False, html_only: bool = False) -> bytes:
         body = (
@@ -52,6 +51,22 @@ class FakeMailboxServer:
         self.connection = (host, port, timeout)
         self.last_client = FakeIMAP(self)
         return self.last_client
+
+
+class NaverMailConfigTests(unittest.TestCase):
+    def test_password_can_be_loaded_from_a_secret_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            password_file = Path(temporary_directory) / "naver-password"
+            password_file.write_text("mail-file-secret\n", encoding="utf-8")
+            config = NaverMailConfig.from_env(
+                {
+                    "MAIL_NAVER_ENABLED": "true",
+                    "MAIL_NAVER_USERNAME": "user@example.test",
+                    "MAIL_NAVER_PASSWORD_FILE": str(password_file),
+                    "MAIL_NAVER_FOLDERS": "세무사",
+                }
+            )
+        self.assertEqual(config.password, "mail-file-secret")
 
 
 class FakeIMAP:

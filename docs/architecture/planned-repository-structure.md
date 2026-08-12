@@ -39,10 +39,8 @@ KaosGDD-AI/
 │   └── events/
 ├── deploy/
 │   ├── h4-kaosbrain/
-│   ├── rk1-1-governor/
-│   ├── rk1-2-family-ai/
-│   ├── rk1-3-data/
-│   ├── rk1-4-web-edge/
+│   ├── h3-backend/
+│   ├── optional-rk1-workers/
 │   └── office-connectors/
 ├── docs/
 │   ├── architecture/

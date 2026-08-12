@@ -1,0 +1,27 @@
+services:
+  memos:
+    image: neosmemo/memos@sha256:3e1253477066eb2aefa91145f7f9038bb931ed88c8a3ee05310a933594cdba7d
+    container_name: memos
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:5230:5230"
+    volumes:
+      - ${KAOS_ROOT:-/srv/kaos}/data/memos:/var/opt/memos
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
+  radicale:
+    image: ghcr.io/kozea/radicale@sha256:ff012f461abd60a439eeee983c4b3de73ca477e6045c439a95e0e1bd81e3482e
+    container_name: radicale
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:5232:5232"
+    volumes:
+      - ${KAOS_ROOT:-/srv/kaos}/config/radicale:/etc/radicale:ro
+      - ${KAOS_ROOT:-/srv/kaos}/data/radicale:/var/lib/radicale
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend

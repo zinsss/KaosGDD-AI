@@ -26,12 +26,11 @@ Discord permissions and the runtime allowlist are both enforced.
 ## Deploy
 
 ```bash
-cd /path/to/KaosGDD-AI/deploy/rk1-1-governor
-cp .env.example .env
-chmod 600 .env
-# Edit .env with the bot token and numeric IDs.
-docker compose -f compose.discord.yaml up -d --build
-docker compose -f compose.discord.yaml logs -f governor-discord
+cd /srv/projects/KaosGDD-AI
+./deploy/h3-backend/kaos-h3 setup
+# Edit deploy/h3-backend/.env and its file-backed secrets.
+./deploy/h3-backend/kaos-h3 test
+./deploy/h3-backend/kaos-h3 up
 ```
 
 Never commit `.env`. Port 8097 is loopback-only and must not be routed through
@@ -39,7 +38,8 @@ Caddy or cloudflared.
 
 For Memos search, create a dedicated PAT in the personal Memos account and set
 the variables documented in [Governor Memos search](memos-search.md). Generate
-`GOVERNOR_API_TOKEN` independently; do not reuse the Memos PAT.
+the Governor API token independently; do not reuse the Memos PAT. The H3 setup
+generates this token and mounts it from a file.
 
 ## Verify
 
@@ -63,13 +63,14 @@ the variables documented in [Governor Memos search](memos-search.md). Generate
 11. An unauthenticated `POST /api/v1/memos/search` returns `401`; the same call
     with `GOVERNOR_API_TOKEN` returns creator-scoped live Memos results.
 
-It may run temporarily on the current Kaos host. Move the same image and `.env`
-to RK1-1 when ready.
+It may run temporarily on the current Kaos host. The supported destination is
+the H3+ backend described in [`deploy/h3-backend`](../../deploy/h3-backend/README.md).
 
 ## Boundary
 
-The temporary fax adapter writes only the narrow, versioned bridge manifest
+The temporary local fax adapter writes only the narrow, versioned bridge manifest
 contract and reads HylaFAX status/archive files; it has no modem, shell, Docker,
 or database authority. The Memos adapter has an account-scoped PAT but exposes
 only read-only search and fetch operations. Radicale and Paperless authority are
-not connected.
+not connected. On H3, fax stays disabled until the authenticated Office Kaos
+Fax Connector replaces local filesystem mounts.

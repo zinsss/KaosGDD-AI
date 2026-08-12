@@ -6,19 +6,19 @@
 Discord                         Family KaosGDD PWA
    |                                    |
    v                                    v
-KaosBrain on H4                 Family AI on RK1-2
-OpenClaw + main LLM             constrained 4B model
+KaosBrain on H4                 Family AI session on H4
+OpenClaw + main LLM             separately scoped tools
    |                                    |
    +----------------+-------------------+
                     |
                     v
-             KaosGovernor on RK1-1
+           KaosGovernor on H3+ backend
                     |
         +-----------+------------+
         |           |            |
         v           v            v
      Radicale      Memos      Office services
-     RK1-3         RK1-3      Paperless/HylaFAX
+     H3+ backend   H3+ backend Paperless/HylaFAX
 ```
 
 KaosBrain communicates with backends only through KaosGovernor. Family AI receives a separate family-scoped Governor credential.
@@ -140,7 +140,7 @@ Records meaningful operations rather than ordinary debug logs:
 
 ## Runtime Processes
 
-RK1-1 should run one image with separate commands where useful:
+The H3+ backend should run one Governor image with separate commands where useful:
 
 ```text
 governor-api
@@ -153,7 +153,7 @@ governor-postgres
 
 Modules remain in one codebase. Separate processes are used only for polling, scheduling, blocking connections, or failure isolation.
 
-The office H3+ separately runs:
+Office Kaos separately runs:
 
 ```text
 kaos-fax-connector
@@ -177,5 +177,12 @@ kaos-fax-connector
 - Family AI failure removes family AI chat but not Family KaosGDD, Radicale, or Memos.
 - Governor failure pauses orchestration while native services remain accessible.
 - Web-edge failure removes web entry points while data services remain intact.
-- Home/Turing Pi failure does not stop office PACS, HylaFAX, Paperless, or RustDesk.
+- H3+/H4 failure does not stop office PACS, HylaFAX, Paperless, or RustDesk.
 - Office-to-home network failure queues fax events locally for later delivery.
+
+## Optional RK1 workers
+
+The Turing Pi 2 and RK1 nodes are not part of the required path. They may later
+run rebuildable jobs such as embeddings, OCR post-processing, conversion, or
+small-model batch work. Governor, Radicale, Memos, and normal family operation
+must remain functional when every RK1 is offline.

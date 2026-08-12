@@ -32,7 +32,7 @@ The existing `zinsss/KaosGDD` `apps/brain` implementation remains production cod
 - Memos database and resources
 - HylaFAX spool and modem configuration
 - Tailscale networking
-- Caddy/cloudflared edge configuration until RK1-4 cutover
+- Caddy/cloudflared edge configuration until the H3+ web-edge cutover
 - production backup scripts until replacement backups are proven
 
 ## Retire Only After Verified Replacement

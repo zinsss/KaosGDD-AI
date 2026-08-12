@@ -143,7 +143,7 @@ class Settings:
         if _boolean(source, "MEMOS_SEARCH_ENABLED") and not governor_api_token:
             raise ConfigurationError("GOVERNOR_API_TOKEN is required when Memos search is enabled")
         return cls(
-            token=_required(source, "DISCORD_BOT_TOKEN"),
+            token=_secret(source, "DISCORD_BOT_TOKEN") or _required(source, "DISCORD_BOT_TOKEN"),
             guild_id=_positive_int(_required(source, "DISCORD_GUILD_ID"), "DISCORD_GUILD_ID"),
             allowed_user_ids=_id_set(source, "DISCORD_ALLOWED_USER_IDS"),
             allowed_channel_ids=allowed_channels,

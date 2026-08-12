@@ -2,13 +2,15 @@
 
 Architecture, deterministic orchestration, AI integrations, and deployment plans for the next KaosGDD platform.
 
-> Status: preparation only. This repository does not yet replace the production KaosGDD Brain or deploy services to the H4/Turing Pi infrastructure.
+> Status: Governor is running side by side in production. This repository now
+> includes a supported, guarded H3+ backend deployment. It does not replace the
+> production Brain or move stateful services automatically.
 
 ## System Roles
 
 - **KaosBrain**: OpenClaw and the main local model on the H4 Ultra. It interprets language, reasons, and selects tools.
-- **KaosGovernor**: deterministic authority on RK1-1. It validates operations, owns domain workflows, records audit history, and calls backend services.
-- **Family AI**: independent constrained 4B family assistant on RK1-2.
+- **KaosGovernor**: deterministic authority on the H3+ backend. It validates operations, owns domain workflows, records audit history, and calls backend services.
+- **Family AI**: a separately scoped assistant served by H4 or a future optional worker.
 - **Authoritative backends**: Radicale, Memos, Paperless, HylaFAX, and other service-owned data stores.
 - **KaosGDD**: main and family web interfaces. The existing frontend remains in the `zinsss/KaosGDD` repository.
 
@@ -19,11 +21,28 @@ KaosBrain and Family AI never become sources of truth. They call narrow KaosGove
 | Host | Planned responsibility |
 | --- | --- |
 | Office H3+ | KaosPACS, KaosPACS-AIO, Paperless, Stirling-PDF, RustDesk, HylaFAX, Tailscale |
-| H4 Ultra | KaosBrain: OpenClaw and main local model |
-| RK1-1 | KaosGovernor processes and Governor PostgreSQL |
-| RK1-2 | Independent Family AI, family chat gateway, Web Push |
-| RK1-3 | Radicale and Memos with persistent storage |
-| RK1-4 | Main/family KaosGDD web UIs, custom Memos UI, Caddy, cloudflared |
+| H3+ 32 GB backend | KaosGovernor, Governor PostgreSQL, Radicale, Memos, Kaos APIs and web deployment support |
+| H4 Ultra | KaosBrain/OpenClaw and separately scoped personal/family AI sessions |
+| Turing Pi 2 / RK1 | Optional future worker pool; never required for normal operation |
+
+## H3+ Quick Start
+
+```bash
+git clone git@github.com:zinsss/KaosGDD-AI.git /srv/projects/KaosGDD-AI
+cd /srv/projects/KaosGDD-AI
+./deploy/h3-backend/kaos-h3 setup
+```
+
+Fill the generated `.env` and Discord token file, then run:
+
+```bash
+./deploy/h3-backend/kaos-h3 test
+./deploy/h3-backend/kaos-h3 up
+```
+
+See [the H3+ deployment guide](deploy/h3-backend/README.md). Memos and
+Radicale have a separate guarded migration and are never started empty by the
+normal `up` command.
 
 ## Repository Scope
 
@@ -59,6 +78,8 @@ Upstream applications will be referenced using pinned release versions or image 
 - [KaosGovernor Discord bot rollout](docs/operations/discord-governor-bot.md)
 - [Naver mail migration](docs/operations/naver-mail.md)
 - [Governor Memos search](docs/operations/memos-search.md)
+- [H3+ backend deployment](deploy/h3-backend/README.md)
+- [H3+ stateful migration](docs/migration/h3-backend-cutover.md)
 
 ## Non-Negotiable Principles
 

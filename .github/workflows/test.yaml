@@ -1,0 +1,39 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  container-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate shell scripts
+        run: bash -n deploy/h3-backend/kaos-h3
+      - name: Render H3 deployment
+        run: |
+          cp deploy/h3-backend/.env.example deploy/h3-backend/.env
+          sed -i \
+            -e 's/^DISCORD_GUILD_ID=.*/DISCORD_GUILD_ID=900000000000000001/' \
+            -e 's/^DISCORD_ALLOWED_USER_IDS=.*/DISCORD_ALLOWED_USER_IDS=900000000000000002/' \
+            -e 's/^DISCORD_ALLOWED_CHANNEL_IDS=.*/DISCORD_ALLOWED_CHANNEL_IDS=900000000000000003,900000000000000004/' \
+            -e 's/^DISCORD_SYSTEM_CHANNEL_ID=.*/DISCORD_SYSTEM_CHANNEL_ID=900000000000000004/' \
+            deploy/h3-backend/.env
+          printf 'test\n' > deploy/h3-backend/secrets/discord_bot_token
+          printf 'test\n' > deploy/h3-backend/secrets/governor_api_token
+          : > deploy/h3-backend/secrets/memos_access_token
+          : > deploy/h3-backend/secrets/naver_mail_password
+          docker compose \
+            --project-directory deploy/h3-backend \
+            --env-file deploy/h3-backend/.env \
+            -f deploy/h3-backend/compose.yaml \
+            config --quiet
+      - name: Build test image
+        run: docker build --target test --tag kaosgdd-ai-governor-discord:test --file integrations/discord/Dockerfile .
+      - name: Run tests
+        run: docker run --rm kaosgdd-ai-governor-discord:test

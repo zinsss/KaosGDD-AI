@@ -1,0 +1,194 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DEPLOY_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(cd -- "${DEPLOY_DIR}/../.." && pwd)
+ENV_FILE="${DEPLOY_DIR}/.env"
+SECRETS_DIR="${DEPLOY_DIR}/secrets"
+COMPOSE=(docker compose --project-directory "${DEPLOY_DIR}" --env-file "${ENV_FILE}" -f "${DEPLOY_DIR}/compose.yaml")
+BACKENDS_COMPOSE=("${COMPOSE[@]}" -f "${DEPLOY_DIR}/compose.backends.yaml")
+
+die() {
+  printf 'ERROR: %s\n' "$*" >&2
+  exit 1
+}
+
+info() {
+  printf '%s\n' "$*"
+}
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || die "$1 is required"
+}
+
+load_env() {
+  [[ -f "${ENV_FILE}" ]] || die "run: ${0} setup"
+  set -a
+  # shellcheck disable=SC1090
+  source "${ENV_FILE}"
+  set +a
+}
+
+secret_path() {
+  printf '%s/%s' "${SECRETS_DIR}" "$1"
+}
+
+require_secret() {
+  local name=$1
+  [[ -s "$(secret_path "${name}")" ]] || die "missing secret: ${SECRETS_DIR}/${name}"
+}
+
+install_state_directories() {
+  local root=$1
+  local uid gid
+  uid=$(id -u)
+  gid=$(id -g)
+  if mkdir -p "${root}/data/kaosgdd-ai/governor/mail" "${root}/data/kaosgdd-ai/governor/fax" 2>/dev/null; then
+    chmod 0770 "${root}/data/kaosgdd-ai/governor/mail" "${root}/data/kaosgdd-ai/governor/fax"
+    return
+  fi
+  require_command sudo
+  sudo install -d -m 0770 -o "${uid}" -g "${gid}" \
+    "${root}/data/kaosgdd-ai/governor/mail" \
+    "${root}/data/kaosgdd-ai/governor/fax"
+}
+
+setup() {
+  require_command docker
+  docker compose version >/dev/null 2>&1 || die "Docker Compose v2 is required"
+  require_command openssl
+  mkdir -p "${SECRETS_DIR}"
+  if [[ ! -f "${ENV_FILE}" ]]; then
+    cp "${DEPLOY_DIR}/.env.example" "${ENV_FILE}"
+    sed -i "s/^KAOS_HOST_GID=.*/KAOS_HOST_GID=$(id -g)/" "${ENV_FILE}"
+    info "Created ${ENV_FILE}"
+  fi
+  load_env
+  install_state_directories "${KAOS_ROOT:-/srv/kaos}"
+  for secret in discord_bot_token memos_access_token naver_mail_password; do
+    [[ -e "$(secret_path "${secret}")" ]] || : > "$(secret_path "${secret}")"
+  done
+  if [[ ! -s "$(secret_path governor_api_token)" ]]; then
+    openssl rand -hex 32 > "$(secret_path governor_api_token)"
+  fi
+  chmod 0640 "${SECRETS_DIR}"/discord_bot_token \
+    "${SECRETS_DIR}"/governor_api_token \
+    "${SECRETS_DIR}"/memos_access_token \
+    "${SECRETS_DIR}"/naver_mail_password
+  info "Setup complete. Fill ${ENV_FILE} and ${SECRETS_DIR}/discord_bot_token, then run:"
+  info "  ${0} test"
+  info "  ${0} up"
+}
+
+preflight() {
+  require_command docker
+  require_command curl
+  docker compose version >/dev/null 2>&1 || die "Docker Compose v2 is required"
+  load_env
+  require_secret discord_bot_token
+  require_secret governor_api_token
+  [[ "${DISCORD_GUILD_ID:-}" != "123456789012345678" ]] || die "replace the example Discord guild ID"
+  [[ "${DISCORD_ALLOWED_USER_IDS:-}" != *"123456789012345678"* ]] || die "replace the example Discord user ID"
+  [[ "${DISCORD_ALLOWED_CHANNEL_IDS:-}" != *"123456789012345678"* ]] || die "replace the example Discord channel IDs"
+  if [[ "${MEMOS_SEARCH_ENABLED:-false}" == "true" ]]; then
+    require_secret memos_access_token
+    [[ -n "${MEMOS_BASE_URL:-}" ]] || die "MEMOS_BASE_URL is required"
+    [[ "${MEMOS_CREATOR:-}" == users/* ]] || die "MEMOS_CREATOR must use users/<username>"
+  fi
+  if [[ "${MAIL_NAVER_ENABLED:-false}" == "true" || "${MAIL_ORGANIZER_ENABLED:-false}" == "true" ]]; then
+    require_secret naver_mail_password
+    [[ -n "${MAIL_NAVER_USERNAME:-}" ]] || die "MAIL_NAVER_USERNAME is required"
+    [[ -n "${MAIL_ARCHIVE_DISCORD_CHANNEL_ID:-}" ]] || die "MAIL_ARCHIVE_DISCORD_CHANNEL_ID is required"
+  fi
+  if [[ "${MAIL_ORGANIZER_ENABLED:-false}" == "true" ]]; then
+    [[ -n "${MAIL_ORGANIZER_DISCORD_CHANNEL_ID:-}" ]] || die "MAIL_ORGANIZER_DISCORD_CHANNEL_ID is required"
+  fi
+  if [[ "${FAX_DISCORD_ENABLED:-false}" == "true" ]]; then
+    die "fax transport is not local to the H3 backend; keep it disabled until the office Fax Connector is deployed"
+  fi
+  "${COMPOSE[@]}" config --quiet
+  info "Preflight passed."
+}
+
+test_image() {
+  require_command docker
+  docker build --target test \
+    --tag kaosgdd-ai-governor-discord:test \
+    --file "${REPO_ROOT}/integrations/discord/Dockerfile" \
+    "${REPO_ROOT}"
+  docker run --rm kaosgdd-ai-governor-discord:test
+}
+
+smoke() {
+  load_env
+  local address=${GOVERNOR_BIND_ADDRESS:-127.0.0.1}
+  [[ "${address}" != "0.0.0.0" ]] || address=127.0.0.1
+  local url="http://${address}:${HEALTH_PORT:-8097}/health"
+  local attempt
+  for attempt in $(seq 1 30); do
+    if curl --fail --silent --show-error "${url}" >/dev/null 2>&1; then
+      curl --fail --silent --show-error "${url}"
+      printf '\n'
+      return
+    fi
+    sleep 1
+  done
+  "${COMPOSE[@]}" logs --tail=80 governor-discord >&2 || true
+  die "Governor health endpoint did not become available: ${url}"
+}
+
+backends_preflight() {
+  load_env
+  require_command sqlite3
+  local root=${KAOS_ROOT:-/srv/kaos}
+  [[ -f "${root}/data/memos/memos_prod.db" ]] || die "Memos data is not staged at ${root}/data/memos"
+  [[ "$(sqlite3 "${root}/data/memos/memos_prod.db" 'PRAGMA integrity_check;')" == "ok" ]] \
+    || die "Memos SQLite integrity check failed"
+  [[ -f "${root}/config/radicale/config" ]] || die "Radicale config is not staged"
+  [[ -f "${root}/config/radicale/users" ]] || die "Radicale users file is not staged"
+  [[ -d "${root}/data/radicale/collections" ]] || die "Radicale collections are not staged"
+  "${BACKENDS_COMPOSE[@]}" config --quiet
+  info "Stateful backend preflight passed."
+}
+
+usage() {
+  cat <<'EOF'
+Usage: deploy/h3-backend/kaos-h3 COMMAND
+
+Commands:
+  setup              Create local env, secrets, and Governor state directories
+  preflight          Validate configuration without starting containers
+  test               Build and run the complete container test suite
+  build              Build the production Governor image
+  up                 Validate, build, start Governor, and check health
+  down               Stop Governor without deleting persistent data
+  restart            Recreate Governor from current configuration
+  status             Show Compose and health status
+  logs               Follow Governor logs
+  smoke              Check the local/Tailscale health endpoint
+  config             Render the effective Compose configuration
+  backends-preflight Validate staged Memos and Radicale data for cutover
+  backends-up         Start migrated Memos and Radicale after guarded preflight
+  backends-down       Stop Memos and Radicale without deleting their data
+EOF
+}
+
+command=${1:-help}
+case "${command}" in
+  setup) setup ;;
+  preflight) preflight ;;
+  test) test_image ;;
+  build) load_env; "${COMPOSE[@]}" build governor-discord ;;
+  up) preflight; "${COMPOSE[@]}" up --detach --build governor-discord; smoke ;;
+  down) load_env; "${COMPOSE[@]}" down ;;
+  restart) preflight; "${COMPOSE[@]}" up --detach --build --force-recreate governor-discord; smoke ;;
+  status) load_env; "${COMPOSE[@]}" ps; smoke ;;
+  logs) load_env; "${COMPOSE[@]}" logs --follow --tail=100 governor-discord ;;
+  smoke) smoke ;;
+  config) load_env; "${COMPOSE[@]}" config ;;
+  backends-preflight) backends_preflight ;;
+  backends-up) backends_preflight; "${BACKENDS_COMPOSE[@]}" up --detach memos radicale ;;
+  backends-down) load_env; "${BACKENDS_COMPOSE[@]}" stop memos radicale ;;
+  help|-h|--help) usage ;;
+  *) usage >&2; die "unknown command: ${command}" ;;
+esac

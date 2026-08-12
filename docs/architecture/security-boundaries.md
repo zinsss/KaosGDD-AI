@@ -33,7 +33,7 @@ Denied:
 
 OpenClaw group/guild and user access must be allowlisted. Only the KaosGovernor MCP server and explicitly required messaging tools should be visible to the agent.
 
-## Family AI on RK1-2
+## Family AI session on H4
 
 - receives a family-scoped Governor credential
 - can use only family calendar, family tasks, Rouny, family Memos, and approved weather/read tools
@@ -41,7 +41,7 @@ OpenClaw group/guild and user access must be allowlisted. Only the KaosGovernor 
 - stores only disposable conversation state
 - never exposes its Governor credential to browser JavaScript
 
-## KaosGovernor on RK1-1
+## KaosGovernor on H3+
 
 - is not publicly exposed
 - accepts connections only from the web edge, H4 KaosBrain, Family AI, and allowlisted office connectors

@@ -21,6 +21,14 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.allowed_user_ids, frozenset({200, 201}))
         self.assertFalse(settings.startup_notification)
 
+    def test_discord_token_can_be_loaded_from_a_secret_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            token_file = Path(temporary_directory) / "discord-token"
+            token_file.write_text("discord-file-secret\n", encoding="utf-8")
+            env = {**BASE_ENV, "DISCORD_BOT_TOKEN": "", "DISCORD_BOT_TOKEN_FILE": str(token_file)}
+            settings = Settings.from_env(env)
+        self.assertEqual(settings.token, "discord-file-secret")
+
     def test_rejects_system_channel_outside_allowlist(self) -> None:
         with self.assertRaises(ConfigurationError):
             Settings.from_env({**BASE_ENV, "DISCORD_SYSTEM_CHANNEL_ID": "999"})

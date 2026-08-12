@@ -1,6 +1,6 @@
 """Deterministic KaosGovernor services."""
 
-__version__ = "0.1.0"
+__version__ = "0.3.0"
 from .fax import FaxAction, FaxConfig, FaxError, FaxRequest, FaxService, normalize_destination, request_from_pdf
 from .memos import Memo, MemoSearchResult, MemosConfig, MemosError, MemosService
 

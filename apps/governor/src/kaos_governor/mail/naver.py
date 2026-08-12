@@ -58,7 +58,7 @@ class NaverMailConfig:
             host=source.get("MAIL_NAVER_HOST", "imap.naver.com").strip(),
             port=int(source.get("MAIL_NAVER_PORT", "993")),
             username=source.get("MAIL_NAVER_USERNAME", "").strip(),
-            password=source.get("MAIL_NAVER_PASSWORD", ""),
+            password=_env_secret(source, "MAIL_NAVER_PASSWORD"),
             folder_roots=roots,
             state_path=Path(source.get("MAIL_NAVER_STATE_PATH", "/data/mail/naver-discord.json")),
             poll_seconds=max(30, int(source.get("MAIL_NAVER_POLL_SECONDS", "60"))),
@@ -133,6 +133,19 @@ def _env_bool(env: Mapping[str, str], name: str, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_secret(env: Mapping[str, str], name: str) -> str:
+    value = env.get(name, "")
+    path = env.get(f"{name}_FILE", "").strip()
+    if value and path:
+        raise ValueError(f"set either {name} or {name}_FILE, not both")
+    if not path:
+        return value
+    try:
+        return Path(path).read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise ValueError(f"unable to read {name}_FILE") from exc
 
 
 def encode_modified_utf7(value: str) -> str:

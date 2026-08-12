@@ -74,14 +74,14 @@ persist a once- or twice-daily KST schedule. Times use five-minute steps.
 
 ## Configuration
 
-Production secrets stay in the host `.env`, never Git:
+Production secrets use host files mounted read-only, never Git:
 
 ```text
 MAIL_NAVER_ENABLED=true
 MAIL_NAVER_HOST=imap.naver.com
 MAIL_NAVER_PORT=993
 MAIL_NAVER_USERNAME=
-MAIL_NAVER_PASSWORD=
+MAIL_NAVER_PASSWORD_FILE=/run/secrets/naver_mail_password
 MAIL_NAVER_FOLDERS=세무사,영덕군보건소
 MAIL_NAVER_STATE_PATH=/data/mail/naver-discord.json
 MAIL_NAVER_POLL_SECONDS=60

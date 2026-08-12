@@ -1,0 +1,57 @@
+name: kaosgdd-ai
+
+services:
+  governor-discord:
+    build:
+      context: ../..
+      dockerfile: integrations/discord/Dockerfile
+      target: runtime
+    image: kaosgdd-ai-governor-discord:0.6.0
+    pull_policy: never
+    container_name: kaos-governor-discord
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env
+    secrets:
+      - discord_bot_token
+      - governor_api_token
+      - memos_access_token
+      - naver_mail_password
+    ports:
+      - "${GOVERNOR_BIND_ADDRESS:-127.0.0.1}:${HEALTH_PORT:-8097}:8097"
+    volumes:
+      - ${KAOS_ROOT:-/srv/kaos}/data/kaosgdd-ai/governor/mail:/data/mail
+      - ${KAOS_ROOT:-/srv/kaos}/data/kaosgdd-ai/governor/fax:/data/fax
+    group_add:
+      - "${KAOS_HOST_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    pids_limit: 100
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "2"
+    networks:
+      - backend
+
+networks:
+  backend:
+    name: kaosgdd-backend
+
+secrets:
+  discord_bot_token:
+    file: ./secrets/discord_bot_token
+  governor_api_token:
+    file: ./secrets/governor_api_token
+  memos_access_token:
+    file: ./secrets/memos_access_token
+  naver_mail_password:
+    file: ./secrets/naver_mail_password
