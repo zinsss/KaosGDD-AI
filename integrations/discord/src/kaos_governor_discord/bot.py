@@ -121,8 +121,14 @@ class GovernorBot(discord.Client):
         self.mail_poller = NaverMailPoller(naver_config)
         self.mail_organizer = NaverMailOrganizer(MailOrganizerConfig.from_env(), naver_config)
         self.discord_mail_organizer = (
-            DiscordMailOrganizer(self, self.mail_organizer, self.policy, settings.mail_organizer_channel_id)
-            if settings.mail_organizer_channel_id is not None
+            DiscordMailOrganizer(
+                self,
+                self.mail_organizer,
+                self.policy,
+                settings.mail_organizer_channel_id,
+                settings.mail_archive_channel_id,
+            )
+            if settings.mail_organizer_channel_id is not None and settings.mail_archive_channel_id is not None
             else None
         )
         self._health = HealthServer(settings.health_host, settings.health_port, self._health_status)
@@ -257,7 +263,7 @@ class GovernorBot(discord.Client):
                 LOGGER.error("Mail organizer enabled without a Discord coordinator")
             else:
                 await self.discord_mail_organizer.prune_expired()
-                restored = self.discord_mail_organizer.restore_views()
+                restored = await self.discord_mail_organizer.restore_views()
                 LOGGER.info("Restored %d mail organizer views", restored)
                 self._organizer_task = asyncio.create_task(
                     self._mail_organizer_loop(),

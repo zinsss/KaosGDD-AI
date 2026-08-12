@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import io
-import math
 from typing import TYPE_CHECKING
 
 import discord
@@ -14,9 +13,6 @@ from .markdown import MarkdownField, MarkdownMessage, NO_MENTIONS
 
 if TYPE_CHECKING:
     from .bot import GovernorBot
-
-
-PAGE_SIZE = 25
 
 
 def _ordered_items(digest: dict[str, object]) -> list[tuple[str, dict[str, object]]]:
@@ -33,10 +29,8 @@ def _short(value: object, limit: int) -> str:
     return text if len(text) <= limit else f"{text[: limit - 3]}..."
 
 
-def render_digest(digest: dict[str, object], page: int = 0) -> str:
+def render_digest(digest: dict[str, object]) -> str:
     items = _ordered_items(digest)
-    pages = max(1, math.ceil(len(items) / PAGE_SIZE))
-    page = min(max(0, page), pages - 1)
     shown = len(items)
     total = int(digest.get("totalUnread") or shown)
     fields = [
@@ -45,27 +39,20 @@ def render_digest(digest: dict[str, object], page: int = 0) -> str:
     ]
     if total > shown:
         fields.append(MarkdownField("Loaded", f"{shown} newest messages"))
-    if pages > 1:
-        fields.append(MarkdownField("Page", f"{page + 1} / {pages}"))
     return MarkdownMessage(
         title="Naver Mail Organizer",
-        summary="Choose an unread message below.",
+        summary="Use the direct actions on each unread message below.",
         fields=tuple(fields),
         footer="Naver remains authoritative",
     ).render()
 
 
-def digest_options(digest: dict[str, object], page: int = 0) -> list[discord.SelectOption]:
-    items = _ordered_items(digest)
-    start = max(0, page) * PAGE_SIZE
-    return [
-        discord.SelectOption(
-            label=_short(item.get("subject"), 100),
-            value=item_id,
-            description=_short(f"{item.get('mailboxName')} · {item.get('sender')}", 100),
-        )
-        for item_id, item in items[start : start + PAGE_SIZE]
-    ]
+def render_digest_item(item: dict[str, object]) -> str:
+    subject = _short(item.get("subject"), 300)
+    context = _short(f"{item.get('mailboxName')} · {item.get('sender')}", 500)
+    escaped_subject = discord.utils.escape_markdown(discord.utils.escape_mentions(subject))
+    escaped_context = discord.utils.escape_markdown(discord.utils.escape_mentions(context))
+    return f"**{escaped_subject}**\n-# {escaped_context}"
 
 
 class DiscordMailOrganizer:
@@ -75,11 +62,13 @@ class DiscordMailOrganizer:
         organizer: NaverMailOrganizer,
         policy: AccessPolicy,
         channel_id: int,
+        archive_channel_id: int,
     ) -> None:
         self.bot = bot
         self.organizer = organizer
         self.policy = policy
         self.channel_id = channel_id
+        self.archive_channel_id = archive_channel_id
         self.restored = False
 
     async def channel(self) -> discord.abc.Messageable:
@@ -88,19 +77,35 @@ class DiscordMailOrganizer:
             raise RuntimeError("mail_channel_not_messageable")
         return channel
 
+    async def archive_channel(self) -> discord.abc.Messageable:
+        channel = self.bot.get_channel(self.archive_channel_id) or await self.bot.fetch_channel(self.archive_channel_id)
+        if not isinstance(channel, discord.abc.Messageable):
+            raise RuntimeError("mail_archive_channel_not_messageable")
+        return channel
+
     async def publish_digest(self, digest: dict[str, object]) -> discord.Message:
         channel = await self.channel()
         digest_id = str(digest["id"])
-        view = MailDigestView(self, digest_id, digest)
-        message = await channel.send(
-            render_digest(digest),
-            view=view,
-            allowed_mentions=NO_MENTIONS,
-        )
-        self.organizer.attach_message(digest_id, self.channel_id, message.id)
-        return message
+        try:
+            message = await channel.send(
+                render_digest(digest),
+                view=MailDigestView(self, digest_id),
+                allowed_mentions=NO_MENTIONS,
+            )
+            await asyncio.to_thread(
+                self.organizer.attach_message,
+                digest_id,
+                self.channel_id,
+                message.id,
+            )
+            for item_id, item in _ordered_items(digest):
+                await self._publish_item(channel, digest_id, item_id, item)
+            return message
+        except Exception:
+            await self.delete_digest(digest_id)
+            raise
 
-    def restore_views(self) -> int:
+    async def restore_views(self) -> int:
         if self.restored:
             return 0
         count = 0
@@ -108,8 +113,19 @@ class DiscordMailOrganizer:
             digest_id = str(digest.get("id") or "")
             message_id = int(digest.get("messageId") or 0)
             if digest_id and message_id:
-                self.bot.add_view(MailDigestView(self, digest_id, digest), message_id=message_id)
+                self.bot.add_view(MailDigestView(self, digest_id), message_id=message_id)
                 count += 1
+                channel = await self.channel()
+                for item_id, item in _ordered_items(digest):
+                    item_message_id = int(item.get("organizerMessageId") or 0)
+                    if item_message_id:
+                        self.bot.add_view(
+                            MailItemActionView(self, digest_id, item_id),
+                            message_id=item_message_id,
+                        )
+                    else:
+                        await self._publish_item(channel, digest_id, item_id, item)
+                    count += 1
         self.restored = True
         return count
 
@@ -117,12 +133,7 @@ class DiscordMailOrganizer:
         expired = await asyncio.to_thread(self.organizer.prune_digests)
         deleted = 0
         for digest in expired:
-            try:
-                message = await self._fetch_digest_message(digest)
-                await message.delete()
-                deleted += 1
-            except (discord.NotFound, discord.HTTPException, RuntimeError):
-                pass
+            deleted += await self._delete_digest_messages(digest)
         return deleted
 
     async def refresh_digest(self, digest_id: str) -> bool:
@@ -133,23 +144,19 @@ class DiscordMailOrganizer:
         message = await self._fetch_digest_message(digest)
         await message.edit(
             content=render_digest(digest),
-            view=MailDigestView(self, digest_id, digest),
+            view=MailDigestView(self, digest_id),
             allowed_mentions=NO_MENTIONS,
         )
         return True
 
     async def delete_digest(self, digest_id: str) -> None:
-        digest = self.organizer.close_digest(digest_id)
-        try:
-            message = await self._fetch_digest_message(digest)
-            await message.delete()
-        except (discord.NotFound, discord.HTTPException):
-            pass
+        digest = await asyncio.to_thread(self.organizer.close_digest, digest_id)
+        await self._delete_digest_messages(digest)
 
     async def import_item(self, digest_id: str, item_id: str) -> None:
         mail = await asyncio.to_thread(self.organizer.fetch_item, digest_id, item_id)
         progress = await asyncio.to_thread(self.organizer.import_progress, digest_id, item_id)
-        channel = await self.channel()
+        channel = await self.archive_channel()
         if not progress.get("summaryMessageId"):
             summary = await channel.send(
                 render_mail_summary(mail, self.organizer.naver_config.max_attachment_bytes),
@@ -179,8 +186,60 @@ class DiscordMailOrganizer:
                 key,
             )
             uploaded.add(key)
-        self.organizer.remove_imported(digest_id, item_id)
-        await self.refresh_digest(digest_id)
+        await asyncio.to_thread(self.organizer.remove_imported, digest_id, item_id)
+
+    async def delete_item_message(self, message_id: int) -> None:
+        channel = await self.channel()
+        if not hasattr(channel, "fetch_message"):
+            raise RuntimeError("mail_channel_not_messageable")
+        try:
+            message = await channel.fetch_message(message_id)
+            await message.delete()
+        except (discord.NotFound, discord.HTTPException):
+            pass
+
+    async def delete_item_messages(self, digest: dict[str, object]) -> int:
+        deleted = 0
+        for _item_id, item in _ordered_items(digest):
+            message_id = int(item.get("organizerMessageId") or 0)
+            if not message_id:
+                continue
+            try:
+                await self.delete_item_message(message_id)
+                deleted += 1
+            except (discord.HTTPException, RuntimeError):
+                pass
+        return deleted
+
+    async def _publish_item(
+        self,
+        channel: discord.abc.Messageable,
+        digest_id: str,
+        item_id: str,
+        item: dict[str, object],
+    ) -> discord.Message:
+        message = await channel.send(
+            render_digest_item(item),
+            view=MailItemActionView(self, digest_id, item_id),
+            allowed_mentions=NO_MENTIONS,
+        )
+        await asyncio.to_thread(
+            self.organizer.attach_item_message,
+            digest_id,
+            item_id,
+            message.id,
+        )
+        return message
+
+    async def _delete_digest_messages(self, digest: dict[str, object]) -> int:
+        deleted = await self.delete_item_messages(digest)
+        try:
+            message = await self._fetch_digest_message(digest)
+            await message.delete()
+            deleted += 1
+        except (discord.NotFound, discord.HTTPException, RuntimeError):
+            pass
+        return deleted
 
     async def _fetch_digest_message(self, digest: dict[str, object]) -> discord.Message:
         channel_id = int(digest.get("channelId") or self.channel_id)
@@ -219,84 +278,22 @@ class RestrictedView(discord.ui.View):
             await interaction.response.send_message(message, ephemeral=True, allowed_mentions=NO_MENTIONS)
 
 
-class DigestSelect(discord.ui.Select):
-    def __init__(self, parent: "MailDigestView") -> None:
-        self.parent_view = parent
-        options = digest_options(parent.digest, parent.page)
-        super().__init__(
-            placeholder="Select unread mail",
-            min_values=1,
-            max_values=1,
-            options=options or [discord.SelectOption(label="No unread mail", value="none")],
-            disabled=not options,
-            custom_id=f"mail:select:{parent.digest_id}",
-            row=0,
-        )
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        item_id = self.values[0]
-        await interaction.response.defer(ephemeral=True, thinking=True)
-        mail = await asyncio.to_thread(
-            self.parent_view.coordinator.organizer.fetch_item,
-            self.parent_view.digest_id,
-            item_id,
-        )
-        await interaction.followup.send(
-            render_mail_summary(mail, self.parent_view.coordinator.organizer.naver_config.max_attachment_bytes),
-            view=MailItemView(
-                self.parent_view.coordinator,
-                self.parent_view.digest_id,
-                item_id,
-                interaction.user.id,
-            ),
-            ephemeral=True,
-            allowed_mentions=NO_MENTIONS,
-        )
-
-
 class MailDigestView(RestrictedView):
-    def __init__(
-        self,
-        coordinator: DiscordMailOrganizer,
-        digest_id: str,
-        digest: dict[str, object],
-        page: int = 0,
-    ) -> None:
+    def __init__(self, coordinator: DiscordMailOrganizer, digest_id: str) -> None:
         super().__init__(coordinator, timeout=None)
         self.digest_id = digest_id
-        self.digest = digest
-        self.pages = max(1, math.ceil(len(_ordered_items(digest)) / PAGE_SIZE))
-        self.page = min(max(0, page), self.pages - 1)
-        self.add_item(DigestSelect(self))
-        self._add_button("Previous", discord.ButtonStyle.secondary, "prev", self._previous, self.page == 0)
-        self._add_button("Next", discord.ButtonStyle.secondary, "next", self._next, self.page >= self.pages - 1)
         self._add_button("Menu", discord.ButtonStyle.primary, "menu", self._menu)
         self._add_button("Close", discord.ButtonStyle.secondary, "close", self._close)
 
-    def _add_button(self, label, style, action, callback, disabled=False) -> None:
+    def _add_button(self, label, style, action, callback) -> None:
         button = discord.ui.Button(
             label=label,
             style=style,
             custom_id=f"mail:{action}:{self.digest_id}",
-            row=1,
-            disabled=disabled,
+            row=0,
         )
         button.callback = callback
         self.add_item(button)
-
-    async def _change_page(self, interaction: discord.Interaction, page: int) -> None:
-        digest = self.coordinator.organizer.digest(self.digest_id)
-        await interaction.response.edit_message(
-            content=render_digest(digest, page),
-            view=MailDigestView(self.coordinator, self.digest_id, digest, page),
-            allowed_mentions=NO_MENTIONS,
-        )
-
-    async def _previous(self, interaction: discord.Interaction) -> None:
-        await self._change_page(interaction, self.page - 1)
-
-    async def _next(self, interaction: discord.Interaction) -> None:
-        await self._change_page(interaction, self.page + 1)
 
     async def _menu(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_message(
@@ -311,56 +308,74 @@ class MailDigestView(RestrictedView):
         await self.coordinator.delete_digest(self.digest_id)
 
 
-class MailItemView(RestrictedView):
-    def __init__(self, coordinator: DiscordMailOrganizer, digest_id: str, item_id: str, owner_id: int) -> None:
-        super().__init__(coordinator, timeout=900, owner_id=owner_id)
+class MailItemActionView(RestrictedView):
+    def __init__(self, coordinator: DiscordMailOrganizer, digest_id: str, item_id: str) -> None:
+        super().__init__(coordinator, timeout=None)
         self.digest_id = digest_id
         self.item_id = item_id
+        self._add_button("Import", discord.ButtonStyle.success, "import", self._import)
+        self._add_button("Mark Read", discord.ButtonStyle.primary, "read", self._mark_read)
+        self._add_button("Delete", discord.ButtonStyle.danger, "delete", self._delete)
 
-    @discord.ui.button(label="Mark Read", style=discord.ButtonStyle.primary)
-    async def mark_read(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.defer(ephemeral=True)
+    def _add_button(self, label, style, action, callback) -> None:
+        button = discord.ui.Button(
+            label=label,
+            style=style,
+            custom_id=f"mail:item:{action}:{self.digest_id}:{self.item_id}",
+        )
+        button.callback = callback
+        self.add_item(button)
+
+    async def _mark_read(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True, thinking=True)
         await asyncio.to_thread(self.coordinator.organizer.mark_read, self.digest_id, self.item_id)
+        await self.coordinator.delete_item_message(interaction.message.id)
         await self.coordinator.refresh_digest(self.digest_id)
         await interaction.edit_original_response(content="Marked read in Naver.", view=None)
         self.stop()
 
-    @discord.ui.button(label="Import", style=discord.ButtonStyle.success)
-    async def import_mail(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.defer(ephemeral=True)
+    async def _import(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True, thinking=True)
         await self.coordinator.import_item(self.digest_id, self.item_id)
+        await self.coordinator.delete_item_message(interaction.message.id)
+        await self.coordinator.refresh_digest(self.digest_id)
         await interaction.edit_original_response(content="Imported to Discord. Naver read state was unchanged.", view=None)
         self.stop()
 
-    @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger)
-    async def delete(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(
+    async def _delete(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_message(
             content=MarkdownMessage(title="Delete this mail?", summary="The message will move to Naver Trash.").render(),
             view=MailDeleteConfirmationView(
                 self.coordinator,
                 self.digest_id,
                 self.item_id,
                 interaction.user.id,
+                interaction.message.id,
             ),
+            ephemeral=True,
             allowed_mentions=NO_MENTIONS,
         )
 
-    @discord.ui.button(label="Close", style=discord.ButtonStyle.secondary)
-    async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(content="Closed.", view=None)
-        self.stop()
-
 
 class MailDeleteConfirmationView(RestrictedView):
-    def __init__(self, coordinator, digest_id: str, item_id: str, owner_id: int) -> None:
+    def __init__(
+        self,
+        coordinator,
+        digest_id: str,
+        item_id: str,
+        owner_id: int,
+        organizer_message_id: int,
+    ) -> None:
         super().__init__(coordinator, timeout=60, owner_id=owner_id)
         self.digest_id = digest_id
         self.item_id = item_id
+        self.organizer_message_id = organizer_message_id
 
     @discord.ui.button(label="Delete from Naver", style=discord.ButtonStyle.danger)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer(ephemeral=True)
         await asyncio.to_thread(self.coordinator.organizer.delete, self.digest_id, self.item_id)
+        await self.coordinator.delete_item_message(self.organizer_message_id)
         await self.coordinator.refresh_digest(self.digest_id)
         await interaction.edit_original_response(content="Moved to Naver Trash.", view=None)
         self.stop()
@@ -379,7 +394,9 @@ class MailBulkView(RestrictedView):
     @discord.ui.button(label="Mark Read All", style=discord.ButtonStyle.primary)
     async def mark_all(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer(ephemeral=True)
+        digest = await asyncio.to_thread(self.coordinator.organizer.digest, self.digest_id)
         await asyncio.to_thread(self.coordinator.organizer.mark_read_all, self.digest_id)
+        await self.coordinator.delete_item_messages(digest)
         await self.coordinator.refresh_digest(self.digest_id)
         await interaction.edit_original_response(content="Digest messages marked read in Naver.", view=None)
         self.stop()
@@ -409,7 +426,9 @@ class MailDeleteAllConfirmationView(RestrictedView):
     @discord.ui.button(label="Delete Snapshot", style=discord.ButtonStyle.danger)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer(ephemeral=True)
+        digest = await asyncio.to_thread(self.coordinator.organizer.digest, self.digest_id)
         await asyncio.to_thread(self.coordinator.organizer.delete_all, self.digest_id)
+        await self.coordinator.delete_item_messages(digest)
         await self.coordinator.refresh_digest(self.digest_id)
         await interaction.edit_original_response(content="Digest messages moved to Naver Trash.", view=None)
         self.stop()

@@ -43,7 +43,12 @@ class SettingsTests(unittest.TestCase):
         with self.assertRaises(ConfigurationError):
             Settings.from_env({**BASE_ENV, "MAIL_ORGANIZER_ENABLED": "true"})
         settings = Settings.from_env(
-            {**BASE_ENV, "MAIL_ORGANIZER_ENABLED": "true", "MAIL_ORGANIZER_DISCORD_CHANNEL_ID": "300"}
+            {
+                **BASE_ENV,
+                "MAIL_ORGANIZER_ENABLED": "true",
+                "MAIL_ARCHIVE_DISCORD_CHANNEL_ID": "300",
+                "MAIL_ORGANIZER_DISCORD_CHANNEL_ID": "300",
+            }
         )
         self.assertEqual(settings.mail_organizer_channel_id, 300)
 

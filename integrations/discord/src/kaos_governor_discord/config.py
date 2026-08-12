@@ -79,8 +79,10 @@ class Settings:
         )
         mail_enabled = _boolean(source, "MAIL_NAVER_ENABLED")
         organizer_enabled = _boolean(source, "MAIL_ORGANIZER_ENABLED")
-        if mail_enabled and mail_archive_channel_id is None:
-            raise ConfigurationError("MAIL_ARCHIVE_DISCORD_CHANNEL_ID is required when MAIL_NAVER_ENABLED=true")
+        if (mail_enabled or organizer_enabled) and mail_archive_channel_id is None:
+            raise ConfigurationError(
+                "MAIL_ARCHIVE_DISCORD_CHANNEL_ID is required when Naver mail or its organizer is enabled"
+            )
         if organizer_enabled and mail_organizer_channel_id is None:
             raise ConfigurationError(
                 "MAIL_ORGANIZER_DISCORD_CHANNEL_ID is required when MAIL_ORGANIZER_ENABLED=true"

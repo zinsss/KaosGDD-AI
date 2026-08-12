@@ -194,6 +194,19 @@ class MailOrganizerTests(unittest.TestCase):
         self.assertEqual(progress["uploadedAttachments"], ["0:notice.pdf:10"])
         self.assertNotIn("Newest body", state_text)
 
+    def test_discord_item_message_id_is_checkpointed_for_restart(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            server = FakeOrganizerServer()
+            service = organizer(Path(tmp), server)
+            digest = service.create_digest()
+            item_id = next(iter(digest["items"]))
+            service.attach_message(str(digest["id"]), 300, 400)
+            service.attach_item_message(str(digest["id"]), item_id, 500)
+            restored = service.active_digests()[0]
+        self.assertEqual(restored["channelId"], 300)
+        self.assertEqual(restored["messageId"], 400)
+        self.assertEqual(restored["items"][item_id]["organizerMessageId"], 500)
+
     def test_delete_all_uses_only_digest_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             server = FakeOrganizerServer()

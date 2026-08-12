@@ -33,13 +33,15 @@ while excluding Sent, Drafts, Trash, Junk, and the configured trash folder.
 Header scans and previews use `BODY.PEEK`; opening or importing a message does
 not mark it read.
 
-The organizer is sent to `MAIL_ORGANIZER_DISCORD_CHANNEL_ID`. Discord uses a
-paginated select menu because one message can contain at most 25
-select options. Actions preserve the legacy behavior:
+The organizer is sent to `MAIL_ORGANIZER_DISCORD_CHANNEL_ID`. It publishes one
+compact subject message per unread mail with direct `Import`, `Mark Read`, and
+`Delete` buttons. The header retains bulk `Menu` and `Close` actions. Actions
+preserve the legacy behavior:
 
 - `Mark Read` sets `\\Seen` in the source Naver folder.
-- `Import` posts the full summary and eligible attachments to Discord without
-  changing Naver read state. Summary and attachment progress are checkpointed.
+- `Import` posts the full summary and eligible attachments to
+  `MAIL_ARCHIVE_DISCORD_CHANNEL_ID` without changing Naver read state. Summary
+  and attachment progress are checkpointed.
 - `Delete` requires a fresh confirmation and moves the message to Naver Trash.
 - bulk actions operate only on the saved digest snapshot.
 - an empty digest closes itself, and stale digests expire after 14 days.
@@ -47,7 +49,8 @@ select options. Actions preserve the legacy behavior:
 
 All controls re-check the configured guild, channel, and user allowlists. Naver
 remains authoritative; organizer state stores only UIDVALIDITY/UID references,
-delivery progress, schedule slots, and Discord message IDs.
+delivery progress, schedule slots, and the header/item Discord message IDs
+needed to restore buttons after restart.
 
 Use `/mail-organizer-now` for a manual run and `/mail-organizer-schedule` to
 persist a once- or twice-daily KST schedule. Times use five-minute steps.

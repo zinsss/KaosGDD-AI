@@ -1,7 +1,15 @@
 from types import SimpleNamespace
 import unittest
+from unittest.mock import AsyncMock, Mock
 
-from kaos_governor_discord.organizer import MailDigestView, PAGE_SIZE, digest_options, render_digest
+from kaos_governor.mail import MailMessage
+from kaos_governor_discord.organizer import (
+    DiscordMailOrganizer,
+    MailDigestView,
+    MailItemActionView,
+    render_digest,
+    render_digest_item,
+)
 
 
 def digest(count: int) -> dict[str, object]:
@@ -23,35 +31,73 @@ def digest(count: int) -> dict[str, object]:
 
 
 class DiscordOrganizerRenderingTests(unittest.TestCase):
-    def test_digest_renders_markdown_and_pages_select_options(self) -> None:
-        value = digest(PAGE_SIZE + 3)
-        rendered = render_digest(value, page=1)
-        first = digest_options(value, page=0)
-        second = digest_options(value, page=1)
+    def test_digest_renders_markdown_without_a_select_menu(self) -> None:
+        value = digest(3)
+        rendered = render_digest(value)
         self.assertIn("## Naver Mail Organizer", rendered)
-        self.assertIn("2 / 2", rendered)
-        self.assertEqual(len(first), PAGE_SIZE)
-        self.assertEqual(len(second), 3)
-        self.assertEqual(second[0].value, f"item-{PAGE_SIZE}")
+        self.assertIn("direct actions", rendered)
+        self.assertNotIn("Page", rendered)
 
-    def test_dynamic_option_text_does_not_exceed_discord_limits(self) -> None:
+    def test_item_message_is_compact_and_escapes_mail_content(self) -> None:
         value = digest(1)
-        value["items"]["item-0"]["subject"] = "x" * 300
-        value["items"]["item-0"]["sender"] = "y" * 300
-        option = digest_options(value)[0]
-        self.assertLessEqual(len(option.label), 100)
-        self.assertLessEqual(len(option.description), 100)
+        value["items"]["item-0"]["subject"] = "**unsafe** @everyone"
+        rendered = render_digest_item(value["items"]["item-0"])
+        self.assertIn("\\*\\*unsafe\\*\\* @\u200beveryone", rendered)
+        self.assertLessEqual(len(rendered), 900)
 
 
 class DiscordOrganizerViewTests(unittest.IsolatedAsyncioTestCase):
     async def test_persistent_digest_components_have_stable_custom_ids(self) -> None:
         coordinator = SimpleNamespace(policy=SimpleNamespace())
-        view = MailDigestView(coordinator, "digest-1", digest(PAGE_SIZE + 1))
-        custom_ids = [item.custom_id for item in view.children]
-        self.assertEqual(len(custom_ids), 5)
-        self.assertTrue(all(custom_ids))
-        self.assertIn("mail:select:digest-1", custom_ids)
-        self.assertIn("mail:next:digest-1", custom_ids)
+        header = MailDigestView(coordinator, "digest-1")
+        item = MailItemActionView(coordinator, "digest-1", "item-1")
+        header_ids = [child.custom_id for child in header.children]
+        item_ids = [child.custom_id for child in item.children]
+        self.assertEqual(header_ids, ["mail:menu:digest-1", "mail:close:digest-1"])
+        self.assertEqual(
+            item_ids,
+            [
+                "mail:item:import:digest-1:item-1",
+                "mail:item:read:digest-1:item-1",
+                "mail:item:delete:digest-1:item-1",
+            ],
+        )
+
+    async def test_digest_and_import_use_their_separate_channels(self) -> None:
+        service = SimpleNamespace(
+            naver_config=SimpleNamespace(max_attachment_bytes=1024),
+            attach_message=Mock(),
+            attach_item_message=Mock(),
+            fetch_item=Mock(
+                return_value=MailMessage(
+                    mailbox="INBOX",
+                    uid=1,
+                    sender="sender@example.test",
+                    subject="Subject",
+                    preview="Preview",
+                    attachments=(),
+                    received_at="2026-08-12 09:00 KST",
+                )
+            ),
+            import_progress=Mock(return_value={}),
+            mark_import_summary=Mock(),
+            remove_imported=Mock(),
+        )
+        coordinator = DiscordMailOrganizer(
+            SimpleNamespace(), service, SimpleNamespace(), 100, 200
+        )
+        organizer_channel = AsyncMock()
+        organizer_channel.send.side_effect = [SimpleNamespace(id=501), SimpleNamespace(id=502)]
+        archive_channel = AsyncMock()
+        archive_channel.send.return_value = SimpleNamespace(id=601)
+        coordinator.channel = AsyncMock(return_value=organizer_channel)
+        coordinator.archive_channel = AsyncMock(return_value=archive_channel)
+
+        await coordinator.publish_digest(digest(1))
+        await coordinator.import_item("digest-1", "item-0")
+
+        self.assertEqual(organizer_channel.send.await_count, 2)
+        archive_channel.send.assert_awaited_once()
 
 
 if __name__ == "__main__":

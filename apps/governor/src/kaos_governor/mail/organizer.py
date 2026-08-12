@@ -369,6 +369,13 @@ class NaverMailOrganizer:
             digest["messageId"] = int(message_id)
             self.save_state(state)
 
+    def attach_item_message(self, digest_id: str, item_id: str, message_id: int) -> None:
+        with self._lock:
+            state = self.load_state()
+            _digest, item = self._digest_item(state, digest_id, item_id)
+            item["organizerMessageId"] = int(message_id)
+            self.save_state(state)
+
     def active_digests(self) -> list[dict[str, object]]:
         with self._lock:
             state = self.load_state()
