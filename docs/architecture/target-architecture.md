@@ -1,0 +1,181 @@
+# Target Architecture
+
+## Overview
+
+```text
+Discord                         Family KaosGDD PWA
+   |                                    |
+   v                                    v
+KaosBrain on H4                 Family AI on RK1-2
+OpenClaw + main LLM             constrained 4B model
+   |                                    |
+   +----------------+-------------------+
+                    |
+                    v
+             KaosGovernor on RK1-1
+                    |
+        +-----------+------------+
+        |           |            |
+        v           v            v
+     Radicale      Memos      Office services
+     RK1-3         RK1-3      Paperless/HylaFAX
+```
+
+KaosBrain communicates with backends only through KaosGovernor. Family AI receives a separate family-scoped Governor credential.
+
+Native clients may still use service-native interfaces:
+
+- iOS Calendar and Reminders use Radicale over CalDAV.
+- KaosGDD Memos frontends use the Memos API.
+- Paperless users may use the Paperless UI.
+- HylaFAX continues locally at the office if home AI infrastructure is unavailable.
+
+## KaosGovernor
+
+KaosGovernor is a modular monolith with one repository and database but several runtime processes.
+
+```text
+KaosGovernor
+├── KaosScheduler
+├── KaosCalendar
+├── KaosMemos
+├── KaosMail
+├── KaosFax
+├── KaosInbox
+├── KaosNotifications
+└── KaosAudit
+```
+
+### KaosScheduler
+
+Owns time, not domain policy:
+
+- one-time and recurring jobs
+- delayed follow-ups and snoozes
+- reminder triggers
+- missed-job recovery after downtime
+- daily and weekly summaries
+- scheduled AI turns
+- retries, leases, expiration, and deduplication
+
+A scheduled AI turn stores an explicit purpose, actor scope, target agent, allowed tools, delivery target, expiry, and idempotency key. It does not depend solely on old conversation context.
+
+### KaosCalendar
+
+A complete calendar and task domain capability, not a thin CalDAV client:
+
+- calendar and task rules
+- preferences and temporary exceptions
+- event/task validation and conflict detection
+- standard and custom recurrence behavior
+- claim day, market day, and holiday generation
+- Rouny scheduling
+- reminder defaults
+- VEVENT/VTODO serialization
+- ETag-safe Radicale writes
+
+KaosScheduler wakes calendar jobs. KaosCalendar decides what the job means and whether a write is valid.
+
+### KaosMemos
+
+- Memos search, retrieval, creation, and update
+- tag and visibility validation
+- canonical Memos API adapter
+- optional rebuildable semantic index references
+
+Memos remains the source of truth. Embeddings and AI summaries are disposable derivatives.
+
+### KaosMail
+
+- IMAP polling
+- folder selection and mail rules
+- deduplication
+- attachment intake
+- Discord delivery and inbox actions
+- retry and read/delete/import operations
+
+AI may summarize collected mail but does not own polling or mailbox state.
+
+### KaosFax
+
+- inbound/outbound fax operation records
+- number and attachment validation
+- confirmations
+- status transitions and retries
+- Discord presentation
+
+Physical modem access remains in a narrow office Fax Connector beside HylaFAX.
+
+### KaosInbox
+
+- Discord file intake
+- temporary upload lifecycle
+- MIME, size, and duplicate validation
+- Paperless import and metadata application
+- optional Stirling-PDF operations
+- cleanup after import, delivery, expiration, or cancellation
+
+Mail attachments and faxes may create Inbox references without transferring ownership of their original workflows.
+
+### KaosNotifications
+
+- Discord delivery
+- Family PWA chat delivery and Web Push
+- quiet hours and category preferences
+- retry/outbox handling
+- deterministic fallback messages when AI is unavailable
+
+### KaosAudit
+
+Records meaningful operations rather than ordinary debug logs:
+
+- actor and channel
+- requested operation
+- normalized parameters
+- confirmation and approval state
+- prior and resulting object versions
+- backend object IDs
+- success, failure, and retry history
+- correlation and idempotency identifiers
+
+## Runtime Processes
+
+RK1-1 should run one image with separate commands where useful:
+
+```text
+governor-api
+governor-worker
+kaos-scheduler
+kaos-mail-worker
+governor-discord
+governor-postgres
+```
+
+Modules remain in one codebase. Separate processes are used only for polling, scheduling, blocking connections, or failure isolation.
+
+The office H3+ separately runs:
+
+```text
+kaos-fax-connector
+```
+
+## Data Ownership
+
+| Data | Authority |
+| --- | --- |
+| Events, tasks, journals | Radicale |
+| Memos and memo resources | Memos |
+| Documents and metadata | Paperless |
+| Fax transport and local fax queues | HylaFAX |
+| Governor jobs, rules, confirmations, audit | Governor PostgreSQL |
+| Conversation working context | KaosBrain or Family AI, non-authoritative |
+| DICOM and PACS database | Existing office PACS services |
+
+## Failure Behavior
+
+- H4 failure removes main AI conversation but not scheduled deterministic services.
+- Family AI failure removes family AI chat but not Family KaosGDD, Radicale, or Memos.
+- Governor failure pauses orchestration while native services remain accessible.
+- Web-edge failure removes web entry points while data services remain intact.
+- Home/Turing Pi failure does not stop office PACS, HylaFAX, Paperless, or RustDesk.
+- Office-to-home network failure queues fax events locally for later delivery.
