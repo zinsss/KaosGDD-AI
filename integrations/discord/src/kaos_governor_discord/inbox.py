@@ -82,6 +82,10 @@ class DiscordDocumentInbox:
             return False
         if await self._handle_metadata_reply(message):
             return True
+        content = str(getattr(message, "content", "") or "").strip()
+        if content.startswith(".."):
+            await self._handle_search(message, content[2:].strip())
+            return True
         if not message.attachments:
             await message.reply(
                 "Upload one PDF file to prepare it for Paperless.",
@@ -273,6 +277,35 @@ class DiscordDocumentInbox:
             "paperless": self.paperless.status(),
         }
 
+    async def _handle_search(self, message: discord.Message, query: str) -> None:
+        try:
+            results = await asyncio.to_thread(self.paperless.search, query, limit=5)
+        except DocumentIntakeError as exc:
+            self.rejected_count += 1
+            self.last_error = exc.code
+            await message.reply(
+                f"Paperless search rejected: {escape_text(rejection_message(exc))}",
+                mention_author=False,
+                allowed_mentions=NO_MENTIONS,
+            )
+            return
+        except Exception:
+            self.rejected_count += 1
+            self.last_error = "internal_error"
+            LOGGER.exception("Unexpected Paperless search failure")
+            await message.reply(
+                "Paperless search rejected: internal_error",
+                mention_author=False,
+                allowed_mentions=NO_MENTIONS,
+            )
+            return
+        await self._delete_message(message)
+        await message.channel.send(
+            render_paperless_search(query, results, public_url=self.paperless.config.public_url),
+            allowed_mentions=NO_MENTIONS,
+        )
+        self.last_error = ""
+
     async def _handle_metadata_reply(self, message: discord.Message) -> bool:
         reference = getattr(message, "reference", None)
         prompt_message_id = int(getattr(reference, "message_id", 0) or 0)
@@ -309,6 +342,12 @@ class DiscordDocumentInbox:
                 allowed_mentions=NO_MENTIONS,
             )
         return True
+
+    async def _delete_message(self, message: discord.Message) -> None:
+        try:
+            await message.delete()
+        except discord.HTTPException:
+            LOGGER.info("Could not delete Paperless search message %s", getattr(message, "id", ""))
 
     async def _edit_prompt(
         self,
@@ -552,6 +591,35 @@ def render_submitted_message(record: InboxRecord) -> str:
         lines.append(f"- title: {escape_text(record.title)}")
     if record.tags:
         lines.append("- tags: " + " ".join(f"#{escape_text(tag)}" for tag in record.tags))
+    return "\n".join(lines)[:1990]
+
+
+def render_paperless_search(query: str, results: object, *, public_url: str = "") -> str:
+    lines = [f"## Paperless search · {escape_text(query or '..')}"]
+    rendered = 0
+    base = public_url.rstrip("/")
+    for result in results if isinstance(results, list | tuple) else ():
+        title = escape_text(getattr(result, "title", "") or "Untitled document")
+        document_id = int(getattr(result, "document_id", 0) or 0)
+        link = f" <{base}/documents/{document_id}/details>" if base and document_id else ""
+        lines.append(f"### {title}{link}")
+        details = []
+        created = str(getattr(result, "created", "") or "")[:10]
+        filename = escape_text(getattr(result, "filename", "") or "")
+        correspondent = escape_text(getattr(result, "correspondent", "") or "")
+        if created:
+            details.append(created)
+        if correspondent:
+            details.append(correspondent)
+        if filename:
+            details.append(filename)
+        if details:
+            lines.append("- " + " · ".join(details))
+        rendered += 1
+        if rendered >= 5:
+            break
+    if rendered == 0:
+        lines.append("- No matching documents.")
     return "\n".join(lines)[:1990]
 
 

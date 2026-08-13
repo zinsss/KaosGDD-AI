@@ -61,6 +61,29 @@ class PaperlessDocumentServiceTests(unittest.TestCase):
         self.assertIn(b'name="tags"\r\n\r\n8', upload.data)
         self.assertIn(b'name="title"\r\n\r\nScan', upload.data)
 
+    def test_search_documents_uses_paperless_query_endpoint(self) -> None:
+        urlopen = mock.Mock(
+            return_value=FakeResponse(
+                body=(
+                    b'{"results":[{"id":42,"title":"Clinic bill","created":"2026-08-13",'
+                    b'"original_file_name":"bill.pdf","correspondent":{"name":"Clinic"}}]}'
+                )
+            )
+        )
+        service = PaperlessDocumentService(self.config(), urlopen=urlopen)
+
+        results = service.search("clinic bill", limit=5)
+
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.get_method(), "GET")
+        self.assertEqual(request.get_header("Authorization"), "Token not-a-real-token")
+        self.assertIn("/api/documents/?", request.full_url)
+        self.assertIn("query=clinic+bill", request.full_url)
+        self.assertEqual(results[0].document_id, 42)
+        self.assertEqual(results[0].title, "Clinic bill")
+        self.assertEqual(results[0].filename, "bill.pdf")
+        self.assertEqual(results[0].correspondent, "Clinic")
+
     def test_rejects_non_pdf_and_oversize_before_network(self) -> None:
         urlopen = mock.Mock()
         service = PaperlessDocumentService(self.config(), urlopen=urlopen)

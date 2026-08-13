@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock
 
-from kaos_governor.memos import Memo
+from kaos_governor.memos import Memo, MemoSearchResult
 from kaos_governor_discord.access import AccessPolicy
 from kaos_governor_discord.memos import DiscordMemosCapture
 
@@ -12,10 +12,16 @@ from kaos_governor_discord.memos import DiscordMemosCapture
 class FakeMemos:
     def __init__(self) -> None:
         self.created = []
+        self.searches = []
 
     def create(self, content):
         self.created.append(content)
         return Memo("memos/42", content, ("태그",), "created", "updated", "PRIVATE", False)
+
+    def search(self, query, tags, limit):
+        self.searches.append((query, tags, limit))
+        memo = Memo("memos/99", "Printer setup notes", ("office",), "created", "updated", "PRIVATE", False)
+        return [MemoSearchResult(memo, "Printer setup notes")]
 
 
 class FakeChannel:
@@ -61,6 +67,24 @@ class DiscordMemosCaptureTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(message.channel.sent[0][0], ("Saved to Memos: memos/42",))
         self.assertEqual(message.channel.sent[0][1]["delete_after"], 1)
         self.assertEqual(capture.status()["acceptedCount"], 1)
+
+    async def test_dotdot_message_searches_memos_then_deletes_original(self) -> None:
+        service = FakeMemos()
+        capture = DiscordMemosCapture(
+            service,  # type: ignore[arg-type]
+            AccessPolicy(100, frozenset({200}), frozenset({300})),
+            channel_id=300,
+        )
+        message = self.make_message("..printer")
+
+        handled = await capture.handle_message(message)  # type: ignore[arg-type]
+
+        self.assertTrue(handled)
+        self.assertEqual(service.created, [])
+        self.assertEqual(service.searches, [("printer", None, 5)])
+        message.delete.assert_awaited_once()
+        self.assertIn("Memos search", message.channel.sent[0][0][0])
+        self.assertIn("Printer setup notes", message.channel.sent[0][0][0])
 
     async def test_other_channels_are_ignored(self) -> None:
         service = FakeMemos()

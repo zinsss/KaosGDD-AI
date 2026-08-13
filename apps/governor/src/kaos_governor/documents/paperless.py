@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import time
 from typing import Any
 import urllib.error
 import urllib.parse
@@ -68,6 +69,24 @@ class PaperlessResult:
         }
 
 
+@dataclass(frozen=True)
+class PaperlessSearchResult:
+    document_id: int
+    title: str
+    created: str
+    filename: str
+    correspondent: str = ""
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "id": self.document_id,
+            "title": self.title,
+            "created": self.created,
+            "filename": self.filename,
+            "correspondent": self.correspondent,
+        }
+
+
 class PaperlessDocumentService:
     def __init__(
         self,
@@ -78,8 +97,51 @@ class PaperlessDocumentService:
         self.config = config
         self._urlopen = urlopen or urllib.request.urlopen
         self.last_submit_at = ""
+        self.last_search_at = ""
         self.last_error = ""
         self.submitted_count = 0
+        self.last_result_count = 0
+
+    def search(self, query: object, *, limit: int = 5) -> list[PaperlessSearchResult]:
+        if not self.config.enabled:
+            raise DocumentIntakeError("paperless_not_configured")
+        normalized = normalize_search_query(query)
+        if not normalized:
+            raise DocumentIntakeError("paperless_query_required")
+        if limit <= 0 or limit > 20:
+            raise DocumentIntakeError("paperless_limit_invalid")
+        query_string = urllib.parse.urlencode(
+            {
+                "query": normalized,
+                "page_size": str(limit),
+                "ordering": "-created",
+            }
+        )
+        request = urllib.request.Request(
+            f"{self.config.base_url.rstrip('/')}/api/documents/?{query_string}",
+            method="GET",
+            headers={
+                "Authorization": f"Token {self.config.api_token}",
+                "Accept": "application/json",
+                "User-Agent": self.config.user_agent,
+            },
+        )
+        try:
+            with self._urlopen(request, timeout=self.config.timeout_seconds) as response:
+                body = response.read()
+            if response.status < 200 or response.status >= 300:
+                raise DocumentIntakeError(f"paperless_http_{response.status}")
+            results = [paperless_search_result(item) for item in decode_results(body)][:limit]
+        except urllib.error.HTTPError as exc:
+            self.last_error = f"paperless_http_{exc.code}"
+            raise DocumentIntakeError(self.last_error) from exc
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            self.last_error = "paperless_request_failed"
+            raise DocumentIntakeError(self.last_error) from exc
+        self.last_search_at = _now()
+        self.last_result_count = len(results)
+        self.last_error = ""
+        return results
 
     def submit_pdf(
         self,
@@ -221,6 +283,8 @@ class PaperlessDocumentService:
             "publicUrlConfigured": bool(self.config.public_url),
             "maxAttachmentMB": self.config.max_document_bytes // (1024 * 1024),
             "submittedCount": self.submitted_count,
+            "lastSearchAt": self.last_search_at,
+            "lastResultCount": self.last_result_count,
             "lastError": self.last_error,
         }
 
@@ -246,6 +310,34 @@ def clean_filename(value: str) -> str:
     if not filename.lower().endswith(".pdf"):
         filename = f"{filename}.pdf"
     return filename[:180]
+
+
+def normalize_search_query(value: object) -> str:
+    query = " ".join(str(value or "").split())
+    if len(query) > 300:
+        raise DocumentIntakeError("paperless_query_too_long")
+    return query
+
+
+def paperless_search_result(payload: Mapping[str, object]) -> PaperlessSearchResult:
+    try:
+        document_id = int(payload.get("id") or 0)
+    except (TypeError, ValueError):
+        document_id = 0
+    title = str(payload.get("title") or payload.get("original_file_name") or f"Document {document_id}")
+    filename = str(payload.get("original_file_name") or payload.get("archive_filename") or "")
+    correspondent = payload.get("correspondent")
+    if isinstance(correspondent, Mapping):
+        correspondent_value = str(correspondent.get("name") or "")
+    else:
+        correspondent_value = str(payload.get("correspondent_name") or "")
+    return PaperlessSearchResult(
+        document_id=document_id,
+        title=title,
+        created=str(payload.get("created") or payload.get("created_date") or ""),
+        filename=filename,
+        correspondent=correspondent_value,
+    )
 
 
 def validate_pdf(filename: str, content: bytes, max_bytes: int) -> None:
@@ -335,3 +427,7 @@ def decode_results(body: bytes) -> list[Mapping[str, object]]:
 def clean_tag_name(value: str) -> str:
     cleaned = re.sub(r"[\x00-\x1f\x7f#]+", "", str(value or "")).strip()
     return cleaned[:100]
+
+
+def _now() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())

@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import AsyncMock
 
-from kaos_governor.documents import PaperlessConfig, PaperlessDocumentService, PaperlessResult
+from kaos_governor.documents import PaperlessConfig, PaperlessDocumentService, PaperlessResult, PaperlessSearchResult
 from kaos_governor_discord.access import AccessPolicy
 from kaos_governor_discord.inbox import DiscordDocumentInbox, parse_metadata_reply, rejection_message
 
@@ -21,6 +21,7 @@ class FakePaperless(PaperlessDocumentService):
             )
         )
         self.submitted = []
+        self.searches = []
 
     def submit_pdf(self, filename, content, *, title="", tags=(), source="discord"):
         self.submitted.append((filename, content, title, tuple(tags), source))
@@ -31,6 +32,10 @@ class FakePaperless(PaperlessDocumentService):
             sha256="hash-" + str(len(content)),
             size_bytes=len(content),
         )
+
+    def search(self, query, *, limit=5):
+        self.searches.append((query, limit))
+        return [PaperlessSearchResult(42, "Clinic bill", "2026-08-13", "bill.pdf", "Clinic")]
 
 
 class FakeAttachment:
@@ -46,14 +51,20 @@ class FakeAttachment:
 
 class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
-        self.channel = SimpleNamespace(id=300)
+        self.channel = SimpleNamespace(id=300, sent=[])
+
+        async def send(content, **kwargs):
+            self.channel.sent.append((content, kwargs))
+            return SimpleNamespace(id=998)
+
+        self.channel.send = AsyncMock(side_effect=send)
         self.bot = SimpleNamespace(
             user=SimpleNamespace(id=900),
             get_channel=lambda channel_id: self.channel if channel_id == 300 else None,
             fetch_channel=AsyncMock(return_value=self.channel),
         )
 
-    def make_message(self, attachments):
+    def make_message(self, attachments, *, content=""):
         replies = []
 
         async def reply(content, **kwargs):
@@ -63,12 +74,13 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
 
         message = SimpleNamespace(
             id=500,
-            content="",
+            content=content,
             guild=SimpleNamespace(id=100),
             channel=self.channel,
             author=SimpleNamespace(id=200, bot=False),
             attachments=attachments,
             reply=AsyncMock(side_effect=reply),
+            delete=AsyncMock(),
             replies=replies,
         )
         self.channel.fetch_message = AsyncMock(return_value=message)
@@ -138,6 +150,21 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(len(paperless.submitted), 1)
             self.assertIn("already submitted", message.replies[1][0])
+
+    async def test_dotdot_message_searches_paperless_then_deletes_original(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            paperless = FakePaperless()
+            inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
+            message = self.make_message([], content="..clinic")
+
+            self.assertTrue(await inbox.handle_message(message))  # type: ignore[arg-type]
+
+            self.assertEqual(paperless.submitted, [])
+            self.assertEqual(paperless.searches, [("clinic", 5)])
+            message.delete.assert_awaited_once()
+            self.assertIn("Paperless search", self.channel.sent[0][0])
+            self.assertIn("Clinic bill", self.channel.sent[0][0])
+            self.assertEqual(message.replies, [])
 
     def test_parse_metadata_reply_extracts_title_and_tags(self) -> None:
         self.assertEqual(

@@ -7,7 +7,7 @@ import discord
 from kaos_governor.memos import MemosError, MemosService
 
 from .access import AccessPolicy
-from .markdown import NO_MENTIONS
+from .markdown import NO_MENTIONS, escape_text
 
 
 LOGGER = logging.getLogger(__name__)
@@ -41,6 +41,9 @@ class DiscordMemosCapture:
             return True
         content = message.content.strip()
         if not content:
+            return True
+        if content.startswith(".."):
+            await self._handle_search(message, content[2:].strip())
             return True
         try:
             memo = await asyncio.to_thread(self.service.create, content)
@@ -78,8 +81,52 @@ class DiscordMemosCapture:
             "lastError": self.last_error,
         }
 
+    async def _handle_search(self, message: discord.Message, query: str) -> None:
+        try:
+            results = await asyncio.to_thread(self.service.search, query, None, 5)
+        except (ValueError, MemosError) as exc:
+            self.rejected_count += 1
+            self.last_error = exc.code if isinstance(exc, MemosError) else str(exc)
+            await message.reply(
+                f"Memos search rejected: {self.last_error}",
+                mention_author=False,
+                allowed_mentions=NO_MENTIONS,
+            )
+            return
+        except Exception as exc:
+            self.rejected_count += 1
+            self.last_error = type(exc).__name__
+            LOGGER.exception("Unexpected Memos search failure")
+            await message.reply(
+                "Memos search rejected: internal_error",
+                mention_author=False,
+                allowed_mentions=NO_MENTIONS,
+            )
+            return
+        await self._delete_message(message)
+        await message.channel.send(render_memos_search(query, results), allowed_mentions=NO_MENTIONS)
+        self.last_error = ""
+
     async def _delete_message(self, message: discord.Message) -> None:
         try:
             await message.delete()
         except discord.HTTPException:
             LOGGER.info("Could not delete captured Memos message %s", getattr(message, "id", ""))
+
+
+def render_memos_search(query: str, results: object) -> str:
+    lines = [f"## Memos search · {escape_text(query or '..')}"]
+    rendered = 0
+    for result in results if isinstance(results, list | tuple) else ():
+        memo = getattr(result, "memo", None)
+        name = escape_text(getattr(memo, "name", "") or "memo")
+        snippet = escape_text(getattr(result, "snippet", "") or "")
+        lines.append(f"### {name}")
+        if snippet:
+            lines.append(f"- {snippet[:220]}")
+        rendered += 1
+        if rendered >= 5:
+            break
+    if rendered == 0:
+        lines.append("- No matching memos.")
+    return "\n".join(lines)[:1990]
