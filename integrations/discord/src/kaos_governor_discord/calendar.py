@@ -386,7 +386,7 @@ def render_agenda(bootstrap: Mapping[str, Any], *, days: list[date], title: str)
         if len(lines) > 1:
             lines.append("")
         weather_summary = weather_agenda_summary(weather) if weather else ""
-        suffix = f" ({weather_summary})" if weather_summary else ""
+        suffix = f" • {weather_summary}" if weather_summary else ""
         lines.append(f"## {value:%Y.%m.%d %a}{suffix}")
         lines.extend(day_lines)
     content = "\n".join(lines)
@@ -437,7 +437,7 @@ def weather_agenda_summary(weather: Mapping[str, Any]) -> str:
     if not parts and not temperature:
         return ""
     suffix = f"  {temperature}" if temperature else ""
-    return f"{' > '.join(parts)}{suffix}"
+    return f"{', '.join(parts)}{suffix}"
 
 
 def weather_temperature_range(weather: Mapping[str, Any]) -> str:

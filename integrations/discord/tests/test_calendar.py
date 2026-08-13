@@ -178,7 +178,7 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
     def test_weather_agenda_summary_renders_dayparts_and_temperatures(self) -> None:
         self.assertEqual(
             weather_agenda_summary(BOOTSTRAP["weather"][0]),
-            "🌧️ > ⛅️ > ⚡️ > ☀️  26-33℃",
+            "🌧️, ⛅️, ⚡️, ☀️  26-33℃",
         )
         self.assertEqual(
             weather_agenda_summary({"condition": "cloudy", "minTemp": 1.5, "maxTemp": 8}),
@@ -190,8 +190,8 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("Agenda", content)
         self.assertIn("# Agenda", content)
-        self.assertIn("## 2026.08.13 Thu (🌧️ > ⛅️ > ⚡️ > ☀️  26-33℃)", content)
-        self.assertNotIn("\n🌧️ > ", content)
+        self.assertIn("## 2026.08.13 Thu • 🌧️, ⛅️, ⚡️, ☀️  26-33℃", content)
+        self.assertNotIn("\n🌧️, ", content)
         self.assertIn("- 09:00 Clinic · ***GDD_ZiN***", content)
         self.assertIn("- 당직", content)
         self.assertNotIn("***Family***", content)
@@ -228,7 +228,7 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             content,
-            "# Agenda · Upcoming 7 Days\n## 2026.08.13 Thu (🌧️ > ⛅️ > ⚡️ > ☀️  26-33℃)",
+            "# Agenda · Upcoming 7 Days\n## 2026.08.13 Thu • 🌧️, ⛅️, ⚡️, ☀️  26-33℃",
         )
 
     def test_month_navigation_wraps_years(self) -> None:
