@@ -155,6 +155,52 @@ class FaxTests(unittest.TestCase):
         self.assertIn("Fax successfully sent.", actions[2].content)
         self.assertEqual(actions[-1].message_ids, (20, 21))
 
+    def test_connector_failed_job_can_recover_after_office_repair(self) -> None:
+        class Connector:
+            def __init__(self):
+                self.status = {"status": "failed", "error": "fax_tiff_not_created"}
+
+            def submit(self, job_id, request, source_metadata):
+                return dict(self.status)
+
+            def job_status(self, job_id):
+                return dict(self.status)
+
+            def incoming_events(self):
+                return []
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = FaxConfig(
+                **{
+                    **self.config(root).__dict__,
+                    "transport": "connector",
+                    "connector_base_url": "http://office-fax:8098",
+                    "connector_token": "not-a-real-token",
+                }
+            )
+            connector = Connector()
+            service = FaxService(config, connector=connector)  # type: ignore[arg-type]
+            service.scan_actions()
+            service.submit(
+                self.request(),
+                {"channelId": 10, "messageId": 20, "commandMessageId": 21},
+            )
+            for action in service.scan_actions():
+                service.acknowledge(action)
+
+            connector.status = {
+                "status": "sent",
+                "hylafaxJobId": "42",
+                "completedAt": "2026-08-13T06:00:00Z",
+            }
+            actions = service.scan_actions()
+
+        self.assertEqual([action.kind for action in actions], ["notification", "notification", "cleanup"])
+        self.assertIn("Sending fax", actions[0].content)
+        self.assertIn("Fax successfully sent.", actions[1].content)
+        self.assertEqual(actions[-1].message_ids, (20, 21))
+
     def test_connector_transport_delivers_incoming_pdf_events(self) -> None:
         class Connector:
             def incoming_events(self):

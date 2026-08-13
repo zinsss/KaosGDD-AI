@@ -429,10 +429,12 @@ class FaxService:
 
     def _reconcile_jobs(self, state: dict) -> None:
         for job_id, job in state["jobs"].items():
-            if job.get("status") not in {"queued", "submitted"}:
-                continue
             if self.config.transport == "connector":
+                if job.get("status") not in {"queued", "submitted", "failed"}:
+                    continue
                 self._reconcile_connector_job(job_id, job)
+                continue
+            if job.get("status") not in {"queued", "submitted"}:
                 continue
             result = _read_json(self.config.queue_root / "results" / f"{job_id}.json")
             if job.get("status") == "queued" and result:
