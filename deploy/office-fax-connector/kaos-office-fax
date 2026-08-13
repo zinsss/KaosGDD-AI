@@ -64,9 +64,18 @@ smoke() {
   local token
   token=$(tr -d '\r\n' < "${SECRETS_DIR}/fax_connector_token")
   local address=${FAX_CONNECTOR_BIND_ADDRESS:-127.0.0.1}
-  curl --fail --silent --show-error \
-    -H "Authorization: Bearer ${token}" \
-    "http://${address}:${FAX_CONNECTOR_PORT:-8098}/health"
+  local attempt
+  for attempt in $(seq 1 20); do
+    if curl --fail --silent --show-error \
+      -H "Authorization: Bearer ${token}" \
+      "http://${address}:${FAX_CONNECTOR_PORT:-8098}/health"; then
+      printf '\n'
+      return
+    fi
+    sleep 1
+  done
+  "${COMPOSE[@]}" logs --tail=80 office-fax-connector >&2 || true
+  die "Office fax connector health endpoint did not become available"
   printf '\n'
 }
 
