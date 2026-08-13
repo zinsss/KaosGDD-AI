@@ -99,7 +99,7 @@ def render_month_png(
     top = 120
     gap = 6
     cell_width = (width - 124 - gap * 6) // 7
-    cell_height = 120
+    cell_height = 115
     for index, name in enumerate(("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")):
         text_at(left + index * (cell_width + gap) + cell_width // 2 - 22, 78, name, theme.dim, small_font)
 
