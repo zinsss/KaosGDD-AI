@@ -206,6 +206,10 @@ def incoming_events(config: ConnectorConfig) -> list[dict[str, Any]]:
         remote = remote_number(str(info.get("remote") or ""))
         received = received_time(str(info.get("receivedAt") or ""), path)
         filename = f"{received:%Y-%m-%d-%H:%M}_FROM_{remote}.pdf"
+        try:
+            pdf = tiff_to_pdf(config, path)
+        except ConnectorError:
+            continue
         events.append(
             {
                 "eventId": f"{path.name}:{stat.st_size}:{int(stat.st_mtime)}",
@@ -214,19 +218,22 @@ def incoming_events(config: ConnectorConfig) -> list[dict[str, Any]]:
                 "receivedAt": received.astimezone(UTC).isoformat().replace("+00:00", "Z"),
                 "commid": str(info.get("commid") or match.group(1).zfill(9)),
                 "pages": str(info.get("pages") or ""),
-                "pdfBase64": base64.b64encode(tiff_to_pdf(config, path)).decode("ascii"),
+                "pdfBase64": base64.b64encode(pdf).decode("ascii"),
             }
         )
     return events
 
 
 def tiff_to_pdf(config: ConnectorConfig, source: Path) -> bytes:
-    result = subprocess.run(
-        [config.tiff2pdf, str(source)],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            [config.tiff2pdf, str(source)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+    except OSError as exc:
+        raise ConnectorError(HTTPStatus.INTERNAL_SERVER_ERROR, "tiff2pdf_failed") from exc
     if result.returncode != 0 or not result.stdout.startswith(b"%PDF-"):
         raise ConnectorError(HTTPStatus.INTERNAL_SERVER_ERROR, "tiff2pdf_failed")
     return result.stdout

@@ -90,6 +90,18 @@ class OfficeFaxConnectorTests(unittest.TestCase):
         self.assertEqual(events[0]["filename"], "2026-08-12-13:55_FROM_0547337787.pdf")
         self.assertEqual(base64.b64decode(events[0]["pdfBase64"]), b"%PDF-converted")
 
+    def test_incoming_events_skip_unconvertible_tiffs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = self.config(root)
+            fax = root / "hylafax" / "recvq" / "fax000000007.tif"
+            fax.parent.mkdir(parents=True)
+            fax.write_bytes(b"not-a-real-tiff")
+
+            events = incoming_events(config)
+
+        self.assertEqual(events, [])
+
     def test_rejects_invalid_job_id(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             with self.assertRaises(ConnectorError) as raised:
