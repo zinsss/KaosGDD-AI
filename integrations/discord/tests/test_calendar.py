@@ -149,7 +149,8 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
 
     def test_weather_marker_uses_emoji_or_simple_condition_symbol(self) -> None:
         self.assertEqual(weather_marker({"emoji": "☀", "condition": "rain"}), "☀")
-        self.assertEqual(weather_marker({"glyph": "🌤️", "condition": "cloudy"}), "🌤️")
+        self.assertEqual(weather_marker({"glyph": "🌤️", "condition": "cloudy"}), "☁")
+        self.assertEqual(weather_marker({"glyph": "🌧️"}), "☂")
         self.assertEqual(weather_marker({"condition": "rain shower"}), "☂")
         self.assertEqual(weather_marker({"summary": "snow"}), "❄")
         self.assertEqual(weather_marker({"weather": "clear"}), "☀")

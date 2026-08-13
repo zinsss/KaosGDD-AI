@@ -405,7 +405,7 @@ def agenda_owner_suffix(collection: Mapping[str, Any]) -> str:
 
 
 def weather_marker(weather: Mapping[str, Any]) -> str:
-    explicit = str(weather.get("emoji") or weather.get("icon") or weather.get("glyph") or "").strip()
+    explicit = str(weather.get("emoji") or weather.get("icon") or "").strip()
     if explicit:
         return explicit[:2]
     raw = str(
@@ -413,22 +413,23 @@ def weather_marker(weather: Mapping[str, Any]) -> str:
         or weather.get("summary")
         or weather.get("weather")
         or weather.get("code")
+        or weather.get("glyph")
         or ""
     ).strip()
     if not raw:
         return ""
     value = raw.lower()
-    if any(token in value for token in ("thunder", "storm", "lightning", "번개", "천둥")):
+    if any(token in value for token in ("⛈", "thunder", "storm", "lightning", "번개", "천둥")):
         return "⚡"
-    if any(token in value for token in ("snow", "sleet", "ice", "눈")):
+    if any(token in value for token in ("❄", "snow", "sleet", "ice", "눈")):
         return "❄"
-    if any(token in value for token in ("rain", "shower", "drizzle", "비")):
+    if any(token in value for token in ("🌧", "☔", "rain", "shower", "drizzle", "비")):
         return "☂"
-    if any(token in value for token in ("fog", "mist", "haze", "smoke", "안개")):
+    if any(token in value for token in ("🌫", "fog", "mist", "haze", "smoke", "안개")):
         return "≋"
-    if any(token in value for token in ("cloud", "overcast", "흐림", "구름")):
+    if any(token in value for token in ("☁", "🌤", "⛅", "cloud", "overcast", "흐림", "구름")):
         return "☁"
-    if any(token in value for token in ("clear", "sun", "맑음", "sunny")):
+    if any(token in value for token in ("☀", "clear", "sun", "맑음", "sunny")):
         return "☀"
     return raw[:2]
 
