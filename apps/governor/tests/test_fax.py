@@ -152,7 +152,7 @@ class FaxTests(unittest.TestCase):
             [action.kind for action in actions],
             ["notification", "notification", "notification", "cleanup"],
         )
-        self.assertIn("Fax successfully sent.", actions[2].content)
+        self.assertEqual(actions[2].content, "Fax successfully sent.")
         self.assertEqual(actions[-1].message_ids, (20, 21))
 
     def test_connector_failed_job_can_recover_after_office_repair(self) -> None:
@@ -198,7 +198,7 @@ class FaxTests(unittest.TestCase):
 
         self.assertEqual([action.kind for action in actions], ["notification", "notification", "cleanup"])
         self.assertIn("Sending fax", actions[0].content)
-        self.assertIn("Fax successfully sent.", actions[1].content)
+        self.assertEqual(actions[1].content, "Fax successfully sent.")
         self.assertEqual(actions[-1].message_ids, (20, 21))
 
     def test_connector_transport_delivers_incoming_pdf_events(self) -> None:
@@ -235,10 +235,9 @@ class FaxTests(unittest.TestCase):
 
             actions = service.scan_actions()
 
-        self.assertEqual([action.kind for action in actions], ["notification", "archive"])
-        self.assertIn("0547337787", actions[0].content)
-        self.assertEqual(actions[1].filename, "2026-08-12-13:55_FROM_0547337787.pdf")
-        self.assertEqual(actions[1].content_bytes, b"%PDF-converted")
+        self.assertEqual([action.kind for action in actions], ["archive"])
+        self.assertEqual(actions[0].filename, "2026-08-12-13:55_FROM_0547337787.pdf")
+        self.assertEqual(actions[0].content_bytes, b"%PDF-converted")
 
     def test_connector_token_can_be_loaded_from_secret_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -278,7 +277,7 @@ class FaxTests(unittest.TestCase):
             [action.kind for action in actions],
             ["notification", "notification", "notification", "archive", "cleanup"],
         )
-        self.assertIn("Fax successfully sent.", actions[2].content)
+        self.assertEqual(actions[2].content, "Fax successfully sent.")
         self.assertEqual(actions[-1].message_ids, (20, 21))
 
     def test_first_run_baselines_incoming_and_legacy_sent_jobs(self) -> None:
@@ -312,9 +311,9 @@ class FaxTests(unittest.TestCase):
 
         self.assertEqual(first, [])
         self.assertEqual(second, [])
-        self.assertGreaterEqual(delivered, 6)
+        self.assertGreaterEqual(delivered, 5)
 
-    def test_new_incoming_fax_uses_telegram_compatible_name_and_notice(self) -> None:
+    def test_new_incoming_fax_archives_pdf_without_extra_notification(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             config = self.config(root)
@@ -331,9 +330,8 @@ class FaxTests(unittest.TestCase):
 
             actions = service.scan_actions()
 
-        self.assertEqual([action.kind for action in actions], ["notification", "archive"])
-        self.assertIn("From: 0547337787", actions[0].content)
-        self.assertEqual(actions[1].filename, "2026-08-12-13:55_FROM_0547337787.pdf")
+        self.assertEqual([action.kind for action in actions], ["archive"])
+        self.assertEqual(actions[0].filename, "2026-08-12-13:55_FROM_0547337787.pdf")
 
     def test_doneq_compatibility_success_rule(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

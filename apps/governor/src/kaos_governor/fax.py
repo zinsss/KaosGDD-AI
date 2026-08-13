@@ -493,20 +493,12 @@ class FaxService:
             pages = str(info.get("pages") or "")
             received = _received_time(str(info.get("receivedAt") or ""), path)
             key = f"{path.name}:{stat.st_size}:{int(stat.st_mtime)}"
-            body = ["Incoming fax", f"Received {path.name}", f"From: {remote}"]
-            if pages:
-                body.append(f"Pages: {pages}")
-            if commid:
-                body.append(f"CommID: {commid}")
-            actions.extend(
-                (
-                    FaxAction(f"incoming:notify:{key}", "notification", "\n".join(body)),
-                    FaxAction(
-                        f"incoming:archive:{key}",
-                        "archive",
-                        path=path,
-                        filename=f"{received:%Y-%m-%d-%H:%M}_FROM_{remote}.pdf",
-                    ),
+            actions.append(
+                FaxAction(
+                    f"incoming:archive:{key}",
+                    "archive",
+                    path=path,
+                    filename=f"{received:%Y-%m-%d-%H:%M}_FROM_{remote}.pdf",
                 )
             )
         return actions
@@ -516,29 +508,18 @@ class FaxService:
         for event in self.connector.incoming_events():
             event_id = str(event.get("eventId") or "")
             filename = unicodedata.normalize("NFC", str(event.get("filename") or "incoming-fax.pdf"))
-            remote = str(event.get("remote") or "unknown")
-            commid = str(event.get("commid") or "")
-            pages = str(event.get("pages") or "")
             try:
                 pdf = base64.b64decode(str(event.get("pdfBase64") or ""), validate=True)
             except ValueError:
                 continue
             if not event_id or not pdf.startswith(b"%PDF-"):
                 continue
-            body = ["Incoming fax", f"From: {remote}"]
-            if pages:
-                body.append(f"Pages: {pages}")
-            if commid:
-                body.append(f"CommID: {commid}")
-            actions.extend(
-                (
-                    FaxAction(f"incoming:notify:{event_id}", "notification", "\n".join(body)),
-                    FaxAction(
-                        f"incoming:archive:{event_id}",
-                        "archive",
-                        filename=filename,
-                        content_bytes=pdf,
-                    ),
+            actions.append(
+                FaxAction(
+                    f"incoming:archive:{event_id}",
+                    "archive",
+                    filename=filename,
+                    content_bytes=pdf,
                 )
             )
         return actions
@@ -554,7 +535,7 @@ class FaxService:
         if status in {"submitted", "sent"} or (status == "failed" and job.get("hylafaxJobId")):
             actions.append(FaxAction(f"{prefix}:sending", "notification", f"Sending fax to {destination}.\n: {filename}"))
         if status == "sent":
-            actions.append(FaxAction(f"{prefix}:sent", "notification", f"Fax successfully sent.\n: to {destination}\n: {filename}"))
+            actions.append(FaxAction(f"{prefix}:sent", "notification", "Fax successfully sent."))
             document = self.config.queue_root / "jobs" / job_id / "document.pdf"
             if self.config.transport == "local" and document.is_file():
                 completed = _sent_time(str(job.get("completedAt") or ""))
