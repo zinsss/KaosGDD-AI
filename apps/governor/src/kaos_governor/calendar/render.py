@@ -79,12 +79,9 @@ def render_month_png(
     image = Image.new("RGB", (width, height), theme.background)
     draw = ImageDraw.Draw(image, "RGBA")
 
-    label_font = _load_font(ImageFont, bold, 22)
-    title_font = _load_font(ImageFont, bold, 54)
     day_font = _load_font(ImageFont, bold, 34)
     small_font = _load_font(ImageFont, bold, 22)
     marker_font = _load_font(ImageFont, bold, 28)
-    nav_font = _load_font(ImageFont, bold, 18)
     weather_font = _load_font(ImageFont, regular, 22)
 
     def rounded(box, radius=8, fill=theme.surface, outline=theme.line, line_width=1):
@@ -97,22 +94,16 @@ def render_month_png(
         draw.ellipse((cx - radius, cy - radius, cx + radius, cy + radius), fill=fill)
 
     rounded((32, 30, width - 32, height - 30), 10, theme.panel, theme.line_strong)
-    text_at(62, 60, "Calendar", theme.dim, label_font)
-    text_at(62, 90, f"{year}.{month:02d}", theme.text, title_font)
-    rounded((width - 248, 84, width - 72, 124), 7, theme.surface, theme.line)
-    text_at(width - 232, 94, "<<", theme.market, nav_font)
-    text_at(width - 172, 94, "Today", theme.muted, nav_font)
-    text_at(width - 98, 94, ">>", theme.market, nav_font)
 
     left = 62
-    top = 200
+    top = 120
     gap = 6
     cell_width = (width - 124 - gap * 6) // 7
-    cell_height = 106
-    for index, name in enumerate(("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")):
-        text_at(left + index * (cell_width + gap) + cell_width // 2 - 22, 158, name, theme.dim, small_font)
+    cell_height = 120
+    for index, name in enumerate(("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")):
+        text_at(left + index * (cell_width + gap) + cell_width // 2 - 22, 78, name, theme.dim, small_font)
 
-    weeks = calendar.Calendar(firstweekday=0).monthdatescalendar(year, month)
+    weeks = calendar.Calendar(firstweekday=6).monthdatescalendar(year, month)
     for row, week in enumerate(weeks):
         for col, value in enumerate(week):
             x = left + col * (cell_width + gap)
@@ -137,7 +128,7 @@ def render_month_png(
 
             text_at(x + 12, y + 10, value.day, _day_number_color(value, in_month, item, theme), day_font)
             if in_month and item.market_day:
-                dot(x + 58, y + 29, theme.market, 7)
+                dot(x + cell_width - 22, y + 28, theme.market, 7)
             if in_month and item.weather:
                 text_at(x + 76, y + 12, item.weather, theme.weather, weather_font)
 

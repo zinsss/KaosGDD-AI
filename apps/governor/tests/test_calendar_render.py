@@ -77,8 +77,17 @@ class CalendarRenderTests(unittest.TestCase):
 
         with Image.open(BytesIO(png)) as image:
             self.assertEqual(image.size[1], 900)
-            self.assertNotEqual(image.getpixel((62 + 3 * 154 + 58, 200 + 2 * 112 + 29)), image.getpixel((10, 10)))
-            self.assertEqual(image.getpixel((62 + 1 * 154 + 58, 200 + 1 * 112 + 29)), image.getpixel((62 + 1 * 154 + 95, 200 + 1 * 112 + 29)))
+            august_13_x = 62 + 4 * 154
+            august_13_y = 120 + 2 * 126
+            august_4_x = 62 + 2 * 154
+            august_4_y = 120 + 1 * 126
+
+            self.assertEqual(image.getpixel((august_13_x + 126, august_13_y + 28)), (136, 192, 208))
+            self.assertNotEqual(image.getpixel((august_13_x + 58, august_13_y + 29)), (136, 192, 208))
+            self.assertEqual(
+                image.getpixel((august_4_x + 126, august_4_y + 28)),
+                image.getpixel((august_4_x + 95, august_4_y + 28)),
+            )
 
 
 if __name__ == "__main__":
