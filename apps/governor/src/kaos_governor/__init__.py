@@ -12,7 +12,16 @@ from .durable import (
     stable_hash,
 )
 from .documents import DocumentIntakeError, PaperlessConfig, PaperlessDocumentService, PaperlessResult
-from .fax import FaxAction, FaxConfig, FaxError, FaxRequest, FaxService, normalize_destination, request_from_pdf
+from .fax import (
+    FaxAction,
+    FaxConfig,
+    FaxError,
+    FaxRequest,
+    FaxService,
+    OfficeFaxConnectorClient,
+    normalize_destination,
+    request_from_pdf,
+)
 from .memos import Memo, MemoSearchResult, MemosConfig, MemosError, MemosService
 
 __all__ = (
@@ -34,6 +43,7 @@ __all__ = (
     "MemosService",
     "OperationRecord",
     "OperationRequest",
+    "OfficeFaxConnectorClient",
     "PaperlessConfig",
     "PaperlessDocumentService",
     "PaperlessResult",

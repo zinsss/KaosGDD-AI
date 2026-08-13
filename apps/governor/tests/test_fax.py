@@ -3,11 +3,13 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from kaos_governor.fax import (
     FaxConfig,
     FaxError,
     FaxService,
+    OfficeFaxConnectorClient,
     normalize_destination,
     parse_doneq,
     request_from_pdf,
@@ -65,6 +67,106 @@ class FaxTests(unittest.TestCase):
         self.assertEqual(job["jobId"], duplicate["jobId"])
         self.assertEqual(manifest["pdfPath"], f"jobs/{job['jobId']}/document.pdf")
         self.assertEqual(manifest["destination"], "022848302")
+
+    def test_connector_submit_uses_authenticated_http_contract(self) -> None:
+        class Response:
+            status = 202
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return None
+
+            def read(self):
+                return b'{"status":"queued"}'
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = FaxConfig(
+                **{
+                    **self.config(root).__dict__,
+                    "transport": "connector",
+                    "connector_base_url": "http://office-fax:8098",
+                    "connector_token": "not-a-real-token",
+                }
+            )
+            urlopen = mock.Mock(return_value=Response())
+            connector = OfficeFaxConnectorClient(config, urlopen=urlopen)
+
+            result = connector.submit("job-1", self.request(), {"channelId": 10})
+
+        request = urlopen.call_args.args[0]
+        body = json.loads(request.data.decode("utf-8"))
+        self.assertEqual(result["status"], "queued")
+        self.assertEqual(request.full_url, "http://office-fax:8098/v1/fax/jobs")
+        self.assertEqual(request.get_header("Authorization"), "Bearer not-a-real-token")
+        self.assertEqual(body["jobId"], "job-1")
+        self.assertEqual(body["destination"], "022848302")
+        self.assertEqual(body["pdfSha256"], self.request().pdf_sha256)
+        self.assertIn("pdfBase64", body)
+
+    def test_connector_transport_records_job_and_polls_status(self) -> None:
+        class Connector:
+            def __init__(self):
+                self.submitted = []
+
+            def submit(self, job_id, request, source_metadata):
+                self.submitted.append((job_id, request, dict(source_metadata)))
+                return {"status": "queued"}
+
+            def job_status(self, job_id):
+                return {
+                    "status": "sent",
+                    "hylafaxJobId": "42",
+                    "completedAt": "2026-08-13T06:00:00Z",
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = FaxConfig(
+                **{
+                    **self.config(root).__dict__,
+                    "transport": "connector",
+                    "connector_base_url": "http://office-fax:8098",
+                    "connector_token": "not-a-real-token",
+                }
+            )
+            connector = Connector()
+            service = FaxService(config, connector=connector)  # type: ignore[arg-type]
+            service.scan_actions()
+            job, created = service.submit(
+                self.request(),
+                {"channelId": 10, "messageId": 20, "commandMessageId": 21},
+            )
+
+            actions = service.scan_actions()
+
+        self.assertTrue(created)
+        self.assertEqual(job["status"], "queued")
+        self.assertEqual(connector.submitted[0][0], job["jobId"])
+        self.assertEqual(
+            [action.kind for action in actions],
+            ["notification", "notification", "notification", "cleanup"],
+        )
+        self.assertIn("Fax successfully sent.", actions[2].content)
+        self.assertEqual(actions[-1].message_ids, (20, 21))
+
+    def test_connector_token_can_be_loaded_from_secret_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            token = Path(tmp) / "token"
+            token.write_text("secret-token\n", encoding="utf-8")
+
+            config = FaxConfig.from_env(
+                {
+                    "FAX_TRANSPORT": "connector",
+                    "FAX_CONNECTOR_BASE_URL": "http://office-fax:8098",
+                    "FAX_CONNECTOR_TOKEN_FILE": str(token),
+                }
+            )
+
+        self.assertEqual(config.transport, "connector")
+        self.assertEqual(config.connector_token, "secret-token")
 
     def test_bridge_and_doneq_generate_lifecycle_archive_and_cleanup(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

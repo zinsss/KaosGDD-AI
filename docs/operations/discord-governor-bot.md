@@ -68,9 +68,14 @@ the H3+ backend described in [`deploy/h3-backend`](../../deploy/h3-backend/READM
 
 ## Boundary
 
-The temporary local fax adapter writes only the narrow, versioned bridge manifest
-contract and reads HylaFAX status/archive files; it has no modem, shell, Docker,
-or database authority. The Memos adapter has an account-scoped PAT but exposes
-only read-only search and fetch operations. Radicale and Paperless authority are
-not connected. On H3, fax stays disabled until the authenticated Office Kaos
-Fax Connector replaces local filesystem mounts.
+HylaFAX and the physical modem remain permanently on Office Kaos. H3
+KaosGovernor must use `FAX_TRANSPORT=connector` with the authenticated Office
+Fax Connector; it must not mount or read HylaFAX spool paths directly.
+
+The legacy local fax adapter writes only the narrow, versioned bridge manifest
+contract and reads HylaFAX status/archive files. It has no modem, shell, Docker,
+or database authority and is valid only when running beside the Office Kaos fax
+bridge. The Memos adapter has an account-scoped PAT but exposes only read-only
+search and fetch operations. Radicale and Paperless authority are not connected.
+On H3, fax stays disabled until the authenticated Office Kaos Fax Connector is
+deployed and verified.

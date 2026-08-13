@@ -111,7 +111,7 @@ setup() {
   fi
   load_env
   install_state_directories "${KAOS_ROOT:-/srv/kaos}"
-  for secret in discord_bot_token memos_access_token naver_mail_password paperless_api_token; do
+  for secret in discord_bot_token memos_access_token naver_mail_password paperless_api_token fax_connector_token; do
     [[ -e "$(secret_path "${secret}")" ]] || : > "$(secret_path "${secret}")"
   done
   if [[ ! -s "$(secret_path governor_api_token)" ]]; then
@@ -121,7 +121,8 @@ setup() {
     "${SECRETS_DIR}"/governor_api_token \
     "${SECRETS_DIR}"/memos_access_token \
     "${SECRETS_DIR}"/naver_mail_password \
-    "${SECRETS_DIR}"/paperless_api_token
+    "${SECRETS_DIR}"/paperless_api_token \
+    "${SECRETS_DIR}"/fax_connector_token
   info "Setup complete. Fill ${ENV_FILE} and ${SECRETS_DIR}/discord_bot_token, then run:"
   info "  ${0} test"
   info "  ${0} up"
@@ -168,7 +169,10 @@ preflight() {
     require_secret paperless_api_token
   fi
   if [[ "${FAX_DISCORD_ENABLED:-false}" == "true" ]]; then
-    die "fax transport is not local to the H3 backend; keep it disabled until the office Fax Connector is deployed"
+    [[ "${FAX_TRANSPORT:-connector}" == "connector" ]] \
+      || die "H3 fax must use FAX_TRANSPORT=connector; HylaFAX stays on Office Kaos"
+    [[ -n "${FAX_CONNECTOR_BASE_URL:-}" ]] || die "FAX_CONNECTOR_BASE_URL is required when fax is enabled"
+    require_secret fax_connector_token
   fi
   "${COMPOSE[@]}" config --quiet
   info "Preflight passed."

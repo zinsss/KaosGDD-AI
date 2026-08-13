@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass
 from datetime import datetime
 import hashlib
@@ -11,6 +12,8 @@ import threading
 import time
 import unicodedata
 from typing import Mapping
+import urllib.error
+import urllib.request
 from zoneinfo import ZoneInfo
 
 
@@ -44,6 +47,19 @@ def _int(env: Mapping[str, str], name: str, default: int, minimum: int) -> int:
     return max(minimum, value)
 
 
+def _secret(env: Mapping[str, str], name: str) -> str:
+    value = env.get(name, "").strip()
+    path = env.get(f"{name}_FILE", "").strip()
+    if value and path:
+        raise FaxError(f"{name} ambiguous")
+    if not path:
+        return value
+    try:
+        return Path(path).read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise FaxError(f"{name}_FILE unreadable") from exc
+
+
 @dataclass(frozen=True)
 class FaxConfig:
     enabled: bool
@@ -59,10 +75,17 @@ class FaxConfig:
     max_pdf_bytes: int
     mark_existing_on_first_run: bool
     delete_source_on_success: bool
+    transport: str = "local"
+    connector_base_url: str = ""
+    connector_token: str = ""
+    connector_timeout_seconds: int = 20
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "FaxConfig":
         source = os.environ if env is None else env
+        transport = source.get("FAX_TRANSPORT", "local").strip().lower() or "local"
+        if transport not in {"local", "connector"}:
+            raise FaxError("FAX_TRANSPORT must be local or connector")
         return cls(
             enabled=_bool(source, "FAX_DISCORD_ENABLED"),
             message_intake=_bool(source, "FAX_DISCORD_MESSAGE_INTAKE"),
@@ -81,6 +104,10 @@ class FaxConfig:
             max_pdf_bytes=_int(source, "FAX_MAX_PDF_MB", 20, 1) * 1024 * 1024,
             mark_existing_on_first_run=_bool(source, "FAX_MARK_EXISTING_ON_FIRST_RUN", True),
             delete_source_on_success=_bool(source, "FAX_DELETE_DISCORD_SOURCE_ON_SUCCESS", True),
+            transport=transport,
+            connector_base_url=source.get("FAX_CONNECTOR_BASE_URL", "").strip().rstrip("/"),
+            connector_token=_secret(source, "FAX_CONNECTOR_TOKEN"),
+            connector_timeout_seconds=_int(source, "FAX_CONNECTOR_TIMEOUT_SECONDS", 20, 1),
         )
 
 
@@ -103,6 +130,62 @@ class FaxAction:
     filename: str = ""
     channel_id: int = 0
     message_ids: tuple[int, ...] = ()
+
+
+class OfficeFaxConnectorClient:
+    def __init__(self, config: FaxConfig, *, urlopen=None) -> None:
+        self.config = config
+        self._urlopen = urlopen or urllib.request.urlopen
+
+    def submit(self, job_id: str, request: FaxRequest, source_metadata: Mapping[str, object]) -> dict[str, object]:
+        payload = {
+            "version": 1,
+            "jobId": job_id,
+            "destination": request.destination,
+            "sender": request.sender,
+            "messageId": request.source_id,
+            "filename": request.filename,
+            "pdfSha256": request.pdf_sha256,
+            "pdfBase64": base64.b64encode(request.pdf).decode("ascii"),
+            "source": "kaos-governor",
+            "sourceMetadata": dict(source_metadata),
+        }
+        return self._request("POST", "/v1/fax/jobs", payload)
+
+    def job_status(self, job_id: str) -> dict[str, object]:
+        return self._request("GET", f"/v1/fax/jobs/{job_id}", None)
+
+    def _request(self, method: str, path: str, payload: dict[str, object] | None) -> dict[str, object]:
+        if not self.config.connector_base_url or not self.config.connector_token:
+            raise FaxError("fax_connector_not_configured")
+        body = json.dumps(payload).encode("utf-8") if payload is not None else None
+        request = urllib.request.Request(
+            f"{self.config.connector_base_url}{path}",
+            data=body,
+            method=method,
+            headers={
+                "Authorization": f"Bearer {self.config.connector_token}",
+                "Accept": "application/json",
+                "User-Agent": "KaosGovernor/fax-connector",
+                **({"Content-Type": "application/json"} if payload is not None else {}),
+            },
+        )
+        try:
+            with self._urlopen(request, timeout=self.config.connector_timeout_seconds) as response:
+                response_body = response.read()
+            if response.status < 200 or response.status >= 300:
+                raise FaxError(f"fax_connector_http_{response.status}")
+        except urllib.error.HTTPError as exc:
+            raise FaxError(f"fax_connector_http_{exc.code}") from exc
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            raise FaxError("fax_connector_request_failed") from exc
+        try:
+            decoded = json.loads(response_body.decode("utf-8", errors="replace") or "{}")
+        except json.JSONDecodeError as exc:
+            raise FaxError("fax_connector_invalid_json") from exc
+        if not isinstance(decoded, dict):
+            raise FaxError("fax_connector_invalid_json")
+        return decoded
 
 
 def normalize_destination(raw: str) -> str:
@@ -234,8 +317,9 @@ def _sent_time(value: str) -> str:
 
 
 class FaxService:
-    def __init__(self, config: FaxConfig) -> None:
+    def __init__(self, config: FaxConfig, *, connector: OfficeFaxConnectorClient | None = None) -> None:
         self.config = config
+        self.connector = connector or OfficeFaxConnectorClient(config)
         self._lock = threading.RLock()
         self.last_scan_at = ""
         self.last_error = ""
@@ -263,6 +347,8 @@ class FaxService:
             job_id = request_job_id(request)
             if job_id in state["jobs"]:
                 return state["jobs"][job_id], False
+            if self.config.transport == "connector":
+                return self._submit_connector(state, job_id, request, source_metadata)
             job_dir = self.config.queue_root / "jobs" / job_id
             document = job_dir / "document.pdf"
             manifest = {
@@ -295,9 +381,50 @@ class FaxService:
             self._save(state)
             return job, True
 
+    def _submit_connector(
+        self,
+        state: dict,
+        job_id: str,
+        request: FaxRequest,
+        source_metadata: dict[str, object],
+    ) -> tuple[dict, bool]:
+        response = self.connector.submit(job_id, request, source_metadata)
+        prompt_id = state["prompts"].pop(str(source_metadata.get("messageId") or ""), 0)
+        if prompt_id:
+            source_metadata["instructionMessageId"] = int(prompt_id)
+        status = str(response.get("status") or "queued")
+        if status not in {"queued", "submitted", "sent", "failed"}:
+            status = "queued"
+        job = {
+            "version": 1,
+            "jobId": job_id,
+            "destination": request.destination,
+            "sender": request.sender,
+            "messageId": request.source_id,
+            "filename": request.filename,
+            "pdfSha256": request.pdf_sha256,
+            "createdAt": _timestamp(),
+            "source": "discord",
+            "sourceMetadata": source_metadata,
+            "status": status,
+            "connectorResult": response,
+        }
+        if response.get("hylafaxJobId"):
+            job["hylafaxJobId"] = str(response["hylafaxJobId"])
+        if response.get("completedAt"):
+            job["completedAt"] = str(response["completedAt"])
+        if response.get("error"):
+            job["error"] = str(response["error"])
+        state["jobs"][job_id] = job
+        self._save(state)
+        return job, True
+
     def _reconcile_jobs(self, state: dict) -> None:
         for job_id, job in state["jobs"].items():
             if job.get("status") not in {"queued", "submitted"}:
+                continue
+            if self.config.transport == "connector":
+                self._reconcile_connector_job(job_id, job)
                 continue
             result = _read_json(self.config.queue_root / "results" / f"{job_id}.json")
             if job.get("status") == "queued" and result:
@@ -318,6 +445,22 @@ class FaxService:
             job["error"] = "" if result["sent"] else str(result.get("status") or "transmission_failed")
             job["completedAt"] = _timestamp(done.stat().st_mtime)
             job["doneq"] = result
+
+    def _reconcile_connector_job(self, job_id: str, job: dict) -> None:
+        result = self.connector.job_status(job_id)
+        status = str(result.get("status") or job.get("status") or "")
+        if status not in {"queued", "submitted", "sent", "failed"}:
+            return
+        job["status"] = status
+        job["connectorResult"] = result
+        if result.get("hylafaxJobId"):
+            job["hylafaxJobId"] = str(result["hylafaxJobId"])
+        if result.get("completedAt"):
+            job["completedAt"] = str(result["completedAt"])
+        if status == "failed":
+            job["error"] = str(result.get("error") or "transmission_failed")
+        elif status == "sent":
+            job["error"] = ""
 
     def _incoming_actions(self) -> list[FaxAction]:
         details = _parse_xferfaxlog(self.config.xferfaxlog)
@@ -369,7 +512,7 @@ class FaxService:
         if status == "sent":
             actions.append(FaxAction(f"{prefix}:sent", "notification", f"Fax successfully sent.\n: to {destination}\n: {filename}"))
             document = self.config.queue_root / "jobs" / job_id / "document.pdf"
-            if document.is_file():
+            if self.config.transport == "local" and document.is_file():
                 completed = _sent_time(str(job.get("completedAt") or ""))
                 content = f"Sent fax.\n: to {destination}" + (f"\n: {completed}" if completed else "")
                 actions.append(FaxAction(f"{prefix}:archive", "archive", content, document, filename))
@@ -438,9 +581,21 @@ class FaxService:
         return {
             "enabled": self.config.enabled,
             "messageIntake": self.config.message_intake,
-            "configured": all((str(self.config.state_path), str(self.config.queue_root), str(self.config.recvq))),
+            "transport": self.config.transport,
+            "configured": bool(
+                self.config.state_path
+                and (
+                    self.config.transport == "local"
+                    and self.config.queue_root
+                    and self.config.recvq
+                    or self.config.transport == "connector"
+                    and self.config.connector_base_url
+                    and self.config.connector_token
+                )
+            ),
             "statePath": str(self.config.state_path),
             "queueRoot": str(self.config.queue_root),
+            "connectorUrlConfigured": bool(self.config.connector_base_url),
             "lastScanAt": self.last_scan_at,
             "lastError": self.last_error,
             "trackedJobs": len(state["jobs"]),

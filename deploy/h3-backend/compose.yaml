@@ -19,6 +19,7 @@ services:
       - memos_access_token
       - naver_mail_password
       - paperless_api_token
+      - fax_connector_token
     ports:
       - "${GOVERNOR_BIND_ADDRESS:-127.0.0.1}:${HEALTH_PORT:-8097}:8097"
     volumes:
@@ -62,3 +63,5 @@ secrets:
     file: ./secrets/naver_mail_password
   paperless_api_token:
     file: ./secrets/paperless_api_token
+  fax_connector_token:
+    file: ./secrets/fax_connector_token
