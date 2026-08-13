@@ -42,6 +42,25 @@ class PaperlessDocumentServiceTests(unittest.TestCase):
         self.assertEqual(result.filename, "문서.pdf")
         self.assertEqual(result.size_bytes, 13)
 
+    def test_submit_pdf_resolves_and_posts_tags(self) -> None:
+        responses = [
+            FakeResponse(body=b'{"results":[{"id":7,"name":"medical"}]}'),
+            FakeResponse(body=b'{"results":[]}'),
+            FakeResponse(body=b'{"id":8,"name":"tax"}'),
+            FakeResponse(body=b'{"task_id":"abc"}'),
+        ]
+        urlopen = mock.Mock(side_effect=responses)
+        service = PaperlessDocumentService(self.config(), urlopen=urlopen)
+
+        service.submit_pdf("scan.pdf", b"%PDF-1.7\nbody", title="Scan", tags=("medical", "tax"))
+
+        methods = [call.args[0].get_method() for call in urlopen.call_args_list]
+        self.assertEqual(methods, ["GET", "GET", "POST", "POST"])
+        upload = urlopen.call_args_list[-1].args[0]
+        self.assertIn(b'name="tags"\r\n\r\n7', upload.data)
+        self.assertIn(b'name="tags"\r\n\r\n8', upload.data)
+        self.assertIn(b'name="title"\r\n\r\nScan', upload.data)
+
     def test_rejects_non_pdf_and_oversize_before_network(self) -> None:
         urlopen = mock.Mock()
         service = PaperlessDocumentService(self.config(), urlopen=urlopen)

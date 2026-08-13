@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 import hashlib
 import json
@@ -81,20 +81,31 @@ class PaperlessDocumentService:
         self.last_error = ""
         self.submitted_count = 0
 
-    def submit_pdf(self, filename: str, content: bytes, *, title: str = "", source: str = "discord") -> PaperlessResult:
+    def submit_pdf(
+        self,
+        filename: str,
+        content: bytes,
+        *,
+        title: str = "",
+        tags: Sequence[str] = (),
+        source: str = "discord",
+    ) -> PaperlessResult:
         if not self.config.enabled:
             raise DocumentIntakeError("paperless_not_configured")
         if not str(filename or "").lower().endswith(".pdf"):
             raise DocumentIntakeError("pdf_attachment_required")
         clean = clean_filename(filename)
         validate_pdf(clean, content, self.config.max_document_bytes)
-        fields = {
+        tag_ids = self.ensure_tags(tags) if tags else []
+        fields: dict[str, str | list[str]] = {
             "title": title or Path(clean).stem,
             "created": "",
             "archive_serial_number": "",
             "custom_fields": "[]",
             "from_webui": "false",
         }
+        if tag_ids:
+            fields["tags"] = [str(value) for value in tag_ids]
         body, content_type = multipart_body(fields, "document", clean, content, "application/pdf")
         request = urllib.request.Request(
             f"{self.config.base_url.rstrip('/')}/api/documents/post_document/",
@@ -128,6 +139,79 @@ class PaperlessDocumentService:
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             self.last_error = "paperless_request_failed"
             raise DocumentIntakeError(self.last_error) from exc
+
+    def ensure_tags(self, names: Sequence[str]) -> list[int]:
+        tag_ids: list[int] = []
+        seen: set[str] = set()
+        for raw_name in names:
+            name = clean_tag_name(raw_name)
+            key = name.casefold()
+            if not name or key in seen:
+                continue
+            seen.add(key)
+            tag_ids.append(self._ensure_tag(name))
+        return tag_ids
+
+    def _ensure_tag(self, name: str) -> int:
+        existing = self._find_tag(name)
+        if existing:
+            return existing
+        request = urllib.request.Request(
+            f"{self.config.base_url.rstrip('/')}/api/tags/",
+            data=json.dumps({"name": name}).encode("utf-8"),
+            method="POST",
+            headers={
+                "Authorization": f"Token {self.config.api_token}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "User-Agent": self.config.user_agent,
+            },
+        )
+        try:
+            with self._urlopen(request, timeout=self.config.timeout_seconds) as response:
+                body = response.read()
+            if response.status < 200 or response.status >= 300:
+                raise DocumentIntakeError(f"paperless_tag_http_{response.status}")
+        except urllib.error.HTTPError as exc:
+            self.last_error = f"paperless_tag_http_{exc.code}"
+            raise DocumentIntakeError(self.last_error) from exc
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            self.last_error = "paperless_request_failed"
+            raise DocumentIntakeError(self.last_error) from exc
+        tag_id = decode_resource_id(body)
+        if not tag_id:
+            raise DocumentIntakeError("paperless_tag_missing_id")
+        return tag_id
+
+    def _find_tag(self, name: str) -> int:
+        query = urllib.parse.urlencode({"page_size": "100", "ordering": "name"})
+        request = urllib.request.Request(
+            f"{self.config.base_url.rstrip('/')}/api/tags/?{query}",
+            method="GET",
+            headers={
+                "Authorization": f"Token {self.config.api_token}",
+                "Accept": "application/json",
+                "User-Agent": self.config.user_agent,
+            },
+        )
+        try:
+            with self._urlopen(request, timeout=self.config.timeout_seconds) as response:
+                body = response.read()
+            if response.status < 200 or response.status >= 300:
+                raise DocumentIntakeError(f"paperless_tag_http_{response.status}")
+        except urllib.error.HTTPError as exc:
+            self.last_error = f"paperless_tag_http_{exc.code}"
+            raise DocumentIntakeError(self.last_error) from exc
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            self.last_error = "paperless_request_failed"
+            raise DocumentIntakeError(self.last_error) from exc
+        for item in decode_results(body):
+            if str(item.get("name") or "").casefold() == name.casefold():
+                try:
+                    return int(item.get("id") or 0)
+                except (TypeError, ValueError):
+                    return 0
+        return 0
 
     def status(self) -> dict[str, object]:
         return {
@@ -174,7 +258,7 @@ def validate_pdf(filename: str, content: bytes, max_bytes: int) -> None:
 
 
 def multipart_body(
-    fields: Mapping[str, str],
+    fields: Mapping[str, str | Sequence[str]],
     file_field: str,
     filename: str,
     content: bytes,
@@ -183,14 +267,16 @@ def multipart_body(
     boundary = f"KaosGovernor{secrets.token_hex(16)}"
     chunks: list[bytes] = []
     for key, value in fields.items():
-        chunks.extend(
-            [
-                f"--{boundary}\r\n".encode("ascii"),
-                f'Content-Disposition: form-data; name="{key}"\r\n\r\n'.encode("utf-8"),
-                str(value).encode("utf-8"),
-                b"\r\n",
-            ]
-        )
+        values = value if isinstance(value, list | tuple) else (value,)
+        for item in values:
+            chunks.extend(
+                [
+                    f"--{boundary}\r\n".encode("ascii"),
+                    f'Content-Disposition: form-data; name="{key}"\r\n\r\n'.encode("utf-8"),
+                    str(item).encode("utf-8"),
+                    b"\r\n",
+                ]
+            )
     chunks.extend(
         [
             f"--{boundary}\r\n".encode("ascii"),
@@ -220,3 +306,32 @@ def decode_task_id(body: bytes) -> str:
     if isinstance(decoded, Mapping):
         return str(decoded.get("task_id") or decoded.get("taskId") or decoded.get("id") or "")
     return str(decoded)
+
+
+def decode_resource_id(body: bytes) -> int:
+    try:
+        decoded = json.loads(body.decode("utf-8", errors="replace"))
+    except json.JSONDecodeError:
+        return 0
+    if isinstance(decoded, Mapping):
+        try:
+            return int(decoded.get("id") or 0)
+        except (TypeError, ValueError):
+            return 0
+    return 0
+
+
+def decode_results(body: bytes) -> list[Mapping[str, object]]:
+    try:
+        decoded = json.loads(body.decode("utf-8", errors="replace"))
+    except json.JSONDecodeError:
+        return []
+    raw_results = decoded.get("results") if isinstance(decoded, Mapping) else decoded
+    if not isinstance(raw_results, list):
+        return []
+    return [item for item in raw_results if isinstance(item, Mapping)]
+
+
+def clean_tag_name(value: str) -> str:
+    cleaned = re.sub(r"[\x00-\x1f\x7f#]+", "", str(value or "")).strip()
+    return cleaned[:100]

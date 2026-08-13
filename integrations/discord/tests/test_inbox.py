@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 
 from kaos_governor.documents import PaperlessConfig, PaperlessDocumentService, PaperlessResult
 from kaos_governor_discord.access import AccessPolicy
-from kaos_governor_discord.inbox import DiscordDocumentInbox, rejection_message
+from kaos_governor_discord.inbox import DiscordDocumentInbox, parse_metadata_reply, rejection_message
 
 
 class FakePaperless(PaperlessDocumentService):
@@ -22,8 +22,8 @@ class FakePaperless(PaperlessDocumentService):
         )
         self.submitted = []
 
-    def submit_pdf(self, filename, content, *, title="", source="discord"):
-        self.submitted.append((filename, content, title, source))
+    def submit_pdf(self, filename, content, *, title="", tags=(), source="discord"):
+        self.submitted.append((filename, content, title, tuple(tags), source))
         return PaperlessResult(
             ok=True,
             task_id=f"task-{len(self.submitted)}",
@@ -45,34 +45,45 @@ class FakeAttachment:
 
 
 class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self) -> None:
+        self.channel = SimpleNamespace(id=300)
+        self.bot = SimpleNamespace(
+            user=SimpleNamespace(id=900),
+            get_channel=lambda channel_id: self.channel if channel_id == 300 else None,
+            fetch_channel=AsyncMock(return_value=self.channel),
+        )
+
     def make_message(self, attachments):
         replies = []
 
         async def reply(content, **kwargs):
-            replies.append((content, kwargs))
-            return SimpleNamespace(id=999)
+            prompt = SimpleNamespace(id=999, content=content, kwargs=kwargs)
+            replies.append((content, kwargs, prompt))
+            return prompt
 
-        return SimpleNamespace(
+        message = SimpleNamespace(
             id=500,
             content="",
             guild=SimpleNamespace(id=100),
-            channel=SimpleNamespace(id=300),
+            channel=self.channel,
             author=SimpleNamespace(id=200, bot=False),
             attachments=attachments,
             reply=AsyncMock(side_effect=reply),
             replies=replies,
         )
+        self.channel.fetch_message = AsyncMock(return_value=message)
+        return message
 
     def make_inbox(self, path: Path, paperless=None) -> DiscordDocumentInbox:
         return DiscordDocumentInbox(
-            SimpleNamespace(user=SimpleNamespace(id=900)),  # type: ignore[arg-type]
+            self.bot,  # type: ignore[arg-type]
             AccessPolicy(100, frozenset({200}), frozenset({300})),
             channel_id=300,
             state_path=path,
             paperless=paperless or FakePaperless(),
         )
 
-    async def test_pdf_upload_is_submitted_and_recorded(self) -> None:
+    async def test_pdf_upload_creates_pending_prompt_without_submitting(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             paperless = FakePaperless()
             inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
@@ -80,9 +91,27 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertTrue(await inbox.handle_message(message))  # type: ignore[arg-type]
 
-            self.assertEqual(len(paperless.submitted), 1)
+            self.assertEqual(paperless.submitted, [])
+            self.assertIn("Choose how to process", message.replies[0][0])
+            self.assertIn("view", message.replies[0][1])
+            self.assertEqual(inbox.status()["pendingCount"], 1)
+            self.assertEqual(inbox.status()["trackedSources"], 0)
+
+    async def test_process_pending_records_completed_upload(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            paperless = FakePaperless()
+            inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
+            message = self.make_message([FakeAttachment(filename="../문서.pdf")])
+
+            await inbox.handle_message(message)  # type: ignore[arg-type]
+            source_id = next(iter(inbox.state.pending))
+            record = await inbox.process_pending(source_id, title="Receipt", tags=("medical", "tax"))
+
+            self.assertEqual(record.filename, "문서.pdf")
             self.assertEqual(paperless.submitted[0][0], "문서.pdf")
-            self.assertIn("submitted", message.replies[0][0])
+            self.assertEqual(paperless.submitted[0][2], "Receipt")
+            self.assertEqual(paperless.submitted[0][3], ("medical", "tax"))
+            self.assertEqual(inbox.status()["pendingCount"], 0)
             self.assertEqual(inbox.status()["trackedSources"], 1)
 
     async def test_rejects_non_pdf_without_submitting(self) -> None:
@@ -103,10 +132,19 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
             message = self.make_message([FakeAttachment()])
 
             await inbox.handle_message(message)  # type: ignore[arg-type]
+            source_id = next(iter(inbox.state.pending))
+            await inbox.process_pending(source_id)
             await inbox.handle_message(message)  # type: ignore[arg-type]
 
             self.assertEqual(len(paperless.submitted), 1)
             self.assertIn("already submitted", message.replies[1][0])
+
+    def test_parse_metadata_reply_extracts_title_and_tags(self) -> None:
+        self.assertEqual(
+            parse_metadata_reply("### Insurance document\n#medical #Tax #의료"),
+            ("Insurance document", ("medical", "Tax", "의료")),
+        )
+        self.assertIsNone(parse_metadata_reply("#tag-only"))
 
     def test_rejection_message_is_stable(self) -> None:
         self.assertIn("Only PDF", rejection_message(ValueError("pdf_attachment_required")))

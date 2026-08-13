@@ -424,6 +424,12 @@ class GovernorBot(discord.Client):
                 await self.discord_supplies.ensure_message()
             except Exception:
                 LOGGER.exception("Failed to ensure Discord supplies messages")
+        if self.discord_inbox is not None:
+            try:
+                restored = await self.discord_inbox.restore_pending_views()
+                LOGGER.info("Restored %d Paperless inbox prompts", restored)
+            except Exception:
+                LOGGER.exception("Failed to restore Discord inbox prompts")
         if self.settings.startup_notification and not self._startup_announced and self.settings.system_channel_id:
             self._startup_announced = True
             try:
