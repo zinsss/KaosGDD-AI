@@ -85,6 +85,8 @@ class DiscordCalendarSurface:
             return False
         persistent_ids = {self.state.month_message_id, self.state.agenda_message_id}
         if message.author.bot:
+            if self._is_own_message(message):
+                return True
             if int(message.id) not in persistent_ids:
                 await self._delete_message(message)
                 return True
@@ -205,6 +207,10 @@ class DiscordCalendarSurface:
             await message.delete()
         except discord.HTTPException:
             LOGGER.info("Could not delete calendar channel message %s", getattr(message, "id", ""))
+
+    def _is_own_message(self, message: discord.Message) -> bool:
+        user = getattr(self.bot, "user", None)
+        return user is not None and int(getattr(message.author, "id", 0)) == int(getattr(user, "id", 0))
 
 
 def month_markers(bootstrap: Mapping[str, Any]) -> list[MonthDayMarkers]:

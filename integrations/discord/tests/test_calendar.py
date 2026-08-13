@@ -102,6 +102,7 @@ class FakeChannel:
 class FakeBot:
     def __init__(self, channel):
         self.channel = channel
+        self.user = SimpleNamespace(id=900)
 
     def get_channel(self, channel_id):
         return self.channel
@@ -191,6 +192,23 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(handled)
             self.assertEqual(surface.state.view.agenda_mode, "upcoming")
             message.delete.assert_awaited_once()
+
+    async def test_own_calendar_messages_are_not_deleted_before_state_is_saved(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            surface = self.make_surface(Path(temporary) / "calendar.json")
+            message = SimpleNamespace(
+                id=700,
+                content="Calendar",
+                channel=SimpleNamespace(id=300),
+                guild=SimpleNamespace(id=100),
+                author=SimpleNamespace(id=900, bot=True),
+                delete=AsyncMock(),
+            )
+
+            handled = await surface.handle_message(message, today=date(2026, 8, 13))  # type: ignore[arg-type]
+
+            self.assertTrue(handled)
+            message.delete.assert_not_awaited()
 
 
 if __name__ == "__main__":
