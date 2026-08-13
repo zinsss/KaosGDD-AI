@@ -11,6 +11,7 @@ from .durable import (
     OperationRequest,
     stable_hash,
 )
+from .documents import DocumentIntakeError, PaperlessConfig, PaperlessDocumentService, PaperlessResult
 from .fax import FaxAction, FaxConfig, FaxError, FaxRequest, FaxService, normalize_destination, request_from_pdf
 from .memos import Memo, MemoSearchResult, MemosConfig, MemosError, MemosService
 
@@ -19,6 +20,7 @@ __all__ = (
     "AuditRecord",
     "ConfirmationRecord",
     "DurableGovernorError",
+    "DocumentIntakeError",
     "FaxAction",
     "FaxConfig",
     "FaxError",
@@ -32,6 +34,9 @@ __all__ = (
     "MemosService",
     "OperationRecord",
     "OperationRequest",
+    "PaperlessConfig",
+    "PaperlessDocumentService",
+    "PaperlessResult",
     "normalize_destination",
     "request_from_pdf",
     "stable_hash",

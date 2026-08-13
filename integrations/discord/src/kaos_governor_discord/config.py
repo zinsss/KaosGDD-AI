@@ -86,10 +86,17 @@ class Settings:
     supplies_profile: Literal["main", "family", "supplies"]
     supplies_state_path: Path
     supplies_collection_id: str
+    inbox_enabled: bool
+    inbox_channel_id: int | None
+    inbox_state_path: Path
     startup_notification: bool
     health_host: str
     health_port: int
     governor_api_token: str
+    paperless_api_token: str
+    paperless_base_url: str
+    paperless_public_url: str
+    paperless_max_attachment_mb: int
     log_level: str
 
     @classmethod
@@ -201,12 +208,36 @@ class Settings:
             or "/data/discord-supplies/state.json"
         )
         supplies_collection_id = source.get("DISCORD_SUPPLIES_COLLECTION_ID", "").strip()
+        inbox_enabled = _boolean(source, "DISCORD_INBOX_ENABLED")
+        raw_inbox_channel = source.get("DISCORD_INBOX_CHANNEL_ID", "").strip()
+        inbox_channel_id = _positive_int(raw_inbox_channel, "DISCORD_INBOX_CHANNEL_ID") if raw_inbox_channel else None
+        if inbox_enabled and inbox_channel_id is None:
+            raise ConfigurationError("DISCORD_INBOX_CHANNEL_ID is required when DISCORD_INBOX_ENABLED=true")
+        if inbox_channel_id is not None and inbox_channel_id not in allowed_channels:
+            raise ConfigurationError("DISCORD_INBOX_CHANNEL_ID must be in DISCORD_ALLOWED_CHANNEL_IDS")
+        inbox_state_path = Path(
+            source.get("DISCORD_INBOX_STATE_PATH", "/data/discord-inbox/state.json").strip()
+            or "/data/discord-inbox/state.json"
+        )
         health_port = _positive_int(source.get("HEALTH_PORT", "8097"), "HEALTH_PORT")
         if health_port > 65535:
             raise ConfigurationError("HEALTH_PORT must be at most 65535")
         governor_api_token = _secret(source, "GOVERNOR_API_TOKEN")
         if _boolean(source, "MEMOS_SEARCH_ENABLED") and not governor_api_token:
             raise ConfigurationError("GOVERNOR_API_TOKEN is required when Memos search is enabled")
+        paperless_api_token = _secret(source, "PAPERLESS_API_TOKEN")
+        paperless_base_url = (
+            source.get("PAPERLESS_BASE_URL", "").strip()
+            or source.get("PAPERLESS_INTERNAL_URL", "").strip()
+        )
+        if inbox_enabled and not paperless_base_url:
+            raise ConfigurationError("PAPERLESS_BASE_URL is required when DISCORD_INBOX_ENABLED=true")
+        if inbox_enabled and not paperless_api_token:
+            raise ConfigurationError("PAPERLESS_API_TOKEN is required when DISCORD_INBOX_ENABLED=true")
+        paperless_max_attachment_mb = _positive_int(
+            source.get("PAPERLESS_INBOX_MAX_ATTACHMENT_MB", "20"),
+            "PAPERLESS_INBOX_MAX_ATTACHMENT_MB",
+        )
         return cls(
             token=_secret(source, "DISCORD_BOT_TOKEN") or _required(source, "DISCORD_BOT_TOKEN"),
             guild_id=_positive_int(_required(source, "DISCORD_GUILD_ID"), "DISCORD_GUILD_ID"),
@@ -232,9 +263,16 @@ class Settings:
             supplies_profile=supplies_profile,  # type: ignore[arg-type]
             supplies_state_path=supplies_state_path,
             supplies_collection_id=supplies_collection_id,
+            inbox_enabled=inbox_enabled,
+            inbox_channel_id=inbox_channel_id,
+            inbox_state_path=inbox_state_path,
             startup_notification=_boolean(source, "DISCORD_STARTUP_NOTIFICATION"),
             health_host=source.get("HEALTH_HOST", "0.0.0.0").strip() or "0.0.0.0",
             health_port=health_port,
             governor_api_token=governor_api_token,
+            paperless_api_token=paperless_api_token,
+            paperless_base_url=paperless_base_url,
+            paperless_public_url=source.get("PAPERLESS_PUBLIC_URL", "").strip(),
+            paperless_max_attachment_mb=paperless_max_attachment_mb,
             log_level=source.get("LOG_LEVEL", "INFO").strip().upper() or "INFO",
         )

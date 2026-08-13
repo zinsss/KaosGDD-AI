@@ -225,6 +225,52 @@ class SettingsTests(unittest.TestCase):
                 }
             )
 
+    def test_document_inbox_is_disabled_by_default(self) -> None:
+        settings = Settings.from_env(BASE_ENV)
+        self.assertFalse(settings.inbox_enabled)
+        self.assertIsNone(settings.inbox_channel_id)
+        self.assertEqual(settings.paperless_base_url, "")
+        self.assertEqual(settings.paperless_api_token, "")
+
+    def test_document_inbox_requires_channel_and_paperless_credentials(self) -> None:
+        with self.assertRaises(ConfigurationError):
+            Settings.from_env({**BASE_ENV, "DISCORD_INBOX_ENABLED": "true"})
+        with self.assertRaises(ConfigurationError):
+            Settings.from_env(
+                {
+                    **BASE_ENV,
+                    "DISCORD_INBOX_ENABLED": "true",
+                    "DISCORD_INBOX_CHANNEL_ID": "999",
+                }
+            )
+        with self.assertRaises(ConfigurationError):
+            Settings.from_env(
+                {
+                    **BASE_ENV,
+                    "DISCORD_INBOX_ENABLED": "true",
+                    "DISCORD_INBOX_CHANNEL_ID": "300",
+                    "PAPERLESS_BASE_URL": "http://paperless:8000",
+                }
+            )
+        settings = Settings.from_env(
+            {
+                **BASE_ENV,
+                "DISCORD_INBOX_ENABLED": "true",
+                "DISCORD_INBOX_CHANNEL_ID": "300",
+                "DISCORD_INBOX_STATE_PATH": "/tmp/inbox-state.json",
+                "PAPERLESS_BASE_URL": "http://paperless:8000",
+                "PAPERLESS_API_TOKEN": "not-a-real-token",
+                "PAPERLESS_PUBLIC_URL": "https://paperless.example",
+                "PAPERLESS_INBOX_MAX_ATTACHMENT_MB": "12",
+            }
+        )
+        self.assertTrue(settings.inbox_enabled)
+        self.assertEqual(settings.inbox_channel_id, 300)
+        self.assertEqual(str(settings.inbox_state_path), "/tmp/inbox-state.json")
+        self.assertEqual(settings.paperless_base_url, "http://paperless:8000")
+        self.assertEqual(settings.paperless_api_token, "not-a-real-token")
+        self.assertEqual(settings.paperless_max_attachment_mb, 12)
+
     def test_memos_search_requires_a_governor_api_token(self) -> None:
         with self.assertRaises(ConfigurationError):
             Settings.from_env({**BASE_ENV, "MEMOS_SEARCH_ENABLED": "true"})

@@ -18,6 +18,7 @@ services:
       - governor_api_token
       - memos_access_token
       - naver_mail_password
+      - paperless_api_token
     ports:
       - "${GOVERNOR_BIND_ADDRESS:-127.0.0.1}:${HEALTH_PORT:-8097}:8097"
     volumes:
@@ -26,6 +27,7 @@ services:
       - ${KAOS_ROOT:-/srv/kaos}/data/kaosgdd-ai/governor/discord-calendar:/data/discord-calendar
       - ${KAOS_ROOT:-/srv/kaos}/data/kaosgdd-ai/governor/discord-tasks:/data/discord-tasks
       - ${KAOS_ROOT:-/srv/kaos}/data/kaosgdd-ai/governor/discord-supplies:/data/discord-supplies
+      - ${KAOS_ROOT:-/srv/kaos}/data/kaosgdd-ai/governor/discord-inbox:/data/discord-inbox
     group_add:
       - "${KAOS_HOST_GID:-1000}"
     read_only: true
@@ -58,3 +60,5 @@ secrets:
     file: ./secrets/memos_access_token
   naver_mail_password:
     file: ./secrets/naver_mail_password
+  paperless_api_token:
+    file: ./secrets/paperless_api_token

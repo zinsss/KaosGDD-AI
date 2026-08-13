@@ -9,6 +9,7 @@ import time
 import discord
 from discord import app_commands
 from kaos_governor.calendar import CalendarAdapterClient, CalendarAdapterConfig
+from kaos_governor.documents import PaperlessConfig, PaperlessDocumentService
 from kaos_governor.mail import (
     Attachment,
     MailMessage,
@@ -25,6 +26,7 @@ from .access import AccessPolicy
 from .calendar import DiscordCalendarSurface
 from .config import Settings
 from .health import HealthServer
+from .inbox import DiscordDocumentInbox
 from .fax import DiscordFaxTransport, rejection_message
 from .mail import render_mail_summary, safe_attachment_filename
 from .markdown import MarkdownField, MarkdownMessage, NO_MENTIONS
@@ -120,6 +122,7 @@ class GovernorBot(discord.Client):
             or settings.calendar_enabled
             or settings.tasks_enabled
             or settings.supplies_enabled
+            or settings.inbox_enabled
         )
         intents.guild_messages = message_intake
         intents.message_content = message_intake
@@ -170,6 +173,25 @@ class GovernorBot(discord.Client):
                 show_due=False,
             )
             if settings.supplies_enabled and settings.supplies_channel_id is not None
+            else None
+        )
+        self.paperless = PaperlessDocumentService(
+            PaperlessConfig(
+                base_url=settings.paperless_base_url,
+                api_token=settings.paperless_api_token,
+                max_document_bytes=settings.paperless_max_attachment_mb * 1024 * 1024,
+                public_url=settings.paperless_public_url,
+            )
+        )
+        self.discord_inbox = (
+            DiscordDocumentInbox(
+                self,
+                self.policy,
+                channel_id=settings.inbox_channel_id,
+                state_path=settings.inbox_state_path,
+                paperless=self.paperless,
+            )
+            if settings.inbox_enabled and settings.inbox_channel_id is not None
             else None
         )
         naver_config = NaverMailConfig.from_env()
@@ -233,6 +255,7 @@ class GovernorBot(discord.Client):
                         f"Calendar surface: {'enabled' if self.discord_calendar is not None else 'disabled'}",
                         f"Tasks surface: {'enabled' if self.discord_tasks is not None else 'disabled'}",
                         f"Supplies surface: {'enabled' if self.discord_supplies is not None else 'disabled'}",
+                        f"Document inbox: {'enabled' if self.discord_inbox is not None else 'disabled'}",
                     ),
                     footer="Private status visible only to you",
                 ).render(),
@@ -425,6 +448,8 @@ class GovernorBot(discord.Client):
             return
         if self.discord_supplies is not None and await self.discord_supplies.handle_message(message):
             return
+        if self.discord_inbox is not None and await self.discord_inbox.handle_message(message):
+            return
         if self.discord_fax is not None and self.fax_service.config.message_intake:
             await self.discord_fax.handle_message(message)
 
@@ -463,6 +488,7 @@ class GovernorBot(discord.Client):
             "suppliesSurface": (
                 self.discord_supplies.status() if self.discord_supplies is not None else {"enabled": False}
             ),
+            "documentInbox": self.discord_inbox.status() if self.discord_inbox is not None else {"enabled": False},
         }
 
     async def _mail_loop(self) -> None:
