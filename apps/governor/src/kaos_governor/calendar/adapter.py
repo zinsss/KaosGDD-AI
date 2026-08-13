@@ -87,6 +87,17 @@ class CalendarAdapterClient:
         payload = self.bootstrap(profile)
         return [dict(item) for item in payload.get("tasks", []) if isinstance(item, Mapping)]
 
+    def month_weather(
+        self,
+        profile: str,
+        *,
+        start: str,
+        end: str,
+        city: str = "pohang",
+    ) -> dict[str, Any]:
+        query = urllib.parse.urlencode({"city": city, "start": start, "end": end})
+        return self.request_json(profile, "GET", f"/api/weather/month?{query}")
+
     def create_task(self, profile: str, payload: Mapping[str, Any]) -> dict[str, Any]:
         result = self.request_json(profile, "POST", "/api/calendar/tasks", payload=payload)
         uid = str(result.get("uid") or "").strip()

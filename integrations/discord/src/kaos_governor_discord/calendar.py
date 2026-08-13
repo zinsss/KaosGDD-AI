@@ -14,6 +14,7 @@ from typing import Any, Mapping
 import discord
 from kaos_governor.calendar import (
     CalendarAdapterClient,
+    CalendarAdapterError,
     CalendarViewState,
     MonthDayMarkers,
     apply_calendar_command,
@@ -60,6 +61,7 @@ class DiscordCalendarSurface:
         if self.state.view.visible_year < 1:
             self.state = DiscordCalendarState(reset_idle_state(today=current))
         bootstrap = await asyncio.to_thread(self.adapter.bootstrap, self.profile)
+        bootstrap = await asyncio.to_thread(self._with_month_weather, bootstrap)
         channel = await self.channel()
         month_content, month_file = await asyncio.to_thread(self._month_payload, bootstrap, current)
         agenda_content = await asyncio.to_thread(self._agenda_content, bootstrap, current)
@@ -182,6 +184,25 @@ class DiscordCalendarSurface:
         filename = f"calendar-{self.state.view.visible_year}-{self.state.view.visible_month:02d}.png"
         return content, discord.File(io.BytesIO(png), filename=filename)
 
+    def _with_month_weather(self, bootstrap: Mapping[str, Any]) -> dict[str, Any]:
+        payload = dict(bootstrap)
+        start, end = visible_month_grid_range(self.state.view.visible_year, self.state.view.visible_month)
+        try:
+            weather = self.adapter.month_weather(
+                self.profile,
+                start=start.isoformat(),
+                end=end.isoformat(),
+            )
+        except CalendarAdapterError as exc:
+            LOGGER.info("Calendar weather unavailable for %s.%02d: %s", self.state.view.visible_year, self.state.view.visible_month, exc)
+            payload.setdefault("weather", [])
+            payload["weatherError"] = type(exc).__name__
+            return payload
+        payload["weather"] = [dict(item) for item in weather.get("items", []) if isinstance(item, Mapping)]
+        if weather.get("error"):
+            payload["weatherError"] = str(weather.get("error") or "")
+        return payload
+
     def _agenda_content(self, bootstrap: Mapping[str, Any], today: date) -> str:
         if self.state.view.agenda_mode == "day" and self.state.view.agenda_date is not None:
             days = [self.state.view.agenda_date]
@@ -276,6 +297,11 @@ def add_months(year: int, month: int, delta: int) -> tuple[int, int]:
     target_month = target_month_index + 1
     calendar_lib.monthrange(target_year, target_month)
     return target_year, target_month
+
+
+def visible_month_grid_range(year: int, month: int) -> tuple[date, date]:
+    weeks = calendar_lib.Calendar(firstweekday=6).monthdatescalendar(year, month)
+    return weeks[0][0], weeks[-1][-1]
 
 
 def month_markers(bootstrap: Mapping[str, Any]) -> list[MonthDayMarkers]:
@@ -379,7 +405,7 @@ def agenda_owner_suffix(collection: Mapping[str, Any]) -> str:
 
 
 def weather_marker(weather: Mapping[str, Any]) -> str:
-    explicit = str(weather.get("emoji") or weather.get("icon") or "").strip()
+    explicit = str(weather.get("emoji") or weather.get("icon") or weather.get("glyph") or "").strip()
     if explicit:
         return explicit[:2]
     raw = str(

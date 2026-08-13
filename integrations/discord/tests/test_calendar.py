@@ -17,6 +17,7 @@ from kaos_governor_discord.calendar import (
     add_months,
     month_markers,
     render_agenda,
+    visible_month_grid_range,
     weather_marker,
 )
 
@@ -68,10 +69,15 @@ BOOTSTRAP = {
 class FakeAdapter:
     def __init__(self, bootstrap=BOOTSTRAP):
         self.bootstrap_payload = bootstrap
+        self.weather_calls = []
 
     def bootstrap(self, profile):
         self.profile = profile
         return self.bootstrap_payload
+
+    def month_weather(self, profile, *, start, end, city="pohang"):
+        self.weather_calls.append({"profile": profile, "start": start, "end": end, "city": city})
+        return {"ok": True, "items": [{"date": "2026-08-13", "glyph": "🌤️", "condition": "partly_cloudy"}]}
 
 
 class FakeMessage:
@@ -143,10 +149,14 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
 
     def test_weather_marker_uses_emoji_or_simple_condition_symbol(self) -> None:
         self.assertEqual(weather_marker({"emoji": "☀", "condition": "rain"}), "☀")
+        self.assertEqual(weather_marker({"glyph": "🌤️", "condition": "cloudy"}), "🌤️")
         self.assertEqual(weather_marker({"condition": "rain shower"}), "☂")
         self.assertEqual(weather_marker({"summary": "snow"}), "❄")
         self.assertEqual(weather_marker({"weather": "clear"}), "☀")
         self.assertEqual(weather_marker({"code": "fog"}), "≋")
+
+    def test_visible_month_grid_range_uses_sunday_to_saturday_grid(self) -> None:
+        self.assertEqual(visible_month_grid_range(2026, 8), (date(2026, 7, 26), date(2026, 9, 5)))
 
     def test_agenda_renders_upcoming_or_single_day_content(self) -> None:
         content = render_agenda(BOOTSTRAP, days=[date(2026, 8, 13)], title="Agenda · 2026.08.13")
@@ -221,6 +231,26 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsInstance(channel.sent[0]["view"], CalendarNavigationView)
             self.assertIn("Agenda", channel.sent[1]["content"])
             self.assertTrue(state_path.exists())
+
+    async def test_ensure_messages_fetches_weather_for_visible_month_grid(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            adapter = FakeAdapter()
+            surface = DiscordCalendarSurface(
+                FakeBot(FakeChannel()),  # type: ignore[arg-type]
+                AccessPolicy(100, frozenset({200}), frozenset({300})),
+                channel_id=300,
+                profile="main",
+                state_path=Path(temporary) / "calendar.json",
+                adapter=adapter,  # type: ignore[arg-type]
+            )
+            surface.state = DiscordCalendarState(CalendarViewState(2026, 8), month_message_id=0, agenda_message_id=0)
+
+            await surface.ensure_messages(today=date(2026, 8, 13))
+
+            self.assertEqual(
+                adapter.weather_calls,
+                [{"profile": "main", "start": "2026-07-26", "end": "2026-09-05", "city": "pohang"}],
+            )
 
     async def test_month_navigation_updates_month_and_reuses_messages(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

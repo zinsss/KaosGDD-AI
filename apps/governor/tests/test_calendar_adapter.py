@@ -90,6 +90,24 @@ class CalendarAdapterBoundaryTests(unittest.TestCase):
 
         self.assertEqual(client.list_tasks("main"), [{"uid": "task-1"}, {"uid": "task-2"}])
 
+    def test_month_weather_uses_allowed_weather_route(self) -> None:
+        urlopen = mock.Mock(
+            return_value=FakeResponse(
+                body=b'{"ok":true,"items":[{"date":"2026-08-13","glyph":"cloud"}]}',
+            )
+        )
+        client = adapter.CalendarAdapterClient(self.config(), urlopen=urlopen)
+
+        payload = client.month_weather("main", start="2026-07-26", end="2026-09-05")
+
+        request = urlopen.call_args.args[0]
+        self.assertTrue(payload["ok"])
+        self.assertEqual(
+            request.full_url,
+            "http://adapter:8091/api/weather/month?city=pohang&start=2026-07-26&end=2026-09-05",
+        )
+        self.assertEqual(request.get_method(), "GET")
+
     def test_create_task_requires_uid_in_adapter_response(self) -> None:
         client = adapter.CalendarAdapterClient(self.config(), urlopen=mock.Mock(return_value=FakeResponse(body=b'{"ok":true}')))
 
