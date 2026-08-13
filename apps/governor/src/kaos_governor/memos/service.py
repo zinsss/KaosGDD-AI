@@ -18,6 +18,7 @@ CREATOR_NAME = re.compile(r"^users/[A-Za-z0-9._-]+$")
 MAX_QUERY_CHARACTERS = 300
 MAX_TAGS = 10
 MAX_TAG_CHARACTERS = 64
+MAX_MEMO_CONTENT_CHARACTERS = 8000
 
 
 class MemosConfigurationError(ValueError):
@@ -199,6 +200,7 @@ class MemosService:
         self._open_url = open_url
         self._lock = threading.RLock()
         self._last_search_at = ""
+        self._last_create_at = ""
         self._last_error = ""
         self._last_result_count = 0
 
@@ -214,6 +216,7 @@ class MemosService:
                 ),
                 "creator": self.config.creator if self.config.enabled else "",
                 "lastSearchAt": self._last_search_at,
+                "lastCreateAt": self._last_create_at,
                 "lastResultCount": self._last_result_count,
                 "lastError": self._last_error,
                 "mode": "live-upstream",
@@ -270,6 +273,26 @@ class MemosService:
             self._record_error(exc)
             raise
 
+    def create(self, content: object, *, visibility: str = "PRIVATE") -> Memo:
+        self._require_enabled()
+        normalized_content = _normalize_content(content)
+        normalized_visibility = _normalize_visibility(visibility)
+        try:
+            memo = Memo.from_payload(
+                self._request(
+                    "/api/v1/memos",
+                    method="POST",
+                    payload={"content": normalized_content, "visibility": normalized_visibility},
+                )
+            )
+        except Exception as exc:
+            self._record_error(exc)
+            raise
+        with self._lock:
+            self._last_create_at = _now()
+            self._last_error = ""
+        return memo
+
     def _limit(self, value: object) -> int:
         if isinstance(value, bool):
             raise ValueError("memos_limit_invalid")
@@ -285,14 +308,20 @@ class MemosService:
         if not self.config.enabled:
             raise MemosError("memos_search_disabled")
 
-    def _request(self, path: str) -> dict[str, object]:
+    def _request(self, path: str, *, method: str = "GET", payload: Mapping[str, object] | None = None) -> dict[str, object]:
+        body = None if payload is None else json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        headers = {
+            "Accept": "application/json",
+            "Authorization": f"Bearer {self.config.access_token}",
+            "User-Agent": "KaosGovernor-Memos/0.1",
+        }
+        if body is not None:
+            headers["Content-Type"] = "application/json"
         request = urllib.request.Request(
             f"{self.config.base_url}{path}",
-            headers={
-                "Accept": "application/json",
-                "Authorization": f"Bearer {self.config.access_token}",
-                "User-Agent": "KaosGovernor-Memos/0.1",
-            },
+            data=body,
+            headers=headers,
+            method=method,
         )
         try:
             with self._open_url(request, timeout=self.config.timeout_seconds) as response:
@@ -320,3 +349,19 @@ class MemosService:
 
 def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def _normalize_content(value: object) -> str:
+    content = str(value or "").strip()
+    if not content:
+        raise ValueError("memos_content_required")
+    if len(content) > MAX_MEMO_CONTENT_CHARACTERS:
+        raise ValueError("memos_content_too_long")
+    return content
+
+
+def _normalize_visibility(value: object) -> str:
+    visibility = str(value or "PRIVATE").strip().upper()
+    if visibility not in {"PRIVATE", "PROTECTED", "PUBLIC"}:
+        raise ValueError("memos_visibility_invalid")
+    return visibility

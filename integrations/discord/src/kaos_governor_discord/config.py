@@ -86,6 +86,8 @@ class Settings:
     supplies_profile: Literal["main", "family", "supplies"]
     supplies_state_path: Path
     supplies_collection_id: str
+    memos_enabled: bool
+    memos_channel_id: int | None
     inbox_enabled: bool
     inbox_channel_id: int | None
     inbox_state_path: Path
@@ -208,6 +210,13 @@ class Settings:
             or "/data/discord-supplies/state.json"
         )
         supplies_collection_id = source.get("DISCORD_SUPPLIES_COLLECTION_ID", "").strip()
+        memos_enabled = _boolean(source, "DISCORD_MEMOS_ENABLED")
+        raw_memos_channel = source.get("DISCORD_MEMOS_CHANNEL_ID", "").strip()
+        memos_channel_id = _positive_int(raw_memos_channel, "DISCORD_MEMOS_CHANNEL_ID") if raw_memos_channel else None
+        if memos_enabled and memos_channel_id is None:
+            raise ConfigurationError("DISCORD_MEMOS_CHANNEL_ID is required when DISCORD_MEMOS_ENABLED=true")
+        if memos_channel_id is not None and memos_channel_id not in allowed_channels:
+            raise ConfigurationError("DISCORD_MEMOS_CHANNEL_ID must be in DISCORD_ALLOWED_CHANNEL_IDS")
         inbox_enabled = _boolean(source, "DISCORD_INBOX_ENABLED")
         raw_inbox_channel = source.get("DISCORD_INBOX_CHANNEL_ID", "").strip()
         inbox_channel_id = _positive_int(raw_inbox_channel, "DISCORD_INBOX_CHANNEL_ID") if raw_inbox_channel else None
@@ -263,6 +272,8 @@ class Settings:
             supplies_profile=supplies_profile,  # type: ignore[arg-type]
             supplies_state_path=supplies_state_path,
             supplies_collection_id=supplies_collection_id,
+            memos_enabled=memos_enabled,
+            memos_channel_id=memos_channel_id,
             inbox_enabled=inbox_enabled,
             inbox_channel_id=inbox_channel_id,
             inbox_state_path=inbox_state_path,

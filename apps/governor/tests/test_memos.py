@@ -144,6 +144,36 @@ class MemosServiceTests(unittest.TestCase):
         self.assertEqual(memo.content, "Current content")
         self.assertEqual(requests, ["http://memos.internal:5230/api/v1/memos/abc_1"])
 
+    def test_create_posts_private_memo_content(self) -> None:
+        requests = []
+
+        def open_url(request, timeout):
+            requests.append((request, timeout, json.loads(request.data.decode("utf-8"))))
+            return FakeResponse(
+                {
+                    "name": "memos/new_1",
+                    "content": "새 메모\n#태그",
+                    "visibility": "PRIVATE",
+                }
+            )
+
+        service = MemosService(config(), open_url)
+        memo = service.create("새 메모\n#태그")
+
+        request, timeout, body = requests[0]
+        self.assertEqual(memo.name, "memos/new_1")
+        self.assertEqual(request.full_url, "http://memos.internal:5230/api/v1/memos")
+        self.assertEqual(request.get_method(), "POST")
+        self.assertEqual(request.get_header("Authorization"), "Bearer secret-personal-access-token")
+        self.assertEqual(body, {"content": "새 메모\n#태그", "visibility": "PRIVATE"})
+        self.assertEqual(timeout, 10)
+        self.assertTrue(service.status()["lastCreateAt"])
+
+    def test_create_validates_content_before_network(self) -> None:
+        service = MemosService(config(), lambda *_args, **_kwargs: self.fail("unexpected call"))
+        with self.assertRaisesRegex(ValueError, "memos_content_required"):
+            service.create("   ")
+
     def test_upstream_auth_failures_have_a_stable_non_secret_code(self) -> None:
         def open_url(request, timeout):
             raise urllib.error.HTTPError(request.full_url, 401, "Unauthorized", {}, None)

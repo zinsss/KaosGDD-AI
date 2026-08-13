@@ -30,6 +30,7 @@ from .inbox import DiscordDocumentInbox
 from .fax import DiscordFaxTransport, rejection_message
 from .mail import render_mail_summary, safe_attachment_filename
 from .markdown import MarkdownField, MarkdownMessage, NO_MENTIONS
+from .memos import DiscordMemosCapture
 from .organizer import DiscordMailOrganizer
 from .tasks import DiscordTasksSurface
 
@@ -122,6 +123,7 @@ class GovernorBot(discord.Client):
             or settings.calendar_enabled
             or settings.tasks_enabled
             or settings.supplies_enabled
+            or settings.memos_enabled
             or settings.inbox_enabled
         )
         intents.guild_messages = message_intake
@@ -210,6 +212,15 @@ class GovernorBot(discord.Client):
         )
         self.fax_service = FaxService(FaxConfig.from_env())
         self.memos = MemosService(MemosConfig.from_env())
+        self.discord_memos = (
+            DiscordMemosCapture(
+                self.memos,
+                self.policy,
+                channel_id=settings.memos_channel_id,
+            )
+            if settings.memos_enabled and settings.memos_channel_id is not None
+            else None
+        )
         self.discord_fax = (
             DiscordFaxTransport(
                 self,
@@ -255,6 +266,7 @@ class GovernorBot(discord.Client):
                         f"Calendar surface: {'enabled' if self.discord_calendar is not None else 'disabled'}",
                         f"Tasks surface: {'enabled' if self.discord_tasks is not None else 'disabled'}",
                         f"Supplies surface: {'enabled' if self.discord_supplies is not None else 'disabled'}",
+                        f"Memos capture: {'enabled' if self.discord_memos is not None else 'disabled'}",
                         f"Document inbox: {'enabled' if self.discord_inbox is not None else 'disabled'}",
                     ),
                     footer="Private status visible only to you",
@@ -454,6 +466,8 @@ class GovernorBot(discord.Client):
             return
         if self.discord_supplies is not None and await self.discord_supplies.handle_message(message):
             return
+        if self.discord_memos is not None and await self.discord_memos.handle_message(message):
+            return
         if self.discord_inbox is not None and await self.discord_inbox.handle_message(message):
             return
         if self.discord_fax is not None and self.fax_service.config.message_intake:
@@ -494,6 +508,7 @@ class GovernorBot(discord.Client):
             "suppliesSurface": (
                 self.discord_supplies.status() if self.discord_supplies is not None else {"enabled": False}
             ),
+            "memosCapture": self.discord_memos.status() if self.discord_memos is not None else {"enabled": False},
             "documentInbox": self.discord_inbox.status() if self.discord_inbox is not None else {"enabled": False},
         }
 

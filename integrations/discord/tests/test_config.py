@@ -232,6 +232,21 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.paperless_base_url, "")
         self.assertEqual(settings.paperless_api_token, "")
 
+    def test_memos_capture_requires_allowed_channel_when_enabled(self) -> None:
+        with self.assertRaises(ConfigurationError):
+            Settings.from_env({**BASE_ENV, "DISCORD_MEMOS_ENABLED": "true"})
+        with self.assertRaises(ConfigurationError):
+            Settings.from_env({**BASE_ENV, "DISCORD_MEMOS_ENABLED": "true", "DISCORD_MEMOS_CHANNEL_ID": "999"})
+        settings = Settings.from_env(
+            {
+                **BASE_ENV,
+                "DISCORD_MEMOS_ENABLED": "true",
+                "DISCORD_MEMOS_CHANNEL_ID": "300",
+            }
+        )
+        self.assertTrue(settings.memos_enabled)
+        self.assertEqual(settings.memos_channel_id, 300)
+
     def test_document_inbox_requires_channel_and_paperless_credentials(self) -> None:
         with self.assertRaises(ConfigurationError):
             Settings.from_env({**BASE_ENV, "DISCORD_INBOX_ENABLED": "true"})
