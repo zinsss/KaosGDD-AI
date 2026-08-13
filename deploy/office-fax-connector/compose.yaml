@@ -23,6 +23,7 @@ services:
       - /srv/kaos/data/kaosgdd-ai/fax-connector:/data/connector
     group_add:
       - "${FAX_CONNECTOR_HOST_GID:-1000}"
+      - "${FAX_CONNECTOR_HYLAFAX_GID:-10}"
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
