@@ -28,12 +28,14 @@ class CalendarAdapterBoundaryTests(unittest.TestCase):
 
     def test_portal_host_keeps_only_known_profiles(self) -> None:
         self.assertEqual(adapter.portal_host({"Host": "family.kaosgdd.net"}), "family.kaosgdd.net")
+        self.assertEqual(adapter.portal_host({"Host": "supplies.kaosgdd.net"}), "supplies.kaosgdd.net")
         self.assertEqual(adapter.portal_host({"X-Forwarded-Host": "kaosgdd.net"}), "kaosgdd.net")
         self.assertEqual(adapter.portal_host({"Host": "paperless.kaosgdd.net"}), "kaosgdd.net")
 
     def test_profile_host_rejects_unknown_profile(self) -> None:
         self.assertEqual(adapter.profile_host("main"), "kaosgdd.net")
         self.assertEqual(adapter.profile_host("family"), "family.kaosgdd.net")
+        self.assertEqual(adapter.profile_host("supplies"), "supplies.kaosgdd.net")
         with self.assertRaisesRegex(adapter.CalendarAdapterError, "calendar_adapter_profile_invalid"):
             adapter.profile_host("clinic")
 

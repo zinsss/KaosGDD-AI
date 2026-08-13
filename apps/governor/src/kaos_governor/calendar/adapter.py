@@ -10,7 +10,7 @@ import urllib.request
 from typing import Any
 
 
-ALLOWED_PORTAL_HOSTS = {"kaosgdd.net", "family.kaosgdd.net"}
+ALLOWED_PORTAL_HOSTS = {"kaosgdd.net", "family.kaosgdd.net", "supplies.kaosgdd.net"}
 ALLOWED_ROUTES = {
     "GET": {"/api/calendar/bootstrap", "/api/weather/month"},
     "POST": {"/api/calendar/events", "/api/calendar/tasks"},
@@ -20,6 +20,7 @@ ALLOWED_ROUTES = {
 PROFILE_HOSTS = {
     "main": "kaosgdd.net",
     "family": "family.kaosgdd.net",
+    "supplies": "supplies.kaosgdd.net",
 }
 
 

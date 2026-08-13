@@ -184,6 +184,47 @@ class SettingsTests(unittest.TestCase):
                 }
             )
 
+    def test_supplies_surface_is_disabled_by_default(self) -> None:
+        settings = Settings.from_env(BASE_ENV)
+        self.assertFalse(settings.supplies_enabled)
+        self.assertIsNone(settings.supplies_channel_id)
+        self.assertEqual(settings.supplies_profile, "main")
+        self.assertEqual(settings.supplies_collection_id, "")
+
+    def test_supplies_surface_requires_allowed_channel_when_enabled(self) -> None:
+        with self.assertRaises(ConfigurationError):
+            Settings.from_env({**BASE_ENV, "DISCORD_SUPPLIES_ENABLED": "true"})
+        with self.assertRaises(ConfigurationError):
+            Settings.from_env(
+                {**BASE_ENV, "DISCORD_SUPPLIES_ENABLED": "true", "DISCORD_SUPPLIES_CHANNEL_ID": "999"}
+            )
+        settings = Settings.from_env(
+            {
+                **BASE_ENV,
+                "DISCORD_SUPPLIES_ENABLED": "true",
+                "DISCORD_SUPPLIES_CHANNEL_ID": "300",
+                "DISCORD_SUPPLIES_PROFILE": "family",
+                "DISCORD_SUPPLIES_STATE_PATH": "/tmp/supplies-state.json",
+                "DISCORD_SUPPLIES_COLLECTION_ID": "family:supplies",
+            }
+        )
+        self.assertTrue(settings.supplies_enabled)
+        self.assertEqual(settings.supplies_channel_id, 300)
+        self.assertEqual(settings.supplies_profile, "family")
+        self.assertEqual(str(settings.supplies_state_path), "/tmp/supplies-state.json")
+        self.assertEqual(settings.supplies_collection_id, "family:supplies")
+
+    def test_supplies_surface_rejects_unknown_profile(self) -> None:
+        with self.assertRaises(ConfigurationError):
+            Settings.from_env(
+                {
+                    **BASE_ENV,
+                    "DISCORD_SUPPLIES_ENABLED": "true",
+                    "DISCORD_SUPPLIES_CHANNEL_ID": "300",
+                    "DISCORD_SUPPLIES_PROFILE": "clinic",
+                }
+            )
+
     def test_memos_search_requires_a_governor_api_token(self) -> None:
         with self.assertRaises(ConfigurationError):
             Settings.from_env({**BASE_ENV, "MEMOS_SEARCH_ENABLED": "true"})

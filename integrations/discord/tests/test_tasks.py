@@ -133,6 +133,17 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("2026-08-13", content)
         self.assertNotIn("Done already", content)
 
+    def test_active_tasks_can_filter_to_supplies_collection(self) -> None:
+        active = active_tasks(
+            [
+                {**TASKS[0], "collection": "zin:tasks"},
+                {**TASKS[0], "uid": "SUPPLY-1", "collection": "zin:supplies", "summary": "Paper towels"},
+            ],
+            collection_id="zin:supplies",
+        )
+
+        self.assertEqual([item["uid"] for item in active], ["SUPPLY-1"])
+
     def test_task_payload_preserves_required_update_fields(self) -> None:
         payload = task_payload(TASKS[0], status="COMPLETED")
 
@@ -159,6 +170,33 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual([button.custom_id for button in buttons], ["tasks:done", "tasks:edit", "tasks:delete"])
             self.assertTrue(buttons[1].disabled)
             self.assertEqual(len(surface.state.message_ids), 2)
+
+    async def test_supplies_surface_uses_own_button_prefix_and_collection_filter(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            tasks = [
+                {**TASKS[0], "collection": "zin:tasks"},
+                {**TASKS[0], "uid": "SUPPLY-1", "collection": "zin:supplies", "summary": "Paper towels"},
+            ]
+            surface = DiscordTasksSurface(
+                FakeBot(channel),  # type: ignore[arg-type]
+                AccessPolicy(100, frozenset({200}), frozenset({300})),
+                channel_id=300,
+                profile="main",
+                state_path=Path(temporary) / "supplies.json",
+                adapter=FakeAdapter(tasks=tasks),  # type: ignore[arg-type]
+                surface_name="supplies",
+                button_prefix="supplies",
+                collection_id="zin:supplies",
+            )
+
+            await surface.ensure_message()
+
+            self.assertEqual(len(channel.sent), 1)
+            self.assertIn("### Paper towels", channel.sent[0]["content"])
+            buttons = channel.sent[0]["view"].children
+            self.assertEqual([button.custom_id for button in buttons], ["supplies:done", "supplies:edit", "supplies:delete"])
+            self.assertEqual(surface.status()["collectionId"], "zin:supplies")
 
     async def test_ensure_message_deletes_legacy_combined_message(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

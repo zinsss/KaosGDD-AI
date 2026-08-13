@@ -115,7 +115,12 @@ class GovernorBot(discord.Client):
     def __init__(self, settings: Settings) -> None:
         intents = discord.Intents.none()
         intents.guilds = True
-        message_intake = settings.fax_message_intake or settings.calendar_enabled or settings.tasks_enabled
+        message_intake = (
+            settings.fax_message_intake
+            or settings.calendar_enabled
+            or settings.tasks_enabled
+            or settings.supplies_enabled
+        )
         intents.guild_messages = message_intake
         intents.message_content = message_intake
         super().__init__(intents=intents, allowed_mentions=NO_MENTIONS)
@@ -149,6 +154,21 @@ class GovernorBot(discord.Client):
                 adapter=CalendarAdapterClient(CalendarAdapterConfig(settings.calendar_adapter_url)),
             )
             if settings.tasks_enabled and settings.tasks_channel_id is not None
+            else None
+        )
+        self.discord_supplies = (
+            DiscordTasksSurface(
+                self,
+                self.policy,
+                channel_id=settings.supplies_channel_id,
+                profile=settings.supplies_profile,
+                state_path=settings.supplies_state_path,
+                adapter=CalendarAdapterClient(CalendarAdapterConfig(settings.calendar_adapter_url)),
+                surface_name="supplies",
+                button_prefix="supplies",
+                collection_id=settings.supplies_collection_id,
+            )
+            if settings.supplies_enabled and settings.supplies_channel_id is not None
             else None
         )
         naver_config = NaverMailConfig.from_env()
@@ -211,6 +231,7 @@ class GovernorBot(discord.Client):
                         f"Memos search: {'enabled' if self.memos.config.enabled else 'disabled'}",
                         f"Calendar surface: {'enabled' if self.discord_calendar is not None else 'disabled'}",
                         f"Tasks surface: {'enabled' if self.discord_tasks is not None else 'disabled'}",
+                        f"Supplies surface: {'enabled' if self.discord_supplies is not None else 'disabled'}",
                     ),
                     footer="Private status visible only to you",
                 ).render(),
@@ -374,6 +395,11 @@ class GovernorBot(discord.Client):
                 await self.discord_tasks.ensure_message()
             except Exception:
                 LOGGER.exception("Failed to ensure Discord tasks message")
+        if self.discord_supplies is not None:
+            try:
+                await self.discord_supplies.ensure_message()
+            except Exception:
+                LOGGER.exception("Failed to ensure Discord supplies messages")
         if self.settings.startup_notification and not self._startup_announced and self.settings.system_channel_id:
             self._startup_announced = True
             try:
@@ -395,6 +421,8 @@ class GovernorBot(discord.Client):
         if self.discord_calendar is not None and await self.discord_calendar.handle_message(message):
             return
         if self.discord_tasks is not None and await self.discord_tasks.handle_message(message):
+            return
+        if self.discord_supplies is not None and await self.discord_supplies.handle_message(message):
             return
         if self.discord_fax is not None and self.fax_service.config.message_intake:
             await self.discord_fax.handle_message(message)
@@ -431,6 +459,9 @@ class GovernorBot(discord.Client):
                 self.discord_calendar.status() if self.discord_calendar is not None else {"enabled": False}
             ),
             "tasksSurface": self.discord_tasks.status() if self.discord_tasks is not None else {"enabled": False},
+            "suppliesSurface": (
+                self.discord_supplies.status() if self.discord_supplies is not None else {"enabled": False}
+            ),
         }
 
     async def _mail_loop(self) -> None:

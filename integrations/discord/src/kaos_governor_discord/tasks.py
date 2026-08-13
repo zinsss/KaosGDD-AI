@@ -34,6 +34,9 @@ class DiscordTasksSurface:
         profile: str,
         state_path: Path,
         adapter: CalendarAdapterClient,
+        surface_name: str = "tasks",
+        button_prefix: str = "tasks",
+        collection_id: str = "",
     ) -> None:
         self.bot = bot
         self.policy = policy
@@ -41,12 +44,15 @@ class DiscordTasksSurface:
         self.profile = profile
         self.state_path = state_path
         self.adapter = adapter
+        self.surface_name = surface_name
+        self.button_prefix = button_prefix
+        self.collection_id = collection_id
         self.state = self._load_state()
         self._tasks_by_key: dict[str, dict[str, Any]] = {}
 
     async def ensure_message(self) -> None:
         tasks = await asyncio.to_thread(self.adapter.list_tasks, self.profile)
-        active = active_tasks(tasks)
+        active = active_tasks(tasks, collection_id=self.collection_id)
         self._tasks_by_key = {task_key(item): item for item in active}
         channel = await self.channel()
         if self.state.legacy_message_id:
@@ -103,6 +109,7 @@ class DiscordTasksSurface:
             "enabled": True,
             "channelId": str(self.channel_id),
             "profile": self.profile,
+            "collectionId": self.collection_id,
             "messageCount": len(self.state.message_ids),
             "messageIds": [str(value) for value in self.state.message_ids.values()],
         }
@@ -110,7 +117,7 @@ class DiscordTasksSurface:
     async def channel(self) -> discord.abc.Messageable:
         channel = self.bot.get_channel(self.channel_id) or await self.bot.fetch_channel(self.channel_id)
         if not hasattr(channel, "send"):
-            raise RuntimeError("tasks_channel_not_messageable")
+            raise RuntimeError(f"{self.surface_name}_channel_not_messageable")
         return channel
 
     async def _upsert_task_message(
@@ -128,7 +135,7 @@ class DiscordTasksSurface:
                 message = await channel.fetch_message(message_id)
                 return await message.edit(content=content, view=view, allowed_mentions=NO_MENTIONS)
             except (discord.NotFound, discord.HTTPException):
-                LOGGER.info("Task message %s missing; recreating", message_id)
+                LOGGER.info("%s message %s missing; recreating", self.surface_name.capitalize(), message_id)
         return await channel.send(content=content, view=view, allowed_mentions=NO_MENTIONS)
 
     def _load_state(self) -> DiscordTasksState:
@@ -163,7 +170,7 @@ class DiscordTasksSurface:
         try:
             await message.delete()
         except discord.HTTPException:
-            LOGGER.info("Could not delete tasks channel message %s", getattr(message, "id", ""))
+            LOGGER.info("Could not delete %s channel message %s", self.surface_name, getattr(message, "id", ""))
 
     async def _delete_message_id(self, channel: discord.abc.Messageable, message_id: int) -> None:
         if not message_id or not hasattr(channel, "fetch_message"):
@@ -172,7 +179,7 @@ class DiscordTasksSurface:
             message = await channel.fetch_message(message_id)
             await message.delete()
         except (discord.NotFound, discord.HTTPException):
-            LOGGER.info("Could not delete stale task message %s", message_id)
+            LOGGER.info("Could not delete stale %s message %s", self.surface_name, message_id)
 
     def _is_own_message(self, message: discord.Message) -> bool:
         user = getattr(self.bot, "user", None)
@@ -183,9 +190,18 @@ class TaskView(discord.ui.View):
     def __init__(self, surface: DiscordTasksSurface, key: str) -> None:
         super().__init__(timeout=None)
         self.surface = surface
-        done = discord.ui.Button(label="Done", style=discord.ButtonStyle.success, custom_id="tasks:done")
-        edit = discord.ui.Button(label="Edit", style=discord.ButtonStyle.secondary, custom_id="tasks:edit", disabled=True)
-        delete = discord.ui.Button(label="Delete", style=discord.ButtonStyle.danger, custom_id="tasks:delete")
+        done = discord.ui.Button(label="Done", style=discord.ButtonStyle.success, custom_id=f"{surface.button_prefix}:done")
+        edit = discord.ui.Button(
+            label="Edit",
+            style=discord.ButtonStyle.secondary,
+            custom_id=f"{surface.button_prefix}:edit",
+            disabled=True,
+        )
+        delete = discord.ui.Button(
+            label="Delete",
+            style=discord.ButtonStyle.danger,
+            custom_id=f"{surface.button_prefix}:delete",
+        )
         done.callback = self._complete_callback(key)
         delete.callback = self._delete_callback(key)
         self.add_item(done)
@@ -205,7 +221,11 @@ class TaskView(discord.ui.View):
         async def callback(interaction: discord.Interaction) -> None:
             await interaction.response.defer(ephemeral=True)
             if not await self.surface.complete_task(key):
-                await interaction.followup.send("Task is no longer active.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+                await interaction.followup.send(
+                    f"{self.surface.surface_name.capitalize()} is no longer active.",
+                    ephemeral=True,
+                    allowed_mentions=NO_MENTIONS,
+                )
 
         return callback
 
@@ -213,16 +233,21 @@ class TaskView(discord.ui.View):
         async def callback(interaction: discord.Interaction) -> None:
             await interaction.response.defer(ephemeral=True)
             if not await self.surface.delete_task(key):
-                await interaction.followup.send("Task is no longer active.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+                await interaction.followup.send(
+                    f"{self.surface.surface_name.capitalize()} is no longer active.",
+                    ephemeral=True,
+                    allowed_mentions=NO_MENTIONS,
+                )
 
         return callback
 
 
-def active_tasks(tasks: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
+def active_tasks(tasks: list[Mapping[str, Any]], *, collection_id: str = "") -> list[dict[str, Any]]:
     active = [
         dict(item)
         for item in tasks
         if str(item.get("status") or "").upper() != "COMPLETED" and str(item.get("uid") or "")
+        and (not collection_id or str(item.get("collection") or "") == collection_id)
     ]
     return sorted(active, key=lambda item: (str(item.get("due") or "9999-12-31"), str(item.get("summary") or ""), str(item.get("uid") or "")))[:MAX_VISIBLE_TASKS]
 

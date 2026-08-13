@@ -81,6 +81,11 @@ class Settings:
     tasks_channel_id: int | None
     tasks_profile: Literal["main", "family"]
     tasks_state_path: Path
+    supplies_enabled: bool
+    supplies_channel_id: int | None
+    supplies_profile: Literal["main", "family", "supplies"]
+    supplies_state_path: Path
+    supplies_collection_id: str
     startup_notification: bool
     health_host: str
     health_port: int
@@ -179,6 +184,23 @@ class Settings:
             source.get("DISCORD_TASKS_STATE_PATH", "/data/discord-tasks/state.json").strip()
             or "/data/discord-tasks/state.json"
         )
+        supplies_enabled = _boolean(source, "DISCORD_SUPPLIES_ENABLED")
+        raw_supplies_channel = source.get("DISCORD_SUPPLIES_CHANNEL_ID", "").strip()
+        supplies_channel_id = (
+            _positive_int(raw_supplies_channel, "DISCORD_SUPPLIES_CHANNEL_ID") if raw_supplies_channel else None
+        )
+        if supplies_enabled and supplies_channel_id is None:
+            raise ConfigurationError("DISCORD_SUPPLIES_CHANNEL_ID is required when DISCORD_SUPPLIES_ENABLED=true")
+        if supplies_channel_id is not None and supplies_channel_id not in allowed_channels:
+            raise ConfigurationError("DISCORD_SUPPLIES_CHANNEL_ID must be in DISCORD_ALLOWED_CHANNEL_IDS")
+        supplies_profile = source.get("DISCORD_SUPPLIES_PROFILE", "main").strip().lower() or "main"
+        if supplies_profile not in {"main", "family", "supplies"}:
+            raise ConfigurationError("DISCORD_SUPPLIES_PROFILE must be main, family, or supplies")
+        supplies_state_path = Path(
+            source.get("DISCORD_SUPPLIES_STATE_PATH", "/data/discord-supplies/state.json").strip()
+            or "/data/discord-supplies/state.json"
+        )
+        supplies_collection_id = source.get("DISCORD_SUPPLIES_COLLECTION_ID", "").strip()
         health_port = _positive_int(source.get("HEALTH_PORT", "8097"), "HEALTH_PORT")
         if health_port > 65535:
             raise ConfigurationError("HEALTH_PORT must be at most 65535")
@@ -205,6 +227,11 @@ class Settings:
             tasks_channel_id=tasks_channel_id,
             tasks_profile=tasks_profile,  # type: ignore[arg-type]
             tasks_state_path=tasks_state_path,
+            supplies_enabled=supplies_enabled,
+            supplies_channel_id=supplies_channel_id,
+            supplies_profile=supplies_profile,  # type: ignore[arg-type]
+            supplies_state_path=supplies_state_path,
+            supplies_collection_id=supplies_collection_id,
             startup_notification=_boolean(source, "DISCORD_STARTUP_NOTIFICATION"),
             health_host=source.get("HEALTH_HOST", "0.0.0.0").strip() or "0.0.0.0",
             health_port=health_port,

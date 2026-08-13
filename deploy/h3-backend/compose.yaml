@@ -25,6 +25,7 @@ services:
       - ${KAOS_ROOT:-/srv/kaos}/data/kaosgdd-ai/governor/fax:/data/fax
       - ${KAOS_ROOT:-/srv/kaos}/data/kaosgdd-ai/governor/discord-calendar:/data/discord-calendar
       - ${KAOS_ROOT:-/srv/kaos}/data/kaosgdd-ai/governor/discord-tasks:/data/discord-tasks
+      - ${KAOS_ROOT:-/srv/kaos}/data/kaosgdd-ai/governor/discord-supplies:/data/discord-supplies
     group_add:
       - "${KAOS_HOST_GID:-1000}"
     read_only: true
