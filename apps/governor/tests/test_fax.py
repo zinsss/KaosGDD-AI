@@ -197,7 +197,7 @@ class FaxTests(unittest.TestCase):
             actions = service.scan_actions()
 
         self.assertEqual([action.kind for action in actions], ["notification", "notification", "cleanup"])
-        self.assertIn("Sending fax", actions[0].content)
+        self.assertEqual(actions[0].content, "Sending fax.")
         self.assertEqual(actions[1].content, "Fax successfully sent.")
         self.assertEqual(actions[-1].message_ids, (20, 21))
 

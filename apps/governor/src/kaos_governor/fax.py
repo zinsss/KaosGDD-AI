@@ -533,7 +533,7 @@ class FaxService:
         if status in {"queued", "submitted", "sent", "failed"}:
             actions.append(FaxAction(f"{prefix}:queued", "notification", f"Fax queued to send.\n: to {destination}\n: {filename}"))
         if status in {"submitted", "sent"} or (status == "failed" and job.get("hylafaxJobId")):
-            actions.append(FaxAction(f"{prefix}:sending", "notification", f"Sending fax to {destination}.\n: {filename}"))
+            actions.append(FaxAction(f"{prefix}:sending", "notification", "Sending fax."))
         if status == "sent":
             actions.append(FaxAction(f"{prefix}:sent", "notification", "Fax successfully sent."))
             document = self.config.queue_root / "jobs" / job_id / "document.pdf"
