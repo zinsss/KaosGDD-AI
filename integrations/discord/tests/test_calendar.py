@@ -10,8 +10,10 @@ from unittest.mock import AsyncMock
 from kaos_governor.calendar import CalendarViewState
 from kaos_governor_discord.access import AccessPolicy
 from kaos_governor_discord.calendar import (
+    CalendarNavigationView,
     DiscordCalendarState,
     DiscordCalendarSurface,
+    add_months,
     month_markers,
     render_agenda,
 )
@@ -152,6 +154,23 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("2026.08.13", content)
         self.assertNotIn("No items", content)
 
+    def test_month_navigation_wraps_years(self) -> None:
+        self.assertEqual(add_months(2026, 1, -1), (2025, 12))
+        self.assertEqual(add_months(2026, 12, 1), (2027, 1))
+
+    def test_month_navigation_view_has_stable_button_ids(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            surface = self.make_surface(Path(temporary) / "calendar.json")
+            view = CalendarNavigationView(surface)
+
+        custom_ids = [child.custom_id for child in view.children]
+        labels = [child.label for child in view.children]
+        self.assertEqual(
+            custom_ids,
+            ["calendar:month:previous", "calendar:month:today", "calendar:month:next"],
+        )
+        self.assertEqual(labels, ["<", "Today", ">"])
+
     async def test_ensure_messages_creates_two_persistent_messages_and_state(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             state_path = Path(temporary) / "calendar.json"
@@ -163,8 +182,28 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(channel.sent), 2)
             self.assertIn("Calendar", channel.sent[0]["content"])
             self.assertIn("file", channel.sent[0])
+            self.assertIsInstance(channel.sent[0]["view"], CalendarNavigationView)
             self.assertIn("Agenda", channel.sent[1]["content"])
             self.assertTrue(state_path.exists())
+
+    async def test_month_navigation_updates_month_and_reuses_messages(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            state_path = Path(temporary) / "calendar.json"
+            channel = FakeChannel()
+            surface = self.make_surface(state_path, channel)
+            surface.state = DiscordCalendarState(CalendarViewState(2026, 8), month_message_id=0, agenda_message_id=0)
+
+            await surface.ensure_messages(today=date(2026, 8, 13))
+            month_id = surface.state.month_message_id
+            agenda_id = surface.state.agenda_message_id
+            await surface.navigate_month("next", today=date(2026, 8, 13))
+
+            self.assertEqual(surface.state.view.visible_year, 2026)
+            self.assertEqual(surface.state.view.visible_month, 9)
+            self.assertEqual(surface.state.view.agenda_mode, "upcoming")
+            self.assertEqual(surface.state.month_message_id, month_id)
+            self.assertEqual(surface.state.agenda_message_id, agenda_id)
+            self.assertIn("2026.09", channel.messages[month_id].edits[-1]["content"])
 
     async def test_valid_day_command_updates_month_agenda_and_deletes_user_message(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

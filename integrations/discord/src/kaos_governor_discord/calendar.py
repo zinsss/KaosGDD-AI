@@ -7,6 +7,7 @@ from datetime import date, timedelta
 import io
 import json
 import logging
+import calendar as calendar_lib
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -67,6 +68,7 @@ class DiscordCalendarSurface:
             self.state.month_message_id,
             content=month_content,
             file=month_file,
+            view=CalendarNavigationView(self),
         )
         agenda_message = await self._upsert_message(
             channel,
@@ -132,19 +134,42 @@ class DiscordCalendarSurface:
         *,
         content: str,
         file: discord.File | None = None,
+        view: discord.ui.View | None = None,
     ) -> discord.Message:
         if message_id and hasattr(channel, "fetch_message"):
             try:
                 message = await channel.fetch_message(message_id)
                 if file is None:
-                    return await message.edit(content=content, allowed_mentions=NO_MENTIONS)
-                return await message.edit(content=content, attachments=[file], allowed_mentions=NO_MENTIONS)
+                    return await message.edit(content=content, view=view, allowed_mentions=NO_MENTIONS)
+                return await message.edit(
+                    content=content,
+                    attachments=[file],
+                    view=view,
+                    allowed_mentions=NO_MENTIONS,
+                )
             except (discord.NotFound, discord.HTTPException):
                 LOGGER.info("Calendar message %s missing; recreating", message_id)
-        kwargs: dict[str, Any] = {"content": content, "allowed_mentions": NO_MENTIONS}
+        kwargs: dict[str, Any] = {"content": content, "view": view, "allowed_mentions": NO_MENTIONS}
         if file is not None:
             kwargs["file"] = file
         return await channel.send(**kwargs)
+
+    async def navigate_month(self, action: str, *, today: date | None = None) -> None:
+        current = today or date.today()
+        if action == "today":
+            view = reset_idle_state(today=current)
+        elif action in {"previous", "next"}:
+            step = -1 if action == "previous" else 1
+            year, month = add_months(self.state.view.visible_year, self.state.view.visible_month, step)
+            view = CalendarViewState(year, month)
+        else:
+            return
+        self.state = DiscordCalendarState(
+            view,
+            month_message_id=self.state.month_message_id,
+            agenda_message_id=self.state.agenda_message_id,
+        )
+        await self.ensure_messages(today=current)
 
     def _month_payload(self, bootstrap: Mapping[str, Any], today: date) -> tuple[str, discord.File]:
         content = f"Calendar · {self.state.view.visible_year}.{self.state.view.visible_month:02d}"
@@ -211,6 +236,46 @@ class DiscordCalendarSurface:
     def _is_own_message(self, message: discord.Message) -> bool:
         user = getattr(self.bot, "user", None)
         return user is not None and int(getattr(message.author, "id", 0)) == int(getattr(user, "id", 0))
+
+
+class CalendarNavigationView(discord.ui.View):
+    def __init__(self, surface: DiscordCalendarSurface) -> None:
+        super().__init__(timeout=None)
+        self.surface = surface
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if self.surface.policy.allows(interaction.guild_id, interaction.channel_id, interaction.user.id):
+            return True
+        if interaction.response.is_done():
+            await interaction.followup.send("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        else:
+            await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+    @discord.ui.button(label="<", style=discord.ButtonStyle.secondary, custom_id="calendar:month:previous")
+    async def previous(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await self._navigate(interaction, "previous")
+
+    @discord.ui.button(label="Today", style=discord.ButtonStyle.primary, custom_id="calendar:month:today")
+    async def today(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await self._navigate(interaction, "today")
+
+    @discord.ui.button(label=">", style=discord.ButtonStyle.secondary, custom_id="calendar:month:next")
+    async def next(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await self._navigate(interaction, "next")
+
+    async def _navigate(self, interaction: discord.Interaction, action: str) -> None:
+        await interaction.response.defer()
+        await self.surface.navigate_month(action)
+
+
+def add_months(year: int, month: int, delta: int) -> tuple[int, int]:
+    first = date(year, month, 1)
+    ordinal = first.year * 12 + first.month - 1 + delta
+    target_year, target_month_index = divmod(ordinal, 12)
+    target_month = target_month_index + 1
+    calendar_lib.monthrange(target_year, target_month)
+    return target_year, target_month
 
 
 def month_markers(bootstrap: Mapping[str, Any]) -> list[MonthDayMarkers]:
