@@ -365,7 +365,7 @@ def month_markers(bootstrap: Mapping[str, Any]) -> list[MonthDayMarkers]:
 def render_agenda(bootstrap: Mapping[str, Any], *, days: list[date], title: str) -> str:
     collections = _collections_by_id(bootstrap)
     events_by_day: dict[date, list[str]] = defaultdict(list)
-    weather_by_day = weather_by_date(bootstrap)
+    weather_items = weather_items_by_date(bootstrap)
     wanted = set(days)
     for event in _items(bootstrap, "events"):
         value = _item_date(event, "startDate")
@@ -380,12 +380,16 @@ def render_agenda(bootstrap: Mapping[str, Any], *, days: list[date], title: str)
     lines = [f"# {escape_text(title)}"]
     for value in days:
         day_lines = []
+        weather = weather_items.get(value)
+        weather_line = weather_agenda_line(weather) if weather else ""
+        if weather_line:
+            day_lines.append(weather_line)
         if events_by_day[value]:
             day_lines.extend(events_by_day[value][:8])
         if len(lines) > 1:
             lines.append("")
-        weather = weather_by_day.get(value, "")
-        suffix = f" {weather}" if weather else ""
+        marker = weather_marker(weather) if weather else ""
+        suffix = f" {marker}" if marker else ""
         lines.append(f"## {value:%Y.%m.%d %a}{suffix}")
         lines.extend(day_lines)
     content = "\n".join(lines)
@@ -408,12 +412,67 @@ def agenda_owner_suffix(collection: Mapping[str, Any]) -> str:
 
 
 def weather_by_date(bootstrap: Mapping[str, Any]) -> dict[date, str]:
+    return {value: weather_marker(weather) for value, weather in weather_items_by_date(bootstrap).items()}
+
+
+def weather_items_by_date(bootstrap: Mapping[str, Any]) -> dict[date, Mapping[str, Any]]:
     values = {}
     for weather in _items(bootstrap, "weather"):
         value = _item_date(weather, "date")
         if value is not None:
-            values[value] = weather_marker(weather)
+            values[value] = weather
     return values
+
+
+def weather_agenda_line(weather: Mapping[str, Any]) -> str:
+    parts = []
+    for item in weather.get("dayparts", []) if isinstance(weather.get("dayparts"), list) else []:
+        if not isinstance(item, Mapping):
+            continue
+        label = weather_daypart_label(item.get("label"))
+        marker = weather_marker(item)
+        if label and marker:
+            parts.append(f"{label}{marker}")
+    if not parts:
+        marker = weather_marker(weather)
+        if marker:
+            parts.append(marker)
+    temperature = weather_temperature_range(weather)
+    if not parts and not temperature:
+        return ""
+    suffix = f" {temperature}" if temperature else ""
+    return f"- {' '.join(parts)}{suffix}"
+
+
+def weather_daypart_label(value: object) -> str:
+    label = str(value or "").strip().lower()
+    if label.startswith("m"):
+        return "M"
+    if label.startswith("a"):
+        return "A"
+    if label.startswith("e"):
+        return "E"
+    if label.startswith("n"):
+        return "N"
+    return ""
+
+
+def weather_temperature_range(weather: Mapping[str, Any]) -> str:
+    low = compact_temperature(weather.get("minTemp"))
+    high = compact_temperature(weather.get("maxTemp"))
+    if low and high:
+        return f"({low} - {high}'c)"
+    return ""
+
+
+def compact_temperature(value: object) -> str:
+    if value is None or value == "":
+        return ""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return ""
+    return str(int(number)) if number.is_integer() else f"{number:.1f}".rstrip("0").rstrip(".")
 
 
 def weather_marker(weather: Mapping[str, Any]) -> str:
