@@ -1,4 +1,5 @@
-from datetime import date, time
+from datetime import UTC, date, datetime, time
+from pathlib import Path
 import unittest
 
 from kaos_governor.tasks import recurring
@@ -85,6 +86,137 @@ class RecurringTaskSynchronizationTests(unittest.TestCase):
         self.assertEqual(plan.action, "create")
         self.assertEqual(plan.due_date, date(2026, 8, 3))
         self.assertEqual(plan.uid, "KAOSGDD-REPEAT-REPEAT1-20260803")
+
+
+class FakeCalendarAdapter:
+    def __init__(self, tasks=None, result=None):
+        self.tasks = list(tasks or [])
+        self.result = dict(result or {})
+        self.created = []
+        self.listed_profiles = []
+
+    def list_tasks(self, profile):
+        self.listed_profiles.append(profile)
+        return list(self.tasks)
+
+    def create_task(self, profile, payload):
+        self.created.append((profile, payload))
+        return dict(self.result or {"uid": payload["uid"], "collection": payload["collectionId"]})
+
+
+class RecurringTaskStoreAndServiceTests(unittest.TestCase):
+    def definition(self, **overrides) -> recurring.RecurringTaskDefinition:
+        values = {
+            "definition_id": "repeat-1",
+            "owner": "zin",
+            "scope": "personal",
+            "adapter_profile": "main",
+            "collection_id": "zin:tasks",
+            "title": "Weekly review",
+            "memo": "",
+            "first_due_date": date(2026, 8, 3),
+            "due_time": time(10, 0),
+            "priority": "",
+            "frequency": "weekly",
+            "next_due_date": date(2026, 8, 3),
+        }
+        values.update(overrides)
+        return recurring.RecurringTaskDefinition(**values)
+
+    def test_store_creates_updates_lists_and_deletes_definitions(self) -> None:
+        now = datetime(2026, 8, 13, 1, 0, tzinfo=UTC)
+        store = recurring.MemoryRecurringTaskStore()
+        stored = store.upsert_definition(self.definition(), now=now)
+        updated = store.upsert_definition(self.definition(title="Updated"), now=now)
+
+        self.assertEqual(stored.created_at, now)
+        self.assertEqual(updated.created_at, now)
+        self.assertEqual(store.enabled_definitions()[0].title, "Updated")
+
+        store.delete_definition("repeat-1")
+        self.assertEqual(store.enabled_definitions(), [])
+
+    def test_service_creates_current_occurrence_and_records_active_mapping(self) -> None:
+        store = recurring.MemoryRecurringTaskStore()
+        definition = store.upsert_definition(self.definition(first_due_date=date(2026, 7, 6), next_due_date=date(2026, 7, 6)))
+        adapter = FakeCalendarAdapter()
+        service = recurring.RecurringTaskService(store, adapter)
+
+        plan = service.synchronize_definition(definition, today=date(2026, 8, 3))
+        updated = store.get_definition("repeat-1")
+
+        self.assertEqual(plan.action, "create")
+        self.assertEqual(len(adapter.created), 1)
+        self.assertEqual(adapter.created[0][1]["dueDate"], "2026-08-03")
+        self.assertEqual(updated.active_uid, "KAOSGDD-REPEAT-REPEAT1-20260803")
+        self.assertIsNone(updated.next_due_date)
+
+    def test_service_adopts_existing_deterministic_occurrence_without_create(self) -> None:
+        store = recurring.MemoryRecurringTaskStore()
+        definition = store.upsert_definition(self.definition())
+        uid = recurring.occurrence_uid(definition.as_planner_mapping(), date(2026, 8, 3))
+        adapter = FakeCalendarAdapter(tasks=[{"uid": uid, "collection": "zin:tasks", "status": "NEEDS-ACTION"}])
+        service = recurring.RecurringTaskService(store, adapter)
+
+        plan = service.synchronize_definition(definition, today=date(2026, 8, 3))
+        updated = store.get_definition("repeat-1")
+
+        self.assertEqual(plan.action, "adopt")
+        self.assertEqual(adapter.created, [])
+        self.assertEqual(updated.active_uid, uid)
+
+    def test_service_advances_after_completed_active_occurrence(self) -> None:
+        now = datetime(2026, 8, 13, 1, 0, tzinfo=UTC)
+        store = recurring.MemoryRecurringTaskStore()
+        definition = store.upsert_definition(
+            self.definition(
+                active_uid="generated-1",
+                active_collection_id="zin:tasks",
+                active_due_date=date(2026, 8, 3),
+                next_due_date=None,
+            ),
+            now=now,
+        )
+        adapter = FakeCalendarAdapter(tasks=[{"uid": "generated-1", "collection": "zin:tasks", "status": "COMPLETED"}])
+        service = recurring.RecurringTaskService(store, adapter)
+
+        plan = service.synchronize_definition(definition, today=date(2026, 8, 3), now=now)
+        updated = store.get_definition("repeat-1")
+
+        self.assertEqual(plan.action, "create")
+        self.assertEqual(adapter.created[0][1]["dueDate"], "2026-08-10")
+        self.assertEqual(updated.last_completed_uid, "generated-1")
+        self.assertEqual(updated.active_due_date, date(2026, 8, 10))
+
+    def test_run_once_skips_disabled_definitions(self) -> None:
+        store = recurring.MemoryRecurringTaskStore()
+        store.upsert_definition(self.definition(enabled=False))
+        adapter = FakeCalendarAdapter()
+        service = recurring.RecurringTaskService(store, adapter)
+
+        self.assertEqual(service.run_once(today=date(2026, 8, 3)), [])
+        self.assertEqual(adapter.listed_profiles, [])
+
+    def test_recurring_task_migration_declares_required_table_and_indexes(self) -> None:
+        migration_path = next(
+            (
+                parent / "migrations" / "002_recurring_tasks.sql"
+                for parent in Path(__file__).resolve().parents
+                if (parent / "migrations" / "002_recurring_tasks.sql").exists()
+            ),
+            None,
+        )
+        self.assertIsNotNone(migration_path)
+        migration = migration_path.read_text(encoding="utf-8")
+
+        for required in (
+            "CREATE TABLE IF NOT EXISTS governor_recurring_task_definitions",
+            "governor_recurring_task_definitions_enabled_idx",
+            "governor_recurring_task_definitions_owner_idx",
+            "governor_recurring_task_definitions_active_uid_idx",
+            "Actual task data remains authoritative in Radicale",
+        ):
+            self.assertIn(required, migration)
 
     def test_completed_occurrence_advances_fixed_schedule(self) -> None:
         item = self.definition(
