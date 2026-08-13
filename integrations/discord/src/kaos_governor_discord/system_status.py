@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 import json
 import logging
+import os
 from pathlib import Path
+import socket
+import time
+from typing import Mapping
+import urllib.error
+import urllib.request
 
 import discord
 
@@ -19,7 +26,18 @@ class ServiceStatusItem:
     key: str
     label: str
     description: str
-    healthy: bool = True
+
+
+@dataclass(frozen=True)
+class ServiceProbeResult:
+    key: str
+    state: str
+    checked_at: str
+    detail: str = ""
+
+    @property
+    def healthy(self) -> bool:
+        return self.state == "healthy"
 
 
 @dataclass
@@ -42,6 +60,15 @@ SERVICES: tuple[ServiceStatusItem, ...] = (
     ServiceStatusItem("rustdesk", "Rustdesk", "Remote support service"),
 )
 
+DEFAULT_HTTP_PROBES = {
+    "kaosgovernor": "http://127.0.0.1:8097/health",
+    "radicale": "http://radicale:5232/",
+    "memos": "http://memos:5230/",
+    "vaultwarden": "http://vaultwarden/alive",
+}
+
+OK_HTTP_STATUSES = {200, 204, 301, 302, 307, 308, 401, 403}
+
 
 class DiscordServiceStatusSurface:
     def __init__(
@@ -51,15 +78,21 @@ class DiscordServiceStatusSurface:
         *,
         channel_id: int,
         state_path: Path,
+        environment: Mapping[str, str] | None = None,
     ) -> None:
         self.bot = bot
         self.policy = policy
         self.channel_id = channel_id
         self.state_path = state_path
         self.state = self._load_state()
+        self.environment = os.environ if environment is None else environment
+        self.timeout_seconds = service_status_timeout_seconds(self.environment)
+        self.refresh_seconds = service_status_refresh_seconds(self.environment)
+        self.last_results: dict[str, ServiceProbeResult] = {}
 
     async def ensure_message(self) -> None:
         channel = await self.channel()
+        results = await self.check_services()
         if self.state.legacy_message_id:
             await self._delete_message_id(channel, self.state.legacy_message_id)
             self.state.legacy_message_id = 0
@@ -69,6 +102,7 @@ class DiscordServiceStatusSurface:
             message = await self._upsert_service_message(
                 channel,
                 item,
+                result=results[item.key],
                 message_id=current_message_ids.get(item.key, 0),
             )
             next_message_ids[item.key] = int(message.id)
@@ -85,9 +119,18 @@ class DiscordServiceStatusSurface:
         return channel
 
     async def handle_service_press(self, interaction: discord.Interaction, item: ServiceStatusItem) -> None:
-        if item.healthy:
+        result = self.last_results.get(item.key) or await self.check_service(item)
+        if result.healthy:
             await interaction.response.send_message(
-                f"{item.label} is healthy.",
+                f"{item.label} is healthy. {result.detail}".strip(),
+                ephemeral=True,
+                delete_after=5,
+                allowed_mentions=NO_MENTIONS,
+            )
+            return
+        if result.state == "unknown":
+            await interaction.response.send_message(
+                f"{item.label} health is unknown. Configure a health probe first.",
                 ephemeral=True,
                 delete_after=5,
                 allowed_mentions=NO_MENTIONS,
@@ -115,19 +158,30 @@ class DiscordServiceStatusSurface:
             "messageCount": len(message_ids),
             "messageIds": {key: str(value) for key, value in message_ids.items()},
             "serviceCount": len(SERVICES),
-            "dummyHealth": True,
+            "dummyHealth": False,
+            "checks": {key: result.__dict__ for key, result in self.last_results.items()},
             "restartRequests": dict(self.state.restart_requests or {}),
         }
+
+    async def check_services(self) -> dict[str, ServiceProbeResult]:
+        pairs = await asyncio.gather(*(self.check_service(item) for item in SERVICES))
+        results = {result.key: result for result in pairs}
+        self.last_results = results
+        return results
+
+    async def check_service(self, item: ServiceStatusItem) -> ServiceProbeResult:
+        return await asyncio.to_thread(check_service, item, self.environment, self.timeout_seconds)
 
     async def _upsert_service_message(
         self,
         channel: discord.abc.Messageable,
         item: ServiceStatusItem,
         *,
+        result: ServiceProbeResult,
         message_id: int,
     ) -> discord.Message:
-        content = render_service_message(item)
-        view = ServiceStatusView(self, item)
+        content = render_service_message(item, result)
+        view = ServiceStatusView(self, item, result)
         if message_id and hasattr(channel, "fetch_message"):
             try:
                 message = await channel.fetch_message(message_id)
@@ -180,12 +234,18 @@ class DiscordServiceStatusSurface:
 
 
 class ServiceStatusView(discord.ui.View):
-    def __init__(self, surface: DiscordServiceStatusSurface, item: ServiceStatusItem) -> None:
+    def __init__(
+        self,
+        surface: DiscordServiceStatusSurface,
+        item: ServiceStatusItem,
+        result: ServiceProbeResult,
+    ) -> None:
         super().__init__(timeout=None)
         self.surface = surface
+        label, style = button_label_and_style(result)
         button = discord.ui.Button(
-            label="Healthy" if item.healthy else "Restart",
-            style=discord.ButtonStyle.success if item.healthy else discord.ButtonStyle.danger,
+            label=label,
+            style=style,
             custom_id=f"system-status:{item.key}",
         )
         button.callback = self._callback(item)
@@ -207,10 +267,126 @@ class ServiceStatusView(discord.ui.View):
         return callback
 
 
-def render_service_message(item: ServiceStatusItem) -> str:
+def render_service_message(item: ServiceStatusItem, result: ServiceProbeResult | None = None) -> str:
+    result = result or ServiceProbeResult(item.key, "unknown", "", "No health probe configured.")
+    status = status_label(result)
+    checked = f" · {result.checked_at}" if result.checked_at else ""
+    detail = f"\n-# {result.detail}" if result.detail else ""
     return "\n".join(
         (
             f"# {item.label}",
             item.description,
+            f"{status}{checked}{detail}",
         )
     )
+
+
+def button_label_and_style(result: ServiceProbeResult) -> tuple[str, discord.ButtonStyle]:
+    if result.state == "healthy":
+        return "Healthy", discord.ButtonStyle.success
+    if result.state == "down":
+        return "Restart", discord.ButtonStyle.danger
+    return "Unknown", discord.ButtonStyle.secondary
+
+
+def status_label(result: ServiceProbeResult) -> str:
+    if result.state == "healthy":
+        return "Healthy"
+    if result.state == "down":
+        return "Down"
+    return "Unknown"
+
+
+def check_service(
+    item: ServiceStatusItem,
+    env: Mapping[str, str],
+    timeout_seconds: float,
+) -> ServiceProbeResult:
+    checked_at = time.strftime("%H:%M:%S", time.localtime())
+    url = probe_value(env, item.key, "URL")
+    if not url and default_probes_enabled(env):
+        url = default_http_probe(env, item.key)
+    tcp = probe_value(env, item.key, "TCP")
+    if url:
+        state, detail = check_http(url, timeout_seconds)
+        return ServiceProbeResult(item.key, state, checked_at, detail)
+    if tcp:
+        state, detail = check_tcp(tcp, timeout_seconds)
+        return ServiceProbeResult(item.key, state, checked_at, detail)
+    return ServiceProbeResult(item.key, "unknown", checked_at, "No health probe configured.")
+
+
+def check_http(url: str, timeout_seconds: float) -> tuple[str, str]:
+    request = urllib.request.Request(url, method="GET", headers={"User-Agent": "KaosGovernor/service-status"})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            status = int(response.status)
+    except urllib.error.HTTPError as exc:
+        status = int(exc.code)
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        return "down", stable_error(exc)
+    if 200 <= status < 400 or status in OK_HTTP_STATUSES:
+        return "healthy", f"HTTP {status}"
+    return "down", f"HTTP {status}"
+
+
+def check_tcp(target: str, timeout_seconds: float) -> tuple[str, str]:
+    host, separator, port_text = target.rpartition(":")
+    if not separator or not host:
+        return "unknown", "Invalid TCP probe."
+    try:
+        port = int(port_text)
+    except ValueError:
+        return "unknown", "Invalid TCP probe."
+    try:
+        with socket.create_connection((host, port), timeout=timeout_seconds):
+            return "healthy", f"TCP {host}:{port}"
+    except OSError as exc:
+        return "down", stable_error(exc)
+
+
+def probe_value(env: Mapping[str, str], key: str, suffix: str) -> str:
+    return env.get(f"SERVICE_STATUS_{key.upper()}_{suffix}", "").strip()
+
+
+def default_http_probe(env: Mapping[str, str], key: str) -> str:
+    if key == "paperless":
+        return env.get("PAPERLESS_BASE_URL", "").strip() or env.get("PAPERLESS_INTERNAL_URL", "").strip()
+    if key == "kaosgovernor":
+        port = env.get("HEALTH_PORT", "8097").strip() or "8097"
+        return f"http://127.0.0.1:{port}/health"
+    return DEFAULT_HTTP_PROBES.get(key, "")
+
+
+def service_status_timeout_seconds(env: Mapping[str, str]) -> float:
+    raw = env.get("SERVICE_STATUS_TIMEOUT_SECONDS", "3").strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        return 3.0
+    return min(max(value, 0.5), 30.0)
+
+
+def service_status_refresh_seconds(env: Mapping[str, str]) -> int:
+    raw = env.get("SERVICE_STATUS_REFRESH_SECONDS", "300").strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        return 300
+    return min(max(value, 30), 3600)
+
+
+def default_probes_enabled(env: Mapping[str, str]) -> bool:
+    return env.get("SERVICE_STATUS_DEFAULT_PROBES_ENABLED", "true").strip().lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+
+
+def stable_error(exc: BaseException) -> str:
+    reason = getattr(exc, "reason", None)
+    if reason:
+        return str(reason)[:120]
+    return exc.__class__.__name__

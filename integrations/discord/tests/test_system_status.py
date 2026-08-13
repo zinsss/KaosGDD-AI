@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 import json
+import socket
 import tempfile
 import unittest
 
@@ -10,7 +11,10 @@ from kaos_governor_discord.access import AccessPolicy
 from kaos_governor_discord.system_status import (
     DiscordServiceStatusSurface,
     SERVICES,
+    ServiceProbeResult,
     ServiceStatusView,
+    check_service,
+    check_tcp,
     render_service_message,
 )
 
@@ -66,6 +70,7 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
             AccessPolicy(100, frozenset({200}), frozenset({300})),
             channel_id=300,
             state_path=path,
+            environment={"SERVICE_STATUS_DEFAULT_PROBES_ENABLED": "false"},
         )
 
     def test_service_rows_match_requested_buttons(self) -> None:
@@ -98,11 +103,12 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
             await surface.ensure_message()
 
             self.assertEqual(len(channel.sent), 10)
-            self.assertEqual(channel.sent[0]["content"], render_service_message(SERVICES[0]))
+            self.assertIn("# KaosBrain", channel.sent[0]["content"])
+            self.assertIn("Unknown", channel.sent[0]["content"])
             self.assertIsInstance(channel.sent[0]["view"], ServiceStatusView)
             buttons = channel.sent[0]["view"].children
             self.assertEqual(len(buttons), 1)
-            self.assertEqual(buttons[0].label, "Healthy")
+            self.assertEqual(buttons[0].label, "Unknown")
             self.assertFalse(buttons[0].disabled)
             state = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(state["messageIds"]["kaosbrain"], 700)
@@ -121,7 +127,8 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(len(channel.sent), 9)
             self.assertEqual(len(message.edits), 1)
-            self.assertEqual(message.edits[0]["content"], render_service_message(SERVICES[0]))
+            self.assertIn("# KaosBrain", message.edits[0]["content"])
+            self.assertIn("Unknown", message.edits[0]["content"])
 
     async def test_ensure_message_deletes_legacy_combined_message(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -148,6 +155,37 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
             await surface.request_restart("memos")
 
             self.assertEqual(surface.status()["restartRequests"], {"memos": 2})
+
+    def test_render_service_message_includes_health_state(self) -> None:
+        content = render_service_message(
+            SERVICES[1],
+            ServiceProbeResult("kaosgovernor", "healthy", "09:15:00", "HTTP 200"),
+        )
+
+        self.assertIn("# KaosGovernor", content)
+        self.assertIn("Healthy · 09:15:00", content)
+        self.assertIn("HTTP 200", content)
+
+    def test_unconfigured_service_is_unknown(self) -> None:
+        result = check_service(
+            SERVICES[0],
+            {"SERVICE_STATUS_DEFAULT_PROBES_ENABLED": "false"},
+            0.5,
+        )
+
+        self.assertEqual(result.state, "unknown")
+        self.assertIn("No health probe", result.detail)
+
+    def test_tcp_probe_reports_healthy_port(self) -> None:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
+            server.bind(("127.0.0.1", 0))
+            server.listen(1)
+            host, port = server.getsockname()
+
+            state, detail = check_tcp(f"{host}:{port}", 0.5)
+
+        self.assertEqual(state, "healthy")
+        self.assertIn(str(port), detail)
 
 
 if __name__ == "__main__":

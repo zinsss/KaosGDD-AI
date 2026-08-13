@@ -138,6 +138,7 @@ class GovernorBot(discord.Client):
         self._mail_task: asyncio.Task | None = None
         self._organizer_task: asyncio.Task | None = None
         self._fax_task: asyncio.Task | None = None
+        self._service_status_task: asyncio.Task | None = None
         self.discord_calendar = (
             DiscordCalendarSurface(
                 self,
@@ -457,6 +458,11 @@ class GovernorBot(discord.Client):
         if self.discord_service_status is not None:
             try:
                 await self.discord_service_status.ensure_message()
+                if self._service_status_task is None:
+                    self._service_status_task = asyncio.create_task(
+                        self._service_status_loop(),
+                        name="governor-service-status",
+                    )
             except Exception:
                 LOGGER.exception("Failed to ensure Discord service status message")
         if self.settings.startup_notification and not self._startup_announced and self.settings.system_channel_id:
@@ -506,6 +512,11 @@ class GovernorBot(discord.Client):
             with suppress(asyncio.CancelledError):
                 await self._fax_task
             self._fax_task = None
+        if self._service_status_task is not None:
+            self._service_status_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._service_status_task
+            self._service_status_task = None
         await self._health.stop()
         await super().close()
 
@@ -584,6 +595,17 @@ class GovernorBot(discord.Client):
                 self.fax_service.record_error(exc)
                 LOGGER.exception("Fax cycle failed")
             await asyncio.sleep(self.fax_service.config.poll_seconds)
+
+    async def _service_status_loop(self) -> None:
+        if self.discord_service_status is None:
+            return
+        refresh_seconds = self.discord_service_status.refresh_seconds
+        while not self.is_closed():
+            await asyncio.sleep(refresh_seconds)
+            try:
+                await self.discord_service_status.ensure_message()
+            except Exception:
+                LOGGER.exception("Failed to refresh Discord service status message")
 
     async def _mail_channel(self) -> discord.abc.Messageable:
         channel_id = self.settings.mail_archive_channel_id
