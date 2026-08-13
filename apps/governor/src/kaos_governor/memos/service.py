@@ -152,6 +152,24 @@ class MemoSearchResult:
         return {**self.memo.as_dict(include_content=False), "snippet": self.snippet}
 
 
+@dataclass(frozen=True)
+class MemoSearchPage:
+    query: str
+    tags: tuple[str, ...]
+    results: tuple[MemoSearchResult, ...]
+    result_count: int
+    total_count: int
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "query": self.query,
+            "tags": list(self.tags),
+            "results": [result.as_dict() for result in self.results],
+            "resultCount": self.result_count,
+            "totalCount": self.total_count,
+        }
+
+
 def _normalize_query(value: object) -> str:
     query = " ".join(str(value or "").split())
     if len(query) > MAX_QUERY_CHARACTERS:
@@ -190,6 +208,20 @@ def _snippet(content: str, query: str, length: int = 360) -> str:
     return f"{'...' if start else ''}{compact[start:end].strip()}{'...' if end < len(compact) else ''}"
 
 
+def _total_count(payload: Mapping[str, object]) -> int | None:
+    for key in ("totalSize", "totalCount", "total"):
+        value = payload.get(key)
+        if value is None:
+            continue
+        try:
+            total = int(value)
+        except (TypeError, ValueError):
+            continue
+        if total >= 0:
+            return total
+    return None
+
+
 class MemosService:
     def __init__(
         self,
@@ -223,6 +255,9 @@ class MemosService:
             }
 
     def search(self, query: object = "", tags: object = None, limit: object = None) -> list[MemoSearchResult]:
+        return list(self.search_page(query, tags, limit).results)
+
+    def search_page(self, query: object = "", tags: object = None, limit: object = None) -> MemoSearchPage:
         self._require_enabled()
         normalized_query = _normalize_query(query)
         normalized_tags = _normalize_tags(tags)
@@ -230,12 +265,7 @@ class MemosService:
             raise ValueError("memos_query_or_tag_required")
         result_limit = self.config.max_results if limit is None else self._limit(limit)
 
-        filters = [f"creator == {json.dumps(self.config.creator, ensure_ascii=False)}"]
-        if normalized_query:
-            filters.append(f"content.contains({json.dumps(normalized_query, ensure_ascii=False)})")
-        if normalized_tags:
-            encoded_tags = ", ".join(json.dumps(tag, ensure_ascii=False) for tag in normalized_tags)
-            filters.append(f"tag in [{encoded_tags}]")
+        filters = self._search_filters(normalized_query, normalized_tags)
         query_string = urllib.parse.urlencode(
             {
                 "pageSize": str(result_limit),
@@ -248,18 +278,26 @@ class MemosService:
             raw_memos = payload.get("memos")
             if not isinstance(raw_memos, list):
                 raise MemosError("memos_upstream_response_invalid")
-            results = [
+            results = tuple(
                 MemoSearchResult(memo, _snippet(memo.content, normalized_query))
                 for memo in (Memo.from_payload(item) for item in raw_memos if isinstance(item, dict))
-            ][:result_limit]
+            )[:result_limit]
+            result_count = self._count_memos(filters, fallback_payload=payload, fallback_count=len(results))
+            total_count = self._count_memos(self._base_filters())
         except Exception as exc:
             self._record_error(exc)
             raise
         with self._lock:
             self._last_search_at = _now()
-            self._last_result_count = len(results)
+            self._last_result_count = result_count
             self._last_error = ""
-        return results
+        return MemoSearchPage(
+            query=normalized_query,
+            tags=normalized_tags,
+            results=results,
+            result_count=result_count,
+            total_count=total_count,
+        )
 
     def get(self, name: object) -> Memo:
         self._require_enabled()
@@ -307,6 +345,53 @@ class MemosService:
     def _require_enabled(self) -> None:
         if not self.config.enabled:
             raise MemosError("memos_search_disabled")
+
+    def _base_filters(self) -> list[str]:
+        return [f"creator == {json.dumps(self.config.creator, ensure_ascii=False)}"]
+
+    def _search_filters(self, normalized_query: str, normalized_tags: tuple[str, ...]) -> list[str]:
+        filters = self._base_filters()
+        if normalized_query:
+            filters.append(f"content.contains({json.dumps(normalized_query, ensure_ascii=False)})")
+        if normalized_tags:
+            encoded_tags = ", ".join(json.dumps(tag, ensure_ascii=False) for tag in normalized_tags)
+            filters.append(f"tag in [{encoded_tags}]")
+        return filters
+
+    def _count_memos(
+        self,
+        filters: list[str],
+        *,
+        fallback_payload: Mapping[str, object] | None = None,
+        fallback_count: int = 0,
+    ) -> int:
+        if fallback_payload is not None:
+            total = _total_count(fallback_payload)
+            if total is not None:
+                return total
+        count = 0
+        page_token = ""
+        seen_tokens: set[str] = set()
+        for _page in range(100):
+            fields = {
+                "pageSize": "100",
+                "filter": " && ".join(filters),
+            }
+            if page_token:
+                fields["pageToken"] = page_token
+            payload = self._request(f"/api/v1/memos?{urllib.parse.urlencode(fields)}")
+            total = _total_count(payload)
+            if total is not None:
+                return total
+            raw_memos = payload.get("memos")
+            if not isinstance(raw_memos, list):
+                raise MemosError("memos_upstream_response_invalid")
+            count += len(raw_memos)
+            page_token = str(payload.get("nextPageToken") or "")
+            if not page_token or page_token in seen_tokens:
+                return count
+            seen_tokens.add(page_token)
+        return max(count, fallback_count)
 
     def _request(self, path: str, *, method: str = "GET", payload: Mapping[str, object] | None = None) -> dict[str, object]:
         body = None if payload is None else json.dumps(payload, ensure_ascii=False).encode("utf-8")

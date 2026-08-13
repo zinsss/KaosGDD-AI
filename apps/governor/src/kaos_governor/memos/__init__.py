@@ -2,6 +2,7 @@
 
 from .service import (
     Memo,
+    MemoSearchPage,
     MemoSearchResult,
     MemosConfig,
     MemosConfigurationError,
@@ -11,6 +12,7 @@ from .service import (
 
 __all__ = (
     "Memo",
+    "MemoSearchPage",
     "MemoSearchResult",
     "MemosConfig",
     "MemosConfigurationError",

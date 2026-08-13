@@ -22,7 +22,7 @@ from .fax import (
     normalize_destination,
     request_from_pdf,
 )
-from .memos import Memo, MemoSearchResult, MemosConfig, MemosError, MemosService
+from .memos import Memo, MemoSearchPage, MemoSearchResult, MemosConfig, MemosError, MemosService
 
 __all__ = (
     "Actor",
@@ -37,6 +37,7 @@ __all__ = (
     "FaxService",
     "MemoryDurableGovernorStore",
     "Memo",
+    "MemoSearchPage",
     "MemoSearchResult",
     "MemosConfig",
     "MemosError",

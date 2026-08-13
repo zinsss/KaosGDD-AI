@@ -4,15 +4,16 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock
 
-from kaos_governor.memos import Memo, MemoSearchResult
+from kaos_governor.memos import Memo, MemoSearchPage, MemoSearchResult
 from kaos_governor_discord.access import AccessPolicy
-from kaos_governor_discord.memos import DiscordMemosCapture
+from kaos_governor_discord.memos import DiscordMemosCapture, render_memo_opened
 
 
 class FakeMemos:
     def __init__(self) -> None:
         self.created = []
         self.searches = []
+        self.config = SimpleNamespace(max_results=20)
 
     def create(self, content):
         self.created.append(content)
@@ -23,6 +24,34 @@ class FakeMemos:
         content = "# Rustdesk Settings\n## For Tailscale\n- Relay server: 100.94.208.16\n@everyone"
         memo = Memo("memos/99", content, ("office",), "created", "updated", "PRIVATE", False)
         return [MemoSearchResult(memo, "Rustdesk Settings")]
+
+    def search_page(self, query, tags, limit):
+        self.searches.append((query, tags, limit))
+        first = Memo(
+            "memos/99",
+            "# Rustdesk Settings\n## For Tailscale\n- Relay server: 100.94.208.16\n@everyone",
+            ("office",),
+            "created",
+            "updated",
+            "PRIVATE",
+            False,
+        )
+        second = Memo(
+            "memos/100",
+            "## Rustdesk LAN\n- API server: blank",
+            ("office",),
+            "created",
+            "updated",
+            "PRIVATE",
+            False,
+        )
+        return MemoSearchPage(
+            query,
+            (),
+            (MemoSearchResult(first, "Rustdesk Settings"), MemoSearchResult(second, "Rustdesk LAN")),
+            13,
+            213,
+        )
 
 
 class FakeChannel:
@@ -82,13 +111,13 @@ class DiscordMemosCaptureTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(handled)
         self.assertEqual(service.created, [])
-        self.assertEqual(service.searches, [("printer", None, 5)])
+        self.assertEqual(service.searches, [("printer", None, 20)])
         message.delete.assert_awaited_once()
         content = message.channel.sent[0][0][0]
-        self.assertIn("Memos search", content)
-        self.assertIn("# Rustdesk Settings\n## For Tailscale", content)
-        self.assertIn("- Relay server: 100.94.208.16", content)
-        self.assertIn("@\u200beveryone", content)
+        self.assertIn("Searched..", content)
+        self.assertIn("## printer", content)
+        self.assertIn("13 results in 213 memos", content)
+        self.assertIn("view", message.channel.sent[0][1])
 
     async def test_other_channels_are_ignored(self) -> None:
         service = FakeMemos()
@@ -100,6 +129,22 @@ class DiscordMemosCaptureTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertFalse(await capture.handle_message(self.make_message("memo", channel_id=301)))  # type: ignore[arg-type]
         self.assertEqual(service.created, [])
+
+    def test_opened_memo_renders_body_as_markdown_and_escapes_mentions(self) -> None:
+        memo = Memo(
+            "memos/99",
+            "# Rustdesk Settings\n## For Tailscale\n- Relay server: 100.94.208.16\n@everyone",
+            (),
+            "",
+            "",
+            "PRIVATE",
+            False,
+        )
+        content = render_memo_opened("rustdesk", MemoSearchResult(memo, "Rustdesk Settings"))
+
+        self.assertIn("# Rustdesk Settings\n## For Tailscale", content)
+        self.assertIn("- Relay server: 100.94.208.16", content)
+        self.assertIn("@\u200beveryone", content)
 
 
 if __name__ == "__main__":

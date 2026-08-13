@@ -106,7 +106,7 @@ class MemosServiceTests(unittest.TestCase):
                 }
             )
 
-        service = MemosService(config(), open_url)
+        service = MemosService(config(max_results=25), open_url)
         results = service.search("thermal printer", ["server"], 5)
 
         self.assertEqual(len(results), 1)
@@ -123,6 +123,33 @@ class MemosServiceTests(unittest.TestCase):
         self.assertIn('tag in ["server"]', query["filter"][0])
         self.assertEqual(request.get_header("Authorization"), "Bearer secret-personal-access-token")
         self.assertEqual(service.status()["lastResultCount"], 1)
+
+    def test_search_page_reports_result_and_total_counts(self) -> None:
+        requests = []
+
+        def open_url(request, timeout):
+            requests.append(request.full_url)
+            if len(requests) == 1:
+                return FakeResponse(
+                    {
+                        "memos": [
+                            {"name": "memos/1", "content": "Rustdesk settings"},
+                            {"name": "memos/2", "content": "Rustdesk relay"},
+                        ],
+                        "totalSize": 13,
+                    }
+                )
+            return FakeResponse({"memos": [{"name": "memos/all"}], "totalSize": 213})
+
+        service = MemosService(config(max_results=25), open_url)
+        page = service.search_page("rustdesk", limit=25)
+
+        self.assertEqual(page.query, "rustdesk")
+        self.assertEqual(page.result_count, 13)
+        self.assertEqual(page.total_count, 213)
+        self.assertEqual(len(page.results), 2)
+        self.assertEqual(service.status()["lastResultCount"], 13)
+        self.assertEqual(len(requests), 2)
 
     def test_search_requires_a_query_or_tag_and_enforces_limits(self) -> None:
         service = MemosService(config(), lambda *_args, **_kwargs: FakeResponse({"memos": []}))
