@@ -61,10 +61,11 @@ class DiscordCalendarSurface:
         if self.state.view.visible_year < 1:
             self.state = DiscordCalendarState(reset_idle_state(today=current))
         bootstrap = await asyncio.to_thread(self.adapter.bootstrap, self.profile)
-        bootstrap = await asyncio.to_thread(self._with_month_weather, bootstrap)
+        agenda_days = self._agenda_days(current)
+        bootstrap = await asyncio.to_thread(self._with_agenda_weather, bootstrap, agenda_days)
         channel = await self.channel()
         month_content, month_file = await asyncio.to_thread(self._month_payload, bootstrap, current)
-        agenda_content = await asyncio.to_thread(self._agenda_content, bootstrap, current)
+        agenda_content = await asyncio.to_thread(self._agenda_content, bootstrap, agenda_days)
         month_message = await self._upsert_message(
             channel,
             self.state.month_message_id,
@@ -184,9 +185,12 @@ class DiscordCalendarSurface:
         filename = f"calendar-{self.state.view.visible_year}-{self.state.view.visible_month:02d}.png"
         return content, discord.File(io.BytesIO(png), filename=filename)
 
-    def _with_month_weather(self, bootstrap: Mapping[str, Any]) -> dict[str, Any]:
+    def _with_agenda_weather(self, bootstrap: Mapping[str, Any], days: list[date]) -> dict[str, Any]:
         payload = dict(bootstrap)
-        start, end = visible_month_grid_range(self.state.view.visible_year, self.state.view.visible_month)
+        if not days:
+            payload.setdefault("weather", [])
+            return payload
+        start, end = min(days), max(days)
         try:
             weather = self.adapter.month_weather(
                 self.profile,
@@ -194,7 +198,7 @@ class DiscordCalendarSurface:
                 end=end.isoformat(),
             )
         except CalendarAdapterError as exc:
-            LOGGER.info("Calendar weather unavailable for %s.%02d: %s", self.state.view.visible_year, self.state.view.visible_month, exc)
+            LOGGER.info("Calendar weather unavailable for agenda %s..%s: %s", start, end, exc)
             payload.setdefault("weather", [])
             payload["weatherError"] = type(exc).__name__
             return payload
@@ -203,12 +207,15 @@ class DiscordCalendarSurface:
             payload["weatherError"] = str(weather.get("error") or "")
         return payload
 
-    def _agenda_content(self, bootstrap: Mapping[str, Any], today: date) -> str:
+    def _agenda_days(self, today: date) -> list[date]:
         if self.state.view.agenda_mode == "day" and self.state.view.agenda_date is not None:
-            days = [self.state.view.agenda_date]
+            return [self.state.view.agenda_date]
+        return [today + timedelta(days=offset) for offset in range(7)]
+
+    def _agenda_content(self, bootstrap: Mapping[str, Any], days: list[date]) -> str:
+        if self.state.view.agenda_mode == "day" and self.state.view.agenda_date is not None:
             title = f"Agenda · {self.state.view.agenda_date:%Y.%m.%d}"
         else:
-            days = [today + timedelta(days=offset) for offset in range(7)]
             title = "Agenda · Upcoming 7 Days"
         return render_agenda(bootstrap, days=days, title=title)
 
@@ -317,11 +324,6 @@ def month_markers(bootstrap: Mapping[str, Any]) -> list[MonthDayMarkers]:
             "tasks": 0,
         }
     )
-    for weather in _items(bootstrap, "weather"):
-        value = _item_date(weather, "date")
-        if value is None:
-            continue
-        values[value]["weather"] = weather_marker(weather)
     for event in _items(bootstrap, "events"):
         value = _item_date(event, "startDate")
         if value is None:
@@ -363,6 +365,7 @@ def month_markers(bootstrap: Mapping[str, Any]) -> list[MonthDayMarkers]:
 def render_agenda(bootstrap: Mapping[str, Any], *, days: list[date], title: str) -> str:
     collections = _collections_by_id(bootstrap)
     events_by_day: dict[date, list[str]] = defaultdict(list)
+    weather_by_day = weather_by_date(bootstrap)
     wanted = set(days)
     for event in _items(bootstrap, "events"):
         value = _item_date(event, "startDate")
@@ -379,11 +382,11 @@ def render_agenda(bootstrap: Mapping[str, Any], *, days: list[date], title: str)
         day_lines = []
         if events_by_day[value]:
             day_lines.extend(events_by_day[value][:8])
-        if not day_lines:
-            continue
         if len(lines) > 1:
             lines.append("")
-        lines.append(f"## {value:%Y.%m.%d %a}")
+        weather = weather_by_day.get(value, "")
+        suffix = f" {weather}" if weather else ""
+        lines.append(f"## {value:%Y.%m.%d %a}{suffix}")
         lines.extend(day_lines)
     content = "\n".join(lines)
     return content[:1990]
@@ -402,6 +405,15 @@ def agenda_owner_suffix(collection: Mapping[str, Any]) -> str:
         return ""
     label = escape_text(collection.get("ownerLabel") or "GDD_ZiN")
     return f" · ***{label}***"
+
+
+def weather_by_date(bootstrap: Mapping[str, Any]) -> dict[date, str]:
+    values = {}
+    for weather in _items(bootstrap, "weather"):
+        value = _item_date(weather, "date")
+        if value is not None:
+            values[value] = weather_marker(weather)
+    return values
 
 
 def weather_marker(weather: Mapping[str, Any]) -> str:

@@ -18,6 +18,7 @@ from kaos_governor_discord.calendar import (
     month_markers,
     render_agenda,
     visible_month_grid_range,
+    weather_by_date,
     weather_marker,
 )
 
@@ -144,7 +145,7 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(markers[date(2026, 8, 13)].family_events, 1)
         self.assertEqual(markers[date(2026, 8, 13)].zin_events, 1)
         self.assertEqual(markers[date(2026, 8, 13)].tasks, 1)
-        self.assertEqual(markers[date(2026, 8, 13)].weather, "☁")
+        self.assertEqual(markers[date(2026, 8, 13)].weather, "")
         self.assertTrue(markers[date(2026, 8, 15)].public_holiday)
 
     def test_weather_marker_uses_emoji_or_simple_condition_symbol(self) -> None:
@@ -159,12 +160,15 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
     def test_visible_month_grid_range_uses_sunday_to_saturday_grid(self) -> None:
         self.assertEqual(visible_month_grid_range(2026, 8), (date(2026, 7, 26), date(2026, 9, 5)))
 
+    def test_weather_by_date_normalizes_agenda_weather(self) -> None:
+        self.assertEqual(weather_by_date(BOOTSTRAP), {date(2026, 8, 13): "☁"})
+
     def test_agenda_renders_upcoming_or_single_day_content(self) -> None:
         content = render_agenda(BOOTSTRAP, days=[date(2026, 8, 13)], title="Agenda · 2026.08.13")
 
         self.assertIn("Agenda", content)
         self.assertIn("# Agenda", content)
-        self.assertIn("## 2026.08.13 Thu", content)
+        self.assertIn("## 2026.08.13 Thu ☁", content)
         self.assertIn("- 09:00 Clinic · ***GDD_ZiN***", content)
         self.assertIn("- 당직", content)
         self.assertNotIn("***Family***", content)
@@ -177,18 +181,18 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(agenda_owner_suffix({"owner": "zin", "ownerLabel": "GDD_ZiN"}), " · ***GDD_ZiN***")
         self.assertEqual(agenda_owner_suffix({"owner": "family", "ownerLabel": "Family"}), "")
 
-    def test_agenda_omits_days_without_events(self) -> None:
+    def test_agenda_keeps_days_without_events(self) -> None:
         content = render_agenda(
             BOOTSTRAP,
             days=[date(2026, 8, 12), date(2026, 8, 13)],
             title="Agenda · Upcoming 7 Days",
         )
 
-        self.assertNotIn("2026.08.12", content)
+        self.assertIn("2026.08.12", content)
         self.assertIn("2026.08.13", content)
         self.assertNotIn("No items", content)
 
-    def test_agenda_omits_task_only_days(self) -> None:
+    def test_agenda_keeps_task_only_days_without_rendering_tasks(self) -> None:
         content = render_agenda(
             {
                 **BOOTSTRAP,
@@ -199,7 +203,7 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
             title="Agenda · Upcoming 7 Days",
         )
 
-        self.assertEqual(content, "# Agenda · Upcoming 7 Days")
+        self.assertEqual(content, "# Agenda · Upcoming 7 Days\n## 2026.08.13 Thu ☁")
 
     def test_month_navigation_wraps_years(self) -> None:
         self.assertEqual(add_months(2026, 1, -1), (2025, 12))
@@ -233,7 +237,7 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("Agenda", channel.sent[1]["content"])
             self.assertTrue(state_path.exists())
 
-    async def test_ensure_messages_fetches_weather_for_visible_month_grid(self) -> None:
+    async def test_ensure_messages_fetches_weather_for_agenda_days(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             adapter = FakeAdapter()
             surface = DiscordCalendarSurface(
@@ -250,7 +254,7 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(
                 adapter.weather_calls,
-                [{"profile": "main", "start": "2026-07-26", "end": "2026-09-05", "city": "pohang"}],
+                [{"profile": "main", "start": "2026-08-13", "end": "2026-08-19", "city": "pohang"}],
             )
 
     async def test_month_navigation_updates_month_and_reuses_messages(self) -> None:
