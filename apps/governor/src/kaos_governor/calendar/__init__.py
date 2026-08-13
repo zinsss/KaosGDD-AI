@@ -1,5 +1,14 @@
 """Calendar domain rules for KaosGovernor."""
 
+from .adapter import (
+    CalendarAdapterClient,
+    CalendarAdapterConfig,
+    CalendarAdapterError,
+    portal_host,
+    profile_host,
+    route_allowed,
+    upstream_url,
+)
 from .generated import (
     CLAIM_CATEGORY,
     GENERATED_CATEGORY,
@@ -22,6 +31,9 @@ from .generated import (
 )
 
 __all__ = (
+    "CalendarAdapterClient",
+    "CalendarAdapterConfig",
+    "CalendarAdapterError",
     "CLAIM_CATEGORY",
     "GENERATED_CATEGORY",
     "MARKET_CATEGORY",
@@ -39,5 +51,9 @@ __all__ = (
     "market_dates",
     "market_event",
     "market_uid",
+    "portal_host",
+    "profile_host",
+    "route_allowed",
     "uid_year",
+    "upstream_url",
 )
