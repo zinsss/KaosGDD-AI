@@ -77,12 +77,14 @@ install_state_directories() {
     "${root}/data/kaosgdd-ai/governor/mail" \
     "${root}/data/kaosgdd-ai/governor/fax" \
     "${root}/data/kaosgdd-ai/governor/discord-calendar" \
-    "${root}/data/kaosgdd-ai/governor/discord-tasks" 2>/dev/null; then
+    "${root}/data/kaosgdd-ai/governor/discord-tasks" \
+    "${root}/data/kaosgdd-ai/governor/discord-supplies" 2>/dev/null; then
     chmod 0770 \
       "${root}/data/kaosgdd-ai/governor/mail" \
       "${root}/data/kaosgdd-ai/governor/fax" \
       "${root}/data/kaosgdd-ai/governor/discord-calendar" \
-      "${root}/data/kaosgdd-ai/governor/discord-tasks"
+      "${root}/data/kaosgdd-ai/governor/discord-tasks" \
+      "${root}/data/kaosgdd-ai/governor/discord-supplies"
     return
   fi
   require_command sudo
@@ -90,7 +92,8 @@ install_state_directories() {
     "${root}/data/kaosgdd-ai/governor/mail" \
     "${root}/data/kaosgdd-ai/governor/fax" \
     "${root}/data/kaosgdd-ai/governor/discord-calendar" \
-    "${root}/data/kaosgdd-ai/governor/discord-tasks"
+    "${root}/data/kaosgdd-ai/governor/discord-tasks" \
+    "${root}/data/kaosgdd-ai/governor/discord-supplies"
 }
 
 setup() {
@@ -149,6 +152,10 @@ preflight() {
   fi
   if [[ "${DISCORD_TASKS_ENABLED:-false}" == "true" ]]; then
     [[ -n "${DISCORD_TASKS_CHANNEL_ID:-}" ]] || die "DISCORD_TASKS_CHANNEL_ID is required"
+    [[ -n "${CALENDAR_ADAPTER_INTERNAL_URL:-}" ]] || die "CALENDAR_ADAPTER_INTERNAL_URL is required"
+  fi
+  if [[ "${DISCORD_SUPPLIES_ENABLED:-false}" == "true" ]]; then
+    [[ -n "${DISCORD_SUPPLIES_CHANNEL_ID:-}" ]] || die "DISCORD_SUPPLIES_CHANNEL_ID is required"
     [[ -n "${CALENDAR_ADAPTER_INTERNAL_URL:-}" ]] || die "CALENDAR_ADAPTER_INTERNAL_URL is required"
   fi
   if [[ "${FAX_DISCORD_ENABLED:-false}" == "true" ]]; then
