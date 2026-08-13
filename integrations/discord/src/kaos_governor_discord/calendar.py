@@ -337,10 +337,11 @@ def render_agenda(bootstrap: Mapping[str, Any], *, days: list[date], title: str)
         value = _item_date(event, "startDate")
         if value not in wanted:
             continue
-        owner = collections.get(str(event.get("collection") or ""), {}).get("ownerLabel") or "Calendar"
+        collection = collections.get(str(event.get("collection") or ""), {})
         time_value = str(event.get("startTime") or "")
         prefix = f"{time_value} " if time_value else ""
-        events_by_day[value].append(f"- {prefix}{escape_text(event.get('summary') or 'Untitled event')} · {escape_text(owner)}")
+        suffix = agenda_owner_suffix(collection)
+        events_by_day[value].append(f"- {prefix}{escape_text(event.get('summary') or 'Untitled event')}{suffix}")
 
     lines = [f"# {escape_text(title)}"]
     for value in days:
@@ -364,6 +365,13 @@ def _collections_by_id(bootstrap: Mapping[str, Any]) -> dict[str, Mapping[str, A
         for item in _items(bootstrap, "collections")
         if str(item.get("id") or "")
     }
+
+
+def agenda_owner_suffix(collection: Mapping[str, Any]) -> str:
+    if str(collection.get("owner") or "").lower() != "family":
+        return ""
+    label = escape_text(collection.get("ownerLabel") or "Family")
+    return f" · ***{label}***"
 
 
 def _items(bootstrap: Mapping[str, Any], name: str) -> list[Mapping[str, Any]]:
