@@ -61,8 +61,8 @@ def render_month_png(
     month: int,
     today: date,
     markers: list[MonthDayMarkers] | None = None,
-    width: int = 1400,
-    height: int = 930,
+    width: int = 1200,
+    height: int = 900,
     font_dir: Path | str = "/usr/share/fonts/truetype/dejavu",
     theme: MonthRenderTheme = MonthRenderTheme(),
 ) -> bytes:
@@ -79,12 +79,12 @@ def render_month_png(
     image = Image.new("RGB", (width, height), theme.background)
     draw = ImageDraw.Draw(image, "RGBA")
 
-    label_font = _load_font(ImageFont, bold, 18)
-    title_font = _load_font(ImageFont, bold, 43)
-    day_font = _load_font(ImageFont, bold, 24)
-    small_font = _load_font(ImageFont, bold, 16)
-    nav_font = _load_font(ImageFont, bold, 16)
-    weather_font = _load_font(ImageFont, regular, 17)
+    label_font = _load_font(ImageFont, bold, 22)
+    title_font = _load_font(ImageFont, bold, 54)
+    day_font = _load_font(ImageFont, bold, 34)
+    small_font = _load_font(ImageFont, bold, 22)
+    nav_font = _load_font(ImageFont, bold, 18)
+    weather_font = _load_font(ImageFont, regular, 22)
 
     def rounded(box, radius=8, fill=theme.surface, outline=theme.line, line_width=1):
         draw.rounded_rectangle(box, radius=radius, fill=fill, outline=outline, width=line_width)
@@ -95,21 +95,21 @@ def render_month_png(
     def dot(cx: int, cy: int, fill: str, radius: int = 5):
         draw.ellipse((cx - radius, cy - radius, cx + radius, cy + radius), fill=fill)
 
-    rounded((48, 38, width - 48, height - 38), 10, theme.panel, theme.line_strong)
-    text_at(88, 75, "Calendar", theme.dim, label_font)
-    text_at(88, 100, f"{year}.{month:02d}", theme.text, title_font)
-    rounded((width - 316, 88, width - 162, 124), 7, theme.surface, theme.line)
-    text_at(width - 299, 96, "<<", theme.market, nav_font)
-    text_at(width - 247, 96, "Today", theme.muted, nav_font)
-    text_at(width - 186, 96, ">>", theme.market, nav_font)
+    rounded((32, 30, width - 32, height - 30), 10, theme.panel, theme.line_strong)
+    text_at(62, 60, "Calendar", theme.dim, label_font)
+    text_at(62, 90, f"{year}.{month:02d}", theme.text, title_font)
+    rounded((width - 248, 84, width - 72, 124), 7, theme.surface, theme.line)
+    text_at(width - 232, 94, "<<", theme.market, nav_font)
+    text_at(width - 172, 94, "Today", theme.muted, nav_font)
+    text_at(width - 98, 94, ">>", theme.market, nav_font)
 
-    left = 88
-    top = 190
+    left = 62
+    top = 200
     gap = 6
-    cell_width = (width - 190 - gap * 6) // 7
-    cell_height = 100
+    cell_width = (width - 124 - gap * 6) // 7
+    cell_height = 106
     for index, name in enumerate(("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")):
-        text_at(left + index * (cell_width + gap) + cell_width // 2 - 18, 154, name, theme.dim, small_font)
+        text_at(left + index * (cell_width + gap) + cell_width // 2 - 22, 158, name, theme.dim, small_font)
 
     weeks = calendar.Calendar(firstweekday=0).monthdatescalendar(year, month)
     for row, week in enumerate(weeks):
@@ -134,11 +134,11 @@ def render_month_png(
                 line_width,
             )
 
-            text_at(x + 11, y + 8, value.day, _day_number_color(value, in_month, item, theme), day_font)
+            text_at(x + 12, y + 10, value.day, _day_number_color(value, in_month, item, theme), day_font)
             if in_month and item.duty:
-                dot(x + 48, y + 22, theme.duty, 6)
+                dot(x + 58, y + 29, theme.duty, 7)
             if in_month and item.weather:
-                text_at(x + 63, y + 8, item.weather, theme.weather, weather_font)
+                text_at(x + 76, y + 12, item.weather, theme.weather, weather_font)
 
             markers_to_draw: list[tuple[str, str]] = []
             if in_month and item.market_day:
@@ -150,16 +150,16 @@ def render_month_png(
             if in_month and item.tasks:
                 markers_to_draw.append((str(item.tasks), theme.task))
 
-            marker_width = sum(18 if value == "dot" else 22 for value, _color in markers_to_draw)
+            marker_width = sum(24 if value == "dot" else 30 for value, _color in markers_to_draw)
             marker_x = x + cell_width // 2 - marker_width // 2
-            marker_y = y + cell_height - 25
+            marker_y = y + cell_height - 34
             for marker_value, color in markers_to_draw:
                 if marker_value == "dot":
-                    dot(marker_x + 6, marker_y + 9, color, 5)
-                    marker_x += 18
+                    dot(marker_x + 8, marker_y + 13, color, 7)
+                    marker_x += 24
                 else:
                     text_at(marker_x, marker_y, marker_value, color, small_font)
-                    marker_x += 22
+                    marker_x += 30
 
     output = BytesIO()
     image.save(output, format="PNG")

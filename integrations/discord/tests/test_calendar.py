@@ -139,11 +139,14 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
         content = render_agenda(BOOTSTRAP, days=[date(2026, 8, 13)], title="Agenda · 2026.08.13")
 
         self.assertIn("Agenda", content)
+        self.assertIn("# Agenda", content)
+        self.assertIn("## 2026.08.13 Thu", content)
         self.assertIn("Clinic", content)
-        self.assertIn("Claim review", content)
+        self.assertNotIn("Claim review", content)
+        self.assertNotIn("Tasks", content)
         self.assertNotIn("Old done", content)
 
-    def test_agenda_omits_days_without_events_or_tasks(self) -> None:
+    def test_agenda_omits_days_without_events(self) -> None:
         content = render_agenda(
             BOOTSTRAP,
             days=[date(2026, 8, 12), date(2026, 8, 13)],
@@ -153,6 +156,19 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("2026.08.12", content)
         self.assertIn("2026.08.13", content)
         self.assertNotIn("No items", content)
+
+    def test_agenda_omits_task_only_days(self) -> None:
+        content = render_agenda(
+            {
+                **BOOTSTRAP,
+                "events": [],
+                "tasks": [{"summary": "Task only", "due": "2026-08-13", "status": "NEEDS-ACTION"}],
+            },
+            days=[date(2026, 8, 13)],
+            title="Agenda · Upcoming 7 Days",
+        )
+
+        self.assertEqual(content, "# Agenda · Upcoming 7 Days")
 
     def test_month_navigation_wraps_years(self) -> None:
         self.assertEqual(add_months(2026, 1, -1), (2025, 12))

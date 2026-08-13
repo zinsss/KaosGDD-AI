@@ -332,7 +332,6 @@ def month_markers(bootstrap: Mapping[str, Any]) -> list[MonthDayMarkers]:
 def render_agenda(bootstrap: Mapping[str, Any], *, days: list[date], title: str) -> str:
     collections = _collections_by_id(bootstrap)
     events_by_day: dict[date, list[str]] = defaultdict(list)
-    tasks_by_day: dict[date, list[str]] = defaultdict(list)
     wanted = set(days)
     for event in _items(bootstrap, "events"):
         value = _item_date(event, "startDate")
@@ -342,24 +341,18 @@ def render_agenda(bootstrap: Mapping[str, Any], *, days: list[date], title: str)
         time_value = str(event.get("startTime") or "")
         prefix = f"{time_value} " if time_value else ""
         events_by_day[value].append(f"- {prefix}{escape_text(event.get('summary') or 'Untitled event')} · {escape_text(owner)}")
-    for task in _items(bootstrap, "tasks"):
-        value = _item_date(task, "due")
-        if value not in wanted or str(task.get("status") or "").upper() == "COMPLETED":
-            continue
-        tasks_by_day[value].append(f"- {escape_text(task.get('summary') or 'Untitled task')}")
 
-    lines = [f"## {escape_text(title)}"]
+    lines = [f"# {escape_text(title)}"]
     for value in days:
         day_lines = []
         if events_by_day[value]:
-            day_lines.append("Events")
+            day_lines.append("**Events**")
             day_lines.extend(events_by_day[value][:8])
-        if tasks_by_day[value]:
-            day_lines.append("Tasks")
-            day_lines.extend(tasks_by_day[value][:8])
         if not day_lines:
             continue
-        lines.append(f"**{value:%Y.%m.%d %a}**")
+        if len(lines) > 1:
+            lines.append("")
+        lines.append(f"## {value:%Y.%m.%d %a}")
         lines.extend(day_lines)
     content = "\n".join(lines)
     return content[:1990]

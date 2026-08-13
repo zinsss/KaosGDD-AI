@@ -13,7 +13,7 @@ class CalendarRenderTests(unittest.TestCase):
 
         self.assertTrue(png.startswith(b"\x89PNG\r\n\x1a\n"))
         with Image.open(BytesIO(png)) as image:
-            self.assertEqual(image.size, (1400, 930))
+            self.assertEqual(image.size, (1200, 900))
             self.assertEqual(image.mode, "RGB")
 
     def test_month_renderer_falls_back_when_font_files_are_absent(self) -> None:
@@ -73,8 +73,8 @@ class CalendarRenderTests(unittest.TestCase):
         )
 
         with Image.open(BytesIO(png)) as image:
-            self.assertEqual(image.size[1], 930)
-            self.assertNotEqual(image.getpixel((88 + 3 * 178 + 48, 190 + 2 * 106 + 22)), image.getpixel((10, 10)))
+            self.assertEqual(image.size[1], 900)
+            self.assertNotEqual(image.getpixel((62 + 3 * 154 + 58, 200 + 2 * 112 + 29)), image.getpixel((10, 10)))
 
 
 if __name__ == "__main__":
