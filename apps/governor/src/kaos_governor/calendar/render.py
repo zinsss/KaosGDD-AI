@@ -136,14 +136,12 @@ def render_month_png(
             )
 
             text_at(x + 12, y + 10, value.day, _day_number_color(value, in_month, item, theme), day_font)
-            if in_month and item.duty:
-                dot(x + 58, y + 29, theme.duty, 7)
+            if in_month and item.market_day:
+                dot(x + 58, y + 29, theme.market, 7)
             if in_month and item.weather:
                 text_at(x + 76, y + 12, item.weather, theme.weather, weather_font)
 
             markers_to_draw: list[tuple[str, str]] = []
-            if in_month and item.market_day:
-                markers_to_draw.append(("dot", theme.market))
             if in_month and item.family_events:
                 markers_to_draw.append((str(item.family_events), theme.family))
             if in_month and item.zin_events:

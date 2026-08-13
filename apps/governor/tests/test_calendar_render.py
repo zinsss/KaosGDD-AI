@@ -61,8 +61,11 @@ class CalendarRenderTests(unittest.TestCase):
             today=date(2026, 8, 13),
             markers=[
                 MonthDayMarkers(
-                    value=date(2026, 8, 13),
+                    value=date(2026, 8, 4),
                     duty=True,
+                ),
+                MonthDayMarkers(
+                    value=date(2026, 8, 13),
                     weather="☁",
                     market_day=True,
                     family_events=2,
@@ -75,6 +78,7 @@ class CalendarRenderTests(unittest.TestCase):
         with Image.open(BytesIO(png)) as image:
             self.assertEqual(image.size[1], 900)
             self.assertNotEqual(image.getpixel((62 + 3 * 154 + 58, 200 + 2 * 112 + 29)), image.getpixel((10, 10)))
+            self.assertEqual(image.getpixel((62 + 1 * 154 + 58, 200 + 1 * 112 + 29)), image.getpixel((62 + 1 * 154 + 95, 200 + 1 * 112 + 29)))
 
 
 if __name__ == "__main__":
