@@ -422,22 +422,11 @@ def weather_items_by_date(bootstrap: Mapping[str, Any]) -> dict[date, Mapping[st
 
 
 def weather_agenda_summary(weather: Mapping[str, Any]) -> str:
-    parts = []
-    for item in weather.get("dayparts", []) if isinstance(weather.get("dayparts"), list) else []:
-        if not isinstance(item, Mapping):
-            continue
-        marker = weather_marker(item)
-        if marker:
-            parts.append(marker)
-    if not parts:
-        marker = weather_marker(weather)
-        if marker:
-            parts.append(marker)
+    marker = weather_marker(weather)
     temperature = weather_temperature_range(weather)
-    if not parts and not temperature:
+    if not marker and not temperature:
         return ""
-    suffix = f"  {temperature}" if temperature else ""
-    return f"{', '.join(parts)}{suffix}"
+    return " ".join(part for part in (marker, temperature) if part)
 
 
 def weather_temperature_range(weather: Mapping[str, Any]) -> str:
