@@ -157,7 +157,7 @@ class DiscordFaxTransport:
             raise FaxError("pdf_attachment_required")
         if attachment.size <= 0 or attachment.size > self.service.config.max_pdf_bytes:
             raise FaxError("pdf_size_invalid")
-        pdf = await attachment.read(use_cached=True)
+        pdf = await attachment.read(use_cached=False)
         request = request_from_pdf(
             destination=destination,
             sender=sender,
