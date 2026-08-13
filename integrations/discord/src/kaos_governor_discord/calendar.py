@@ -381,15 +381,12 @@ def render_agenda(bootstrap: Mapping[str, Any], *, days: list[date], title: str)
     for value in days:
         day_lines = []
         weather = weather_items.get(value)
-        weather_line = weather_agenda_line(weather) if weather else ""
-        if weather_line:
-            day_lines.append(weather_line)
         if events_by_day[value]:
             day_lines.extend(events_by_day[value][:8])
         if len(lines) > 1:
             lines.append("")
-        marker = weather_marker(weather) if weather else ""
-        suffix = f" {marker}" if marker else ""
+        weather_summary = weather_agenda_summary(weather) if weather else ""
+        suffix = f" ({weather_summary})" if weather_summary else ""
         lines.append(f"## {value:%Y.%m.%d %a}{suffix}")
         lines.extend(day_lines)
     content = "\n".join(lines)
@@ -424,7 +421,7 @@ def weather_items_by_date(bootstrap: Mapping[str, Any]) -> dict[date, Mapping[st
     return values
 
 
-def weather_agenda_line(weather: Mapping[str, Any]) -> str:
+def weather_agenda_summary(weather: Mapping[str, Any]) -> str:
     parts = []
     for item in weather.get("dayparts", []) if isinstance(weather.get("dayparts"), list) else []:
         if not isinstance(item, Mapping):
@@ -464,7 +461,7 @@ def compact_temperature(value: object) -> str:
 def weather_marker(weather: Mapping[str, Any]) -> str:
     explicit = str(weather.get("emoji") or weather.get("icon") or "").strip()
     if explicit:
-        return explicit[:2]
+        return normalize_weather_marker(explicit) or explicit[:2]
     raw = str(
         weather.get("condition")
         or weather.get("summary")
@@ -475,20 +472,24 @@ def weather_marker(weather: Mapping[str, Any]) -> str:
     ).strip()
     if not raw:
         return ""
+    return normalize_weather_marker(raw) or raw[:2]
+
+
+def normalize_weather_marker(raw: str) -> str:
     value = raw.lower()
-    if any(token in value for token in ("⛈", "thunder", "storm", "lightning", "번개", "천둥")):
-        return "⛈️"
+    if any(token in value for token in ("⛈", "⚡", "thunder", "storm", "lightning", "번개", "천둥")):
+        return "⚡️"
     if any(token in value for token in ("❄", "snow", "sleet", "ice", "눈")):
-        return "🌨️"
+        return "❄️"
     if any(token in value for token in ("🌧", "☔", "rain", "shower", "drizzle", "비")):
         return "🌧️"
     if any(token in value for token in ("🌫", "fog", "mist", "haze", "smoke", "안개")):
         return "🌫️"
     if any(token in value for token in ("☁", "🌤", "⛅", "cloud", "overcast", "흐림", "구름")):
-        return "☁️"
+        return "⛅️"
     if any(token in value for token in ("☀", "clear", "sun", "맑음", "sunny")):
         return "☀️"
-    return raw[:2]
+    return ""
 
 
 def _items(bootstrap: Mapping[str, Any], name: str) -> list[Mapping[str, Any]]:
