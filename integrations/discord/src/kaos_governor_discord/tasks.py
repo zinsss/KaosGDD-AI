@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 import logging
 from pathlib import Path
@@ -15,12 +15,13 @@ from .markdown import NO_MENTIONS, escape_text
 
 
 LOGGER = logging.getLogger(__name__)
-MAX_VISIBLE_TASKS = 5
+MAX_VISIBLE_TASKS = 25
 
 
-@dataclass(frozen=True)
+@dataclass
 class DiscordTasksState:
-    message_id: int = 0
+    message_ids: dict[str, int] = field(default_factory=dict)
+    legacy_message_id: int = 0
 
 
 class DiscordTasksSurface:
@@ -48,10 +49,23 @@ class DiscordTasksSurface:
         active = active_tasks(tasks)
         self._tasks_by_key = {task_key(item): item for item in active}
         channel = await self.channel()
-        content = render_active_tasks(active)
-        view = TasksView(self, active)
-        message = await self._upsert_message(channel, content=content, view=view)
-        self.state = DiscordTasksState(message_id=int(message.id))
+        if self.state.legacy_message_id:
+            await self._delete_message_id(channel, self.state.legacy_message_id)
+            self.state.legacy_message_id = 0
+        next_message_ids: dict[str, int] = {}
+        for task in active:
+            key = task_key(task)
+            message = await self._upsert_task_message(
+                channel,
+                key,
+                task,
+                message_id=self.state.message_ids.get(key, 0),
+            )
+            next_message_ids[key] = int(message.id)
+        for key, message_id in self.state.message_ids.items():
+            if key not in next_message_ids:
+                await self._delete_message_id(channel, message_id)
+        self.state.message_ids = next_message_ids
         self._save_state()
 
     async def handle_message(self, message: discord.Message) -> bool:
@@ -89,7 +103,8 @@ class DiscordTasksSurface:
             "enabled": True,
             "channelId": str(self.channel_id),
             "profile": self.profile,
-            "messageId": str(self.state.message_id) if self.state.message_id else "",
+            "messageCount": len(self.state.message_ids),
+            "messageIds": [str(value) for value in self.state.message_ids.values()],
         }
 
     async def channel(self) -> discord.abc.Messageable:
@@ -98,19 +113,22 @@ class DiscordTasksSurface:
             raise RuntimeError("tasks_channel_not_messageable")
         return channel
 
-    async def _upsert_message(
+    async def _upsert_task_message(
         self,
         channel: discord.abc.Messageable,
+        key: str,
+        task: Mapping[str, Any],
         *,
-        content: str,
-        view: discord.ui.View,
+        message_id: int,
     ) -> discord.Message:
-        if self.state.message_id and hasattr(channel, "fetch_message"):
+        content = render_task_message(task)
+        view = TaskView(self, key)
+        if message_id and hasattr(channel, "fetch_message"):
             try:
-                message = await channel.fetch_message(self.state.message_id)
+                message = await channel.fetch_message(message_id)
                 return await message.edit(content=content, view=view, allowed_mentions=NO_MENTIONS)
             except (discord.NotFound, discord.HTTPException):
-                LOGGER.info("Tasks message %s missing; recreating", self.state.message_id)
+                LOGGER.info("Task message %s missing; recreating", message_id)
         return await channel.send(content=content, view=view, allowed_mentions=NO_MENTIONS)
 
     def _load_state(self) -> DiscordTasksState:
@@ -119,8 +137,14 @@ class DiscordTasksSurface:
         except (OSError, json.JSONDecodeError):
             return DiscordTasksState()
         try:
+            message_ids = {
+                str(key): int(value)
+                for key, value in dict(raw.get("messageIds") or {}).items()
+                if str(key) and int(value)
+            }
             return DiscordTasksState(
-                message_id=int(raw.get("messageId") or 0),
+                message_ids=message_ids,
+                legacy_message_id=int(raw.get("messageId") or 0),
             )
         except (TypeError, ValueError):
             return DiscordTasksState()
@@ -128,7 +152,7 @@ class DiscordTasksSurface:
     def _save_state(self) -> None:
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
-            "messageId": self.state.message_id,
+            "messageIds": self.state.message_ids,
         }
         temporary = self.state_path.with_suffix(f"{self.state_path.suffix}.tmp")
         temporary.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
@@ -141,41 +165,32 @@ class DiscordTasksSurface:
         except discord.HTTPException:
             LOGGER.info("Could not delete tasks channel message %s", getattr(message, "id", ""))
 
+    async def _delete_message_id(self, channel: discord.abc.Messageable, message_id: int) -> None:
+        if not message_id or not hasattr(channel, "fetch_message"):
+            return
+        try:
+            message = await channel.fetch_message(message_id)
+            await message.delete()
+        except (discord.NotFound, discord.HTTPException):
+            LOGGER.info("Could not delete stale task message %s", message_id)
+
     def _is_own_message(self, message: discord.Message) -> bool:
         user = getattr(self.bot, "user", None)
         return user is not None and int(getattr(message.author, "id", 0)) == int(getattr(user, "id", 0))
 
 
-class TasksView(discord.ui.View):
-    def __init__(self, surface: DiscordTasksSurface, tasks: list[Mapping[str, Any]]) -> None:
+class TaskView(discord.ui.View):
+    def __init__(self, surface: DiscordTasksSurface, key: str) -> None:
         super().__init__(timeout=None)
         self.surface = surface
-        for index, task in enumerate(tasks[:MAX_VISIBLE_TASKS]):
-            key = task_key(task)
-            done = discord.ui.Button(
-                label="Done",
-                style=discord.ButtonStyle.success,
-                custom_id=f"tasks:done:{index}",
-                row=index,
-            )
-            edit = discord.ui.Button(
-                label="Edit",
-                style=discord.ButtonStyle.secondary,
-                custom_id=f"tasks:edit:{index}",
-                row=index,
-                disabled=True,
-            )
-            delete = discord.ui.Button(
-                label="Delete",
-                style=discord.ButtonStyle.danger,
-                custom_id=f"tasks:delete:{index}",
-                row=index,
-            )
-            done.callback = self._complete_callback(key)
-            delete.callback = self._delete_callback(key)
-            self.add_item(done)
-            self.add_item(edit)
-            self.add_item(delete)
+        done = discord.ui.Button(label="Done", style=discord.ButtonStyle.success, custom_id="tasks:done")
+        edit = discord.ui.Button(label="Edit", style=discord.ButtonStyle.secondary, custom_id="tasks:edit", disabled=True)
+        delete = discord.ui.Button(label="Delete", style=discord.ButtonStyle.danger, custom_id="tasks:delete")
+        done.callback = self._complete_callback(key)
+        delete.callback = self._delete_callback(key)
+        self.add_item(done)
+        self.add_item(edit)
+        self.add_item(delete)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if self.surface.policy.allows(interaction.guild_id, interaction.channel_id, interaction.user.id):
@@ -212,16 +227,10 @@ def active_tasks(tasks: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
     return sorted(active, key=lambda item: (str(item.get("due") or "9999-12-31"), str(item.get("summary") or ""), str(item.get("uid") or "")))[:MAX_VISIBLE_TASKS]
 
 
-def render_active_tasks(tasks: list[Mapping[str, Any]]) -> str:
-    lines = ["## Active Tasks"]
-    if not tasks:
-        lines.append("-# No active tasks")
-        return "\n".join(lines)
-    for task in tasks:
-        due = str(task.get("due") or "No due date")
-        title = escape_text(task.get("summary") or "Untitled task")
-        lines.append(f"### {title}")
-        lines.append(f"- due: {escape_text(due)}")
+def render_task_message(task: Mapping[str, Any]) -> str:
+    due = str(task.get("due") or "No due date")
+    title = escape_text(task.get("summary") or "Untitled task")
+    lines = [f"### {title}", f"- due: {escape_text(due)}"]
     return "\n".join(lines)[:1990]
 
 
