@@ -5,6 +5,7 @@ from .paperless import (
     PaperlessConfig,
     PaperlessDocumentService,
     PaperlessResult,
+    PaperlessSearchPage,
     PaperlessSearchResult,
 )
 
@@ -13,5 +14,6 @@ __all__ = (
     "PaperlessConfig",
     "PaperlessDocumentService",
     "PaperlessResult",
+    "PaperlessSearchPage",
     "PaperlessSearchResult",
 )

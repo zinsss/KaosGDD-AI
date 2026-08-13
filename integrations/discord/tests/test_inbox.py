@@ -6,9 +6,15 @@ import tempfile
 import unittest
 from unittest.mock import AsyncMock
 
-from kaos_governor.documents import PaperlessConfig, PaperlessDocumentService, PaperlessResult, PaperlessSearchResult
+from kaos_governor.documents import (
+    PaperlessConfig,
+    PaperlessDocumentService,
+    PaperlessResult,
+    PaperlessSearchPage,
+    PaperlessSearchResult,
+)
 from kaos_governor_discord.access import AccessPolicy
-from kaos_governor_discord.inbox import DiscordDocumentInbox, parse_metadata_reply, rejection_message
+from kaos_governor_discord.inbox import DiscordDocumentInbox, parse_metadata_reply, rejection_message, render_paperless_opened
 
 
 class FakePaperless(PaperlessDocumentService):
@@ -36,6 +42,18 @@ class FakePaperless(PaperlessDocumentService):
     def search(self, query, *, limit=5):
         self.searches.append((query, limit))
         return [PaperlessSearchResult(42, "Clinic bill", "2026-08-13", "bill.pdf", "Clinic")]
+
+    def search_page(self, query, *, limit=5):
+        self.searches.append((query, limit))
+        return PaperlessSearchPage(
+            query,
+            (
+                PaperlessSearchResult(42, "Clinic bill", "2026-08-13", "bill.pdf", "Clinic"),
+                PaperlessSearchResult(43, "Clinic receipt", "2026-08-12", "receipt.pdf", "Clinic"),
+            ),
+            13,
+            213,
+        )
 
 
 class FakeAttachment:
@@ -160,11 +178,27 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(await inbox.handle_message(message))  # type: ignore[arg-type]
 
             self.assertEqual(paperless.submitted, [])
-            self.assertEqual(paperless.searches, [("clinic", 5)])
+            self.assertEqual(paperless.searches, [("clinic", 25)])
             message.delete.assert_awaited_once()
-            self.assertIn("Paperless search", self.channel.sent[0][0])
-            self.assertIn("Clinic bill", self.channel.sent[0][0])
+            self.assertIn("Searched..", self.channel.sent[0][0])
+            self.assertIn("## clinic", self.channel.sent[0][0])
+            self.assertIn("13 results in 213 documents", self.channel.sent[0][0])
+            self.assertIn("view", self.channel.sent[0][1])
             self.assertEqual(message.replies, [])
+
+    def test_opened_document_renders_link_and_details(self) -> None:
+        content = render_paperless_opened(
+            "clinic",
+            PaperlessSearchResult(42, "Clinic bill", "2026-08-13T12:30:00Z", "bill.pdf", "Clinic"),
+            public_url="https://paperless.example",
+        )
+
+        self.assertIn("## Documents search", content)
+        self.assertIn("### Clinic bill", content)
+        self.assertIn("https://paperless.example/documents/42/details", content)
+        self.assertIn("2026-08-13", content)
+        self.assertIn("Clinic", content)
+        self.assertIn("bill.pdf", content)
 
     def test_parse_metadata_reply_extracts_title_and_tags(self) -> None:
         self.assertEqual(

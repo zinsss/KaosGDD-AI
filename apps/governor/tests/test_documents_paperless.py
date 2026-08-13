@@ -63,26 +63,56 @@ class PaperlessDocumentServiceTests(unittest.TestCase):
 
     def test_search_documents_uses_paperless_query_endpoint(self) -> None:
         urlopen = mock.Mock(
-            return_value=FakeResponse(
-                body=(
-                    b'{"results":[{"id":42,"title":"Clinic bill","created":"2026-08-13",'
-                    b'"original_file_name":"bill.pdf","correspondent":{"name":"Clinic"}}]}'
-                )
-            )
+            side_effect=[
+                FakeResponse(
+                    body=(
+                        b'{"count":1,"results":[{"id":42,"title":"Clinic bill","created":"2026-08-13",'
+                        b'"original_file_name":"bill.pdf","correspondent":{"name":"Clinic"}}]}'
+                    )
+                ),
+                FakeResponse(body=b'{"count":212,"results":[]}'),
+            ]
         )
         service = PaperlessDocumentService(self.config(), urlopen=urlopen)
 
         results = service.search("clinic bill", limit=5)
 
-        request = urlopen.call_args.args[0]
+        request = urlopen.call_args_list[0].args[0]
         self.assertEqual(request.get_method(), "GET")
         self.assertEqual(request.get_header("Authorization"), "Token not-a-real-token")
         self.assertIn("/api/documents/?", request.full_url)
         self.assertIn("query=clinic+bill", request.full_url)
+        self.assertIn("page_size=5", request.full_url)
         self.assertEqual(results[0].document_id, 42)
         self.assertEqual(results[0].title, "Clinic bill")
         self.assertEqual(results[0].filename, "bill.pdf")
         self.assertEqual(results[0].correspondent, "Clinic")
+        self.assertEqual(service.last_result_count, 1)
+
+    def test_search_page_reports_result_and_total_counts(self) -> None:
+        urlopen = mock.Mock(
+            side_effect=[
+                FakeResponse(
+                    body=(
+                        b'{"count":13,"results":['
+                        b'{"id":42,"title":"Clinic bill","created":"2026-08-13",'
+                        b'"original_file_name":"bill.pdf","correspondent":{"name":"Clinic"}},'
+                        b'{"id":43,"title":"Clinic receipt","created":"2026-08-12",'
+                        b'"original_file_name":"receipt.pdf","correspondent_name":"Clinic"}]}'
+                    )
+                ),
+                FakeResponse(body=b'{"count":213,"results":[]}'),
+            ]
+        )
+        service = PaperlessDocumentService(self.config(), urlopen=urlopen)
+
+        page = service.search_page("clinic", limit=25)
+
+        self.assertEqual(page.query, "clinic")
+        self.assertEqual(page.result_count, 13)
+        self.assertEqual(page.total_count, 213)
+        self.assertEqual(len(page.results), 2)
+        self.assertEqual(service.status()["lastResultCount"], 13)
 
     def test_rejects_non_pdf_and_oversize_before_network(self) -> None:
         urlopen = mock.Mock()

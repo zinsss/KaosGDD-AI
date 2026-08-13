@@ -10,7 +10,12 @@ import re
 from typing import Any
 
 import discord
-from kaos_governor.documents import DocumentIntakeError, PaperlessDocumentService
+from kaos_governor.documents import (
+    DocumentIntakeError,
+    PaperlessDocumentService,
+    PaperlessSearchPage,
+    PaperlessSearchResult,
+)
 
 from .access import AccessPolicy
 from .fax import safe_filename
@@ -107,7 +112,7 @@ class DiscordDocumentInbox:
             if result["duplicate"]:
                 self.duplicate_count += 1
                 await message.reply(
-                    f"## Paperless inbox\n- {escape_text(result['filename'])}: already submitted",
+                    f"## Documents\n- {escape_text(result['filename'])}: already submitted",
                     mention_author=False,
                     allowed_mentions=NO_MENTIONS,
                 )
@@ -126,7 +131,7 @@ class DiscordDocumentInbox:
             self.rejected_count += 1
             self.last_error = str(exc)
             await message.reply(
-                f"## Paperless inbox\n- {escape_text(attachment.filename)}: {escape_text(rejection_message(exc))}",
+                f"## Documents\n- {escape_text(attachment.filename)}: {escape_text(rejection_message(exc))}",
                 mention_author=False,
                 allowed_mentions=NO_MENTIONS,
             )
@@ -279,12 +284,12 @@ class DiscordDocumentInbox:
 
     async def _handle_search(self, message: discord.Message, query: str) -> None:
         try:
-            results = await asyncio.to_thread(self.paperless.search, query, limit=5)
+            page = await asyncio.to_thread(self.paperless.search_page, query, limit=25)
         except DocumentIntakeError as exc:
             self.rejected_count += 1
             self.last_error = exc.code
             await message.reply(
-                f"Paperless search rejected: {escape_text(rejection_message(exc))}",
+                f"Documents search rejected: {escape_text(rejection_message(exc))}",
                 mention_author=False,
                 allowed_mentions=NO_MENTIONS,
             )
@@ -294,14 +299,23 @@ class DiscordDocumentInbox:
             self.last_error = "internal_error"
             LOGGER.exception("Unexpected Paperless search failure")
             await message.reply(
-                "Paperless search rejected: internal_error",
+                "Documents search rejected: internal_error",
                 mention_author=False,
                 allowed_mentions=NO_MENTIONS,
             )
             return
         await self._delete_message(message)
+        content = render_paperless_search_summary(page)
+        view = (
+            PaperlessSearchView(page, self.policy, public_url=self.paperless.config.public_url)
+            if len(page.results) > 1
+            else None
+        )
+        if len(page.results) == 1:
+            content = render_paperless_opened(page.query, page.results[0], public_url=self.paperless.config.public_url)
         await message.channel.send(
-            render_paperless_search(query, results, public_url=self.paperless.config.public_url),
+            content,
+            view=view,
             allowed_mentions=NO_MENTIONS,
         )
         self.last_error = ""
@@ -337,7 +351,7 @@ class DiscordDocumentInbox:
             self.rejected_count += 1
             self.last_error = str(exc)
             await message.reply(
-                f"Paperless import failed: {escape_text(rejection_message(exc))}",
+                f"Documents import failed: {escape_text(rejection_message(exc))}",
                 mention_author=False,
                 allowed_mentions=NO_MENTIONS,
             )
@@ -508,7 +522,7 @@ class InboxMenuView(discord.ui.View):
         pending = self.inbox.state.pending.get(self.source_id)
         if pending is None:
             await interaction.response.edit_message(
-                content="## Paperless inbox\nThis item is no longer pending.",
+                content="## Documents\nThis item is no longer pending.",
                 view=InboxClosedView(),
                 allowed_mentions=NO_MENTIONS,
             )
@@ -523,7 +537,7 @@ class InboxMenuView(discord.ui.View):
         pending = self.inbox.state.pending.get(self.source_id)
         if pending is None:
             await interaction.response.edit_message(
-                content="## Paperless inbox\nThis item is no longer pending.",
+                content="## Documents\nThis item is no longer pending.",
                 view=InboxClosedView(),
                 allowed_mentions=NO_MENTIONS,
             )
@@ -540,7 +554,7 @@ class InboxMenuView(discord.ui.View):
             self.inbox.rejected_count += 1
             self.inbox.last_error = str(exc)
             await interaction.followup.send(
-                f"Paperless import failed: {escape_text(rejection_message(exc))}",
+                f"Documents import failed: {escape_text(rejection_message(exc))}",
                 ephemeral=True,
                 allowed_mentions=NO_MENTIONS,
             )
@@ -548,7 +562,7 @@ class InboxMenuView(discord.ui.View):
     async def _close(self, interaction: discord.Interaction) -> None:
         await self.inbox.close_pending(self.source_id)
         await interaction.response.edit_message(
-            content="## Paperless inbox\nClosed.",
+            content="## Documents\nClosed.",
             view=InboxClosedView(),
             allowed_mentions=NO_MENTIONS,
         )
@@ -563,7 +577,7 @@ class InboxClosedView(discord.ui.View):
 def render_pending_message(filename: str) -> str:
     return "\n".join(
         (
-            "## Paperless inbox",
+            "## Documents",
             f"### {escape_text(filename)}",
             "Choose how to process this document.",
         )
@@ -573,7 +587,7 @@ def render_pending_message(filename: str) -> str:
 def render_metadata_message(filename: str) -> str:
     return "\n".join(
         (
-            "## Paperless inbox",
+            "## Documents",
             f"### {escape_text(filename)}",
             "Reply to this message with:",
             "```md",
@@ -586,7 +600,7 @@ def render_metadata_message(filename: str) -> str:
 
 def render_submitted_message(record: InboxRecord) -> str:
     task = f" `{escape_text(record.task_id)}`" if record.task_id else ""
-    lines = ["## Paperless inbox", f"- {escape_text(record.filename)}: submitted{task}"]
+    lines = ["## Documents", f"- {escape_text(record.filename)}: submitted{task}"]
     if record.title:
         lines.append(f"- title: {escape_text(record.title)}")
     if record.tags:
@@ -594,33 +608,122 @@ def render_submitted_message(record: InboxRecord) -> str:
     return "\n".join(lines)[:1990]
 
 
-def render_paperless_search(query: str, results: object, *, public_url: str = "") -> str:
-    lines = [f"## Paperless search · {escape_text(query or '..')}"]
-    rendered = 0
-    base = public_url.rstrip("/")
-    for result in results if isinstance(results, list | tuple) else ():
-        title = escape_text(getattr(result, "title", "") or "Untitled document")
-        document_id = int(getattr(result, "document_id", 0) or 0)
-        link = f" <{base}/documents/{document_id}/details>" if base and document_id else ""
-        lines.append(f"### {title}{link}")
-        details = []
-        created = str(getattr(result, "created", "") or "")[:10]
-        filename = escape_text(getattr(result, "filename", "") or "")
-        correspondent = escape_text(getattr(result, "correspondent", "") or "")
-        if created:
-            details.append(created)
-        if correspondent:
-            details.append(correspondent)
-        if filename:
-            details.append(filename)
-        if details:
-            lines.append("- " + " · ".join(details))
-        rendered += 1
-        if rendered >= 5:
-            break
-    if rendered == 0:
+class PaperlessSearchView(discord.ui.View):
+    def __init__(self, page: PaperlessSearchPage, policy: AccessPolicy, *, public_url: str = "") -> None:
+        super().__init__(timeout=600)
+        self.page = page
+        self.policy = policy
+        self.public_url = public_url
+        self.add_item(PaperlessSearchSelect(page, public_url=public_url))
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if self.policy.allows(interaction.guild_id, interaction.channel_id, interaction.user.id):
+            return True
+        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+
+class PaperlessSearchSelect(discord.ui.Select):
+    def __init__(self, page: PaperlessSearchPage, *, public_url: str = "") -> None:
+        options = [
+            discord.SelectOption(
+                label=paperless_option_label(result),
+                description=paperless_option_description(result),
+                value=str(index),
+            )
+            for index, result in enumerate(page.results[:25])
+        ]
+        super().__init__(
+            placeholder="Open document",
+            min_values=1,
+            max_values=1,
+            options=options,
+            custom_id="paperless-search:open",
+        )
+        self.page = page
+        self.public_url = public_url
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        try:
+            index = int(self.values[0])
+            result = self.page.results[index]
+        except (IndexError, TypeError, ValueError):
+            await interaction.response.send_message(
+                "Document selection expired.",
+                ephemeral=True,
+                allowed_mentions=NO_MENTIONS,
+            )
+            return
+        await interaction.response.edit_message(
+            content=render_paperless_opened(self.page.query, result, public_url=self.public_url),
+            view=None,
+            allowed_mentions=NO_MENTIONS,
+        )
+
+
+def render_paperless_search_summary(page: PaperlessSearchPage) -> str:
+    lines = [
+        "Searched..",
+        f"## {escape_text(page.query or '..')}",
+        f"{page.result_count} results in {page.total_count} documents",
+    ]
+    if not page.results:
         lines.append("- No matching documents.")
+    elif page.result_count > len(page.results):
+        lines.append(f"- Showing first {len(page.results)} results.")
     return "\n".join(lines)[:1990]
+
+
+def render_paperless_opened(query: str, result: PaperlessSearchResult, *, public_url: str = "") -> str:
+    lines = [f"## Documents search · {escape_text(query or '..')}"]
+    title = escape_text(result.title or "Untitled document")
+    lines.append(f"### {title}")
+    link = paperless_document_link(result, public_url)
+    if link:
+        lines.append(f"- Open: <{link}>")
+    details = []
+    created = str(result.created or "")[:10]
+    filename = escape_text(result.filename or "")
+    correspondent = escape_text(result.correspondent or "")
+    if created:
+        details.append(created)
+    if correspondent:
+        details.append(correspondent)
+    if filename:
+        details.append(filename)
+    if details:
+        lines.append("- " + " · ".join(details))
+    return "\n".join(lines)[:1990]
+
+
+def render_paperless_search(query: str, results: object, *, public_url: str = "") -> str:
+    normalized_results = tuple(results if isinstance(results, list | tuple) else ())
+    page = PaperlessSearchPage(str(query or ""), normalized_results, len(normalized_results), len(normalized_results))
+    if len(page.results) == 1:
+        return render_paperless_opened(page.query, page.results[0], public_url=public_url)
+    return render_paperless_search_summary(page)
+
+
+def paperless_option_label(result: PaperlessSearchResult) -> str:
+    return compact_select_text(result.title or result.filename or f"Document {result.document_id}", 100)
+
+
+def paperless_option_description(result: PaperlessSearchResult) -> str:
+    details = [str(result.created or "")[:10], result.correspondent, result.filename]
+    return compact_select_text(" · ".join(item for item in details if item), 100)
+
+
+def paperless_document_link(result: PaperlessSearchResult, public_url: str) -> str:
+    base = public_url.rstrip("/")
+    document_id = int(result.document_id or 0)
+    return f"{base}/documents/{document_id}/details" if base and document_id else ""
+
+
+def compact_select_text(value: object, limit: int) -> str:
+    text = " ".join(str(value or "").split())
+    if not text:
+        text = "Document"
+    return text if len(text) <= limit else text[: limit - 3].rstrip() + "..."
 
 
 def metadata_instruction() -> str:

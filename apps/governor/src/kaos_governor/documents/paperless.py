@@ -87,6 +87,22 @@ class PaperlessSearchResult:
         }
 
 
+@dataclass(frozen=True)
+class PaperlessSearchPage:
+    query: str
+    results: tuple[PaperlessSearchResult, ...]
+    result_count: int
+    total_count: int
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "query": self.query,
+            "results": [result.as_dict() for result in self.results],
+            "resultCount": self.result_count,
+            "totalCount": self.total_count,
+        }
+
+
 class PaperlessDocumentService:
     def __init__(
         self,
@@ -103,35 +119,22 @@ class PaperlessDocumentService:
         self.last_result_count = 0
 
     def search(self, query: object, *, limit: int = 5) -> list[PaperlessSearchResult]:
+        return list(self.search_page(query, limit=limit).results)
+
+    def search_page(self, query: object, *, limit: int = 5) -> PaperlessSearchPage:
         if not self.config.enabled:
             raise DocumentIntakeError("paperless_not_configured")
         normalized = normalize_search_query(query)
         if not normalized:
             raise DocumentIntakeError("paperless_query_required")
-        if limit <= 0 or limit > 20:
+        if limit <= 0 or limit > 25:
             raise DocumentIntakeError("paperless_limit_invalid")
-        query_string = urllib.parse.urlencode(
-            {
-                "query": normalized,
-                "page_size": str(limit),
-                "ordering": "-created",
-            }
-        )
-        request = urllib.request.Request(
-            f"{self.config.base_url.rstrip('/')}/api/documents/?{query_string}",
-            method="GET",
-            headers={
-                "Authorization": f"Token {self.config.api_token}",
-                "Accept": "application/json",
-                "User-Agent": self.config.user_agent,
-            },
-        )
         try:
-            with self._urlopen(request, timeout=self.config.timeout_seconds) as response:
-                body = response.read()
-            if response.status < 200 or response.status >= 300:
-                raise DocumentIntakeError(f"paperless_http_{response.status}")
-            results = [paperless_search_result(item) for item in decode_results(body)][:limit]
+            payload = self._request_documents({"query": normalized, "page_size": str(limit), "ordering": "-created"})
+            results = tuple(paperless_search_result(item) for item in decode_results_payload(payload))[:limit]
+            result_count = result_count_from_payload(payload, len(results))
+            total_payload = self._request_documents({"page_size": "1"})
+            total_count = result_count_from_payload(total_payload, 0)
         except urllib.error.HTTPError as exc:
             self.last_error = f"paperless_http_{exc.code}"
             raise DocumentIntakeError(self.last_error) from exc
@@ -139,9 +142,9 @@ class PaperlessDocumentService:
             self.last_error = "paperless_request_failed"
             raise DocumentIntakeError(self.last_error) from exc
         self.last_search_at = _now()
-        self.last_result_count = len(results)
+        self.last_result_count = result_count
         self.last_error = ""
-        return results
+        return PaperlessSearchPage(normalized, results, result_count, total_count)
 
     def submit_pdf(
         self,
@@ -274,6 +277,23 @@ class PaperlessDocumentService:
                 except (TypeError, ValueError):
                     return 0
         return 0
+
+    def _request_documents(self, query: Mapping[str, str]) -> Mapping[str, object]:
+        query_string = urllib.parse.urlencode(query)
+        request = urllib.request.Request(
+            f"{self.config.base_url.rstrip('/')}/api/documents/?{query_string}",
+            method="GET",
+            headers={
+                "Authorization": f"Token {self.config.api_token}",
+                "Accept": "application/json",
+                "User-Agent": self.config.user_agent,
+            },
+        )
+        with self._urlopen(request, timeout=self.config.timeout_seconds) as response:
+            body = response.read()
+        if response.status < 200 or response.status >= 300:
+            raise DocumentIntakeError(f"paperless_http_{response.status}")
+        return decode_payload(body)
 
     def status(self) -> dict[str, object]:
         return {
@@ -414,14 +434,31 @@ def decode_resource_id(body: bytes) -> int:
 
 
 def decode_results(body: bytes) -> list[Mapping[str, object]]:
+    return decode_results_payload(decode_payload(body))
+
+
+def decode_payload(body: bytes) -> Mapping[str, object]:
     try:
         decoded = json.loads(body.decode("utf-8", errors="replace"))
     except json.JSONDecodeError:
-        return []
+        return {}
+    return decoded if isinstance(decoded, Mapping) else {"results": decoded}
+
+
+def decode_results_payload(decoded: Mapping[str, object]) -> list[Mapping[str, object]]:
     raw_results = decoded.get("results") if isinstance(decoded, Mapping) else decoded
     if not isinstance(raw_results, list):
         return []
     return [item for item in raw_results if isinstance(item, Mapping)]
+
+
+def result_count_from_payload(payload: Mapping[str, object], fallback: int) -> int:
+    value = payload.get("count")
+    try:
+        count = int(value)
+    except (TypeError, ValueError):
+        return fallback
+    return count if count >= 0 else fallback
 
 
 def clean_tag_name(value: str) -> str:
