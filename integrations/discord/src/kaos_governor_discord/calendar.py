@@ -291,6 +291,11 @@ def month_markers(bootstrap: Mapping[str, Any]) -> list[MonthDayMarkers]:
             "tasks": 0,
         }
     )
+    for weather in _items(bootstrap, "weather"):
+        value = _item_date(weather, "date")
+        if value is None:
+            continue
+        values[value]["weather"] = weather_marker(weather)
     for event in _items(bootstrap, "events"):
         value = _item_date(event, "startDate")
         if value is None:
@@ -371,6 +376,35 @@ def agenda_owner_suffix(collection: Mapping[str, Any]) -> str:
         return ""
     label = escape_text(collection.get("ownerLabel") or "GDD_ZiN")
     return f" · ***{label}***"
+
+
+def weather_marker(weather: Mapping[str, Any]) -> str:
+    explicit = str(weather.get("emoji") or weather.get("icon") or "").strip()
+    if explicit:
+        return explicit[:2]
+    raw = str(
+        weather.get("condition")
+        or weather.get("summary")
+        or weather.get("weather")
+        or weather.get("code")
+        or ""
+    ).strip()
+    if not raw:
+        return ""
+    value = raw.lower()
+    if any(token in value for token in ("thunder", "storm", "lightning", "번개", "천둥")):
+        return "⚡"
+    if any(token in value for token in ("snow", "sleet", "ice", "눈")):
+        return "❄"
+    if any(token in value for token in ("rain", "shower", "drizzle", "비")):
+        return "☂"
+    if any(token in value for token in ("fog", "mist", "haze", "smoke", "안개")):
+        return "≋"
+    if any(token in value for token in ("cloud", "overcast", "흐림", "구름")):
+        return "☁"
+    if any(token in value for token in ("clear", "sun", "맑음", "sunny")):
+        return "☀"
+    return raw[:2]
 
 
 def _items(bootstrap: Mapping[str, Any], name: str) -> list[Mapping[str, Any]]:

@@ -17,6 +17,7 @@ from kaos_governor_discord.calendar import (
     add_months,
     month_markers,
     render_agenda,
+    weather_marker,
 )
 
 
@@ -53,6 +54,9 @@ BOOTSTRAP = {
             "publicHoliday": True,
             "categories": [],
         },
+    ],
+    "weather": [
+        {"date": "2026-08-13", "condition": "cloudy"},
     ],
     "tasks": [
         {"summary": "Claim review", "due": "2026-08-13", "status": "NEEDS-ACTION"},
@@ -134,7 +138,15 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(markers[date(2026, 8, 13)].family_events, 1)
         self.assertEqual(markers[date(2026, 8, 13)].zin_events, 1)
         self.assertEqual(markers[date(2026, 8, 13)].tasks, 1)
+        self.assertEqual(markers[date(2026, 8, 13)].weather, "☁")
         self.assertTrue(markers[date(2026, 8, 15)].public_holiday)
+
+    def test_weather_marker_uses_emoji_or_simple_condition_symbol(self) -> None:
+        self.assertEqual(weather_marker({"emoji": "☀", "condition": "rain"}), "☀")
+        self.assertEqual(weather_marker({"condition": "rain shower"}), "☂")
+        self.assertEqual(weather_marker({"summary": "snow"}), "❄")
+        self.assertEqual(weather_marker({"weather": "clear"}), "☀")
+        self.assertEqual(weather_marker({"code": "fog"}), "≋")
 
     def test_agenda_renders_upcoming_or_single_day_content(self) -> None:
         content = render_agenda(BOOTSTRAP, days=[date(2026, 8, 13)], title="Agenda · 2026.08.13")
