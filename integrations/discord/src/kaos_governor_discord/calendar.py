@@ -429,10 +429,9 @@ def weather_agenda_line(weather: Mapping[str, Any]) -> str:
     for item in weather.get("dayparts", []) if isinstance(weather.get("dayparts"), list) else []:
         if not isinstance(item, Mapping):
             continue
-        label = weather_daypart_label(item.get("label"))
         marker = weather_marker(item)
-        if label and marker:
-            parts.append(f"{label}{marker}")
+        if marker:
+            parts.append(marker)
     if not parts:
         marker = weather_marker(weather)
         if marker:
@@ -440,28 +439,15 @@ def weather_agenda_line(weather: Mapping[str, Any]) -> str:
     temperature = weather_temperature_range(weather)
     if not parts and not temperature:
         return ""
-    suffix = f" {temperature}" if temperature else ""
-    return f"- {' '.join(parts)}{suffix}"
-
-
-def weather_daypart_label(value: object) -> str:
-    label = str(value or "").strip().lower()
-    if label.startswith("m"):
-        return "M"
-    if label.startswith("a"):
-        return "A"
-    if label.startswith("e"):
-        return "E"
-    if label.startswith("n"):
-        return "N"
-    return ""
+    suffix = f"  {temperature}" if temperature else ""
+    return f"{' > '.join(parts)}{suffix}"
 
 
 def weather_temperature_range(weather: Mapping[str, Any]) -> str:
     low = compact_temperature(weather.get("minTemp"))
     high = compact_temperature(weather.get("maxTemp"))
     if low and high:
-        return f"({low} - {high}'c)"
+        return f"{low}-{high}℃"
     return ""
 
 
@@ -491,17 +477,17 @@ def weather_marker(weather: Mapping[str, Any]) -> str:
         return ""
     value = raw.lower()
     if any(token in value for token in ("⛈", "thunder", "storm", "lightning", "번개", "천둥")):
-        return "⚡"
+        return "⛈️"
     if any(token in value for token in ("❄", "snow", "sleet", "ice", "눈")):
-        return "❄"
+        return "🌨️"
     if any(token in value for token in ("🌧", "☔", "rain", "shower", "drizzle", "비")):
-        return "☂"
+        return "🌧️"
     if any(token in value for token in ("🌫", "fog", "mist", "haze", "smoke", "안개")):
-        return "≋"
+        return "🌫️"
     if any(token in value for token in ("☁", "🌤", "⛅", "cloud", "overcast", "흐림", "구름")):
-        return "☁"
+        return "☁️"
     if any(token in value for token in ("☀", "clear", "sun", "맑음", "sunny")):
-        return "☀"
+        return "☀️"
     return raw[:2]
 
 
