@@ -79,14 +79,16 @@ install_state_directories() {
     "${root}/data/kaosgdd-ai/governor/discord-calendar" \
     "${root}/data/kaosgdd-ai/governor/discord-tasks" \
     "${root}/data/kaosgdd-ai/governor/discord-supplies" \
-    "${root}/data/kaosgdd-ai/governor/discord-inbox" 2>/dev/null; then
+    "${root}/data/kaosgdd-ai/governor/discord-inbox" \
+    "${root}/data/kaosgdd-ai/governor/discord-system" 2>/dev/null; then
     chmod 0770 \
       "${root}/data/kaosgdd-ai/governor/mail" \
       "${root}/data/kaosgdd-ai/governor/fax" \
       "${root}/data/kaosgdd-ai/governor/discord-calendar" \
       "${root}/data/kaosgdd-ai/governor/discord-tasks" \
       "${root}/data/kaosgdd-ai/governor/discord-supplies" \
-      "${root}/data/kaosgdd-ai/governor/discord-inbox"
+      "${root}/data/kaosgdd-ai/governor/discord-inbox" \
+      "${root}/data/kaosgdd-ai/governor/discord-system"
     return
   fi
   require_command sudo
@@ -96,7 +98,8 @@ install_state_directories() {
     "${root}/data/kaosgdd-ai/governor/discord-calendar" \
     "${root}/data/kaosgdd-ai/governor/discord-tasks" \
     "${root}/data/kaosgdd-ai/governor/discord-supplies" \
-    "${root}/data/kaosgdd-ai/governor/discord-inbox"
+    "${root}/data/kaosgdd-ai/governor/discord-inbox" \
+    "${root}/data/kaosgdd-ai/governor/discord-system"
 }
 
 setup() {

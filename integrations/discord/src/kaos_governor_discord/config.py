@@ -91,6 +91,9 @@ class Settings:
     inbox_enabled: bool
     inbox_channel_id: int | None
     inbox_state_path: Path
+    service_status_enabled: bool
+    service_status_channel_id: int | None
+    service_status_state_path: Path
     startup_notification: bool
     health_host: str
     health_port: int
@@ -228,6 +231,24 @@ class Settings:
             source.get("DISCORD_INBOX_STATE_PATH", "/data/discord-inbox/state.json").strip()
             or "/data/discord-inbox/state.json"
         )
+        service_status_enabled = _boolean(source, "DISCORD_SERVICE_STATUS_ENABLED")
+        raw_service_status_channel = source.get("DISCORD_SERVICE_STATUS_CHANNEL_ID", "").strip()
+        service_status_channel_id = (
+            _positive_int(raw_service_status_channel, "DISCORD_SERVICE_STATUS_CHANNEL_ID")
+            if raw_service_status_channel
+            else system_channel_id
+        )
+        if service_status_enabled and service_status_channel_id is None:
+            raise ConfigurationError(
+                "DISCORD_SERVICE_STATUS_CHANNEL_ID or DISCORD_SYSTEM_CHANNEL_ID is required "
+                "when DISCORD_SERVICE_STATUS_ENABLED=true"
+            )
+        if service_status_channel_id is not None and service_status_channel_id not in allowed_channels:
+            raise ConfigurationError("DISCORD_SERVICE_STATUS_CHANNEL_ID must be in DISCORD_ALLOWED_CHANNEL_IDS")
+        service_status_state_path = Path(
+            source.get("DISCORD_SERVICE_STATUS_STATE_PATH", "/data/discord-system/status.json").strip()
+            or "/data/discord-system/status.json"
+        )
         health_port = _positive_int(source.get("HEALTH_PORT", "8097"), "HEALTH_PORT")
         if health_port > 65535:
             raise ConfigurationError("HEALTH_PORT must be at most 65535")
@@ -277,6 +298,9 @@ class Settings:
             inbox_enabled=inbox_enabled,
             inbox_channel_id=inbox_channel_id,
             inbox_state_path=inbox_state_path,
+            service_status_enabled=service_status_enabled,
+            service_status_channel_id=service_status_channel_id,
+            service_status_state_path=service_status_state_path,
             startup_notification=_boolean(source, "DISCORD_STARTUP_NOTIFICATION"),
             health_host=source.get("HEALTH_HOST", "0.0.0.0").strip() or "0.0.0.0",
             health_port=health_port,

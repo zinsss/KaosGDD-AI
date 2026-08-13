@@ -29,6 +29,7 @@ services:
       - ${KAOS_ROOT:-/srv/kaos}/data/kaosgdd-ai/governor/discord-tasks:/data/discord-tasks
       - ${KAOS_ROOT:-/srv/kaos}/data/kaosgdd-ai/governor/discord-supplies:/data/discord-supplies
       - ${KAOS_ROOT:-/srv/kaos}/data/kaosgdd-ai/governor/discord-inbox:/data/discord-inbox
+      - ${KAOS_ROOT:-/srv/kaos}/data/kaosgdd-ai/governor/discord-system:/data/discord-system
     group_add:
       - "${KAOS_HOST_GID:-1000}"
     read_only: true

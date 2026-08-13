@@ -286,6 +286,41 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.paperless_api_token, "not-a-real-token")
         self.assertEqual(settings.paperless_max_attachment_mb, 12)
 
+    def test_service_status_uses_system_channel_by_default(self) -> None:
+        settings = Settings.from_env({**BASE_ENV, "DISCORD_SERVICE_STATUS_ENABLED": "true"})
+
+        self.assertTrue(settings.service_status_enabled)
+        self.assertEqual(settings.service_status_channel_id, 301)
+        self.assertEqual(str(settings.service_status_state_path), "/data/discord-system/status.json")
+
+    def test_service_status_requires_allowed_channel_when_enabled(self) -> None:
+        with self.assertRaises(ConfigurationError):
+            Settings.from_env(
+                {
+                    **BASE_ENV,
+                    "DISCORD_SERVICE_STATUS_ENABLED": "true",
+                    "DISCORD_SYSTEM_CHANNEL_ID": "",
+                }
+            )
+        with self.assertRaises(ConfigurationError):
+            Settings.from_env(
+                {
+                    **BASE_ENV,
+                    "DISCORD_SERVICE_STATUS_ENABLED": "true",
+                    "DISCORD_SERVICE_STATUS_CHANNEL_ID": "999",
+                }
+            )
+        settings = Settings.from_env(
+            {
+                **BASE_ENV,
+                "DISCORD_SERVICE_STATUS_ENABLED": "true",
+                "DISCORD_SERVICE_STATUS_CHANNEL_ID": "300",
+                "DISCORD_SERVICE_STATUS_STATE_PATH": "/tmp/system-status.json",
+            }
+        )
+        self.assertEqual(settings.service_status_channel_id, 300)
+        self.assertEqual(str(settings.service_status_state_path), "/tmp/system-status.json")
+
     def test_memos_search_requires_a_governor_api_token(self) -> None:
         with self.assertRaises(ConfigurationError):
             Settings.from_env({**BASE_ENV, "MEMOS_SEARCH_ENABLED": "true"})

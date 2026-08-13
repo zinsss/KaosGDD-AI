@@ -32,6 +32,7 @@ from .mail import render_mail_summary, safe_attachment_filename
 from .markdown import MarkdownField, MarkdownMessage, NO_MENTIONS
 from .memos import DiscordMemosCapture
 from .organizer import DiscordMailOrganizer
+from .system_status import DiscordServiceStatusSurface
 from .tasks import DiscordTasksSurface
 
 LOGGER = logging.getLogger(__name__)
@@ -221,6 +222,16 @@ class GovernorBot(discord.Client):
             if settings.memos_enabled and settings.memos_channel_id is not None
             else None
         )
+        self.discord_service_status = (
+            DiscordServiceStatusSurface(
+                self,
+                self.policy,
+                channel_id=settings.service_status_channel_id,
+                state_path=settings.service_status_state_path,
+            )
+            if settings.service_status_enabled and settings.service_status_channel_id is not None
+            else None
+        )
         self.discord_fax = (
             DiscordFaxTransport(
                 self,
@@ -268,6 +279,7 @@ class GovernorBot(discord.Client):
                         f"Supplies surface: {'enabled' if self.discord_supplies is not None else 'disabled'}",
                         f"Memos capture: {'enabled' if self.discord_memos is not None else 'disabled'}",
                         f"Document inbox: {'enabled' if self.discord_inbox is not None else 'disabled'}",
+                        f"Service status: {'enabled' if self.discord_service_status is not None else 'disabled'}",
                     ),
                     footer="Private status visible only to you",
                 ).render(),
@@ -442,6 +454,11 @@ class GovernorBot(discord.Client):
                 LOGGER.info("Restored %d Paperless inbox prompts", restored)
             except Exception:
                 LOGGER.exception("Failed to restore Discord inbox prompts")
+        if self.discord_service_status is not None:
+            try:
+                await self.discord_service_status.ensure_message()
+            except Exception:
+                LOGGER.exception("Failed to ensure Discord service status message")
         if self.settings.startup_notification and not self._startup_announced and self.settings.system_channel_id:
             self._startup_announced = True
             try:
@@ -510,6 +527,11 @@ class GovernorBot(discord.Client):
             ),
             "memosCapture": self.discord_memos.status() if self.discord_memos is not None else {"enabled": False},
             "documentInbox": self.discord_inbox.status() if self.discord_inbox is not None else {"enabled": False},
+            "serviceStatus": (
+                self.discord_service_status.status()
+                if self.discord_service_status is not None
+                else {"enabled": False}
+            ),
         }
 
     async def _mail_loop(self) -> None:
