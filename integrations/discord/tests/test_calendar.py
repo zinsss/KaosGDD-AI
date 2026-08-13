@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 import tempfile
@@ -17,6 +17,7 @@ from kaos_governor_discord.calendar import (
     add_months,
     month_markers,
     render_agenda,
+    seconds_until_next_midnight,
     visible_month_grid_range,
     weather_agenda_summary,
     weather_by_date,
@@ -302,6 +303,31 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(surface.state.agenda_message_id, agenda_id)
             self.assertIn("2026.09", channel.messages[month_id].edits[-1]["content"])
 
+    async def test_midnight_refresh_resets_to_new_today(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            state_path = Path(temporary) / "calendar.json"
+            channel = FakeChannel()
+            surface = self.make_surface(state_path, channel)
+            surface.state = DiscordCalendarState(
+                CalendarViewState(2026, 9, agenda_mode="day", agenda_date=date(2026, 9, 17)),
+                month_message_id=0,
+                agenda_message_id=0,
+            )
+
+            await surface.ensure_messages(today=date(2026, 8, 31))
+            month_id = surface.state.month_message_id
+            agenda_id = surface.state.agenda_message_id
+            await surface.refresh_for_new_day(today=date(2026, 9, 1))
+
+            self.assertEqual(surface.state.view.visible_year, 2026)
+            self.assertEqual(surface.state.view.visible_month, 9)
+            self.assertEqual(surface.state.view.agenda_mode, "upcoming")
+            self.assertIsNone(surface.state.view.agenda_date)
+            self.assertEqual(surface.state.month_message_id, month_id)
+            self.assertEqual(surface.state.agenda_message_id, agenda_id)
+            self.assertIn("2026.09", channel.messages[month_id].edits[-1]["content"])
+            self.assertIn("Upcoming 7 Days", channel.messages[agenda_id].edits[-1]["content"])
+
     async def test_valid_day_command_updates_month_agenda_and_deletes_user_message(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             surface = self.make_surface(Path(temporary) / "calendar.json")
@@ -356,6 +382,16 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertTrue(handled)
             message.delete.assert_not_awaited()
+
+    def test_seconds_until_next_midnight_uses_local_date_boundary(self) -> None:
+        self.assertEqual(
+            seconds_until_next_midnight(datetime(2026, 8, 13, 23, 59, 30, tzinfo=timezone.utc)),
+            30,
+        )
+        self.assertEqual(
+            seconds_until_next_midnight(datetime(2026, 8, 13, 0, 0, 0, tzinfo=timezone.utc)),
+            24 * 60 * 60,
+        )
 
 
 if __name__ == "__main__":

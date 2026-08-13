@@ -23,7 +23,7 @@ from kaos_governor.memos import MemosConfig, MemosService
 
 from . import __version__
 from .access import AccessPolicy
-from .calendar import DiscordCalendarSurface
+from .calendar import DiscordCalendarSurface, seconds_until_next_midnight
 from .config import Settings
 from .health import HealthServer
 from .inbox import DiscordDocumentInbox
@@ -139,6 +139,7 @@ class GovernorBot(discord.Client):
         self._organizer_task: asyncio.Task | None = None
         self._fax_task: asyncio.Task | None = None
         self._service_status_task: asyncio.Task | None = None
+        self._calendar_midnight_task: asyncio.Task | None = None
         self.discord_calendar = (
             DiscordCalendarSurface(
                 self,
@@ -437,6 +438,11 @@ class GovernorBot(discord.Client):
         if self.discord_calendar is not None:
             try:
                 await self.discord_calendar.ensure_messages()
+                if self._calendar_midnight_task is None:
+                    self._calendar_midnight_task = asyncio.create_task(
+                        self._calendar_midnight_loop(),
+                        name="governor-calendar-midnight",
+                    )
             except Exception:
                 LOGGER.exception("Failed to ensure Discord calendar messages")
         if self.discord_tasks is not None:
@@ -517,6 +523,11 @@ class GovernorBot(discord.Client):
             with suppress(asyncio.CancelledError):
                 await self._service_status_task
             self._service_status_task = None
+        if self._calendar_midnight_task is not None:
+            self._calendar_midnight_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._calendar_midnight_task
+            self._calendar_midnight_task = None
         await self._health.stop()
         await super().close()
 
@@ -595,6 +606,16 @@ class GovernorBot(discord.Client):
                 self.fax_service.record_error(exc)
                 LOGGER.exception("Fax cycle failed")
             await asyncio.sleep(self.fax_service.config.poll_seconds)
+
+    async def _calendar_midnight_loop(self) -> None:
+        if self.discord_calendar is None:
+            return
+        while not self.is_closed():
+            await asyncio.sleep(seconds_until_next_midnight() + 5)
+            try:
+                await self.discord_calendar.refresh_for_new_day()
+            except Exception:
+                LOGGER.exception("Failed to refresh Discord calendar for new day")
 
     async def _service_status_loop(self) -> None:
         if self.discord_service_status is None:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, time as datetime_time, timedelta
 import io
 import json
 import logging
@@ -84,6 +84,15 @@ class DiscordCalendarSurface:
             agenda_message_id=int(agenda_message.id),
         )
         self._save_state()
+
+    async def refresh_for_new_day(self, *, today: date | None = None) -> None:
+        current = today or date.today()
+        self.state = DiscordCalendarState(
+            reset_idle_state(today=current),
+            month_message_id=self.state.month_message_id,
+            agenda_message_id=self.state.agenda_message_id,
+        )
+        await self.ensure_messages(today=current)
 
     async def handle_message(self, message: discord.Message, *, today: date | None = None) -> bool:
         if message.channel.id != self.channel_id:
@@ -304,6 +313,13 @@ def add_months(year: int, month: int, delta: int) -> tuple[int, int]:
     target_month = target_month_index + 1
     calendar_lib.monthrange(target_year, target_month)
     return target_year, target_month
+
+
+def seconds_until_next_midnight(now: datetime | None = None) -> float:
+    current = now or datetime.now().astimezone()
+    tomorrow = current.date() + timedelta(days=1)
+    target = datetime.combine(tomorrow, datetime_time.min, tzinfo=current.tzinfo)
+    return max(0.0, (target - current).total_seconds())
 
 
 def visible_month_grid_range(year: int, month: int) -> tuple[date, date]:
