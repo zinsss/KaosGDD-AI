@@ -255,7 +255,7 @@ def active_tasks(tasks: list[Mapping[str, Any]], *, collection_id: str = "") -> 
 def render_task_message(task: Mapping[str, Any]) -> str:
     due = str(task.get("due") or "No due date")
     title = escape_text(task.get("summary") or "Untitled task")
-    lines = [f"### {title}", f"- due: {escape_text(due)}"]
+    lines = [f"## {title}", f"- due: {escape_text(due)}"]
     return "\n".join(lines)[:1990]
 
 

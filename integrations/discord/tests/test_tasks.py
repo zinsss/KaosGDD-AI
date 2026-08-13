@@ -127,7 +127,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
         content = render_task_message(active[0])
 
         self.assertEqual([item["uid"] for item in active], ["TASK-1"])
-        self.assertIn("### Buy milk", content)
+        self.assertIn("## Buy milk", content)
         self.assertIn("- due: 2026-08-13", content)
         self.assertIn("Buy milk", content)
         self.assertIn("2026-08-13", content)
@@ -162,8 +162,8 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             await surface.ensure_message()
 
             self.assertEqual(len(channel.sent), 2)
-            self.assertIn("### Buy milk", channel.sent[0]["content"])
-            self.assertIn("### Call school", channel.sent[1]["content"])
+            self.assertIn("## Buy milk", channel.sent[0]["content"])
+            self.assertIn("## Call school", channel.sent[1]["content"])
             self.assertIsInstance(channel.sent[0]["view"], TaskView)
             buttons = channel.sent[0]["view"].children
             self.assertEqual([button.label for button in buttons], ["Done", "Edit", "Delete"])
@@ -193,7 +193,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             await surface.ensure_message()
 
             self.assertEqual(len(channel.sent), 1)
-            self.assertIn("### Paper towels", channel.sent[0]["content"])
+            self.assertIn("## Paper towels", channel.sent[0]["content"])
             buttons = channel.sent[0]["view"].children
             self.assertEqual([button.custom_id for button in buttons], ["supplies:done", "supplies:edit", "supplies:delete"])
             self.assertEqual(surface.status()["collectionId"], "zin:supplies")
