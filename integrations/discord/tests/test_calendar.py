@@ -141,6 +141,17 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Claim review", content)
         self.assertNotIn("Old done", content)
 
+    def test_agenda_omits_days_without_events_or_tasks(self) -> None:
+        content = render_agenda(
+            BOOTSTRAP,
+            days=[date(2026, 8, 12), date(2026, 8, 13)],
+            title="Agenda · Upcoming 7 Days",
+        )
+
+        self.assertNotIn("2026.08.12", content)
+        self.assertIn("2026.08.13", content)
+        self.assertNotIn("No items", content)
+
     async def test_ensure_messages_creates_two_persistent_messages_and_state(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             state_path = Path(temporary) / "calendar.json"

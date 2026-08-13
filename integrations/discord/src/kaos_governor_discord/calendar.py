@@ -285,7 +285,6 @@ def render_agenda(bootstrap: Mapping[str, Any], *, days: list[date], title: str)
 
     lines = [f"## {escape_text(title)}"]
     for value in days:
-        lines.append(f"**{value:%Y.%m.%d %a}**")
         day_lines = []
         if events_by_day[value]:
             day_lines.append("Events")
@@ -293,7 +292,10 @@ def render_agenda(bootstrap: Mapping[str, Any], *, days: list[date], title: str)
         if tasks_by_day[value]:
             day_lines.append("Tasks")
             day_lines.extend(tasks_by_day[value][:8])
-        lines.extend(day_lines or ["-# No items"])
+        if not day_lines:
+            continue
+        lines.append(f"**{value:%Y.%m.%d %a}**")
+        lines.extend(day_lines)
     content = "\n".join(lines)
     return content[:1990]
 
