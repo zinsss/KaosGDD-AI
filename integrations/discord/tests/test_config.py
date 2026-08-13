@@ -148,6 +148,42 @@ class SettingsTests(unittest.TestCase):
                 }
             )
 
+    def test_tasks_surface_is_disabled_by_default(self) -> None:
+        settings = Settings.from_env(BASE_ENV)
+        self.assertFalse(settings.tasks_enabled)
+        self.assertIsNone(settings.tasks_channel_id)
+        self.assertEqual(settings.tasks_profile, "main")
+
+    def test_tasks_surface_requires_allowed_channel_when_enabled(self) -> None:
+        with self.assertRaises(ConfigurationError):
+            Settings.from_env({**BASE_ENV, "DISCORD_TASKS_ENABLED": "true"})
+        with self.assertRaises(ConfigurationError):
+            Settings.from_env({**BASE_ENV, "DISCORD_TASKS_ENABLED": "true", "DISCORD_TASKS_CHANNEL_ID": "999"})
+        settings = Settings.from_env(
+            {
+                **BASE_ENV,
+                "DISCORD_TASKS_ENABLED": "true",
+                "DISCORD_TASKS_CHANNEL_ID": "300",
+                "DISCORD_TASKS_PROFILE": "family",
+                "DISCORD_TASKS_STATE_PATH": "/tmp/tasks-state.json",
+            }
+        )
+        self.assertTrue(settings.tasks_enabled)
+        self.assertEqual(settings.tasks_channel_id, 300)
+        self.assertEqual(settings.tasks_profile, "family")
+        self.assertEqual(str(settings.tasks_state_path), "/tmp/tasks-state.json")
+
+    def test_tasks_surface_rejects_unknown_profile(self) -> None:
+        with self.assertRaises(ConfigurationError):
+            Settings.from_env(
+                {
+                    **BASE_ENV,
+                    "DISCORD_TASKS_ENABLED": "true",
+                    "DISCORD_TASKS_CHANNEL_ID": "300",
+                    "DISCORD_TASKS_PROFILE": "clinic",
+                }
+            )
+
     def test_memos_search_requires_a_governor_api_token(self) -> None:
         with self.assertRaises(ConfigurationError):
             Settings.from_env({**BASE_ENV, "MEMOS_SEARCH_ENABLED": "true"})

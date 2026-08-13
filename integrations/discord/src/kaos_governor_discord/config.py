@@ -77,6 +77,10 @@ class Settings:
     calendar_profile: Literal["main", "family"]
     calendar_state_path: Path
     calendar_adapter_url: str
+    tasks_enabled: bool
+    tasks_channel_id: int | None
+    tasks_profile: Literal["main", "family"]
+    tasks_state_path: Path
     startup_notification: bool
     health_host: str
     health_port: int
@@ -161,6 +165,20 @@ class Settings:
             source.get("CALENDAR_ADAPTER_INTERNAL_URL", "http://calendar-adapter:8091").strip()
             or "http://calendar-adapter:8091"
         )
+        tasks_enabled = _boolean(source, "DISCORD_TASKS_ENABLED")
+        raw_tasks_channel = source.get("DISCORD_TASKS_CHANNEL_ID", "").strip()
+        tasks_channel_id = _positive_int(raw_tasks_channel, "DISCORD_TASKS_CHANNEL_ID") if raw_tasks_channel else None
+        if tasks_enabled and tasks_channel_id is None:
+            raise ConfigurationError("DISCORD_TASKS_CHANNEL_ID is required when DISCORD_TASKS_ENABLED=true")
+        if tasks_channel_id is not None and tasks_channel_id not in allowed_channels:
+            raise ConfigurationError("DISCORD_TASKS_CHANNEL_ID must be in DISCORD_ALLOWED_CHANNEL_IDS")
+        tasks_profile = source.get("DISCORD_TASKS_PROFILE", "main").strip().lower() or "main"
+        if tasks_profile not in {"main", "family"}:
+            raise ConfigurationError("DISCORD_TASKS_PROFILE must be main or family")
+        tasks_state_path = Path(
+            source.get("DISCORD_TASKS_STATE_PATH", "/data/discord-tasks/state.json").strip()
+            or "/data/discord-tasks/state.json"
+        )
         health_port = _positive_int(source.get("HEALTH_PORT", "8097"), "HEALTH_PORT")
         if health_port > 65535:
             raise ConfigurationError("HEALTH_PORT must be at most 65535")
@@ -183,6 +201,10 @@ class Settings:
             calendar_profile=calendar_profile,  # type: ignore[arg-type]
             calendar_state_path=calendar_state_path,
             calendar_adapter_url=calendar_adapter_url,
+            tasks_enabled=tasks_enabled,
+            tasks_channel_id=tasks_channel_id,
+            tasks_profile=tasks_profile,  # type: ignore[arg-type]
+            tasks_state_path=tasks_state_path,
             startup_notification=_boolean(source, "DISCORD_STARTUP_NOTIFICATION"),
             health_host=source.get("HEALTH_HOST", "0.0.0.0").strip() or "0.0.0.0",
             health_port=health_port,

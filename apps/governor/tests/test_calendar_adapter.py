@@ -1,3 +1,4 @@
+import json
 import unittest
 from unittest import mock
 import urllib.error
@@ -92,6 +93,22 @@ class CalendarAdapterBoundaryTests(unittest.TestCase):
 
         with self.assertRaisesRegex(adapter.CalendarAdapterError, "calendar_adapter_missing_uid"):
             client.create_task("main", {"uid": "task-1"})
+
+    def test_update_and_delete_task_use_existing_adapter_routes(self) -> None:
+        urlopen = mock.Mock(
+            side_effect=[
+                FakeResponse(status=200, body=b'{"ok":true,"uid":"TASK-1","collection":"zin:tasks"}'),
+                FakeResponse(status=200, body=b'{"ok":true,"uid":"TASK-1","collection":"zin:tasks"}'),
+            ]
+        )
+        client = adapter.CalendarAdapterClient(self.config(), urlopen=urlopen)
+
+        self.assertEqual(client.update_task("main", {"uid": "TASK-1", "title": "Task"})["uid"], "TASK-1")
+        self.assertTrue(client.delete_task("main", "TASK-1", "zin:tasks")["ok"])
+        methods = [call.args[0].get_method() for call in urlopen.call_args_list]
+        bodies = [json.loads(call.args[0].data.decode("utf-8")) for call in urlopen.call_args_list]
+        self.assertEqual(methods, ["PUT", "DELETE"])
+        self.assertEqual(bodies[1], {"uid": "TASK-1", "collectionId": "zin:tasks"})
 
     def test_request_json_raises_adapter_error_body_for_http_error(self) -> None:
         error = urllib.error.HTTPError(
