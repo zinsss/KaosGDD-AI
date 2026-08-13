@@ -8,7 +8,7 @@ RUN PYTHONPATH=/install/lib/python3.12/site-packages python -m pip install --no-
 FROM python:3.12-slim AS runtime
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 RUN apt-get update \
-    && apt-get install --no-install-recommends --yes libtiff-tools \
+    && apt-get install --no-install-recommends --yes fonts-dejavu-core libtiff-tools \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 kaos \
     && useradd --uid 10001 --gid kaos --no-create-home --shell /usr/sbin/nologin kaos

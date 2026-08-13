@@ -9,6 +9,13 @@ from .adapter import (
     route_allowed,
     upstream_url,
 )
+from .discord_view import (
+    CalendarCommand,
+    CalendarViewState,
+    apply_calendar_command,
+    parse_calendar_command,
+    reset_idle_state,
+)
 from .generated import (
     CLAIM_CATEGORY,
     GENERATED_CATEGORY,
@@ -29,22 +36,28 @@ from .generated import (
     market_uid,
     uid_year,
 )
+from .render import MonthDayMarkers, MonthRenderTheme, render_month_png
 
 __all__ = (
     "CalendarAdapterClient",
     "CalendarAdapterConfig",
     "CalendarAdapterError",
+    "CalendarCommand",
+    "CalendarViewState",
     "CLAIM_CATEGORY",
     "GENERATED_CATEGORY",
     "MARKET_CATEGORY",
     "MARKET_DAYS",
     "MARKET_SATURDAY_CATEGORY",
+    "MonthDayMarkers",
+    "MonthRenderTheme",
     "SYSTEM_CATEGORY",
     "GeneratedCalendarSettings",
     "claim_date_for_friday",
     "claim_event",
     "claim_uid",
     "claim_weeks",
+    "apply_calendar_command",
     "desired_events",
     "event_matches",
     "is_market_day",
@@ -53,7 +66,10 @@ __all__ = (
     "market_uid",
     "portal_host",
     "profile_host",
+    "parse_calendar_command",
+    "reset_idle_state",
     "route_allowed",
+    "render_month_png",
     "uid_year",
     "upstream_url",
 )
