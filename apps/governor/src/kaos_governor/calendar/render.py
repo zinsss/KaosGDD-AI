@@ -83,6 +83,7 @@ def render_month_png(
     title_font = _load_font(ImageFont, bold, 54)
     day_font = _load_font(ImageFont, bold, 34)
     small_font = _load_font(ImageFont, bold, 22)
+    marker_font = _load_font(ImageFont, bold, 28)
     nav_font = _load_font(ImageFont, bold, 18)
     weather_font = _load_font(ImageFont, regular, 22)
 
@@ -150,16 +151,16 @@ def render_month_png(
             if in_month and item.tasks:
                 markers_to_draw.append((str(item.tasks), theme.task))
 
-            marker_width = sum(24 if value == "dot" else 30 for value, _color in markers_to_draw)
+            marker_width = sum(28 if value == "dot" else 36 for value, _color in markers_to_draw)
             marker_x = x + cell_width // 2 - marker_width // 2
-            marker_y = y + cell_height - 34
+            marker_y = y + cell_height - 40
             for marker_value, color in markers_to_draw:
                 if marker_value == "dot":
-                    dot(marker_x + 8, marker_y + 13, color, 7)
-                    marker_x += 24
+                    dot(marker_x + 10, marker_y + 17, color, 9)
+                    marker_x += 28
                 else:
-                    text_at(marker_x, marker_y, marker_value, color, small_font)
-                    marker_x += 30
+                    text_at(marker_x, marker_y, marker_value, color, marker_font)
+                    marker_x += 36
 
     output = BytesIO()
     image.save(output, format="PNG")
