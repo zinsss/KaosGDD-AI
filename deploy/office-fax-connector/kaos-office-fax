@@ -22,6 +22,7 @@ setup() {
   mkdir -p "${SECRETS_DIR}"
   if [[ ! -f "${ENV_FILE}" ]]; then
     cp "${DEPLOY_DIR}/.env.example" "${ENV_FILE}"
+    sed -i "s/^FAX_CONNECTOR_HOST_GID=.*/FAX_CONNECTOR_HOST_GID=$(id -g)/" "${ENV_FILE}"
   fi
   [[ -e "${SECRETS_DIR}/fax_connector_token" ]] || : > "${SECRETS_DIR}/fax_connector_token"
   chmod 0640 "${SECRETS_DIR}/fax_connector_token"
@@ -62,9 +63,10 @@ smoke() {
   load_env
   local token
   token=$(tr -d '\r\n' < "${SECRETS_DIR}/fax_connector_token")
+  local address=${FAX_CONNECTOR_BIND_ADDRESS:-127.0.0.1}
   curl --fail --silent --show-error \
     -H "Authorization: Bearer ${token}" \
-    "http://127.0.0.1:${FAX_CONNECTOR_PORT:-8098}/health"
+    "http://${address}:${FAX_CONNECTOR_PORT:-8098}/health"
   printf '\n'
 }
 

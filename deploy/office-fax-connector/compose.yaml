@@ -21,6 +21,8 @@ services:
       - /srv/kaos/data/kaosgdd/brain/fax-outgoing:/data/fax-outgoing
       - /var/spool/hylafax:/integrations/hylafax:ro
       - /srv/kaos/data/kaosgdd-ai/fax-connector:/data/connector
+    group_add:
+      - "${FAX_CONNECTOR_HOST_GID:-1000}"
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
