@@ -167,6 +167,7 @@ class GovernorBot(discord.Client):
                 surface_name="supplies",
                 button_prefix="supplies",
                 collection_id=settings.supplies_collection_id,
+                show_due=False,
             )
             if settings.supplies_enabled and settings.supplies_channel_id is not None
             else None

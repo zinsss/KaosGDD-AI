@@ -188,12 +188,14 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
                 surface_name="supplies",
                 button_prefix="supplies",
                 collection_id="zin:supplies",
+                show_due=False,
             )
 
             await surface.ensure_message()
 
             self.assertEqual(len(channel.sent), 1)
             self.assertIn("## Paper towels", channel.sent[0]["content"])
+            self.assertNotIn("- due:", channel.sent[0]["content"])
             buttons = channel.sent[0]["view"].children
             self.assertEqual([button.custom_id for button in buttons], ["supplies:done", "supplies:edit", "supplies:delete"])
             self.assertEqual(surface.status()["collectionId"], "zin:supplies")

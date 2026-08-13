@@ -37,6 +37,7 @@ class DiscordTasksSurface:
         surface_name: str = "tasks",
         button_prefix: str = "tasks",
         collection_id: str = "",
+        show_due: bool = True,
     ) -> None:
         self.bot = bot
         self.policy = policy
@@ -47,6 +48,7 @@ class DiscordTasksSurface:
         self.surface_name = surface_name
         self.button_prefix = button_prefix
         self.collection_id = collection_id
+        self.show_due = show_due
         self.state = self._load_state()
         self._tasks_by_key: dict[str, dict[str, Any]] = {}
 
@@ -128,7 +130,7 @@ class DiscordTasksSurface:
         *,
         message_id: int,
     ) -> discord.Message:
-        content = render_task_message(task)
+        content = render_task_message(task, show_due=self.show_due)
         view = TaskView(self, key)
         if message_id and hasattr(channel, "fetch_message"):
             try:
@@ -252,10 +254,12 @@ def active_tasks(tasks: list[Mapping[str, Any]], *, collection_id: str = "") -> 
     return sorted(active, key=lambda item: (str(item.get("due") or "9999-12-31"), str(item.get("summary") or ""), str(item.get("uid") or "")))[:MAX_VISIBLE_TASKS]
 
 
-def render_task_message(task: Mapping[str, Any]) -> str:
+def render_task_message(task: Mapping[str, Any], *, show_due: bool = True) -> str:
     due = str(task.get("due") or "No due date")
     title = escape_text(task.get("summary") or "Untitled task")
-    lines = [f"## {title}", f"- due: {escape_text(due)}"]
+    lines = [f"## {title}"]
+    if show_due:
+        lines.append(f"- due: {escape_text(due)}")
     return "\n".join(lines)[:1990]
 
 
