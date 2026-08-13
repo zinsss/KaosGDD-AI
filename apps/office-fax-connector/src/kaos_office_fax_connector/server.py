@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import tempfile
 import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
@@ -226,17 +227,20 @@ def incoming_events(config: ConnectorConfig) -> list[dict[str, Any]]:
 
 def tiff_to_pdf(config: ConnectorConfig, source: Path) -> bytes:
     try:
-        result = subprocess.run(
-            [config.tiff2pdf, str(source)],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=False,
-        )
+        with tempfile.TemporaryDirectory(prefix="kaos-office-fax-") as temporary:
+            output = Path(temporary) / "fax.pdf"
+            result = subprocess.run(
+                [config.tiff2pdf, "-o", str(output), str(source)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            pdf = output.read_bytes() if output.is_file() else b""
     except OSError as exc:
         raise ConnectorError(HTTPStatus.INTERNAL_SERVER_ERROR, "tiff2pdf_failed") from exc
-    if result.returncode != 0 or not result.stdout.startswith(b"%PDF-"):
+    if result.returncode != 0 or not pdf.startswith(b"%PDF-"):
         raise ConnectorError(HTTPStatus.INTERNAL_SERVER_ERROR, "tiff2pdf_failed")
-    return result.stdout
+    return pdf
 
 
 def secret_value(env: Mapping[str, str], name: str) -> str:
