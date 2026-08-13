@@ -9,9 +9,9 @@ import unittest
 from kaos_governor_discord.access import AccessPolicy
 from kaos_governor_discord.system_status import (
     DiscordServiceStatusSurface,
-    SERVICE_ROWS,
+    SERVICES,
     ServiceStatusView,
-    render_status_message,
+    render_service_message,
 )
 
 
@@ -19,10 +19,14 @@ class FakeMessage:
     def __init__(self, message_id):
         self.id = message_id
         self.edits = []
+        self.deleted = False
 
     async def edit(self, **kwargs):
         self.edits.append(kwargs)
         return self
+
+    async def delete(self):
+        self.deleted = True
 
 
 class FakeChannel:
@@ -65,7 +69,7 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
         )
 
     def test_service_rows_match_requested_buttons(self) -> None:
-        labels = [item.label for row in SERVICE_ROWS for item in row]
+        labels = [item.label for item in SERVICES]
 
         self.assertEqual(
             labels,
@@ -77,14 +81,15 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
                 "Radicale",
                 "Memos",
                 "Paperless",
-                "SterlingPDF",
+                "StirlingPDF",
                 "Vaultwarden",
                 "Rustdesk",
             ],
         )
-        self.assertEqual([len(row) for row in SERVICE_ROWS], [2, 2, 2, 2, 2])
+        self.assertEqual(SERVICES[0].description, "Brain of KaosGDD on Odroid H4 Ultra")
+        self.assertEqual(SERVICES[1].description, "Rules and controller of KaosGDD")
 
-    async def test_ensure_message_creates_one_status_message(self) -> None:
+    async def test_ensure_message_creates_one_status_message_per_service(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             channel = FakeChannel()
             path = Path(temporary) / "status.json"
@@ -92,30 +97,47 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
 
             await surface.ensure_message()
 
-            self.assertEqual(len(channel.sent), 1)
-            self.assertEqual(channel.sent[0]["content"], render_status_message())
+            self.assertEqual(len(channel.sent), 10)
+            self.assertEqual(channel.sent[0]["content"], render_service_message(SERVICES[0]))
             self.assertIsInstance(channel.sent[0]["view"], ServiceStatusView)
             buttons = channel.sent[0]["view"].children
-            self.assertEqual(len(buttons), 10)
-            self.assertEqual([button.row for button in buttons], [0, 0, 1, 1, 2, 2, 3, 3, 4, 4])
-            self.assertTrue(all(not button.disabled for button in buttons))
+            self.assertEqual(len(buttons), 1)
+            self.assertEqual(buttons[0].label, "Healthy")
+            self.assertFalse(buttons[0].disabled)
             state = json.loads(path.read_text(encoding="utf-8"))
-            self.assertEqual(state["messageId"], 700)
+            self.assertEqual(state["messageIds"]["kaosbrain"], 700)
+            self.assertEqual(state["messageIds"]["rustdesk"], 709)
 
-    async def test_ensure_message_edits_existing_message(self) -> None:
+    async def test_ensure_message_edits_existing_messages(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             channel = FakeChannel()
             message = FakeMessage(777)
             channel.messages[777] = message
+            path = Path(temporary) / "status.json"
+            path.write_text('{"messageIds": {"kaosbrain": 777}}', encoding="utf-8")
+            surface = self.make_surface(path, channel)
+
+            await surface.ensure_message()
+
+            self.assertEqual(len(channel.sent), 9)
+            self.assertEqual(len(message.edits), 1)
+            self.assertEqual(message.edits[0]["content"], render_service_message(SERVICES[0]))
+
+    async def test_ensure_message_deletes_legacy_combined_message(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            legacy = FakeMessage(777)
+            channel.messages[777] = legacy
             path = Path(temporary) / "status.json"
             path.write_text('{"messageId": 777}', encoding="utf-8")
             surface = self.make_surface(path, channel)
 
             await surface.ensure_message()
 
-            self.assertEqual(len(channel.sent), 0)
-            self.assertEqual(len(message.edits), 1)
-            self.assertEqual(message.edits[0]["content"], render_status_message())
+            self.assertTrue(legacy.deleted)
+            state = json.loads(path.read_text(encoding="utf-8"))
+            self.assertNotIn("messageId", state)
+            self.assertEqual(len(state["messageIds"]), 10)
 
     async def test_restart_request_is_recorded_for_future_down_services(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

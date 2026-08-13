@@ -18,36 +18,28 @@ LOGGER = logging.getLogger(__name__)
 class ServiceStatusItem:
     key: str
     label: str
+    description: str
     healthy: bool = True
 
 
 @dataclass
 class DiscordServiceStatusState:
-    message_id: int = 0
+    message_ids: dict[str, int] | None = None
+    legacy_message_id: int = 0
     restart_requests: dict[str, int] | None = None
 
 
-SERVICE_ROWS: tuple[tuple[ServiceStatusItem, ...], ...] = (
-    (
-        ServiceStatusItem("kaosbrain", "KaosBrain"),
-        ServiceStatusItem("kaosgovernor", "KaosGovernor"),
-    ),
-    (
-        ServiceStatusItem("kaospacs", "KaosPACS"),
-        ServiceStatusItem("kaosinj", "KaosInj"),
-    ),
-    (
-        ServiceStatusItem("radicale", "Radicale"),
-        ServiceStatusItem("memos", "Memos"),
-    ),
-    (
-        ServiceStatusItem("paperless", "Paperless"),
-        ServiceStatusItem("stirlingpdf", "SterlingPDF"),
-    ),
-    (
-        ServiceStatusItem("vaultwarden", "Vaultwarden"),
-        ServiceStatusItem("rustdesk", "Rustdesk"),
-    ),
+SERVICES: tuple[ServiceStatusItem, ...] = (
+    ServiceStatusItem("kaosbrain", "KaosBrain", "Brain of KaosGDD on Odroid H4 Ultra"),
+    ServiceStatusItem("kaosgovernor", "KaosGovernor", "Rules and controller of KaosGDD"),
+    ServiceStatusItem("kaospacs", "KaosPACS", "Clinic PACS and DICOM infrastructure"),
+    ServiceStatusItem("kaosinj", "KaosInj", "Clinic injection workflow support"),
+    ServiceStatusItem("radicale", "Radicale", "Calendar and task source of truth"),
+    ServiceStatusItem("memos", "Memos", "Private and family memo source of truth"),
+    ServiceStatusItem("paperless", "Paperless", "Document archive and metadata source of truth"),
+    ServiceStatusItem("stirlingpdf", "StirlingPDF", "PDF utility service"),
+    ServiceStatusItem("vaultwarden", "Vaultwarden", "Password vault service"),
+    ServiceStatusItem("rustdesk", "Rustdesk", "Remote support service"),
 )
 
 
@@ -68,17 +60,22 @@ class DiscordServiceStatusSurface:
 
     async def ensure_message(self) -> None:
         channel = await self.channel()
-        content = render_status_message()
-        view = ServiceStatusView(self)
-        if self.state.message_id and hasattr(channel, "fetch_message"):
-            try:
-                message = await channel.fetch_message(self.state.message_id)
-                await message.edit(content=content, view=view, allowed_mentions=NO_MENTIONS)
-                return
-            except (discord.NotFound, discord.HTTPException):
-                LOGGER.info("Service status message %s missing; recreating", self.state.message_id)
-        message = await channel.send(content=content, view=view, allowed_mentions=NO_MENTIONS)
-        self.state.message_id = int(message.id)
+        if self.state.legacy_message_id:
+            await self._delete_message_id(channel, self.state.legacy_message_id)
+            self.state.legacy_message_id = 0
+        next_message_ids: dict[str, int] = {}
+        current_message_ids = dict(self.state.message_ids or {})
+        for item in SERVICES:
+            message = await self._upsert_service_message(
+                channel,
+                item,
+                message_id=current_message_ids.get(item.key, 0),
+            )
+            next_message_ids[item.key] = int(message.id)
+        for key, message_id in current_message_ids.items():
+            if key not in next_message_ids:
+                await self._delete_message_id(channel, message_id)
+        self.state.message_ids = next_message_ids
         self._save_state()
 
     async def channel(self) -> discord.abc.Messageable:
@@ -111,14 +108,42 @@ class DiscordServiceStatusSurface:
         self._save_state()
 
     def status(self) -> dict[str, object]:
+        message_ids = dict(self.state.message_ids or {})
         return {
             "enabled": True,
             "channelId": str(self.channel_id),
-            "messageId": str(self.state.message_id) if self.state.message_id else "",
-            "serviceCount": sum(len(row) for row in SERVICE_ROWS),
+            "messageCount": len(message_ids),
+            "messageIds": {key: str(value) for key, value in message_ids.items()},
+            "serviceCount": len(SERVICES),
             "dummyHealth": True,
             "restartRequests": dict(self.state.restart_requests or {}),
         }
+
+    async def _upsert_service_message(
+        self,
+        channel: discord.abc.Messageable,
+        item: ServiceStatusItem,
+        *,
+        message_id: int,
+    ) -> discord.Message:
+        content = render_service_message(item)
+        view = ServiceStatusView(self, item)
+        if message_id and hasattr(channel, "fetch_message"):
+            try:
+                message = await channel.fetch_message(message_id)
+                return await message.edit(content=content, view=view, allowed_mentions=NO_MENTIONS)
+            except (discord.NotFound, discord.HTTPException):
+                LOGGER.info("Service status message %s for %s missing; recreating", message_id, item.key)
+        return await channel.send(content=content, view=view, allowed_mentions=NO_MENTIONS)
+
+    async def _delete_message_id(self, channel: discord.abc.Messageable, message_id: int) -> None:
+        if not message_id or not hasattr(channel, "fetch_message"):
+            return
+        try:
+            message = await channel.fetch_message(message_id)
+            await message.delete()
+        except (discord.NotFound, discord.HTTPException):
+            LOGGER.info("Could not delete stale service status message %s", message_id)
 
     def _load_state(self) -> DiscordServiceStatusState:
         try:
@@ -127,7 +152,12 @@ class DiscordServiceStatusSurface:
             return DiscordServiceStatusState()
         try:
             return DiscordServiceStatusState(
-                message_id=int(raw.get("messageId") or 0),
+                message_ids={
+                    str(key): int(value)
+                    for key, value in dict(raw.get("messageIds") or {}).items()
+                    if str(key) and int(value)
+                },
+                legacy_message_id=int(raw.get("messageId") or 0),
                 restart_requests={
                     str(key): int(value)
                     for key, value in dict(raw.get("restartRequests") or {}).items()
@@ -140,7 +170,7 @@ class DiscordServiceStatusSurface:
     def _save_state(self) -> None:
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
-            "messageId": self.state.message_id,
+            "messageIds": dict(self.state.message_ids or {}),
             "restartRequests": dict(self.state.restart_requests or {}),
         }
         temporary = self.state_path.with_suffix(f"{self.state_path.suffix}.tmp")
@@ -150,19 +180,16 @@ class DiscordServiceStatusSurface:
 
 
 class ServiceStatusView(discord.ui.View):
-    def __init__(self, surface: DiscordServiceStatusSurface) -> None:
+    def __init__(self, surface: DiscordServiceStatusSurface, item: ServiceStatusItem) -> None:
         super().__init__(timeout=None)
         self.surface = surface
-        for row_index, row in enumerate(SERVICE_ROWS):
-            for item in row:
-                button = discord.ui.Button(
-                    label=item.label,
-                    style=discord.ButtonStyle.success if item.healthy else discord.ButtonStyle.danger,
-                    custom_id=f"system-status:{item.key}",
-                    row=row_index,
-                )
-                button.callback = self._callback(item)
-                self.add_item(button)
+        button = discord.ui.Button(
+            label="Healthy" if item.healthy else "Restart",
+            style=discord.ButtonStyle.success if item.healthy else discord.ButtonStyle.danger,
+            custom_id=f"system-status:{item.key}",
+        )
+        button.callback = self._callback(item)
+        self.add_item(button)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if self.surface.policy.allows(interaction.guild_id, interaction.channel_id, interaction.user.id):
@@ -180,11 +207,10 @@ class ServiceStatusView(discord.ui.View):
         return callback
 
 
-def render_status_message() -> str:
+def render_service_message(item: ServiceStatusItem) -> str:
     return "\n".join(
         (
-            "## System",
-            "",
-            "Service health board",
+            f"# {item.label}",
+            item.description,
         )
     )
