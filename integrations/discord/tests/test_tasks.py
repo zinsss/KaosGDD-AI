@@ -126,6 +126,8 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
         content = render_active_tasks(active)
 
         self.assertEqual([item["uid"] for item in active], ["TASK-1"])
+        self.assertIn("### Buy milk", content)
+        self.assertIn("- due: 2026-08-13", content)
         self.assertIn("Buy milk", content)
         self.assertIn("2026-08-13", content)
         self.assertNotIn("Done already", content)
@@ -149,21 +151,23 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(channel.sent), 1)
             self.assertIn("Active Tasks", channel.sent[0]["content"])
             self.assertIsInstance(channel.sent[0]["view"], TasksView)
+            buttons = channel.sent[0]["view"].children
+            self.assertEqual([button.label for button in buttons], ["Done", "Edit", "Delete"])
+            self.assertEqual([button.custom_id for button in buttons], ["tasks:done:0", "tasks:edit:0", "tasks:delete:0"])
+            self.assertTrue(buttons[1].disabled)
 
-    async def test_complete_and_delete_selected_tasks_use_adapter_contract(self) -> None:
+    async def test_complete_and_delete_task_buttons_use_adapter_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             adapter = FakeAdapter()
             surface = self.make_surface(Path(temporary) / "tasks.json", adapter=adapter)
 
             await surface.ensure_message()
-            await surface.select_task("zin:tasks|TASK-1")
-            self.assertTrue(await surface.complete_selected())
+            self.assertTrue(await surface.complete_task("zin:tasks|TASK-1"))
             self.assertEqual(adapter.updated[0][1]["status"], "COMPLETED")
 
             adapter.tasks = [{**TASKS[0], "status": "NEEDS-ACTION"}]
             await surface.ensure_message()
-            await surface.select_task("zin:tasks|TASK-1")
-            self.assertTrue(await surface.delete_selected())
+            self.assertTrue(await surface.delete_task("zin:tasks|TASK-1"))
             self.assertEqual(adapter.deleted[0], ("main", "TASK-1", "zin:tasks"))
 
     async def test_user_messages_in_tasks_channel_are_deleted(self) -> None:
