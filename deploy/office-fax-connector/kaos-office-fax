@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DEPLOY_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(cd -- "${DEPLOY_DIR}/../.." && pwd)
+ENV_FILE="${DEPLOY_DIR}/.env"
+SECRETS_DIR="${DEPLOY_DIR}/secrets"
+COMPOSE=(docker compose --project-directory "${DEPLOY_DIR}" --env-file "${ENV_FILE}" -f "${DEPLOY_DIR}/compose.yaml")
+
+die() {
+  printf 'ERROR: %s\n' "$*" >&2
+  exit 1
+}
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || die "$1 is required"
+}
+
+setup() {
+  require_command docker
+  docker compose version >/dev/null 2>&1 || die "Docker Compose v2 is required"
+  mkdir -p "${SECRETS_DIR}"
+  if [[ ! -f "${ENV_FILE}" ]]; then
+    cp "${DEPLOY_DIR}/.env.example" "${ENV_FILE}"
+  fi
+  [[ -e "${SECRETS_DIR}/fax_connector_token" ]] || : > "${SECRETS_DIR}/fax_connector_token"
+  chmod 0640 "${SECRETS_DIR}/fax_connector_token"
+  install -d -m 0770 /srv/kaos/data/kaosgdd-ai/fax-connector
+  printf 'Setup complete. Fill %s and %s/fax_connector_token.\n' "${ENV_FILE}" "${SECRETS_DIR}"
+}
+
+load_env() {
+  [[ -f "${ENV_FILE}" ]] || die "run: ${0} setup"
+  set -a
+  # shellcheck disable=SC1090
+  source "${ENV_FILE}"
+  set +a
+}
+
+preflight() {
+  require_command docker
+  require_command curl
+  load_env
+  [[ -s "${SECRETS_DIR}/fax_connector_token" ]] || die "missing secret: ${SECRETS_DIR}/fax_connector_token"
+  [[ -d /srv/kaos/data/kaosgdd/brain/fax-outgoing ]] || die "missing existing fax bridge queue"
+  [[ -d /var/spool/hylafax ]] || die "missing HylaFAX spool"
+  command -v tiff2pdf >/dev/null 2>&1 || die "tiff2pdf is required on Office Kaos"
+  "${COMPOSE[@]}" config --quiet
+  printf 'Preflight passed.\n'
+}
+
+test_image() {
+  require_command docker
+  docker build --target test \
+    --tag kaos-office-fax-connector:test \
+    --file "${REPO_ROOT}/apps/office-fax-connector/Dockerfile" \
+    "${REPO_ROOT}"
+  docker run --rm kaos-office-fax-connector:test
+}
+
+smoke() {
+  load_env
+  local token
+  token=$(tr -d '\r\n' < "${SECRETS_DIR}/fax_connector_token")
+  curl --fail --silent --show-error \
+    -H "Authorization: Bearer ${token}" \
+    "http://127.0.0.1:${FAX_CONNECTOR_PORT:-8098}/health"
+  printf '\n'
+}
+
+case "${1:-}" in
+  setup) setup ;;
+  preflight) preflight ;;
+  test) test_image ;;
+  up) preflight; "${COMPOSE[@]}" up --detach --build office-fax-connector; smoke ;;
+  down) load_env; "${COMPOSE[@]}" down ;;
+  restart) preflight; "${COMPOSE[@]}" up --detach --build --force-recreate office-fax-connector; smoke ;;
+  logs) load_env; "${COMPOSE[@]}" logs --follow --tail=100 office-fax-connector ;;
+  *) die "usage: ${0} setup|preflight|test|up|down|restart|logs" ;;
+esac

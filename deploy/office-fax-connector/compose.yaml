@@ -1,0 +1,41 @@
+name: kaos-office-fax
+
+services:
+  office-fax-connector:
+    build:
+      context: ../..
+      dockerfile: apps/office-fax-connector/Dockerfile
+      target: runtime
+    image: kaos-office-fax-connector:0.1.0
+    pull_policy: never
+    container_name: kaos-office-fax-connector
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env
+    secrets:
+      - fax_connector_token
+    ports:
+      - "${FAX_CONNECTOR_BIND_ADDRESS:-127.0.0.1}:${FAX_CONNECTOR_PORT:-8098}:8098"
+    volumes:
+      - /srv/kaos/data/kaosgdd/brain/fax-outgoing:/data/fax-outgoing
+      - /var/spool/hylafax:/integrations/hylafax:ro
+      - /srv/kaos/data/kaosgdd-ai/fax-connector:/data/connector
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
+    pids_limit: 80
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "2"
+
+secrets:
+  fax_connector_token:
+    file: ./secrets/fax_connector_token

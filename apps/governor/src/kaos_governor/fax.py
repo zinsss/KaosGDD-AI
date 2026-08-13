@@ -130,6 +130,7 @@ class FaxAction:
     filename: str = ""
     channel_id: int = 0
     message_ids: tuple[int, ...] = ()
+    content_bytes: bytes = b""
 
 
 class OfficeFaxConnectorClient:
@@ -154,6 +155,13 @@ class OfficeFaxConnectorClient:
 
     def job_status(self, job_id: str) -> dict[str, object]:
         return self._request("GET", f"/v1/fax/jobs/{job_id}", None)
+
+    def incoming_events(self) -> list[Mapping[str, object]]:
+        result = self._request("GET", "/v1/fax/incoming", None)
+        events = result.get("events")
+        if not isinstance(events, list):
+            return []
+        return [item for item in events if isinstance(item, Mapping)]
 
     def _request(self, method: str, path: str, payload: dict[str, object] | None) -> dict[str, object]:
         if not self.config.connector_base_url or not self.config.connector_token:
@@ -463,6 +471,8 @@ class FaxService:
             job["error"] = ""
 
     def _incoming_actions(self) -> list[FaxAction]:
+        if self.config.transport == "connector":
+            return self._connector_incoming_actions()
         details = _parse_xferfaxlog(self.config.xferfaxlog)
         now = time.time()
         actions = []
@@ -494,6 +504,38 @@ class FaxService:
                         "archive",
                         path=path,
                         filename=f"{received:%Y-%m-%d-%H:%M}_FROM_{remote}.pdf",
+                    ),
+                )
+            )
+        return actions
+
+    def _connector_incoming_actions(self) -> list[FaxAction]:
+        actions = []
+        for event in self.connector.incoming_events():
+            event_id = str(event.get("eventId") or "")
+            filename = unicodedata.normalize("NFC", str(event.get("filename") or "incoming-fax.pdf"))
+            remote = str(event.get("remote") or "unknown")
+            commid = str(event.get("commid") or "")
+            pages = str(event.get("pages") or "")
+            try:
+                pdf = base64.b64decode(str(event.get("pdfBase64") or ""), validate=True)
+            except ValueError:
+                continue
+            if not event_id or not pdf.startswith(b"%PDF-"):
+                continue
+            body = ["Incoming fax", f"From: {remote}"]
+            if pages:
+                body.append(f"Pages: {pages}")
+            if commid:
+                body.append(f"CommID: {commid}")
+            actions.extend(
+                (
+                    FaxAction(f"incoming:notify:{event_id}", "notification", "\n".join(body)),
+                    FaxAction(
+                        f"incoming:archive:{event_id}",
+                        "archive",
+                        filename=filename,
+                        content_bytes=pdf,
                     ),
                 )
             )

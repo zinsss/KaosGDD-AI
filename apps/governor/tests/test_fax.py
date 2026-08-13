@@ -122,6 +122,9 @@ class FaxTests(unittest.TestCase):
                     "completedAt": "2026-08-13T06:00:00Z",
                 }
 
+            def incoming_events(self):
+                return []
+
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             config = FaxConfig(
@@ -151,6 +154,45 @@ class FaxTests(unittest.TestCase):
         )
         self.assertIn("Fax successfully sent.", actions[2].content)
         self.assertEqual(actions[-1].message_ids, (20, 21))
+
+    def test_connector_transport_delivers_incoming_pdf_events(self) -> None:
+        class Connector:
+            def incoming_events(self):
+                return [
+                    {
+                        "eventId": "fax000000007.tif:4:1",
+                        "filename": "2026-08-12-13:55_FROM_0547337787.pdf",
+                        "remote": "0547337787",
+                        "commid": "000000007",
+                        "pages": "1",
+                        "pdfBase64": "JVBERi1jb252ZXJ0ZWQ=",
+                    }
+                ]
+
+            def job_status(self, job_id):
+                return {"status": "queued"}
+
+            def submit(self, job_id, request, source_metadata):
+                return {"status": "queued"}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = FaxConfig(
+                **{
+                    **self.config(root).__dict__,
+                    "transport": "connector",
+                    "connector_base_url": "http://office-fax:8098",
+                    "connector_token": "not-a-real-token",
+                }
+            )
+            service = FaxService(config, connector=Connector())  # type: ignore[arg-type]
+
+            actions = service.scan_actions()
+
+        self.assertEqual([action.kind for action in actions], ["notification", "archive"])
+        self.assertIn("0547337787", actions[0].content)
+        self.assertEqual(actions[1].filename, "2026-08-12-13:55_FROM_0547337787.pdf")
+        self.assertEqual(actions[1].content_bytes, b"%PDF-converted")
 
     def test_connector_token_can_be_loaded_from_secret_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

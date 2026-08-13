@@ -14,7 +14,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Validate shell scripts
-        run: bash -n deploy/h3-backend/kaos-h3
+        run: |
+          bash -n deploy/h3-backend/kaos-h3
+          bash -n deploy/office-fax-connector/kaos-office-fax
       - name: Render H3 deployment
         run: |
           cp deploy/h3-backend/.env.example deploy/h3-backend/.env
@@ -28,12 +30,28 @@ jobs:
           printf 'test\n' > deploy/h3-backend/secrets/governor_api_token
           : > deploy/h3-backend/secrets/memos_access_token
           : > deploy/h3-backend/secrets/naver_mail_password
+          : > deploy/h3-backend/secrets/paperless_api_token
+          : > deploy/h3-backend/secrets/fax_connector_token
           docker compose \
             --project-directory deploy/h3-backend \
             --env-file deploy/h3-backend/.env \
             -f deploy/h3-backend/compose.yaml \
             config --quiet
+      - name: Render Office fax connector deployment
+        run: |
+          cp deploy/office-fax-connector/.env.example deploy/office-fax-connector/.env
+          mkdir -p deploy/office-fax-connector/secrets
+          printf 'test\n' > deploy/office-fax-connector/secrets/fax_connector_token
+          docker compose \
+            --project-directory deploy/office-fax-connector \
+            --env-file deploy/office-fax-connector/.env \
+            -f deploy/office-fax-connector/compose.yaml \
+            config --quiet
       - name: Build test image
         run: docker build --target test --tag kaosgdd-ai-governor-discord:test --file integrations/discord/Dockerfile .
       - name: Run tests
         run: docker run --rm kaosgdd-ai-governor-discord:test
+      - name: Build Office fax connector test image
+        run: docker build --target test --tag kaos-office-fax-connector:test --file apps/office-fax-connector/Dockerfile .
+      - name: Run Office fax connector tests
+        run: docker run --rm kaos-office-fax-connector:test

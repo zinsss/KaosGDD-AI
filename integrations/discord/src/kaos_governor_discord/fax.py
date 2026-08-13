@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import suppress
+import io
 import logging
 from pathlib import Path
 import re
@@ -78,13 +79,22 @@ class DiscordFaxTransport:
             raise RuntimeError(reason)
 
     async def _archive(self, action: FaxAction) -> None:
-        if action.path is None:
+        if action.path is None and not action.content_bytes:
             raise RuntimeError("fax_archive_path_missing")
         channel = await self._channel(self.archive_channel_id)
         source = action.path
         temporary = None
         try:
-            if source.suffix.lower() in {".tif", ".tiff"}:
+            if action.content_bytes:
+                kwargs = {
+                    "file": discord.File(io.BytesIO(action.content_bytes), filename=safe_filename(action.filename)),
+                    "allowed_mentions": NO_MENTIONS,
+                }
+                if action.content:
+                    kwargs["content"] = action.content
+                await channel.send(**kwargs)
+                return
+            if source is not None and source.suffix.lower() in {".tif", ".tiff"}:
                 temporary = tempfile.TemporaryDirectory(prefix="kaos-discord-fax-")
                 source = Path(temporary.name) / safe_filename(action.filename)
                 await asyncio.to_thread(self._convert_tiff, action.path, source)
