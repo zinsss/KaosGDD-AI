@@ -347,7 +347,6 @@ def render_agenda(bootstrap: Mapping[str, Any], *, days: list[date], title: str)
     for value in days:
         day_lines = []
         if events_by_day[value]:
-            day_lines.append("**Events**")
             day_lines.extend(events_by_day[value][:8])
         if not day_lines:
             continue
@@ -368,9 +367,9 @@ def _collections_by_id(bootstrap: Mapping[str, Any]) -> dict[str, Mapping[str, A
 
 
 def agenda_owner_suffix(collection: Mapping[str, Any]) -> str:
-    if str(collection.get("owner") or "").lower() != "family":
+    if str(collection.get("owner") or "").lower() != "zin":
         return ""
-    label = escape_text(collection.get("ownerLabel") or "Family")
+    label = escape_text(collection.get("ownerLabel") or "GDD_ZiN")
     return f" · ***{label}***"
 
 
