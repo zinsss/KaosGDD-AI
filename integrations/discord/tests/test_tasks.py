@@ -125,10 +125,13 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
     def test_active_tasks_skip_completed_and_render_due_dates(self) -> None:
         active = active_tasks(TASKS)
         content = render_task_message(active[0])
+        completed = render_task_message({**TASKS[0], "status": "COMPLETED"})
 
         self.assertEqual([item["uid"] for item in active], ["TASK-1"])
         self.assertIn("## Buy milk", content)
         self.assertIn("- due: 2026-08-13", content)
+        self.assertIn("## ~~Buy milk~~", completed)
+        self.assertIn("- due: ~~2026-08-13~~", completed)
         self.assertIn("Buy milk", content)
         self.assertIn("2026-08-13", content)
         self.assertNotIn("Done already", content)
@@ -218,19 +221,43 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_complete_and_delete_task_buttons_use_adapter_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
             adapter = FakeAdapter()
-            surface = self.make_surface(Path(temporary) / "tasks.json", adapter=adapter)
+            surface = self.make_surface(Path(temporary) / "tasks.json", channel, adapter)
 
             await surface.ensure_message()
             self.assertTrue(await surface.complete_task("zin:tasks|TASK-1"))
             self.assertEqual(adapter.updated[0][1]["status"], "COMPLETED")
             self.assertEqual(surface.state.message_ids, {})
+            completed_message = channel.messages[700]
+            self.assertFalse(completed_message.deleted)
+            self.assertIn("## ~~Buy milk~~", completed_message.edits[-1]["content"])
+            self.assertIsNone(completed_message.edits[-1]["view"])
 
             adapter.tasks = [{**TASKS[0], "status": "NEEDS-ACTION"}]
             await surface.ensure_message()
             self.assertTrue(await surface.delete_task("zin:tasks|TASK-1"))
             self.assertEqual(adapter.deleted[0], ("main", "TASK-1", "zin:tasks"))
             self.assertEqual(surface.state.message_ids, {})
+
+    async def test_repost_active_messages_moves_active_items_to_channel_bottom(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            tasks = [{**TASKS[0], "uid": "TASK-1"}, {**TASKS[0], "uid": "TASK-3", "summary": "Call school"}]
+            surface = self.make_surface(Path(temporary) / "tasks.json", channel, FakeAdapter(tasks=tasks))
+
+            await surface.ensure_message()
+            first_ids = dict(surface.state.message_ids)
+
+            await surface.repost_active_messages()
+
+            self.assertEqual(len(channel.sent), 4)
+            self.assertTrue(channel.messages[first_ids["zin:tasks|TASK-1"]].deleted)
+            self.assertTrue(channel.messages[first_ids["zin:tasks|TASK-3"]].deleted)
+            self.assertEqual(set(surface.state.message_ids), set(first_ids))
+            self.assertNotEqual(surface.state.message_ids, first_ids)
+            self.assertIn("## Buy milk", channel.sent[2]["content"])
+            self.assertIn("## Call school", channel.sent[3]["content"])
 
     async def test_user_messages_in_tasks_channel_are_deleted(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

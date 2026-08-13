@@ -76,6 +76,14 @@ class DiscordTasksSurface:
         self.state.message_ids = next_message_ids
         self._save_state()
 
+    async def repost_active_messages(self) -> None:
+        channel = await self.channel()
+        for message_id in self.state.message_ids.values():
+            await self._delete_message_id(channel, message_id)
+        self.state.message_ids = {}
+        self._save_state()
+        await self.ensure_message()
+
     async def handle_message(self, message: discord.Message) -> bool:
         if message.channel.id != self.channel_id:
             return False
@@ -90,7 +98,11 @@ class DiscordTasksSurface:
             return False
         payload = task_payload(task, status="COMPLETED")
         await asyncio.to_thread(self.adapter.update_task, self.profile, payload)
-        await self.ensure_message()
+        message_id = self.state.message_ids.pop(key, 0)
+        self._tasks_by_key.pop(key, None)
+        self._save_state()
+        if message_id:
+            await self._mark_message_completed(message_id, {**task, "status": "COMPLETED"})
         return True
 
     async def delete_task(self, key: str) -> bool:
@@ -183,6 +195,20 @@ class DiscordTasksSurface:
         except (discord.NotFound, discord.HTTPException):
             LOGGER.info("Could not delete stale %s message %s", self.surface_name, message_id)
 
+    async def _mark_message_completed(self, message_id: int, task: Mapping[str, Any]) -> None:
+        channel = await self.channel()
+        if not hasattr(channel, "fetch_message"):
+            return
+        try:
+            message = await channel.fetch_message(message_id)
+            await message.edit(
+                content=render_task_message(task, show_due=self.show_due, completed=True),
+                view=None,
+                allowed_mentions=NO_MENTIONS,
+            )
+        except (discord.NotFound, discord.HTTPException):
+            LOGGER.info("Could not mark completed %s message %s", self.surface_name, message_id)
+
     def _is_own_message(self, message: discord.Message) -> bool:
         user = getattr(self.bot, "user", None)
         return user is not None and int(getattr(message.author, "id", 0)) == int(getattr(user, "id", 0))
@@ -254,12 +280,18 @@ def active_tasks(tasks: list[Mapping[str, Any]], *, collection_id: str = "") -> 
     return sorted(active, key=lambda item: (str(item.get("due") or "9999-12-31"), str(item.get("summary") or ""), str(item.get("uid") or "")))[:MAX_VISIBLE_TASKS]
 
 
-def render_task_message(task: Mapping[str, Any], *, show_due: bool = True) -> str:
+def render_task_message(task: Mapping[str, Any], *, show_due: bool = True, completed: bool | None = None) -> str:
     due = str(task.get("due") or "No due date")
     title = escape_text(task.get("summary") or "Untitled task")
+    is_completed = str(task.get("status") or "").upper() == "COMPLETED" if completed is None else completed
+    if is_completed:
+        title = f"~~{title}~~"
     lines = [f"## {title}"]
     if show_due:
-        lines.append(f"- due: {escape_text(due)}")
+        due_text = escape_text(due)
+        if is_completed:
+            due_text = f"~~{due_text}~~"
+        lines.append(f"- due: {due_text}")
     return "\n".join(lines)[:1990]
 
 
