@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import suppress
 import io
 from typing import TYPE_CHECKING
 
@@ -303,8 +304,9 @@ class MailDigestView(RestrictedView):
         )
 
     async def _close(self, interaction: discord.Interaction) -> None:
-        await interaction.response.send_message("Organizer closed.", ephemeral=True)
+        await interaction.response.defer(ephemeral=True)
         await self.coordinator.delete_digest(self.digest_id)
+        await delete_ephemeral_response(interaction)
 
 
 class MailItemActionView(RestrictedView):
@@ -330,7 +332,7 @@ class MailItemActionView(RestrictedView):
         await asyncio.to_thread(self.coordinator.organizer.mark_read, self.digest_id, self.item_id)
         await self.coordinator.delete_item_message(interaction.message.id)
         await self.coordinator.refresh_digest(self.digest_id)
-        await interaction.edit_original_response(content="Marked read in Naver.", view=None)
+        await delete_ephemeral_response(interaction)
         self.stop()
 
     async def _import(self, interaction: discord.Interaction) -> None:
@@ -338,7 +340,7 @@ class MailItemActionView(RestrictedView):
         await self.coordinator.import_item(self.digest_id, self.item_id)
         await self.coordinator.delete_item_message(interaction.message.id)
         await self.coordinator.refresh_digest(self.digest_id)
-        await interaction.edit_original_response(content="Imported to Discord. Naver read state was unchanged.", view=None)
+        await delete_ephemeral_response(interaction)
         self.stop()
 
     async def _delete(self, interaction: discord.Interaction) -> None:
@@ -376,12 +378,13 @@ class MailDeleteConfirmationView(RestrictedView):
         await asyncio.to_thread(self.coordinator.organizer.delete, self.digest_id, self.item_id)
         await self.coordinator.delete_item_message(self.organizer_message_id)
         await self.coordinator.refresh_digest(self.digest_id)
-        await interaction.edit_original_response(content="Moved to Naver Trash.", view=None)
+        await delete_ephemeral_response(interaction)
         self.stop()
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(content="Delete cancelled.", view=None)
+        await interaction.response.defer(ephemeral=True)
+        await delete_ephemeral_response(interaction)
         self.stop()
 
 
@@ -397,7 +400,7 @@ class MailBulkView(RestrictedView):
         await asyncio.to_thread(self.coordinator.organizer.mark_read_all, self.digest_id)
         await self.coordinator.delete_item_messages(digest)
         await self.coordinator.refresh_digest(self.digest_id)
-        await interaction.edit_original_response(content="Digest messages marked read in Naver.", view=None)
+        await delete_ephemeral_response(interaction)
         self.stop()
 
     @discord.ui.button(label="Delete All", style=discord.ButtonStyle.danger)
@@ -413,7 +416,8 @@ class MailBulkView(RestrictedView):
 
     @discord.ui.button(label="Close", style=discord.ButtonStyle.secondary)
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(content="Closed.", view=None)
+        await interaction.response.defer(ephemeral=True)
+        await delete_ephemeral_response(interaction)
         self.stop()
 
 
@@ -429,10 +433,16 @@ class MailDeleteAllConfirmationView(RestrictedView):
         await asyncio.to_thread(self.coordinator.organizer.delete_all, self.digest_id)
         await self.coordinator.delete_item_messages(digest)
         await self.coordinator.refresh_digest(self.digest_id)
-        await interaction.edit_original_response(content="Digest messages moved to Naver Trash.", view=None)
+        await delete_ephemeral_response(interaction)
         self.stop()
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(content="Delete cancelled.", view=None)
+        await interaction.response.defer(ephemeral=True)
+        await delete_ephemeral_response(interaction)
         self.stop()
+
+
+async def delete_ephemeral_response(interaction: discord.Interaction) -> None:
+    with suppress(discord.HTTPException):
+        await interaction.delete_original_response()
