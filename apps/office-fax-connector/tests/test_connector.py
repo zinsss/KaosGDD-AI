@@ -1,6 +1,7 @@
 from http import HTTPStatus
 import base64
 import json
+import stat
 from pathlib import Path
 import tempfile
 import unittest
@@ -49,6 +50,16 @@ class OfficeFaxConnectorTests(unittest.TestCase):
             self.assertEqual(result["status"], "queued")
             self.assertEqual(manifest["pdfPath"], f"jobs/{'a' * 32}/document.pdf")
             self.assertEqual((root / "queue" / "jobs" / ("a" * 32) / "document.pdf").read_bytes(), b"%PDF-test")
+
+    def test_submit_job_creates_bridge_writable_job_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = self.config(root)
+
+            submit_job(config, self.payload())
+
+            job_dir = root / "queue" / "jobs" / ("a" * 32)
+            self.assertEqual(stat.S_IMODE(job_dir.stat().st_mode), 0o2770)
 
     def test_job_status_maps_doneq_to_sent(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

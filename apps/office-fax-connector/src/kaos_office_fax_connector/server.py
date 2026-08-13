@@ -269,7 +269,7 @@ def read_json(path: Path) -> dict[str, Any]:
 
 
 def atomic_bytes(path: Path, value: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_shared_directory(path.parent)
     temporary = path.with_suffix(f"{path.suffix}.tmp")
     temporary.write_bytes(value)
     os.chmod(temporary, 0o660)
@@ -278,6 +278,15 @@ def atomic_bytes(path: Path, value: bytes) -> None:
 
 def atomic_json(path: Path, value: Mapping[str, Any]) -> None:
     atomic_bytes(path, json.dumps(value, indent=2, sort_keys=True).encode("utf-8"))
+
+
+def ensure_shared_directory(path: Path) -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chmod(path, 0o2770)
+    except PermissionError:
+        pass
+    return path
 
 
 def safe_name(value: str) -> str:
