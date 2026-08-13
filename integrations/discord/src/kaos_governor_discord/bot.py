@@ -8,6 +8,7 @@ import time
 
 import discord
 from discord import app_commands
+from kaos_governor.calendar import CalendarAdapterClient, CalendarAdapterConfig
 from kaos_governor.mail import (
     Attachment,
     MailMessage,
@@ -21,6 +22,7 @@ from kaos_governor.memos import MemosConfig, MemosService
 
 from . import __version__
 from .access import AccessPolicy
+from .calendar import DiscordCalendarSurface
 from .config import Settings
 from .health import HealthServer
 from .fax import DiscordFaxTransport, rejection_message
@@ -112,8 +114,8 @@ class GovernorBot(discord.Client):
     def __init__(self, settings: Settings) -> None:
         intents = discord.Intents.none()
         intents.guilds = True
-        intents.guild_messages = settings.fax_message_intake
-        intents.message_content = settings.fax_message_intake
+        intents.guild_messages = settings.fax_message_intake or settings.calendar_enabled
+        intents.message_content = settings.fax_message_intake or settings.calendar_enabled
         super().__init__(intents=intents, allowed_mentions=NO_MENTIONS)
         self.settings = settings
         self.policy = AccessPolicy(settings.guild_id, settings.allowed_user_ids, settings.allowed_channel_ids)
@@ -123,6 +125,18 @@ class GovernorBot(discord.Client):
         self._mail_task: asyncio.Task | None = None
         self._organizer_task: asyncio.Task | None = None
         self._fax_task: asyncio.Task | None = None
+        self.discord_calendar = (
+            DiscordCalendarSurface(
+                self,
+                self.policy,
+                channel_id=settings.calendar_channel_id,
+                profile=settings.calendar_profile,
+                state_path=settings.calendar_state_path,
+                adapter=CalendarAdapterClient(CalendarAdapterConfig(settings.calendar_adapter_url)),
+            )
+            if settings.calendar_enabled and settings.calendar_channel_id is not None
+            else None
+        )
         naver_config = NaverMailConfig.from_env()
         self.mail_poller = NaverMailPoller(naver_config)
         self.mail_organizer = NaverMailOrganizer(MailOrganizerConfig.from_env(), naver_config)
@@ -181,6 +195,7 @@ class GovernorBot(discord.Client):
                         f"Fax: {'enabled' if self.fax_service.config.enabled else 'disabled'}",
                         f"Fax message intake: {'enabled' if self.fax_service.config.message_intake else 'disabled'}",
                         f"Memos search: {'enabled' if self.memos.config.enabled else 'disabled'}",
+                        f"Calendar surface: {'enabled' if self.discord_calendar is not None else 'disabled'}",
                     ),
                     footer="Private status visible only to you",
                 ).render(),
@@ -334,6 +349,11 @@ class GovernorBot(discord.Client):
         if self.discord_fax is not None and self._fax_task is None:
             await self.discord_fax.cycle()
             self._fax_task = asyncio.create_task(self._fax_loop(), name="governor-fax")
+        if self.discord_calendar is not None:
+            try:
+                await self.discord_calendar.ensure_messages()
+            except Exception:
+                LOGGER.exception("Failed to ensure Discord calendar messages")
         if self.settings.startup_notification and not self._startup_announced and self.settings.system_channel_id:
             self._startup_announced = True
             try:
@@ -352,6 +372,8 @@ class GovernorBot(discord.Client):
                 LOGGER.exception("Failed to send startup notification")
 
     async def on_message(self, message: discord.Message) -> None:
+        if self.discord_calendar is not None and await self.discord_calendar.handle_message(message):
+            return
         if self.discord_fax is not None and self.fax_service.config.message_intake:
             await self.discord_fax.handle_message(message)
 
@@ -383,6 +405,9 @@ class GovernorBot(discord.Client):
             "naverMailOrganizer": self.mail_organizer.status(),
             "fax": self.fax_service.status(),
             "memosSearch": self.memos.status(),
+            "calendarSurface": (
+                self.discord_calendar.status() if self.discord_calendar is not None else {"enabled": False}
+            ),
         }
 
     async def _mail_loop(self) -> None:

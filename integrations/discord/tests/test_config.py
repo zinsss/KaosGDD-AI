@@ -108,6 +108,46 @@ class SettingsTests(unittest.TestCase):
         with self.assertRaises(ConfigurationError):
             Settings.from_env({**BASE_ENV, "FAX_DISCORD_MESSAGE_INTAKE": "true"})
 
+    def test_calendar_surface_is_disabled_by_default(self) -> None:
+        settings = Settings.from_env(BASE_ENV)
+        self.assertFalse(settings.calendar_enabled)
+        self.assertIsNone(settings.calendar_channel_id)
+        self.assertEqual(settings.calendar_profile, "main")
+
+    def test_calendar_surface_requires_allowed_channel_when_enabled(self) -> None:
+        with self.assertRaises(ConfigurationError):
+            Settings.from_env({**BASE_ENV, "DISCORD_CALENDAR_ENABLED": "true"})
+        with self.assertRaises(ConfigurationError):
+            Settings.from_env(
+                {**BASE_ENV, "DISCORD_CALENDAR_ENABLED": "true", "DISCORD_CALENDAR_CHANNEL_ID": "999"}
+            )
+        settings = Settings.from_env(
+            {
+                **BASE_ENV,
+                "DISCORD_CALENDAR_ENABLED": "true",
+                "DISCORD_CALENDAR_CHANNEL_ID": "300",
+                "DISCORD_CALENDAR_PROFILE": "family",
+                "DISCORD_CALENDAR_STATE_PATH": "/tmp/calendar-state.json",
+                "CALENDAR_ADAPTER_INTERNAL_URL": "http://calendar-adapter:8091",
+            }
+        )
+        self.assertTrue(settings.calendar_enabled)
+        self.assertEqual(settings.calendar_channel_id, 300)
+        self.assertEqual(settings.calendar_profile, "family")
+        self.assertEqual(str(settings.calendar_state_path), "/tmp/calendar-state.json")
+        self.assertEqual(settings.calendar_adapter_url, "http://calendar-adapter:8091")
+
+    def test_calendar_surface_rejects_unknown_profile(self) -> None:
+        with self.assertRaises(ConfigurationError):
+            Settings.from_env(
+                {
+                    **BASE_ENV,
+                    "DISCORD_CALENDAR_ENABLED": "true",
+                    "DISCORD_CALENDAR_CHANNEL_ID": "300",
+                    "DISCORD_CALENDAR_PROFILE": "clinic",
+                }
+            )
+
     def test_memos_search_requires_a_governor_api_token(self) -> None:
         with self.assertRaises(ConfigurationError):
             Settings.from_env({**BASE_ENV, "MEMOS_SEARCH_ENABLED": "true"})

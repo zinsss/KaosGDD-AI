@@ -73,14 +73,21 @@ install_state_directories() {
   local uid gid
   uid=$(id -u)
   gid=$(id -g)
-  if mkdir -p "${root}/data/kaosgdd-ai/governor/mail" "${root}/data/kaosgdd-ai/governor/fax" 2>/dev/null; then
-    chmod 0770 "${root}/data/kaosgdd-ai/governor/mail" "${root}/data/kaosgdd-ai/governor/fax"
+  if mkdir -p \
+    "${root}/data/kaosgdd-ai/governor/mail" \
+    "${root}/data/kaosgdd-ai/governor/fax" \
+    "${root}/data/kaosgdd-ai/governor/discord-calendar" 2>/dev/null; then
+    chmod 0770 \
+      "${root}/data/kaosgdd-ai/governor/mail" \
+      "${root}/data/kaosgdd-ai/governor/fax" \
+      "${root}/data/kaosgdd-ai/governor/discord-calendar"
     return
   fi
   require_command sudo
   sudo install -d -m 0770 -o "${uid}" -g "${gid}" \
     "${root}/data/kaosgdd-ai/governor/mail" \
-    "${root}/data/kaosgdd-ai/governor/fax"
+    "${root}/data/kaosgdd-ai/governor/fax" \
+    "${root}/data/kaosgdd-ai/governor/discord-calendar"
 }
 
 setup() {
@@ -132,6 +139,10 @@ preflight() {
   fi
   if [[ "${MAIL_ORGANIZER_ENABLED:-false}" == "true" ]]; then
     [[ -n "${MAIL_ORGANIZER_DISCORD_CHANNEL_ID:-}" ]] || die "MAIL_ORGANIZER_DISCORD_CHANNEL_ID is required"
+  fi
+  if [[ "${DISCORD_CALENDAR_ENABLED:-false}" == "true" ]]; then
+    [[ -n "${DISCORD_CALENDAR_CHANNEL_ID:-}" ]] || die "DISCORD_CALENDAR_CHANNEL_ID is required"
+    [[ -n "${CALENDAR_ADAPTER_INTERNAL_URL:-}" ]] || die "CALENDAR_ADAPTER_INTERNAL_URL is required"
   fi
   if [[ "${FAX_DISCORD_ENABLED:-false}" == "true" ]]; then
     die "fax transport is not local to the H3 backend; keep it disabled until the office Fax Connector is deployed"

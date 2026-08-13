@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 from pathlib import Path
-from typing import Mapping
+from typing import Literal, Mapping
 
 
 class ConfigurationError(ValueError):
@@ -72,6 +72,11 @@ class Settings:
     fax_archive_channel_id: int | None
     fax_notification_channel_id: int | None
     fax_message_intake: bool
+    calendar_enabled: bool
+    calendar_channel_id: int | None
+    calendar_profile: Literal["main", "family"]
+    calendar_state_path: Path
+    calendar_adapter_url: str
     startup_notification: bool
     health_host: str
     health_port: int
@@ -136,6 +141,26 @@ class Settings:
         ):
             if channel_id is not None and channel_id not in allowed_channels:
                 raise ConfigurationError(f"{name} must be in DISCORD_ALLOWED_CHANNEL_IDS")
+        calendar_enabled = _boolean(source, "DISCORD_CALENDAR_ENABLED")
+        raw_calendar_channel = source.get("DISCORD_CALENDAR_CHANNEL_ID", "").strip()
+        calendar_channel_id = (
+            _positive_int(raw_calendar_channel, "DISCORD_CALENDAR_CHANNEL_ID") if raw_calendar_channel else None
+        )
+        if calendar_enabled and calendar_channel_id is None:
+            raise ConfigurationError("DISCORD_CALENDAR_CHANNEL_ID is required when DISCORD_CALENDAR_ENABLED=true")
+        if calendar_channel_id is not None and calendar_channel_id not in allowed_channels:
+            raise ConfigurationError("DISCORD_CALENDAR_CHANNEL_ID must be in DISCORD_ALLOWED_CHANNEL_IDS")
+        calendar_profile = source.get("DISCORD_CALENDAR_PROFILE", "main").strip().lower() or "main"
+        if calendar_profile not in {"main", "family"}:
+            raise ConfigurationError("DISCORD_CALENDAR_PROFILE must be main or family")
+        calendar_state_path = Path(
+            source.get("DISCORD_CALENDAR_STATE_PATH", "/data/discord-calendar/state.json").strip()
+            or "/data/discord-calendar/state.json"
+        )
+        calendar_adapter_url = (
+            source.get("CALENDAR_ADAPTER_INTERNAL_URL", "http://calendar-adapter:8091").strip()
+            or "http://calendar-adapter:8091"
+        )
         health_port = _positive_int(source.get("HEALTH_PORT", "8097"), "HEALTH_PORT")
         if health_port > 65535:
             raise ConfigurationError("HEALTH_PORT must be at most 65535")
@@ -153,6 +178,11 @@ class Settings:
             fax_archive_channel_id=fax_archive_channel_id,
             fax_notification_channel_id=fax_notification_channel_id,
             fax_message_intake=fax_message_intake,
+            calendar_enabled=calendar_enabled,
+            calendar_channel_id=calendar_channel_id,
+            calendar_profile=calendar_profile,  # type: ignore[arg-type]
+            calendar_state_path=calendar_state_path,
+            calendar_adapter_url=calendar_adapter_url,
             startup_notification=_boolean(source, "DISCORD_STARTUP_NOTIFICATION"),
             health_host=source.get("HEALTH_HOST", "0.0.0.0").strip() or "0.0.0.0",
             health_port=health_port,
