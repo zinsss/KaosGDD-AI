@@ -20,8 +20,9 @@ class FakeMemos:
 
     def search(self, query, tags, limit):
         self.searches.append((query, tags, limit))
-        memo = Memo("memos/99", "Printer setup notes", ("office",), "created", "updated", "PRIVATE", False)
-        return [MemoSearchResult(memo, "Printer setup notes")]
+        content = "# Rustdesk Settings\n## For Tailscale\n- Relay server: 100.94.208.16\n@everyone"
+        memo = Memo("memos/99", content, ("office",), "created", "updated", "PRIVATE", False)
+        return [MemoSearchResult(memo, "Rustdesk Settings")]
 
 
 class FakeChannel:
@@ -83,8 +84,11 @@ class DiscordMemosCaptureTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(service.created, [])
         self.assertEqual(service.searches, [("printer", None, 5)])
         message.delete.assert_awaited_once()
-        self.assertIn("Memos search", message.channel.sent[0][0][0])
-        self.assertIn("Printer setup notes", message.channel.sent[0][0][0])
+        content = message.channel.sent[0][0][0]
+        self.assertIn("Memos search", content)
+        self.assertIn("# Rustdesk Settings\n## For Tailscale", content)
+        self.assertIn("- Relay server: 100.94.208.16", content)
+        self.assertIn("@\u200beveryone", content)
 
     async def test_other_channels_are_ignored(self) -> None:
         service = FakeMemos()

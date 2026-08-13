@@ -120,10 +120,10 @@ def render_memos_search(query: str, results: object) -> str:
     for result in results if isinstance(results, list | tuple) else ():
         memo = getattr(result, "memo", None)
         name = escape_text(getattr(memo, "name", "") or "memo")
-        snippet = escape_text(getattr(result, "snippet", "") or "")
-        lines.append(f"### {name}")
-        if snippet:
-            lines.append(f"- {snippet[:220]}")
+        content = discord.utils.escape_mentions(str(getattr(memo, "content", "") or ""))
+        lines.append(f"-# {name}")
+        if content.strip():
+            lines.append(content.strip())
         rendered += 1
         if rendered >= 5:
             break
