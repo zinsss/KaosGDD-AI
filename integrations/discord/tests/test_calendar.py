@@ -258,7 +258,7 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
             await surface.ensure_messages(today=date(2026, 8, 13))
 
             self.assertEqual(len(channel.sent), 2)
-            self.assertIn("Calendar", channel.sent[0]["content"])
+            self.assertEqual(channel.sent[0]["content"], "# 2026.08")
             self.assertIn("file", channel.sent[0])
             self.assertIsInstance(channel.sent[0]["view"], CalendarNavigationView)
             self.assertIn("Agenda", channel.sent[1]["content"])

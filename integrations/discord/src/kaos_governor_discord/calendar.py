@@ -184,7 +184,7 @@ class DiscordCalendarSurface:
         await self.ensure_messages(today=current)
 
     def _month_payload(self, bootstrap: Mapping[str, Any], today: date) -> tuple[str, discord.File]:
-        content = f"Calendar · {self.state.view.visible_year}.{self.state.view.visible_month:02d}"
+        content = f"# {self.state.view.visible_year}.{self.state.view.visible_month:02d}"
         png = render_month_png(
             year=self.state.view.visible_year,
             month=self.state.view.visible_month,
