@@ -263,8 +263,8 @@ class GovernorBot(discord.Client):
                 allowed_mentions=NO_MENTIONS,
             )
 
-        @self.tree.command(name="fax-send", description="Send one PDF through the Kaos HylaFAX bridge")
-        @app_commands.describe(destination="Domestic fax number", document="PDF document to send")
+        @self.tree.command(name="fax-send", description="Send one PDF or image through the Kaos HylaFAX bridge")
+        @app_commands.describe(destination="Domestic fax number", document="PDF or image document to send")
         async def fax_send(
             interaction: discord.Interaction,
             destination: str,

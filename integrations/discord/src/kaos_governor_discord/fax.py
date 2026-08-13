@@ -12,6 +12,7 @@ import unicodedata
 
 import discord
 from kaos_governor.fax import FaxAction, FaxError, FaxService, request_from_pdf
+from PIL import Image, UnidentifiedImageError
 
 from .access import AccessPolicy
 from .markdown import NO_MENTIONS
@@ -19,6 +20,7 @@ from .markdown import NO_MENTIONS
 
 LOGGER = logging.getLogger(__name__)
 FAX_COMMAND = re.compile(r"^\s*fax\s*:\s*([+0-9][0-9\s().-]*)\s*$", re.IGNORECASE)
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff", ".bmp"}
 
 
 def safe_filename(value: str) -> str:
@@ -30,13 +32,44 @@ def safe_filename(value: str) -> str:
 def rejection_message(error: Exception) -> str:
     labels = {
         "invalid_domestic_fax_number": "The fax number is invalid.",
-        "pdf_attachment_required": "Only one PDF document can be faxed.",
+        "fax_attachment_required": "Only one PDF or image can be faxed.",
+        "pdf_attachment_required": "Only one PDF or image can be faxed.",
         "pdf_size_invalid": "The PDF is empty or exceeds the configured size limit.",
+        "image_attachment_invalid": "The uploaded image could not be converted to a faxable PDF.",
         "invalid_pdf_signature": "The uploaded document is not a valid PDF.",
-        "reply_to_pdf_required": "Reply directly to one PDF with fax:<number>.",
-        "caption_must_be_fax_colon_number": "Use fax:<number> with the PDF, or reply to it with fax:<number>.",
+        "reply_to_pdf_required": "Reply directly to one PDF or image with fax:<number>.",
+        "caption_must_be_fax_colon_number": "Use fax:<number> with the PDF/image, or reply to it with fax:<number>.",
     }
     return f"Fax request rejected.\n{labels.get(str(error), str(error))}"
+
+
+def faxable_attachment_name(filename: str) -> str:
+    clean = safe_filename(filename)
+    suffix = Path(clean).suffix.lower()
+    if suffix == ".pdf":
+        return clean
+    if suffix in IMAGE_EXTENSIONS:
+        stem = Path(clean).stem.strip(" .-") or "fax"
+        return f"{stem}.pdf"
+    raise FaxError("fax_attachment_required")
+
+
+def image_to_pdf(content: bytes) -> bytes:
+    try:
+        with Image.open(io.BytesIO(content)) as image:
+            image.seek(0)
+            if image.mode in {"RGBA", "LA", "P"}:
+                background = Image.new("RGB", image.size, "white")
+                converted = image.convert("RGBA")
+                background.paste(converted, mask=converted.getchannel("A"))
+                page = background
+            else:
+                page = image.convert("RGB")
+            output = io.BytesIO()
+            page.save(output, format="PDF", resolution=200.0)
+            return output.getvalue()
+    except (OSError, UnidentifiedImageError, ValueError) as exc:
+        raise FaxError("image_attachment_invalid") from exc
 
 
 class DiscordFaxTransport:
@@ -153,16 +186,19 @@ class DiscordFaxTransport:
         source_id: str,
         metadata: dict[str, object],
     ) -> tuple[dict, bool]:
-        if not attachment.filename.lower().endswith(".pdf"):
-            raise FaxError("pdf_attachment_required")
+        filename = faxable_attachment_name(attachment.filename)
         if attachment.size <= 0 or attachment.size > self.service.config.max_pdf_bytes:
             raise FaxError("pdf_size_invalid")
-        pdf = await attachment.read(use_cached=False)
+        content = await attachment.read(use_cached=False)
+        if Path(filename).suffix.lower() == ".pdf" and safe_filename(attachment.filename).lower().endswith(".pdf"):
+            pdf = content
+        else:
+            pdf = await asyncio.to_thread(image_to_pdf, content)
         request = request_from_pdf(
             destination=destination,
             sender=sender,
             source_id=source_id,
-            filename=attachment.filename,
+            filename=filename,
             pdf=pdf,
             max_bytes=self.service.config.max_pdf_bytes,
         )
@@ -190,11 +226,11 @@ class DiscordFaxTransport:
         attachment = message.attachments[0] if len(message.attachments) == 1 else None
         destination = ""
         if attachment is not None:
-            if not attachment.filename.lower().endswith(".pdf"):
+            if Path(safe_filename(attachment.filename)).suffix.lower() not in {".pdf", *IMAGE_EXTENSIONS}:
                 return False
             if not message.content.strip():
                 prompt = await message.reply(
-                    "Reply directly to this PDF with fax:<number>.",
+                    "Reply directly to this PDF/image with fax:<number>.",
                     mention_author=False,
                     allowed_mentions=NO_MENTIONS,
                 )
