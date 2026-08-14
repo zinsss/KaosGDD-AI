@@ -281,13 +281,13 @@ def active_tasks(tasks: list[Mapping[str, Any]], *, collection_id: str = "") -> 
 
 
 def render_task_message(task: Mapping[str, Any], *, show_due: bool = True, completed: bool | None = None) -> str:
-    due = str(task.get("due") or "No due date")
+    due = str(task.get("due") or "")
     title = escape_text(task.get("summary") or "Untitled task")
     is_completed = str(task.get("status") or "").upper() == "COMPLETED" if completed is None else completed
     if is_completed:
         title = f"~~{title}~~"
     lines = [f"## {title}"]
-    if show_due:
+    if show_due and due:
         due_text = escape_text(due)
         if is_completed:
             due_text = f"~~{due_text}~~"

@@ -136,6 +136,14 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("2026-08-13", content)
         self.assertNotIn("Done already", content)
 
+    def test_task_message_omits_due_line_when_due_date_is_missing(self) -> None:
+        content = render_task_message({**TASKS[0], "due": ""})
+        completed = render_task_message({**TASKS[0], "due": "", "status": "COMPLETED"})
+
+        self.assertEqual(content, "## Buy milk")
+        self.assertEqual(completed, "## ~~Buy milk~~")
+        self.assertNotIn("No due date", content)
+
     def test_active_tasks_can_filter_to_supplies_collection(self) -> None:
         active = active_tasks(
             [
