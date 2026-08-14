@@ -9,12 +9,16 @@ import unittest
 
 from kaos_governor_discord.access import AccessPolicy
 from kaos_governor_discord.system_status import (
+    EMBED_COLOR_DOWN,
+    EMBED_COLOR_HEALTHY,
+    EMBED_COLOR_UNKNOWN,
     DiscordServiceStatusSurface,
     SERVICES,
     ServiceProbeResult,
     ServiceStatusView,
     check_service,
     check_tcp,
+    render_service_embed,
     render_service_message,
 )
 
@@ -103,13 +107,10 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
             await surface.ensure_message()
 
             self.assertEqual(len(channel.sent), 10)
-            self.assertIn("# KaosBrain", channel.sent[0]["content"])
-            self.assertIn("Unknown", channel.sent[0]["content"])
-            self.assertIsInstance(channel.sent[0]["view"], ServiceStatusView)
-            buttons = channel.sent[0]["view"].children
-            self.assertEqual(len(buttons), 1)
-            self.assertEqual(buttons[0].label, "Unknown")
-            self.assertFalse(buttons[0].disabled)
+            self.assertEqual(channel.sent[0]["content"], "")
+            self.assertEqual(channel.sent[0]["embed"].title, "KaosBrain")
+            self.assertIn("Unknown", channel.sent[0]["embed"].description)
+            self.assertIsNone(channel.sent[0]["view"])
             state = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(state["messageIds"]["kaosbrain"], 700)
             self.assertEqual(state["messageIds"]["rustdesk"], 709)
@@ -127,8 +128,9 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(len(channel.sent), 9)
             self.assertEqual(len(message.edits), 1)
-            self.assertIn("# KaosBrain", message.edits[0]["content"])
-            self.assertIn("Unknown", message.edits[0]["content"])
+            self.assertEqual(message.edits[0]["content"], "")
+            self.assertEqual(message.edits[0]["embed"].title, "KaosBrain")
+            self.assertIn("Unknown", message.edits[0]["embed"].description)
 
     async def test_ensure_message_deletes_legacy_combined_message(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -161,10 +163,43 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
             SERVICES[1],
             ServiceProbeResult("kaosgovernor", "healthy", "09:15:00", "HTTP 200"),
         )
+        embed = render_service_embed(
+            SERVICES[1],
+            ServiceProbeResult("kaosgovernor", "healthy", "09:15:00", "HTTP 200"),
+        )
 
-        self.assertIn("# KaosGovernor", content)
-        self.assertIn("Healthy · 09:15:00", content)
-        self.assertIn("HTTP 200", content)
+        self.assertEqual(content, "")
+        self.assertEqual(embed.title, "KaosGovernor")
+        self.assertIn("Healthy", embed.description)
+        self.assertIn("09:15:00", embed.description)
+        self.assertIn("HTTP 200", embed.description)
+        self.assertEqual(embed.color.value, EMBED_COLOR_HEALTHY)
+
+    def test_service_embed_colors_match_state(self) -> None:
+        self.assertEqual(
+            render_service_embed(SERVICES[1], ServiceProbeResult("kaosgovernor", "healthy", "", "")).color.value,
+            EMBED_COLOR_HEALTHY,
+        )
+        self.assertEqual(
+            render_service_embed(SERVICES[1], ServiceProbeResult("kaosgovernor", "down", "", "")).color.value,
+            EMBED_COLOR_DOWN,
+        )
+        self.assertEqual(
+            render_service_embed(SERVICES[1], ServiceProbeResult("kaosgovernor", "unknown", "", "")).color.value,
+            EMBED_COLOR_UNKNOWN,
+        )
+
+    def test_service_view_only_contains_restart_button(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            surface = self.make_surface(Path(temporary) / "status.json")
+            view = ServiceStatusView(
+                surface,
+                SERVICES[1],
+                ServiceProbeResult("kaosgovernor", "down", "09:15:00", "Connection refused"),
+            )
+
+            self.assertEqual(len(view.children), 1)
+            self.assertEqual(view.children[0].label, "Restart")
 
     def test_unconfigured_service_is_unknown(self) -> None:
         result = check_service(

@@ -21,6 +21,11 @@ from .markdown import NO_MENTIONS
 LOGGER = logging.getLogger(__name__)
 
 
+EMBED_COLOR_HEALTHY = 0xA3BE8C
+EMBED_COLOR_DOWN = 0xBF616A
+EMBED_COLOR_UNKNOWN = 0x4C566A
+
+
 @dataclass(frozen=True)
 class ServiceStatusItem:
     key: str
@@ -181,14 +186,15 @@ class DiscordServiceStatusSurface:
         message_id: int,
     ) -> discord.Message:
         content = render_service_message(item, result)
-        view = ServiceStatusView(self, item, result)
+        embed = render_service_embed(item, result)
+        view = ServiceStatusView(self, item, result) if result.state == "down" else None
         if message_id and hasattr(channel, "fetch_message"):
             try:
                 message = await channel.fetch_message(message_id)
-                return await message.edit(content=content, view=view, allowed_mentions=NO_MENTIONS)
+                return await message.edit(content=content, embed=embed, view=view, allowed_mentions=NO_MENTIONS)
             except (discord.NotFound, discord.HTTPException):
                 LOGGER.info("Service status message %s for %s missing; recreating", message_id, item.key)
-        return await channel.send(content=content, view=view, allowed_mentions=NO_MENTIONS)
+        return await channel.send(content=content, embed=embed, view=view, allowed_mentions=NO_MENTIONS)
 
     async def _delete_message_id(self, channel: discord.abc.Messageable, message_id: int) -> None:
         if not message_id or not hasattr(channel, "fetch_message"):
@@ -242,10 +248,9 @@ class ServiceStatusView(discord.ui.View):
     ) -> None:
         super().__init__(timeout=None)
         self.surface = surface
-        label, style = button_label_and_style(result)
         button = discord.ui.Button(
-            label=label,
-            style=style,
+            label="Restart",
+            style=discord.ButtonStyle.danger,
             custom_id=f"system-status:{item.key}",
         )
         button.callback = self._callback(item)
@@ -268,25 +273,28 @@ class ServiceStatusView(discord.ui.View):
 
 
 def render_service_message(item: ServiceStatusItem, result: ServiceProbeResult | None = None) -> str:
+    return ""
+
+
+def render_service_embed(item: ServiceStatusItem, result: ServiceProbeResult | None = None) -> discord.Embed:
     result = result or ServiceProbeResult(item.key, "unknown", "", "No health probe configured.")
     status = status_label(result)
     checked = f" · {result.checked_at}" if result.checked_at else ""
-    detail = f"\n-# {result.detail}" if result.detail else ""
-    return "\n".join(
-        (
-            f"# {item.label}",
-            item.description,
-            f"{status}{checked}{detail}",
-        )
+    detail = f"\n{result.detail}" if result.detail else ""
+    embed = discord.Embed(
+        title=item.label,
+        description=f"{item.description}\n\n**{status}**{checked}{detail}",
+        color=service_embed_color(result),
     )
+    return embed
 
 
-def button_label_and_style(result: ServiceProbeResult) -> tuple[str, discord.ButtonStyle]:
+def service_embed_color(result: ServiceProbeResult) -> int:
     if result.state == "healthy":
-        return "Healthy", discord.ButtonStyle.success
+        return EMBED_COLOR_HEALTHY
     if result.state == "down":
-        return "Restart", discord.ButtonStyle.danger
-    return "Unknown", discord.ButtonStyle.secondary
+        return EMBED_COLOR_DOWN
+    return EMBED_COLOR_UNKNOWN
 
 
 def status_label(result: ServiceProbeResult) -> str:
