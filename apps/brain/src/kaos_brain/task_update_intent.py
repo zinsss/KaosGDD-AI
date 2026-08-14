@@ -30,6 +30,13 @@ class TaskDueUpdateRequest:
     due_time: str = "10:00"
 
 
+@dataclass(frozen=True)
+class TaskCreateRequest:
+    title: str
+    due_date: str
+    due_time: str = "10:00"
+
+
 def parse_task_due_update(content: str, *, today: date) -> TaskDueUpdateRequest | None:
     text = " ".join(content.strip().split())
     if not text or not any(marker in text for marker in ("편집", "변경", "바꿔", "수정")):
@@ -43,6 +50,24 @@ def parse_task_due_update(content: str, *, today: date) -> TaskDueUpdateRequest 
     if not title:
         return None
     return TaskDueUpdateRequest(task_title=title, due_date=due_date.isoformat())
+
+
+def parse_task_create(content: str, *, today: date) -> TaskCreateRequest | None:
+    text = " ".join(content.strip().split())
+    if not text or any(marker in text for marker in ("편집", "변경", "바꿔", "수정")):
+        return None
+    if not any(marker in text for marker in ("해야", "할 일", "해야돼", "해야되", "해야 해", "필요")):
+        return None
+    parsed = _extract_due_date(text, today=today)
+    if parsed is None:
+        return None
+    phrase, due_date = parsed
+    title = text.replace(phrase, " ", 1)
+    title = re.sub(r"(까지로|까지는|까지)", " ", title, count=1)
+    title = _clean_create_title(title)
+    if not title:
+        return None
+    return TaskCreateRequest(title=title, due_date=due_date.isoformat())
 
 
 def _extract_due_date(text: str, *, today: date) -> tuple[str, date] | None:
@@ -70,4 +95,13 @@ def _clean_title(value: str) -> str:
     title = value.strip(" .,")
     for suffix in ("마감일을", "마감일", "기한을", "기한", "due date", "due"):
         title = title.removesuffix(suffix).strip(" .,")
+    return title
+
+
+def _clean_create_title(value: str) -> str:
+    title = value.strip(" .,")
+    for suffix in ("해야돼", "해야되", "해야 해", "해야", "할 일", "필요"):
+        title = title.removesuffix(suffix).strip(" .,")
+    for prefix in ("까지", "까지로", "까지는"):
+        title = title.removeprefix(prefix).strip(" .,")
     return title

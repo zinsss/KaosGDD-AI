@@ -27,6 +27,7 @@ class FakeCalendarAdapter:
             {"uid": "TASK-3", "summary": "Done", "due": "2026-08-14", "status": "COMPLETED"},
         ]
         self.updated = []
+        self.created = []
 
     def bootstrap(self, profile):
         self.bootstrap_calls.append(profile)
@@ -79,6 +80,21 @@ class FakeCalendarAdapter:
                 }
                 return {"uid": task["uid"]}
         return {"uid": payload.get("uid", "")}
+
+    def create_task(self, profile, payload):
+        self.created.append((profile, dict(payload)))
+        uid = f"TASK-CREATED-{len(self.created)}"
+        self.tasks.append(
+            {
+                "uid": uid,
+                "summary": payload.get("title", ""),
+                "due": payload.get("dueDate", ""),
+                "dueTime": payload.get("dueTime", ""),
+                "status": "NEEDS-ACTION",
+                "collection": payload.get("collectionId", "zin:tasks"),
+            }
+        )
+        return {"uid": uid}
 
 
 class FakeMemos:
@@ -301,6 +317,81 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response.status, 409)
         self.assertEqual((await response.json())["error"], "task_match_ambiguous")
+
+    async def test_task_create_proposal_requires_confirmation_before_write(self) -> None:
+        response = await self.client.post(
+            "/tools/tasks/create/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-create-1",
+                "profile": "main",
+                "title": "Call school",
+                "dueDate": "2026-08-17",
+                "dueTime": "10:00",
+            },
+        )
+
+        self.assertEqual(response.status, 201)
+        payload = await response.json()
+        self.assertTrue(payload["confirmationId"].startswith("conf_"))
+        self.assertEqual(payload["task"]["title"], "Call school")
+        self.assertEqual(payload["task"]["due"], "2026-08-17")
+        self.assertEqual(self.calendar.created, [])
+
+    async def test_task_create_approval_creates_calendar_task(self) -> None:
+        proposal = await self.client.post(
+            "/tools/tasks/create/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-create-2",
+                "profile": "main",
+                "title": "Call school",
+                "dueDate": "2026-08-17",
+                "dueTime": "10:00",
+            },
+        )
+        confirmation_id = (await proposal.json())["confirmationId"]
+
+        response = await self.client.post(
+            f"/tools/confirmations/{confirmation_id}/approve",
+            headers=self.headers(),
+            json={"actorId": "994579996960104529"},
+        )
+
+        self.assertEqual(response.status, 200)
+        payload = await response.json()
+        self.assertEqual(payload["status"], "completed")
+        self.assertEqual(payload["task"]["uid"], "TASK-CREATED-1")
+        self.assertEqual(self.calendar.created[0][0], "main")
+        self.assertEqual(self.calendar.created[0][1]["title"], "Call school")
+        self.assertEqual(self.calendar.created[0][1]["dueDate"], "2026-08-17")
+
+    async def test_task_create_approval_rejects_wrong_actor(self) -> None:
+        proposal = await self.client.post(
+            "/tools/tasks/create/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-create-3",
+                "profile": "main",
+                "title": "Call school",
+                "dueDate": "2026-08-17",
+                "dueTime": "10:00",
+            },
+        )
+        confirmation_id = (await proposal.json())["confirmationId"]
+
+        response = await self.client.post(
+            f"/tools/confirmations/{confirmation_id}/approve",
+            headers=self.headers(),
+            json={"actorId": "111"},
+        )
+
+        self.assertEqual(response.status, 400)
+        self.assertEqual((await response.json())["error"], "confirmation_actor_mismatch")
+        self.assertEqual(self.calendar.created, [])
 
 
 if __name__ == "__main__":

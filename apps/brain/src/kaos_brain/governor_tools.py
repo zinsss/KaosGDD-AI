@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from .task_update_intent import TaskDueUpdateRequest
+from .task_update_intent import TaskCreateRequest, TaskDueUpdateRequest
 from .tool_intent import ToolKind, ToolRequest
 
 
@@ -48,6 +48,25 @@ class GovernorToolClient:
                 "idempotencyKey": idempotency_key,
                 "profile": self.config.profile,
                 "taskTitle": request.task_title,
+                "dueDate": request.due_date,
+                "dueTime": request.due_time,
+            },
+        )
+
+    async def propose_task_create(
+        self,
+        request: TaskCreateRequest,
+        *,
+        actor_id: int,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        return await self._post(
+            "/tools/tasks/create/proposals",
+            {
+                "actorId": str(actor_id),
+                "idempotencyKey": idempotency_key,
+                "profile": self.config.profile,
+                "title": request.title,
                 "dueDate": request.due_date,
                 "dueTime": request.due_time,
             },
@@ -122,6 +141,30 @@ def render_task_due_update_completed(payload: dict[str, Any]) -> str:
     title = str(task.get("title") or "Untitled task")
     new_due = _due_text(str(task.get("newDue") or ""), str(task.get("newDueTime") or ""))
     return f"Task updated: {title} -> {new_due}"
+
+
+def render_task_create_proposal(payload: dict[str, Any]) -> str:
+    task = payload.get("task")
+    if not isinstance(task, dict):
+        return "Task creation requires confirmation."
+    title = str(task.get("title") or "Untitled task")
+    due = _due_text(str(task.get("due") or ""), str(task.get("dueTime") or ""))
+    return "\n".join(
+        [
+            "## Confirm new task",
+            f"- task: {title}",
+            f"- due: {due}",
+        ]
+    )
+
+
+def render_task_create_completed(payload: dict[str, Any]) -> str:
+    task = payload.get("task")
+    if not isinstance(task, dict):
+        return "Task created."
+    title = str(task.get("title") or "Untitled task")
+    due = _due_text(str(task.get("due") or ""), str(task.get("dueTime") or ""))
+    return f"Task created: {title} -> {due}"
 
 
 def _due_text(due_date: str, due_time: str) -> str:

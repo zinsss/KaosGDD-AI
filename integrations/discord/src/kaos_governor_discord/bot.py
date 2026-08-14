@@ -265,6 +265,7 @@ class GovernorBot(discord.Client):
                 calendar_adapter=self.calendar_adapter,
                 memos=self.memos,
                 paperless=self.paperless,
+                task_refresh_callback=self.discord_tasks.ensure_message if self.discord_tasks else None,
             )
             if settings.brain_tools_enabled
             else None
