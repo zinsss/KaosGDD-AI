@@ -8,7 +8,9 @@ from kaos_governor.memos import Memo, MemoSearchPage, MemoSearchResult
 from kaos_governor_discord.access import AccessPolicy
 from kaos_governor_discord.memos import (
     DiscordMemosCapture,
+    MemosEditModal,
     MemosCreatePromptView,
+    MemosOpenedView,
     parse_create_memo_message,
     render_memo_opened,
 )
@@ -17,12 +19,22 @@ from kaos_governor_discord.memos import (
 class FakeMemos:
     def __init__(self) -> None:
         self.created = []
+        self.updated = []
+        self.deleted = []
         self.searches = []
         self.config = SimpleNamespace(max_results=20)
 
     def create(self, content):
         self.created.append(content)
         return Memo("memos/42", content, ("태그",), "created", "updated", "PRIVATE", False)
+
+    def update(self, name, content):
+        self.updated.append((name, content))
+        return Memo(name, content, ("태그",), "created", "updated2", "PRIVATE", False)
+
+    def delete(self, name):
+        self.deleted.append(name)
+        return None
 
     def search(self, query, tags, limit):
         self.searches.append((query, tags, limit))
@@ -159,6 +171,27 @@ class DiscordMemosCaptureTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("13 results in 213 memos", content)
         self.assertIn("view", message.channel.sent[0][1])
 
+    async def test_single_search_result_opens_with_close_edit_delete_buttons(self) -> None:
+        class OneResultMemos(FakeMemos):
+            def search_page(self, query, tags, limit):
+                self.searches.append((query, tags, limit))
+                memo = Memo("memos/99", "# Rustdesk Settings", (), "created", "updated", "PRIVATE", False)
+                return MemoSearchPage(query, (), (MemoSearchResult(memo, "Rustdesk Settings"),), 1, 213)
+
+        service = OneResultMemos()
+        capture = DiscordMemosCapture(
+            service,  # type: ignore[arg-type]
+            AccessPolicy(100, frozenset({200}), frozenset({300})),
+            channel_id=300,
+        )
+        message = self.make_message("..rustdesk")
+
+        self.assertTrue(await capture.handle_message(message))  # type: ignore[arg-type]
+
+        view = message.channel.sent[0][1]["view"]
+        self.assertIsInstance(view, MemosOpenedView)
+        self.assertEqual([item.label for item in view.children], ["Close", "Edit", "Delete"])
+
     async def test_dotdot_message_normalizes_multi_term_memos_search(self) -> None:
         service = FakeMemos()
         capture = DiscordMemosCapture(
@@ -200,6 +233,67 @@ class DiscordMemosCaptureTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("# Rustdesk Settings\n## For Tailscale", content)
         self.assertIn("- Relay server: 100.94.208.16", content)
         self.assertIn("@\u200beveryone", content)
+
+    async def test_opened_memo_delete_button_deletes_memo_and_message(self) -> None:
+        service = FakeMemos()
+        capture = DiscordMemosCapture(
+            service,  # type: ignore[arg-type]
+            AccessPolicy(100, frozenset({200}), frozenset({300})),
+            channel_id=300,
+        )
+        memo = Memo("memos/99", "# Memo", (), "created", "updated", "PRIVATE", False)
+        view = MemosOpenedView(capture, "memo", memo)
+        message = SimpleNamespace(delete=AsyncMock())
+        interaction = SimpleNamespace(
+            guild_id=100,
+            channel_id=300,
+            user=SimpleNamespace(id=200),
+            response=SimpleNamespace(defer=AsyncMock()),
+            followup=SimpleNamespace(send=AsyncMock()),
+            message=message,
+        )
+
+        await view.children[2].callback(interaction)  # type: ignore[arg-type,union-attr]
+
+        self.assertEqual(service.deleted, ["memos/99"])
+        interaction.response.defer.assert_awaited_once_with(ephemeral=True)
+        message.delete.assert_awaited_once()
+
+    async def test_opened_memo_edit_button_opens_prefilled_modal(self) -> None:
+        service = FakeMemos()
+        capture = DiscordMemosCapture(
+            service,  # type: ignore[arg-type]
+            AccessPolicy(100, frozenset({200}), frozenset({300})),
+            channel_id=300,
+        )
+        memo = Memo("memos/99", "# Memo\nBody", (), "created", "updated", "PRIVATE", False)
+        view = MemosOpenedView(capture, "memo", memo)
+        interaction = SimpleNamespace(
+            guild_id=100,
+            channel_id=300,
+            user=SimpleNamespace(id=200),
+            response=SimpleNamespace(send_modal=AsyncMock()),
+        )
+
+        await view.children[1].callback(interaction)  # type: ignore[arg-type,union-attr]
+
+        modal = interaction.response.send_modal.await_args.args[0]
+        self.assertIsInstance(modal, MemosEditModal)
+        self.assertEqual(modal.content.default, "# Memo\nBody")
+
+    async def test_update_memo_uses_service_contract(self) -> None:
+        service = FakeMemos()
+        capture = DiscordMemosCapture(
+            service,  # type: ignore[arg-type]
+            AccessPolicy(100, frozenset({200}), frozenset({300})),
+            channel_id=300,
+        )
+
+        memo = await capture.update_memo("memos/99", "# Updated")
+
+        self.assertEqual(memo.content, "# Updated")
+        self.assertEqual(service.updated, [("memos/99", "# Updated")])
+        self.assertEqual(capture.last_error, "")
 
     def test_parse_create_memo_message_requires_triple_plus_marker(self) -> None:
         self.assertEqual(parse_create_memo_message("+++"), "")

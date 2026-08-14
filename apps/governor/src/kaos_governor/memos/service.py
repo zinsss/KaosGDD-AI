@@ -305,12 +305,9 @@ class MemosService:
 
     def get(self, name: object) -> Memo:
         self._require_enabled()
-        normalized_name = str(name or "").strip()
-        if not MEMO_NAME.fullmatch(normalized_name):
-            raise ValueError("memos_name_invalid")
-        memo_id = urllib.parse.quote(normalized_name.removeprefix("memos/"), safe="")
+        path = _memo_api_path(name)
         try:
-            return Memo.from_payload(self._request(f"/api/v1/memos/{memo_id}"))
+            return Memo.from_payload(self._request(path))
         except Exception as exc:
             self._record_error(exc)
             raise
@@ -334,6 +331,32 @@ class MemosService:
             self._last_create_at = _now()
             self._last_error = ""
         return memo
+
+    def update(self, name: object, content: object) -> Memo:
+        self._require_enabled()
+        path = f"{_memo_api_path(name)}?{urllib.parse.urlencode({'updateMask': 'content'})}"
+        normalized_content = _normalize_content(content)
+        try:
+            memo = Memo.from_payload(
+                self._request(path, method="PATCH", payload={"content": normalized_content})
+            )
+        except Exception as exc:
+            self._record_error(exc)
+            raise
+        with self._lock:
+            self._last_error = ""
+        return memo
+
+    def delete(self, name: object) -> None:
+        self._require_enabled()
+        path = _memo_api_path(name)
+        try:
+            self._request(path, method="DELETE", expect_json=False)
+        except Exception as exc:
+            self._record_error(exc)
+            raise
+        with self._lock:
+            self._last_error = ""
 
     def _limit(self, value: object) -> int:
         if isinstance(value, bool):
@@ -397,7 +420,14 @@ class MemosService:
             seen_tokens.add(page_token)
         return max(count, fallback_count)
 
-    def _request(self, path: str, *, method: str = "GET", payload: Mapping[str, object] | None = None) -> dict[str, object]:
+    def _request(
+        self,
+        path: str,
+        *,
+        method: str = "GET",
+        payload: Mapping[str, object] | None = None,
+        expect_json: bool = True,
+    ) -> dict[str, object]:
         body = None if payload is None else json.dumps(payload, ensure_ascii=False).encode("utf-8")
         headers = {
             "Accept": "application/json",
@@ -423,6 +453,8 @@ class MemosService:
             raise MemosError("memos_upstream_error", upstream_status=exc.code) from exc
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise MemosError("memos_upstream_unavailable") from exc
+        if not body.strip() and not expect_json:
+            return {}
         try:
             payload = json.loads(body.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -438,6 +470,14 @@ class MemosService:
 
 def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def _memo_api_path(name: object) -> str:
+    normalized_name = str(name or "").strip()
+    if not MEMO_NAME.fullmatch(normalized_name):
+        raise ValueError("memos_name_invalid")
+    memo_id = urllib.parse.quote(normalized_name.removeprefix("memos/"), safe="")
+    return f"/api/v1/memos/{memo_id}"
 
 
 def _normalize_content(value: object) -> str:

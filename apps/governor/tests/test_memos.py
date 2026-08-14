@@ -14,8 +14,8 @@ from kaos_governor.memos import (
 
 
 class FakeResponse:
-    def __init__(self, payload: dict) -> None:
-        self.body = json.dumps(payload).encode("utf-8")
+    def __init__(self, payload: dict | bytes) -> None:
+        self.body = payload if isinstance(payload, bytes) else json.dumps(payload).encode("utf-8")
 
     def __enter__(self):
         return self
@@ -219,6 +219,51 @@ class MemosServiceTests(unittest.TestCase):
         service = MemosService(config(), lambda *_args, **_kwargs: self.fail("unexpected call"))
         with self.assertRaisesRegex(ValueError, "memos_content_required"):
             service.create("   ")
+
+    def test_update_patches_memo_content_with_update_mask(self) -> None:
+        requests = []
+
+        def open_url(request, timeout):
+            requests.append((request, timeout, json.loads(request.data.decode("utf-8"))))
+            return FakeResponse({"name": "memos/abc_1", "content": "Updated memo"})
+
+        service = MemosService(config(), open_url)
+        memo = service.update("memos/abc_1", "Updated memo")
+
+        request, timeout, body = requests[0]
+        self.assertEqual(memo.content, "Updated memo")
+        self.assertEqual(
+            request.full_url,
+            "http://memos.internal:5230/api/v1/memos/abc_1?updateMask=content",
+        )
+        self.assertEqual(request.get_method(), "PATCH")
+        self.assertEqual(request.get_header("Authorization"), "Bearer secret-personal-access-token")
+        self.assertEqual(body, {"content": "Updated memo"})
+        self.assertEqual(timeout, 10)
+
+    def test_delete_uses_memo_endpoint_and_accepts_empty_response(self) -> None:
+        requests = []
+
+        def open_url(request, timeout):
+            requests.append((request, timeout))
+            return FakeResponse(b"")
+
+        service = MemosService(config(), open_url)
+        service.delete("memos/abc_1")
+
+        request, timeout = requests[0]
+        self.assertEqual(request.full_url, "http://memos.internal:5230/api/v1/memos/abc_1")
+        self.assertEqual(request.get_method(), "DELETE")
+        self.assertEqual(request.get_header("Authorization"), "Bearer secret-personal-access-token")
+        self.assertEqual(timeout, 10)
+        self.assertEqual(service.status()["lastError"], "")
+
+    def test_update_and_delete_validate_memo_name(self) -> None:
+        service = MemosService(config(), lambda *_args, **_kwargs: self.fail("unexpected call"))
+        with self.assertRaisesRegex(ValueError, "memos_name_invalid"):
+            service.update("../secret", "memo")
+        with self.assertRaisesRegex(ValueError, "memos_name_invalid"):
+            service.delete("../secret")
 
     def test_upstream_auth_failures_have_a_stable_non_secret_code(self) -> None:
         def open_url(request, timeout):

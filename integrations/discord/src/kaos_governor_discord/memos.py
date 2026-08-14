@@ -4,7 +4,7 @@ import asyncio
 import logging
 
 import discord
-from kaos_governor.memos import MemoSearchPage, MemoSearchResult, MemosError, MemosService
+from kaos_governor.memos import Memo, MemoSearchPage, MemoSearchResult, MemosError, MemosService
 
 from .access import AccessPolicy
 from .markdown import NO_MENTIONS, escape_text
@@ -77,6 +77,35 @@ class DiscordMemosCapture:
         self.last_error = ""
         return memo
 
+    async def update_memo(self, name: str, content: str) -> Memo:
+        try:
+            memo = await asyncio.to_thread(self.service.update, name, content)
+        except (ValueError, MemosError) as exc:
+            self.rejected_count += 1
+            self.last_error = exc.code if isinstance(exc, MemosError) else str(exc)
+            raise
+        except Exception as exc:
+            self.rejected_count += 1
+            self.last_error = type(exc).__name__
+            LOGGER.exception("Unexpected Memos update failure")
+            raise
+        self.last_error = ""
+        return memo
+
+    async def delete_memo(self, name: str) -> None:
+        try:
+            await asyncio.to_thread(self.service.delete, name)
+        except (ValueError, MemosError) as exc:
+            self.rejected_count += 1
+            self.last_error = exc.code if isinstance(exc, MemosError) else str(exc)
+            raise
+        except Exception as exc:
+            self.rejected_count += 1
+            self.last_error = type(exc).__name__
+            LOGGER.exception("Unexpected Memos delete failure")
+            raise
+        self.last_error = ""
+
     async def _handle_create(self, message: discord.Message, content: str) -> None:
         try:
             memo = await self.create_memo(content)
@@ -132,9 +161,10 @@ class DiscordMemosCapture:
             return
         await self._delete_message(message)
         content = render_memos_search_summary(page)
-        view = MemosSearchView(page, self.policy) if len(page.results) > 1 else None
+        view: discord.ui.View | None = MemosSearchView(page, self) if len(page.results) > 1 else None
         if len(page.results) == 1:
             content = render_memo_opened(page.query, page.results[0])
+            view = MemosOpenedView(self, page.query, page.results[0].memo)
         await message.channel.send(content, view=view, allowed_mentions=NO_MENTIONS)
         self.last_error = ""
 
@@ -198,21 +228,21 @@ class MemosCreateModal(discord.ui.Modal):
 
 
 class MemosSearchView(discord.ui.View):
-    def __init__(self, page: MemoSearchPage, policy: AccessPolicy) -> None:
+    def __init__(self, page: MemoSearchPage, capture: DiscordMemosCapture) -> None:
         super().__init__(timeout=600)
         self.page = page
-        self.policy = policy
-        self.add_item(MemosSearchSelect(page))
+        self.capture = capture
+        self.add_item(MemosSearchSelect(page, capture))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if self.policy.allows(interaction.guild_id, interaction.channel_id, interaction.user.id):
+        if self.capture.policy.allows(interaction.guild_id, interaction.channel_id, interaction.user.id):
             return True
         await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
         return False
 
 
 class MemosSearchSelect(discord.ui.Select):
-    def __init__(self, page: MemoSearchPage) -> None:
+    def __init__(self, page: MemoSearchPage, capture: DiscordMemosCapture) -> None:
         options = [
             discord.SelectOption(
                 label=memo_option_label(result),
@@ -229,6 +259,7 @@ class MemosSearchSelect(discord.ui.Select):
             custom_id="memos-search:open",
         )
         self.page = page
+        self.capture = capture
 
     async def callback(self, interaction: discord.Interaction) -> None:
         try:
@@ -239,9 +270,90 @@ class MemosSearchSelect(discord.ui.Select):
             return
         await interaction.response.edit_message(
             content=render_memo_opened(self.page.query, result),
-            view=None,
+            view=MemosOpenedView(self.capture, self.page.query, result.memo),
             allowed_mentions=NO_MENTIONS,
         )
+
+
+class MemosOpenedView(discord.ui.View):
+    def __init__(self, capture: DiscordMemosCapture, query: str, memo: Memo) -> None:
+        super().__init__(timeout=600)
+        self.capture = capture
+        self.query = query
+        self.memo = memo
+        close = discord.ui.Button(label="Close", style=discord.ButtonStyle.secondary, custom_id="memos-open:close")
+        edit = discord.ui.Button(label="Edit", style=discord.ButtonStyle.primary, custom_id="memos-open:edit")
+        delete = discord.ui.Button(label="Delete", style=discord.ButtonStyle.danger, custom_id="memos-open:delete")
+        close.callback = self._close
+        edit.callback = self._edit
+        delete.callback = self._delete
+        self.add_item(close)
+        self.add_item(edit)
+        self.add_item(delete)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if self.capture.policy.allows(interaction.guild_id, interaction.channel_id, interaction.user.id):
+            return True
+        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+    async def _close(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
+        if interaction.message is not None:
+            await interaction.message.delete()
+
+    async def _edit(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_modal(MemosEditModal(self.capture, self.query, self.memo))
+
+    async def _delete(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
+        try:
+            await self.capture.delete_memo(self.memo.name)
+        except Exception:
+            await interaction.followup.send(
+                f"Memos delete rejected: {self.capture.last_error or 'internal_error'}",
+                ephemeral=True,
+                allowed_mentions=NO_MENTIONS,
+            )
+            return
+        if interaction.message is not None:
+            await interaction.message.delete()
+
+
+class MemosEditModal(discord.ui.Modal):
+    def __init__(self, capture: DiscordMemosCapture, query: str, memo: Memo) -> None:
+        super().__init__(title="Edit Memo", timeout=600)
+        self.capture = capture
+        self.query = query
+        self.memo = memo
+        self.content = discord.ui.TextInput(
+            label="Memo",
+            style=discord.TextStyle.paragraph,
+            required=True,
+            default=memo.content[:4000],
+            max_length=4000,
+            custom_id="memos-edit:content",
+        )
+        self.add_item(self.content)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
+        try:
+            memo = await self.capture.update_memo(self.memo.name, str(self.content.value or ""))
+        except Exception:
+            await interaction.followup.send(
+                f"Memos edit rejected: {self.capture.last_error or 'internal_error'}",
+                ephemeral=True,
+                allowed_mentions=NO_MENTIONS,
+            )
+            return
+        result = MemoSearchResult(memo, "")
+        if interaction.message is not None:
+            await interaction.message.edit(
+                content=render_memo_opened(self.query, result),
+                view=MemosOpenedView(self.capture, self.query, memo),
+                allowed_mentions=NO_MENTIONS,
+            )
 
 
 def parse_create_memo_message(content: str) -> str | None:
