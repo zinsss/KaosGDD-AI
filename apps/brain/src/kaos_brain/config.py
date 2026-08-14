@@ -73,6 +73,11 @@ class Settings:
     max_reply_chars: int
     respond_without_mention: bool
     auto_route_enabled: bool
+    governor_tools_enabled: bool
+    governor_tools_base_url: str
+    governor_tools_api_token: str
+    governor_tools_profile: str
+    governor_tools_timeout_seconds: int
     log_level: str
 
     @classmethod
@@ -85,6 +90,15 @@ class Settings:
         allowed_user_ids = _id_set(source, "DISCORD_ALLOWED_USER_IDS")
         brain_channel_id = _positive_int(_required(source, "DISCORD_BRAIN_CHANNEL_ID"), "DISCORD_BRAIN_CHANNEL_ID")
         timeout = _positive_int(source.get("KAOSBRAIN_REQUEST_TIMEOUT_SECONDS", "90"), "KAOSBRAIN_REQUEST_TIMEOUT_SECONDS")
+        governor_tools_api_token = _secret(source, "GOVERNOR_API_TOKEN")
+        governor_tools_enabled = _boolean(source, "KAOSBRAIN_GOVERNOR_TOOLS_ENABLED")
+        if governor_tools_enabled and not governor_tools_api_token:
+            raise ConfigurationError(
+                "GOVERNOR_API_TOKEN or GOVERNOR_API_TOKEN_FILE is required when KAOSBRAIN_GOVERNOR_TOOLS_ENABLED=true"
+            )
+        governor_tools_base_url = source.get("KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL", "").strip()
+        if governor_tools_enabled and not governor_tools_base_url:
+            raise ConfigurationError("KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL is required when Governor tools are enabled")
         max_reply_chars = _positive_int(source.get("KAOSBRAIN_MAX_REPLY_CHARS", "1800"), "KAOSBRAIN_MAX_REPLY_CHARS")
         if max_reply_chars > 1900:
             raise ConfigurationError("KAOSBRAIN_MAX_REPLY_CHARS must be at most 1900")
@@ -101,5 +115,13 @@ class Settings:
             max_reply_chars=max_reply_chars,
             respond_without_mention=_boolean(source, "KAOSBRAIN_RESPOND_WITHOUT_MENTION", default=True),
             auto_route_enabled=_boolean(source, "KAOSBRAIN_AUTO_ROUTE_ENABLED", default=True),
+            governor_tools_enabled=governor_tools_enabled,
+            governor_tools_base_url=governor_tools_base_url,
+            governor_tools_api_token=governor_tools_api_token,
+            governor_tools_profile=source.get("KAOSBRAIN_GOVERNOR_TOOLS_PROFILE", "main").strip() or "main",
+            governor_tools_timeout_seconds=_positive_int(
+                source.get("KAOSBRAIN_GOVERNOR_TOOLS_TIMEOUT_SECONDS", "10"),
+                "KAOSBRAIN_GOVERNOR_TOOLS_TIMEOUT_SECONDS",
+            ),
             log_level=source.get("LOG_LEVEL", "INFO").strip().upper() or "INFO",
         )

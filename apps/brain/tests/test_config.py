@@ -51,6 +51,32 @@ class SettingsTests(unittest.TestCase):
         settings = Settings.from_env({**BASE_ENV, "KAOSBRAIN_AUTO_ROUTE_ENABLED": "false"})
         self.assertFalse(settings.auto_route_enabled)
 
+    def test_governor_tools_require_token_and_base_url(self) -> None:
+        with self.assertRaises(ConfigurationError):
+            Settings.from_env({**BASE_ENV, "KAOSBRAIN_GOVERNOR_TOOLS_ENABLED": "true"})
+        with self.assertRaises(ConfigurationError):
+            Settings.from_env(
+                {
+                    **BASE_ENV,
+                    "KAOSBRAIN_GOVERNOR_TOOLS_ENABLED": "true",
+                    "GOVERNOR_API_TOKEN": "token",
+                }
+            )
+
+    def test_governor_tools_parse_configuration(self) -> None:
+        settings = Settings.from_env(
+            {
+                **BASE_ENV,
+                "KAOSBRAIN_GOVERNOR_TOOLS_ENABLED": "true",
+                "KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL": "http://100.64.0.1:8098",
+                "KAOSBRAIN_GOVERNOR_TOOLS_PROFILE": "family",
+                "GOVERNOR_API_TOKEN": "token",
+            }
+        )
+        self.assertTrue(settings.governor_tools_enabled)
+        self.assertEqual(settings.governor_tools_base_url, "http://100.64.0.1:8098")
+        self.assertEqual(settings.governor_tools_profile, "family")
+
 
 if __name__ == "__main__":
     unittest.main()

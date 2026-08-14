@@ -11,7 +11,7 @@ EnvironmentFile=/srv/kaos/brain/kaosbrain.env
 Restart=always
 RestartSec=10
 ExecStartPre=-/usr/bin/docker rm -f kaos-brain
-ExecStart=/usr/bin/docker run --rm --name kaos-brain --network host --user ${KAOS_HOST_UID}:${KAOS_HOST_GID} --env-file /srv/kaos/brain/kaosbrain.env --mount type=bind,src=/srv/kaos/secrets/kaosbrain_discord_bot_token,dst=/run/secrets/discord_bot_token,ro kaos-brain:current
+ExecStart=/usr/bin/docker run --rm --name kaos-brain --network host --user ${KAOS_HOST_UID}:${KAOS_HOST_GID} --env-file /srv/kaos/brain/kaosbrain.env --mount type=bind,src=/srv/kaos/secrets,dst=/run/secrets,ro kaos-brain:current
 ExecStop=/usr/bin/docker stop kaos-brain
 
 [Install]

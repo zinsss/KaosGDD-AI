@@ -20,11 +20,13 @@ Ollama directly, and leaves authoritative state changes to KaosGovernor.
 - Direct Ollama `/api/chat` calls.
 - Fast chat model and automatic deep model routing.
 - `deep:`, `think:`, `깊게:`, and `생각:` prefixes route to the deep model.
+- Read-only KaosGovernor tool calls for today, active tasks, Memos search, and
+  Paperless document search.
 
 ## Required Environment
 
 ```sh
-DISCORD_BOT_TOKEN_FILE=/run/secrets/discord_bot_token
+DISCORD_BOT_TOKEN_FILE=/run/secrets/kaosbrain_discord_bot_token
 DISCORD_GUILD_ID=1536016949127942164
 DISCORD_ALLOWED_USER_IDS=...
 DISCORD_BRAIN_CHANNEL_ID=1536983928337076224
@@ -32,6 +34,10 @@ OLLAMA_BASE_URL=http://127.0.0.1:11434
 KAOSBRAIN_CHAT_MODEL=gemma3:4b
 KAOSBRAIN_DEEP_MODEL=qwen3:8b
 KAOSBRAIN_AUTO_ROUTE_ENABLED=true
+KAOSBRAIN_GOVERNOR_TOOLS_ENABLED=true
+KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL=http://<kaosgovernor-tailscale-ip>:8098
+KAOSBRAIN_GOVERNOR_TOOLS_PROFILE=main
+GOVERNOR_API_TOKEN_FILE=/run/secrets/governor_api_token
 ```
 
 Use the same Discord bot token exclusivity rule as every Discord service: never

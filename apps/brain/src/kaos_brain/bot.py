@@ -5,8 +5,10 @@ import logging
 import discord
 
 from .config import Settings
+from .governor_tools import GovernorToolClient, GovernorToolConfig, GovernorToolError, render_tool_context
 from .intent import Route, parse_request
 from .ollama import OllamaClient, OllamaConfig, OllamaError
+from .tool_intent import ToolRequest, parse_tool_request
 
 LOGGER = logging.getLogger(__name__)
 NO_MENTIONS = discord.AllowedMentions.none()
@@ -27,6 +29,18 @@ class BrainBot(discord.Client):
                 deep_model=settings.deep_model,
                 timeout_seconds=settings.request_timeout_seconds,
             )
+        )
+        self.governor_tools = (
+            GovernorToolClient(
+                GovernorToolConfig(
+                    base_url=settings.governor_tools_base_url,
+                    api_token=settings.governor_tools_api_token,
+                    profile=settings.governor_tools_profile,
+                    timeout_seconds=settings.governor_tools_timeout_seconds,
+                )
+            )
+            if settings.governor_tools_enabled
+            else None
         )
 
     async def on_ready(self) -> None:
@@ -62,7 +76,10 @@ class BrainBot(discord.Client):
             return
         async with message.channel.typing():
             try:
-                if request.route is Route.CHAT and self.settings.auto_route_enabled:
+                tool_request = parse_tool_request(request.text) if request.route is Route.CHAT else None
+                if tool_request is not None:
+                    reply = await self._answer_with_governor_tool(request.text, tool_request)
+                elif request.route is Route.CHAT and self.settings.auto_route_enabled:
                     reply = await self.ollama.generate_auto(request.text)
                 else:
                     reply = await self.ollama.generate(request.route, request.text)
@@ -75,3 +92,16 @@ class BrainBot(discord.Client):
             mention_author=False,
             allowed_mentions=NO_MENTIONS,
         )
+
+    async def _answer_with_governor_tool(self, user_text: str, tool_request: ToolRequest) -> str:
+        if self.governor_tools is None:
+            return "Governor tools are not configured yet."
+        try:
+            payload = await self.governor_tools.fetch(tool_request)
+        except GovernorToolError as exc:
+            return f"Governor tool failed: {exc}"
+        context = render_tool_context(tool_request, payload)
+        try:
+            return await self.ollama.summarize_tool_result(user_text, context)
+        except OllamaError:
+            return context

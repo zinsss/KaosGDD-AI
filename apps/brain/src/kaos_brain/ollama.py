@@ -6,7 +6,7 @@ from typing import Any
 import aiohttp
 
 from .intent import Route
-from .prompt import ROUTER_SYSTEM_PROMPT, system_prompt
+from .prompt import ROUTER_SYSTEM_PROMPT, TOOL_SUMMARY_SYSTEM_PROMPT, system_prompt
 from .router import RouteDecision, parse_route_decision
 
 
@@ -41,6 +41,16 @@ class OllamaClient:
         decision = await self.route(user_text)
         route = Route.DEEP if decision is RouteDecision.DEEP else Route.CHAT
         return await self.generate(route, user_text)
+
+    async def summarize_tool_result(self, user_text: str, tool_context: str) -> str:
+        return await self._complete(
+            self.config.chat_model,
+            [
+                {"role": "system", "content": TOOL_SUMMARY_SYSTEM_PROMPT},
+                {"role": "user", "content": f"User request:\n{user_text}\n\nGovernor data:\n{tool_context}"},
+            ],
+            num_predict=512,
+        )
 
     async def route(self, user_text: str) -> RouteDecision:
         try:

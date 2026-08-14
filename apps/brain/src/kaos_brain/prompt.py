@@ -22,6 +22,13 @@ Use answer for greetings, simple conversation, definitions, short Korean replies
 Use deep for planning, multi-step reasoning, architecture decisions, debugging strategy, synthesis, risk analysis, or ambiguous important choices.
 Do not explain. Do not emit JSON."""
 
+TOOL_SUMMARY_SYSTEM_PROMPT = """You are KaosBrain.
+Reply in the user's language using only the Governor data provided.
+Be concise and readable in Discord markdown.
+If the Governor data says none, say there is nothing found.
+Do not claim to have changed authoritative state.
+Do not emit JSON."""
+
 
 def system_prompt(route: Route) -> str:
     if route is Route.DEEP:
