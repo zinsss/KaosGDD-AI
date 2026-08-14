@@ -119,6 +119,21 @@ class DiscordMemosCaptureTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("13 results in 213 memos", content)
         self.assertIn("view", message.channel.sent[0][1])
 
+    async def test_dotdot_message_normalizes_multi_term_memos_search(self) -> None:
+        service = FakeMemos()
+        capture = DiscordMemosCapture(
+            service,  # type: ignore[arg-type]
+            AccessPolicy(100, frozenset({200}), frozenset({300})),
+            channel_id=300,
+        )
+        message = self.make_message("..rust   desk setup")
+
+        self.assertTrue(await capture.handle_message(message))  # type: ignore[arg-type]
+
+        self.assertEqual(service.searches, [("rust desk setup", None, 20)])
+        content = message.channel.sent[0][0][0]
+        self.assertIn("## rust desk setup", content)
+
     async def test_other_channels_are_ignored(self) -> None:
         service = FakeMemos()
         capture = DiscordMemosCapture(

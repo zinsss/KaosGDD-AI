@@ -8,6 +8,7 @@ from kaos_governor.memos import MemoSearchPage, MemoSearchResult, MemosError, Me
 
 from .access import AccessPolicy
 from .markdown import NO_MENTIONS, escape_text
+from .search import normalize_dotdot_query
 
 
 LOGGER = logging.getLogger(__name__)
@@ -82,9 +83,10 @@ class DiscordMemosCapture:
         }
 
     async def _handle_search(self, message: discord.Message, query: str) -> None:
+        normalized_query = normalize_dotdot_query(query)
         try:
             limit = min(25, self.service.config.max_results)
-            page = await asyncio.to_thread(self.service.search_page, query, None, limit)
+            page = await asyncio.to_thread(self.service.search_page, normalized_query, None, limit)
         except (ValueError, MemosError) as exc:
             self.rejected_count += 1
             self.last_error = exc.code if isinstance(exc, MemosError) else str(exc)
@@ -108,7 +110,7 @@ class DiscordMemosCapture:
         content = render_memos_search_summary(page)
         view = MemosSearchView(page, self.policy) if len(page.results) > 1 else None
         if len(page.results) == 1:
-            content = render_memo_opened(query, page.results[0])
+            content = render_memo_opened(page.query, page.results[0])
         await message.channel.send(content, view=view, allowed_mentions=NO_MENTIONS)
         self.last_error = ""
 

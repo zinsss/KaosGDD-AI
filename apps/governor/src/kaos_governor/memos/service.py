@@ -177,6 +177,10 @@ def _normalize_query(value: object) -> str:
     return query
 
 
+def _query_terms(normalized_query: str) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(normalized_query.split()))
+
+
 def _normalize_tags(values: object) -> tuple[str, ...]:
     if values is None:
         return ()
@@ -351,8 +355,8 @@ class MemosService:
 
     def _search_filters(self, normalized_query: str, normalized_tags: tuple[str, ...]) -> list[str]:
         filters = self._base_filters()
-        if normalized_query:
-            filters.append(f"content.contains({json.dumps(normalized_query, ensure_ascii=False)})")
+        for term in _query_terms(normalized_query):
+            filters.append(f"content.contains({json.dumps(term, ensure_ascii=False)})")
         if normalized_tags:
             encoded_tags = ", ".join(json.dumps(tag, ensure_ascii=False) for tag in normalized_tags)
             filters.append(f"tag in [{encoded_tags}]")

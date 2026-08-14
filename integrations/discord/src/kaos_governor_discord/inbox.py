@@ -20,6 +20,7 @@ from kaos_governor.documents import (
 from .access import AccessPolicy
 from .fax import safe_filename
 from .markdown import NO_MENTIONS, escape_text
+from .search import normalize_dotdot_query
 
 
 LOGGER = logging.getLogger(__name__)
@@ -283,8 +284,9 @@ class DiscordDocumentInbox:
         }
 
     async def _handle_search(self, message: discord.Message, query: str) -> None:
+        normalized_query = normalize_dotdot_query(query)
         try:
-            page = await asyncio.to_thread(self.paperless.search_page, query, limit=25)
+            page = await asyncio.to_thread(self.paperless.search_page, normalized_query, limit=25)
         except DocumentIntakeError as exc:
             self.rejected_count += 1
             self.last_error = exc.code

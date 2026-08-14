@@ -119,10 +119,29 @@ class MemosServiceTests(unittest.TestCase):
         self.assertEqual(query["pageSize"], ["5"])
         self.assertEqual(query["orderBy"], ["pinned desc, create_time desc"])
         self.assertIn('creator == "users/zin"', query["filter"][0])
-        self.assertIn('content.contains("thermal printer")', query["filter"][0])
+        self.assertIn('content.contains("thermal")', query["filter"][0])
+        self.assertIn('content.contains("printer")', query["filter"][0])
+        self.assertNotIn('content.contains("thermal printer")', query["filter"][0])
         self.assertIn('tag in ["server"]', query["filter"][0])
         self.assertEqual(request.get_header("Authorization"), "Bearer secret-personal-access-token")
         self.assertEqual(service.status()["lastResultCount"], 1)
+
+    def test_search_splits_multi_word_query_into_individual_terms(self) -> None:
+        requests = []
+
+        def open_url(request, timeout):
+            requests.append(request)
+            return FakeResponse({"memos": [], "totalSize": 0})
+
+        service = MemosService(config(max_results=25), open_url)
+        service.search_page("rust desk setup", limit=5)
+
+        parsed = urllib.parse.urlsplit(requests[0].full_url)
+        query = urllib.parse.parse_qs(parsed.query)
+        self.assertIn('content.contains("rust")', query["filter"][0])
+        self.assertIn('content.contains("desk")', query["filter"][0])
+        self.assertIn('content.contains("setup")', query["filter"][0])
+        self.assertNotIn('content.contains("rust desk setup")', query["filter"][0])
 
     def test_search_page_reports_result_and_total_counts(self) -> None:
         requests = []

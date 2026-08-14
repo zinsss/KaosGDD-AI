@@ -186,6 +186,17 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("view", self.channel.sent[0][1])
             self.assertEqual(message.replies, [])
 
+    async def test_dotdot_message_normalizes_multi_term_paperless_search(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            paperless = FakePaperless()
+            inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
+            message = self.make_message([], content="..rust   desk setup")
+
+            self.assertTrue(await inbox.handle_message(message))  # type: ignore[arg-type]
+
+            self.assertEqual(paperless.searches, [("rust desk setup", 25)])
+            self.assertIn("## rust desk setup", self.channel.sent[0][0])
+
     def test_opened_document_renders_link_and_details(self) -> None:
         content = render_paperless_opened(
             "clinic",
