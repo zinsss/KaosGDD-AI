@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
+from datetime import datetime
 import json
 import logging
 from pathlib import Path
+import re
 from typing import Any, Mapping
 
 import discord
@@ -16,12 +18,20 @@ from .markdown import NO_MENTIONS, escape_text
 
 LOGGER = logging.getLogger(__name__)
 MAX_VISIBLE_TASKS = 25
+DUE_LINE_PATTERN = re.compile(r"^:(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}))?$")
 
 
 @dataclass
 class DiscordTasksState:
     message_ids: dict[str, int] = field(default_factory=dict)
     legacy_message_id: int = 0
+
+
+@dataclass(frozen=True)
+class AddTaskCommand:
+    title: str
+    due_date: str = ""
+    due_time: str = ""
 
 
 class DiscordTasksSurface:
@@ -89,21 +99,28 @@ class DiscordTasksSurface:
             return False
         if message.author.bot:
             return self._is_own_message(message)
-        title = parse_add_task_message(str(message.content or ""))
-        if title:
-            await self.create_task(title)
+        command = parse_add_task_message(str(message.content or ""))
+        if command is not None:
+            await self.create_task(command)
         await self._delete_message(message)
         return True
 
-    async def create_task(self, title: str) -> bool:
-        clean_title = title.strip()
+    async def create_task(self, command: AddTaskCommand | str) -> bool:
+        if isinstance(command, AddTaskCommand):
+            clean_title = command.title.strip()
+            due_date = command.due_date
+            due_time = command.due_time
+        else:
+            clean_title = command.strip()
+            due_date = ""
+            due_time = ""
         if not clean_title:
             return False
         payload = {
             "title": clean_title,
             "memo": "",
-            "dueDate": "",
-            "dueTime": "",
+            "dueDate": due_date,
+            "dueTime": due_time,
             "priority": "",
         }
         if self.collection_id:
@@ -303,23 +320,47 @@ def active_tasks(tasks: list[Mapping[str, Any]], *, collection_id: str = "") -> 
     return sorted(active, key=lambda item: (str(item.get("due") or "9999-12-31"), str(item.get("summary") or ""), str(item.get("uid") or "")))[:MAX_VISIBLE_TASKS]
 
 
-def parse_add_task_message(content: str) -> str:
-    stripped = content.strip()
-    if not stripped.startswith("+"):
-        return ""
-    title = stripped[1:].strip()
-    return title if title else ""
+def parse_add_task_message(content: str) -> AddTaskCommand | None:
+    lines = [line.strip() for line in content.strip().splitlines() if line.strip()]
+    if not lines or not lines[0].startswith("+"):
+        return None
+    title = lines[0][1:].strip()
+    if not title:
+        return None
+    if len(lines) == 1:
+        return AddTaskCommand(title=title)
+    if len(lines) != 2 or not lines[1].startswith(":"):
+        return None
+    due = parse_due_line(lines[1])
+    if due is None:
+        return None
+    due_date, due_time = due
+    return AddTaskCommand(title=title, due_date=due_date, due_time=due_time)
+
+
+def parse_due_line(line: str) -> tuple[str, str] | None:
+    match = DUE_LINE_PATTERN.fullmatch(line.strip())
+    if match is None:
+        return None
+    due_date = match.group(1)
+    due_time = match.group(2) or "10:00"
+    try:
+        datetime.strptime(f"{due_date} {due_time}", "%Y-%m-%d %H:%M")
+    except ValueError:
+        return None
+    return due_date, due_time
 
 
 def render_task_message(task: Mapping[str, Any], *, show_due: bool = True, completed: bool | None = None) -> str:
     due = str(task.get("due") or "")
+    due_time = str(task.get("dueTime") or "")
     title = escape_text(task.get("summary") or "Untitled task")
     is_completed = str(task.get("status") or "").upper() == "COMPLETED" if completed is None else completed
     if is_completed:
         title = f"~~{title}~~"
     lines = [f"## {title}"]
     if show_due and due:
-        due_text = escape_text(due)
+        due_text = escape_text(f"{due} {due_time}" if due_time else due)
         if is_completed:
             due_text = f"~~{due_text}~~"
         lines.append(f"- due: {due_text}")

@@ -9,10 +9,12 @@ from unittest.mock import AsyncMock
 
 from kaos_governor_discord.access import AccessPolicy
 from kaos_governor_discord.tasks import (
+    AddTaskCommand,
     DiscordTasksSurface,
     TaskView,
     active_tasks,
     parse_add_task_message,
+    parse_due_line,
     render_task_message,
     task_payload,
 )
@@ -149,9 +151,9 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual([item["uid"] for item in active], ["TASK-1"])
         self.assertIn("## Buy milk", content)
-        self.assertIn("- due: 2026-08-13", content)
+        self.assertIn("- due: 2026-08-13 09:00", content)
         self.assertIn("## ~~Buy milk~~", completed)
-        self.assertIn("- due: ~~2026-08-13~~", completed)
+        self.assertIn("- due: ~~2026-08-13 09:00~~", completed)
         self.assertIn("Buy milk", content)
         self.assertIn("2026-08-13", content)
         self.assertNotIn("Done already", content)
@@ -165,10 +167,34 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("No due date", content)
 
     def test_parse_add_task_message_accepts_plus_title_only(self) -> None:
-        self.assertEqual(parse_add_task_message("+ Call mom"), "Call mom")
-        self.assertEqual(parse_add_task_message("  +   엄마한테 전화  "), "엄마한테 전화")
-        self.assertEqual(parse_add_task_message("+"), "")
-        self.assertEqual(parse_add_task_message("Call mom"), "")
+        self.assertEqual(parse_add_task_message("+ Call mom"), AddTaskCommand(title="Call mom"))
+        self.assertEqual(parse_add_task_message("  +   엄마한테 전화  "), AddTaskCommand(title="엄마한테 전화"))
+        self.assertIsNone(parse_add_task_message("+"))
+        self.assertIsNone(parse_add_task_message("Call mom"))
+
+    def test_parse_add_task_message_accepts_strict_due_line(self) -> None:
+        self.assertEqual(
+            parse_add_task_message("+ Call mom\n:2026-08-15"),
+            AddTaskCommand(title="Call mom", due_date="2026-08-15", due_time="10:00"),
+        )
+        self.assertEqual(
+            parse_add_task_message("+ Call mom\n:2026-08-15 14:30"),
+            AddTaskCommand(title="Call mom", due_date="2026-08-15", due_time="14:30"),
+        )
+
+    def test_parse_add_task_message_rejects_time_only_or_invalid_due_line(self) -> None:
+        self.assertIsNone(parse_add_task_message("+ Call mom\n:14:30"))
+        self.assertIsNone(parse_add_task_message("+ Call mom\n:2026-08-15 24:00"))
+        self.assertIsNone(parse_add_task_message("+ Call mom\n:2026-02-30 10:00"))
+        self.assertIsNone(parse_add_task_message("+ Call mom\n2026-08-15 10:00"))
+        self.assertIsNone(parse_add_task_message("+ Call mom\n:2026-08-15 10:00\nextra"))
+
+    def test_parse_due_line_defaults_time_and_validates_24_hour_time(self) -> None:
+        self.assertEqual(parse_due_line(":2026-08-15"), ("2026-08-15", "10:00"))
+        self.assertEqual(parse_due_line(":2026-08-15 00:00"), ("2026-08-15", "00:00"))
+        self.assertEqual(parse_due_line(":2026-08-15 23:59"), ("2026-08-15", "23:59"))
+        self.assertIsNone(parse_due_line(":2026-08-15 24:00"))
+        self.assertIsNone(parse_due_line(":10:00"))
 
     def test_active_tasks_can_filter_to_supplies_collection(self) -> None:
         active = active_tasks(
@@ -260,6 +286,63 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("collectionId", adapter.created[0][1])
             self.assertEqual(len(channel.sent), 1)
             self.assertEqual(channel.sent[0]["content"], "## Call mom")
+
+    async def test_plus_message_creates_task_with_strict_due_date_time(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            adapter = FakeAdapter(tasks=[])
+            surface = self.make_surface(Path(temporary) / "tasks.json", channel, adapter)
+            message = SimpleNamespace(
+                id=1,
+                content="+ Call mom\n:2026-08-15 14:30",
+                channel=SimpleNamespace(id=300),
+                author=SimpleNamespace(id=200, bot=False),
+                delete=AsyncMock(),
+            )
+
+            self.assertTrue(await surface.handle_message(message))  # type: ignore[arg-type]
+
+            self.assertEqual(adapter.created[0][1]["title"], "Call mom")
+            self.assertEqual(adapter.created[0][1]["dueDate"], "2026-08-15")
+            self.assertEqual(adapter.created[0][1]["dueTime"], "14:30")
+            self.assertEqual(channel.sent[0]["content"], "## Call mom\n- due: 2026-08-15 14:30")
+
+    async def test_plus_message_defaults_due_time_to_ten(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            adapter = FakeAdapter(tasks=[])
+            surface = self.make_surface(Path(temporary) / "tasks.json", channel, adapter)
+            message = SimpleNamespace(
+                id=1,
+                content="+ Call mom\n:2026-08-15",
+                channel=SimpleNamespace(id=300),
+                author=SimpleNamespace(id=200, bot=False),
+                delete=AsyncMock(),
+            )
+
+            self.assertTrue(await surface.handle_message(message))  # type: ignore[arg-type]
+
+            self.assertEqual(adapter.created[0][1]["dueDate"], "2026-08-15")
+            self.assertEqual(adapter.created[0][1]["dueTime"], "10:00")
+
+    async def test_invalid_due_line_deletes_command_without_creating_task(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            adapter = FakeAdapter(tasks=[])
+            surface = self.make_surface(Path(temporary) / "tasks.json", channel, adapter)
+            message = SimpleNamespace(
+                id=1,
+                content="+ Call mom\n:14:30",
+                channel=SimpleNamespace(id=300),
+                author=SimpleNamespace(id=200, bot=False),
+                delete=AsyncMock(),
+            )
+
+            self.assertTrue(await surface.handle_message(message))  # type: ignore[arg-type]
+
+            self.assertEqual(adapter.created, [])
+            self.assertEqual(channel.sent, [])
+            message.delete.assert_awaited_once()
 
     async def test_plus_message_for_supplies_uses_supplies_collection(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
