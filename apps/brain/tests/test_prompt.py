@@ -1,7 +1,7 @@
 import unittest
 
 from kaos_brain.intent import Route
-from kaos_brain.prompt import system_prompt
+from kaos_brain.prompt import ROUTER_SYSTEM_PROMPT, system_prompt
 
 
 class PromptTests(unittest.TestCase):
@@ -14,6 +14,10 @@ class PromptTests(unittest.TestCase):
         prompt = system_prompt(Route.DEEP)
         self.assertIn("advisory only", prompt)
         self.assertIn("suitable for Discord", prompt)
+
+    def test_router_prompt_only_allows_route_words(self) -> None:
+        self.assertIn("answer or deep", ROUTER_SYSTEM_PROMPT)
+        self.assertIn("Do not emit JSON", ROUTER_SYSTEM_PROMPT)
 
 
 if __name__ == "__main__":

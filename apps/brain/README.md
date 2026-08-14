@@ -18,7 +18,7 @@ Ollama directly, and leaves authoritative state changes to KaosGovernor.
 - Discord message intake for one configured `#brain` channel.
 - Allowed-user and guild checks.
 - Direct Ollama `/api/chat` calls.
-- Fast chat model and explicit deep model routing.
+- Fast chat model and automatic deep model routing.
 - `deep:`, `think:`, `깊게:`, and `생각:` prefixes route to the deep model.
 
 ## Required Environment
@@ -31,6 +31,7 @@ DISCORD_BRAIN_CHANNEL_ID=1536983928337076224
 OLLAMA_BASE_URL=http://127.0.0.1:11434
 KAOSBRAIN_CHAT_MODEL=gemma3:4b
 KAOSBRAIN_DEEP_MODEL=qwen3:8b
+KAOSBRAIN_AUTO_ROUTE_ENABLED=true
 ```
 
 Use the same Discord bot token exclusivity rule as every Discord service: never

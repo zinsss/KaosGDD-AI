@@ -22,6 +22,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.chat_model, "gemma3:4b")
         self.assertEqual(settings.deep_model, "qwen3:8b")
         self.assertTrue(settings.respond_without_mention)
+        self.assertTrue(settings.auto_route_enabled)
 
     def test_token_can_be_loaded_from_secret_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -45,6 +46,10 @@ class SettingsTests(unittest.TestCase):
     def test_caps_discord_reply_length(self) -> None:
         with self.assertRaises(ConfigurationError):
             Settings.from_env({**BASE_ENV, "KAOSBRAIN_MAX_REPLY_CHARS": "2000"})
+
+    def test_auto_route_can_be_disabled(self) -> None:
+        settings = Settings.from_env({**BASE_ENV, "KAOSBRAIN_AUTO_ROUTE_ENABLED": "false"})
+        self.assertFalse(settings.auto_route_enabled)
 
 
 if __name__ == "__main__":

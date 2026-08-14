@@ -72,6 +72,7 @@ class Settings:
     request_timeout_seconds: int
     max_reply_chars: int
     respond_without_mention: bool
+    auto_route_enabled: bool
     log_level: str
 
     @classmethod
@@ -99,5 +100,6 @@ class Settings:
             request_timeout_seconds=timeout,
             max_reply_chars=max_reply_chars,
             respond_without_mention=_boolean(source, "KAOSBRAIN_RESPOND_WITHOUT_MENTION", default=True),
+            auto_route_enabled=_boolean(source, "KAOSBRAIN_AUTO_ROUTE_ENABLED", default=True),
             log_level=source.get("LOG_LEVEL", "INFO").strip().upper() or "INFO",
         )

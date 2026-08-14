@@ -6,7 +6,8 @@ from typing import Any
 import aiohttp
 
 from .intent import Route
-from .prompt import system_prompt
+from .prompt import ROUTER_SYSTEM_PROMPT, system_prompt
+from .router import RouteDecision, parse_route_decision
 
 
 class OllamaError(RuntimeError):
@@ -27,16 +28,42 @@ class OllamaClient:
 
     async def generate(self, route: Route, user_text: str) -> str:
         model = self.config.deep_model if route is Route.DEEP else self.config.chat_model
-        payload: dict[str, Any] = {
-            "model": model,
-            "stream": False,
-            "messages": [
+        return await self._complete(
+            model,
+            [
                 {"role": "system", "content": system_prompt(route)},
                 {"role": "user", "content": user_text},
             ],
+            num_predict=512,
+        )
+
+    async def generate_auto(self, user_text: str) -> str:
+        decision = await self.route(user_text)
+        route = Route.DEEP if decision is RouteDecision.DEEP else Route.CHAT
+        return await self.generate(route, user_text)
+
+    async def route(self, user_text: str) -> RouteDecision:
+        try:
+            raw = await self._complete(
+                self.config.chat_model,
+                [
+                    {"role": "system", "content": ROUTER_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_text},
+                ],
+                num_predict=8,
+            )
+        except OllamaError:
+            return RouteDecision.ANSWER
+        return parse_route_decision(raw)
+
+    async def _complete(self, model: str, messages: list[dict[str, str]], *, num_predict: int) -> str:
+        payload: dict[str, Any] = {
+            "model": model,
+            "stream": False,
+            "messages": messages,
             "options": {
                 "temperature": 0.2,
-                "num_predict": 512,
+                "num_predict": num_predict,
             },
         }
         timeout = aiohttp.ClientTimeout(total=self.config.timeout_seconds)

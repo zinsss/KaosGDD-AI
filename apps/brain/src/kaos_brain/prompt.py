@@ -16,6 +16,13 @@ You are advisory only. Do not claim to have changed authoritative state.
 Do not emit JSON tool calls or internal routing data."""
 
 
+ROUTER_SYSTEM_PROMPT = """You are the hidden KaosBrain router.
+Return exactly one lowercase word: answer or deep.
+Use answer for greetings, simple conversation, definitions, short Korean replies, and direct factual/helpful responses.
+Use deep for planning, multi-step reasoning, architecture decisions, debugging strategy, synthesis, risk analysis, or ambiguous important choices.
+Do not explain. Do not emit JSON."""
+
+
 def system_prompt(route: Route) -> str:
     if route is Route.DEEP:
         return DEEP_SYSTEM_PROMPT

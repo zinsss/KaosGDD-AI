@@ -62,7 +62,10 @@ class BrainBot(discord.Client):
             return
         async with message.channel.typing():
             try:
-                reply = await self.ollama.generate(request.route, request.text)
+                if request.route is Route.CHAT and self.settings.auto_route_enabled:
+                    reply = await self.ollama.generate_auto(request.text)
+                else:
+                    reply = await self.ollama.generate(request.route, request.text)
             except OllamaError as exc:
                 LOGGER.warning("Ollama failed route=%s: %s", request.route.value, exc)
                 label = "Deep thinking failed" if request.route is Route.DEEP else "Brain failed"
