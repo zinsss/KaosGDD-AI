@@ -12,6 +12,7 @@ from kaos_governor_discord.tasks import (
     DiscordTasksSurface,
     TaskView,
     active_tasks,
+    parse_add_task_message,
     render_task_message,
     task_payload,
 )
@@ -40,7 +41,8 @@ TASKS = [
 
 class FakeAdapter:
     def __init__(self, tasks=None):
-        self.tasks = list(tasks or TASKS)
+        self.tasks = list(TASKS if tasks is None else tasks)
+        self.created = []
         self.updated = []
         self.deleted = []
 
@@ -55,6 +57,24 @@ class FakeAdapter:
             for item in self.tasks
         ]
         return {"ok": True, "uid": payload["uid"], "collection": payload["collectionId"]}
+
+    def create_task(self, profile, payload):
+        uid = f"TASK-{len(self.tasks) + 1}"
+        collection = payload.get("collectionId") or "zin:tasks"
+        self.created.append((profile, dict(payload)))
+        self.tasks.append(
+            {
+                "uid": uid,
+                "collection": collection,
+                "summary": payload["title"],
+                "description": payload.get("memo") or "",
+                "due": payload.get("dueDate") or "",
+                "dueTime": payload.get("dueTime") or "",
+                "priority": payload.get("priority") or "",
+                "status": "NEEDS-ACTION",
+            }
+        )
+        return {"ok": True, "uid": uid, "collection": collection}
 
     def delete_task(self, profile, uid, collection_id):
         self.deleted.append((profile, uid, collection_id))
@@ -144,6 +164,12 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(completed, "## ~~Buy milk~~")
         self.assertNotIn("No due date", content)
 
+    def test_parse_add_task_message_accepts_plus_title_only(self) -> None:
+        self.assertEqual(parse_add_task_message("+ Call mom"), "Call mom")
+        self.assertEqual(parse_add_task_message("  +   엄마한테 전화  "), "엄마한테 전화")
+        self.assertEqual(parse_add_task_message("+"), "")
+        self.assertEqual(parse_add_task_message("Call mom"), "")
+
     def test_active_tasks_can_filter_to_supplies_collection(self) -> None:
         active = active_tasks(
             [
@@ -210,6 +236,59 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             buttons = channel.sent[0]["view"].children
             self.assertEqual([button.custom_id for button in buttons], ["supplies:done", "supplies:edit", "supplies:delete"])
             self.assertEqual(surface.status()["collectionId"], "zin:supplies")
+
+    async def test_plus_message_creates_task_without_due_date_and_deletes_command(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            adapter = FakeAdapter(tasks=[])
+            surface = self.make_surface(Path(temporary) / "tasks.json", channel, adapter)
+            message = SimpleNamespace(
+                id=1,
+                content="+ Call mom",
+                channel=SimpleNamespace(id=300),
+                author=SimpleNamespace(id=200, bot=False),
+                delete=AsyncMock(),
+            )
+
+            handled = await surface.handle_message(message)  # type: ignore[arg-type]
+
+            self.assertTrue(handled)
+            message.delete.assert_awaited_once()
+            self.assertEqual(adapter.created[0][0], "main")
+            self.assertEqual(adapter.created[0][1]["title"], "Call mom")
+            self.assertEqual(adapter.created[0][1]["dueDate"], "")
+            self.assertNotIn("collectionId", adapter.created[0][1])
+            self.assertEqual(len(channel.sent), 1)
+            self.assertEqual(channel.sent[0]["content"], "## Call mom")
+
+    async def test_plus_message_for_supplies_uses_supplies_collection(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            adapter = FakeAdapter(tasks=[])
+            surface = DiscordTasksSurface(
+                FakeBot(channel),  # type: ignore[arg-type]
+                AccessPolicy(100, frozenset({200}), frozenset({300})),
+                channel_id=300,
+                profile="main",
+                state_path=Path(temporary) / "supplies.json",
+                adapter=adapter,  # type: ignore[arg-type]
+                surface_name="supplies",
+                button_prefix="supplies",
+                collection_id="zin:supplies",
+                show_due=False,
+            )
+            message = SimpleNamespace(
+                id=1,
+                content="+ Paper towels",
+                channel=SimpleNamespace(id=300),
+                author=SimpleNamespace(id=200, bot=False),
+                delete=AsyncMock(),
+            )
+
+            self.assertTrue(await surface.handle_message(message))  # type: ignore[arg-type]
+
+            self.assertEqual(adapter.created[0][1]["collectionId"], "zin:supplies")
+            self.assertEqual(channel.sent[0]["content"], "## Paper towels")
 
     async def test_ensure_message_deletes_legacy_combined_message(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

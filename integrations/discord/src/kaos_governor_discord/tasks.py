@@ -89,7 +89,30 @@ class DiscordTasksSurface:
             return False
         if message.author.bot:
             return self._is_own_message(message)
+        title = parse_add_task_message(str(message.content or ""))
+        if title:
+            await self.create_task(title)
         await self._delete_message(message)
+        return True
+
+    async def create_task(self, title: str) -> bool:
+        clean_title = title.strip()
+        if not clean_title:
+            return False
+        payload = {
+            "title": clean_title,
+            "memo": "",
+            "dueDate": "",
+            "dueTime": "",
+            "priority": "",
+        }
+        if self.collection_id:
+            payload["collectionId"] = self.collection_id
+        result = await asyncio.to_thread(self.adapter.create_task, self.profile, payload)
+        uid = str(result.get("uid") or "")
+        if not uid:
+            return False
+        await self.ensure_message()
         return True
 
     async def complete_task(self, key: str) -> bool:
@@ -278,6 +301,14 @@ def active_tasks(tasks: list[Mapping[str, Any]], *, collection_id: str = "") -> 
         and (not collection_id or str(item.get("collection") or "") == collection_id)
     ]
     return sorted(active, key=lambda item: (str(item.get("due") or "9999-12-31"), str(item.get("summary") or ""), str(item.get("uid") or "")))[:MAX_VISIBLE_TASKS]
+
+
+def parse_add_task_message(content: str) -> str:
+    stripped = content.strip()
+    if not stripped.startswith("+"):
+        return ""
+    title = stripped[1:].strip()
+    return title if title else ""
 
 
 def render_task_message(task: Mapping[str, Any], *, show_due: bool = True, completed: bool | None = None) -> str:
