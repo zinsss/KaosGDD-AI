@@ -49,15 +49,24 @@ Paperless, HylaFAX, or RustDesk.
 
 ## Network binding
 
-The default API binding is loopback only:
+The default health binding is loopback only:
 
 ```text
 GOVERNOR_BIND_ADDRESS=127.0.0.1
 ```
 
-When KaosBrain moves to H4, bind Governor to the H3+ Tailscale address and
-allow TCP 8097 only from H4 in the host firewall. Do not publish Governor
-through Caddy, cloudflared, or the public Internet.
+KaosBrain should use the separate tool API, not the health port:
+
+```text
+GOVERNOR_BRAIN_TOOLS_ENABLED=true
+GOVERNOR_BRAIN_TOOLS_BIND_ADDRESS=<H3_TAILSCALE_IP>
+GOVERNOR_BRAIN_TOOLS_PORT=8098
+```
+
+The tool API requires the `GOVERNOR_API_TOKEN` bearer token and exposes only
+narrow `/tools/...` endpoints for Brain. Allow TCP 8098 only from H4 in the
+host firewall. Do not publish Governor tools through Caddy, cloudflared, or the
+public Internet.
 
 Memos and Radicale default to loopback. Their native clients require a
 separate, intentional Caddy/Tailscale or CalDAV routing design.

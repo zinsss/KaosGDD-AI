@@ -34,6 +34,7 @@ from .memos import DiscordMemosCapture
 from .organizer import DiscordMailOrganizer
 from .system_status import DiscordServiceStatusSurface
 from .tasks import DiscordTasksSurface
+from .tools import BrainToolServer
 
 LOGGER = logging.getLogger(__name__)
 
@@ -141,6 +142,7 @@ class GovernorBot(discord.Client):
         self._service_status_task: asyncio.Task | None = None
         self._calendar_midnight_task: asyncio.Task | None = None
         self._tasks_midnight_task: asyncio.Task | None = None
+        self.calendar_adapter = CalendarAdapterClient(CalendarAdapterConfig(settings.calendar_adapter_url))
         self.discord_calendar = (
             DiscordCalendarSurface(
                 self,
@@ -148,7 +150,7 @@ class GovernorBot(discord.Client):
                 channel_id=settings.calendar_channel_id,
                 profile=settings.calendar_profile,
                 state_path=settings.calendar_state_path,
-                adapter=CalendarAdapterClient(CalendarAdapterConfig(settings.calendar_adapter_url)),
+                adapter=self.calendar_adapter,
             )
             if settings.calendar_enabled and settings.calendar_channel_id is not None
             else None
@@ -160,7 +162,7 @@ class GovernorBot(discord.Client):
                 channel_id=settings.tasks_channel_id,
                 profile=settings.tasks_profile,
                 state_path=settings.tasks_state_path,
-                adapter=CalendarAdapterClient(CalendarAdapterConfig(settings.calendar_adapter_url)),
+                adapter=self.calendar_adapter,
             )
             if settings.tasks_enabled and settings.tasks_channel_id is not None
             else None
@@ -172,7 +174,7 @@ class GovernorBot(discord.Client):
                 channel_id=settings.supplies_channel_id,
                 profile=settings.supplies_profile,
                 state_path=settings.supplies_state_path,
-                adapter=CalendarAdapterClient(CalendarAdapterConfig(settings.calendar_adapter_url)),
+                adapter=self.calendar_adapter,
                 surface_name="supplies",
                 button_prefix="supplies",
                 collection_id=settings.supplies_collection_id,
@@ -254,6 +256,18 @@ class GovernorBot(discord.Client):
             self._health_status,
             governor_api_token=settings.governor_api_token,
             memos=self.memos,
+        )
+        self._brain_tools = (
+            BrainToolServer(
+                settings.brain_tools_host,
+                settings.brain_tools_port,
+                governor_api_token=settings.governor_api_token,
+                calendar_adapter=self.calendar_adapter,
+                memos=self.memos,
+                paperless=self.paperless,
+            )
+            if settings.brain_tools_enabled
+            else None
         )
         self._register_commands()
 
@@ -413,6 +427,8 @@ class GovernorBot(discord.Client):
 
     async def setup_hook(self) -> None:
         await self._health.start()
+        if self._brain_tools is not None:
+            await self._brain_tools.start()
         guild = discord.Object(id=self.settings.guild_id)
         self.tree.copy_global_to(guild=guild)
         synced = await self.tree.sync(guild=guild)
@@ -540,6 +556,8 @@ class GovernorBot(discord.Client):
                 await self._tasks_midnight_task
             self._tasks_midnight_task = None
         await self._health.stop()
+        if self._brain_tools is not None:
+            await self._brain_tools.stop()
         await super().close()
 
     def _health_status(self) -> dict[str, object]:
@@ -547,6 +565,11 @@ class GovernorBot(discord.Client):
             "discordReady": self.is_ready(),
             "guildId": str(self.settings.guild_id),
             "version": __version__,
+            "brainTools": {
+                "enabled": self._brain_tools is not None,
+                "host": self.settings.brain_tools_host if self._brain_tools is not None else "",
+                "port": self.settings.brain_tools_port if self._brain_tools is not None else 0,
+            },
             "naverMail": self.mail_poller.status(),
             "naverMailOrganizer": self.mail_organizer.status(),
             "fax": self.fax_service.status(),

@@ -22,6 +22,7 @@ services:
       - fax_connector_token
     ports:
       - "${GOVERNOR_BIND_ADDRESS:-127.0.0.1}:${HEALTH_PORT:-8097}:8097"
+      - "${GOVERNOR_BRAIN_TOOLS_BIND_ADDRESS:-127.0.0.1}:${GOVERNOR_BRAIN_TOOLS_PORT:-8098}:8098"
     volumes:
       - ${KAOS_ROOT:-/srv/kaos}/data/kaosgdd-ai/governor/mail:/data/mail
       - ${KAOS_ROOT:-/srv/kaos}/data/kaosgdd-ai/governor/fax:/data/fax

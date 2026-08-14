@@ -97,6 +97,9 @@ class Settings:
     startup_notification: bool
     health_host: str
     health_port: int
+    brain_tools_enabled: bool
+    brain_tools_host: str
+    brain_tools_port: int
     governor_api_token: str
     paperless_api_token: str
     paperless_base_url: str
@@ -252,9 +255,15 @@ class Settings:
         health_port = _positive_int(source.get("HEALTH_PORT", "8097"), "HEALTH_PORT")
         if health_port > 65535:
             raise ConfigurationError("HEALTH_PORT must be at most 65535")
+        brain_tools_enabled = _boolean(source, "GOVERNOR_BRAIN_TOOLS_ENABLED")
+        brain_tools_port = _positive_int(source.get("GOVERNOR_BRAIN_TOOLS_PORT", "8098"), "GOVERNOR_BRAIN_TOOLS_PORT")
+        if brain_tools_port > 65535:
+            raise ConfigurationError("GOVERNOR_BRAIN_TOOLS_PORT must be at most 65535")
         governor_api_token = _secret(source, "GOVERNOR_API_TOKEN")
-        if _boolean(source, "MEMOS_SEARCH_ENABLED") and not governor_api_token:
-            raise ConfigurationError("GOVERNOR_API_TOKEN is required when Memos search is enabled")
+        if (_boolean(source, "MEMOS_SEARCH_ENABLED") or brain_tools_enabled) and not governor_api_token:
+            raise ConfigurationError(
+                "GOVERNOR_API_TOKEN is required when Memos search or Brain tools are enabled"
+            )
         paperless_api_token = _secret(source, "PAPERLESS_API_TOKEN")
         paperless_base_url = (
             source.get("PAPERLESS_BASE_URL", "").strip()
@@ -304,6 +313,9 @@ class Settings:
             startup_notification=_boolean(source, "DISCORD_STARTUP_NOTIFICATION"),
             health_host=source.get("HEALTH_HOST", "0.0.0.0").strip() or "0.0.0.0",
             health_port=health_port,
+            brain_tools_enabled=brain_tools_enabled,
+            brain_tools_host=source.get("GOVERNOR_BRAIN_TOOLS_HOST", "0.0.0.0").strip() or "0.0.0.0",
+            brain_tools_port=brain_tools_port,
             governor_api_token=governor_api_token,
             paperless_api_token=paperless_api_token,
             paperless_base_url=paperless_base_url,

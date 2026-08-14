@@ -333,6 +333,24 @@ class SettingsTests(unittest.TestCase):
         )
         self.assertEqual(settings.governor_api_token, "not-a-real-secret")
 
+    def test_brain_tools_require_governor_api_token_and_parse_bindings(self) -> None:
+        with self.assertRaises(ConfigurationError):
+            Settings.from_env({**BASE_ENV, "GOVERNOR_BRAIN_TOOLS_ENABLED": "true"})
+        settings = Settings.from_env(
+            {
+                **BASE_ENV,
+                "GOVERNOR_BRAIN_TOOLS_ENABLED": "true",
+                "GOVERNOR_BRAIN_TOOLS_HOST": "0.0.0.0",
+                "GOVERNOR_BRAIN_TOOLS_PORT": "8098",
+                "GOVERNOR_API_TOKEN": "not-a-real-secret",
+            }
+        )
+
+        self.assertTrue(settings.brain_tools_enabled)
+        self.assertEqual(settings.brain_tools_host, "0.0.0.0")
+        self.assertEqual(settings.brain_tools_port, 8098)
+        self.assertEqual(settings.governor_api_token, "not-a-real-secret")
+
     def test_governor_api_token_can_be_loaded_from_a_secret_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             token_file = Path(temporary_directory) / "governor-api-token"
