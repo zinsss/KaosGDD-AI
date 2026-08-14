@@ -28,6 +28,7 @@ class FakeCalendarAdapter:
         ]
         self.updated = []
         self.created = []
+        self.deleted = []
 
     def bootstrap(self, profile):
         self.bootstrap_calls.append(profile)
@@ -94,6 +95,11 @@ class FakeCalendarAdapter:
                 "collection": payload.get("collectionId", "zin:tasks"),
             }
         )
+        return {"uid": uid}
+
+    def delete_task(self, profile, uid, collection_id):
+        self.deleted.append((profile, uid, collection_id))
+        self.tasks = [task for task in self.tasks if task.get("uid") != uid]
         return {"uid": uid}
 
 
@@ -392,6 +398,100 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 400)
         self.assertEqual((await response.json())["error"], "confirmation_actor_mismatch")
         self.assertEqual(self.calendar.created, [])
+
+    async def test_task_complete_proposal_requires_confirmation_before_write(self) -> None:
+        response = await self.client.post(
+            "/tools/tasks/action/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-complete-1",
+                "profile": "main",
+                "taskTitle": "Call mom",
+                "action": "complete",
+            },
+        )
+
+        self.assertEqual(response.status, 201)
+        payload = await response.json()
+        self.assertEqual(payload["task"]["title"], "Call mom")
+        self.assertEqual(payload["task"]["action"], "complete")
+        self.assertEqual(self.calendar.updated, [])
+
+    async def test_task_complete_approval_marks_task_completed(self) -> None:
+        proposal = await self.client.post(
+            "/tools/tasks/action/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-complete-2",
+                "profile": "main",
+                "taskTitle": "Call mom",
+                "action": "complete",
+            },
+        )
+        confirmation_id = (await proposal.json())["confirmationId"]
+
+        response = await self.client.post(
+            f"/tools/confirmations/{confirmation_id}/approve",
+            headers=self.headers(),
+            json={"actorId": "994579996960104529"},
+        )
+
+        self.assertEqual(response.status, 200)
+        payload = await response.json()
+        self.assertEqual(payload["task"]["action"], "complete")
+        self.assertEqual(self.calendar.updated[0][1]["uid"], "TASK-1")
+        self.assertEqual(self.calendar.updated[0][1]["status"], "COMPLETED")
+
+    async def test_task_delete_approval_deletes_calendar_task(self) -> None:
+        proposal = await self.client.post(
+            "/tools/tasks/action/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-delete-1",
+                "profile": "main",
+                "taskTitle": "Call mom",
+                "action": "delete",
+            },
+        )
+        confirmation_id = (await proposal.json())["confirmationId"]
+
+        response = await self.client.post(
+            f"/tools/confirmations/{confirmation_id}/approve",
+            headers=self.headers(),
+            json={"actorId": "994579996960104529"},
+        )
+
+        self.assertEqual(response.status, 200)
+        payload = await response.json()
+        self.assertEqual(payload["task"]["action"], "delete")
+        self.assertEqual(self.calendar.deleted, [("main", "TASK-1", "zin:tasks")])
+
+    async def test_task_action_approval_rejects_wrong_actor(self) -> None:
+        proposal = await self.client.post(
+            "/tools/tasks/action/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-complete-3",
+                "profile": "main",
+                "taskTitle": "Call mom",
+                "action": "complete",
+            },
+        )
+        confirmation_id = (await proposal.json())["confirmationId"]
+
+        response = await self.client.post(
+            f"/tools/confirmations/{confirmation_id}/approve",
+            headers=self.headers(),
+            json={"actorId": "111"},
+        )
+
+        self.assertEqual(response.status, 400)
+        self.assertEqual((await response.json())["error"], "confirmation_actor_mismatch")
+        self.assertEqual(self.calendar.updated, [])
 
 
 if __name__ == "__main__":

@@ -42,6 +42,18 @@ class PendingTaskCreate:
     payload: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class PendingTaskAction:
+    profile: str
+    action: str
+    uid: str
+    collection_id: str
+    title: str
+    due: str
+    due_time: str
+    payload: dict[str, Any]
+
+
 class BrainToolServer:
     def __init__(
         self,
@@ -67,6 +79,7 @@ class BrainToolServer:
         self._durable = durable_store or MemoryDurableGovernorStore()
         self._pending_task_due_updates: dict[str, PendingTaskDueUpdate] = {}
         self._pending_task_creates: dict[str, PendingTaskCreate] = {}
+        self._pending_task_actions: dict[str, PendingTaskAction] = {}
         self._runner: web.AppRunner | None = None
 
     def application(self) -> web.Application:
@@ -77,6 +90,7 @@ class BrainToolServer:
         app.router.add_get("/tools/memos/search", self._search_memos)
         app.router.add_get("/tools/memos/{memo_id}", self._get_memo)
         app.router.add_get("/tools/documents/search", self._search_documents)
+        app.router.add_post("/tools/tasks/action/proposals", self._propose_task_action)
         app.router.add_post("/tools/tasks/create/proposals", self._propose_task_create)
         app.router.add_post("/tools/tasks/update-due/proposals", self._propose_task_due_update)
         app.router.add_post("/tools/confirmations/{confirmation_id}/approve", self._approve_confirmation)
@@ -343,6 +357,98 @@ class BrainToolServer:
             status=201,
         )
 
+    async def _propose_task_action(self, request: web.Request) -> web.Response:
+        try:
+            body = await request.json()
+        except ValueError:
+            return web.json_response({"error": "invalid_json"}, status=400)
+        if not isinstance(body, Mapping):
+            return web.json_response({"error": "invalid_json"}, status=400)
+        profile = str(body.get("profile") or "main").strip().lower() or "main"
+        try:
+            profile_host(profile)
+        except CalendarAdapterError:
+            return web.json_response({"error": "invalid_profile"}, status=400)
+        actor_id = str(body.get("actorId") or "").strip()
+        idempotency_key = str(body.get("idempotencyKey") or "").strip()
+        task_title = " ".join(str(body.get("taskTitle") or "").split())
+        action = str(body.get("action") or "").strip().lower()
+        if action not in {"complete", "delete"}:
+            return web.json_response({"error": "task_action_invalid_action"}, status=400)
+        if not actor_id or not idempotency_key or not task_title:
+            return web.json_response({"error": "task_action_missing_required_field"}, status=400)
+        try:
+            tasks = await asyncio.to_thread(self._calendar_adapter.list_tasks, profile)
+        except CalendarAdapterError as exc:
+            return web.json_response({"error": str(exc)}, status=502)
+        matches = _match_active_tasks(tasks, task_title)
+        if not matches:
+            return web.json_response({"error": "task_not_found"}, status=404)
+        if len(matches) > 1:
+            return web.json_response(
+                {
+                    "error": "task_match_ambiguous",
+                    "matches": [task_payload(item, {}) for item in matches[:5]],
+                },
+                status=409,
+            )
+        task = matches[0]
+        uid = str(task.get("uid") or "")
+        collection_id = str(task.get("collection") or "")
+        title = str(task.get("summary") or "Untitled task")
+        payload = {
+            "uid": uid,
+            "collectionId": collection_id,
+            "title": title,
+            "memo": str(task.get("description") or ""),
+            "dueDate": str(task.get("due") or ""),
+            "dueTime": str(task.get("dueTime") or ""),
+            "priority": str(task.get("priority") or ""),
+            "status": "COMPLETED" if action == "complete" else str(task.get("status") or ""),
+        }
+        try:
+            actor = Actor("user", actor_id, "family" if profile == "family" else "personal")
+            operation, _created = self._durable.start_operation(
+                OperationRequest(
+                    actor=actor,
+                    idempotency_key=idempotency_key,
+                    tool_name="calendar.tasks",
+                    operation_type=action,
+                    parameters={
+                        "profile": profile,
+                        "uid": uid,
+                        "collectionId": collection_id,
+                        "title": title,
+                        "action": action,
+                    },
+                    requires_confirmation=True,
+                )
+            )
+            confirmation = self._durable.create_confirmation(operation.operation_id, ttl=timedelta(minutes=10))
+        except DurableGovernorError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+        pending = PendingTaskAction(
+            profile=profile,
+            action=action,
+            uid=uid,
+            collection_id=collection_id,
+            title=title,
+            due=str(task.get("due") or ""),
+            due_time=str(task.get("dueTime") or ""),
+            payload=payload,
+        )
+        self._pending_task_actions[operation.operation_id] = pending
+        return web.json_response(
+            {
+                "operationId": operation.operation_id,
+                "confirmationId": confirmation.confirmation_id,
+                "expiresAt": confirmation.expires_at.isoformat(),
+                "task": _pending_task_action_payload(pending),
+                "source": "calendar-adapter-live",
+            },
+            status=201,
+        )
+
     async def _approve_confirmation(self, request: web.Request) -> web.Response:
         confirmation_id = request.match_info["confirmation_id"]
         try:
@@ -362,7 +468,8 @@ class BrainToolServer:
             return web.json_response({"error": "operation_not_found"}, status=404)
         pending_update = self._pending_task_due_updates.get(operation.operation_id)
         pending_create = self._pending_task_creates.get(operation.operation_id)
-        if pending_update is None and pending_create is None:
+        pending_action = self._pending_task_actions.get(operation.operation_id)
+        if pending_update is None and pending_create is None and pending_action is None:
             return web.json_response({"error": "operation_payload_not_found"}, status=410)
         try:
             actor = Actor("user", actor_id, operation.actor.scope)
@@ -380,14 +487,32 @@ class BrainToolServer:
                 task = _pending_task_payload(pending_update)
                 result_uid = str(result.get("uid") or pending_update.uid)
             else:
-                assert pending_create is not None
-                result = await asyncio.to_thread(
-                    self._calendar_adapter.create_task,
-                    pending_create.profile,
-                    pending_create.payload,
-                )
-                result_uid = str(result.get("uid") or "")
-                task = {**_pending_task_create_payload(pending_create), "uid": result_uid}
+                if pending_create is not None:
+                    result = await asyncio.to_thread(
+                        self._calendar_adapter.create_task,
+                        pending_create.profile,
+                        pending_create.payload,
+                    )
+                    result_uid = str(result.get("uid") or "")
+                    task = {**_pending_task_create_payload(pending_create), "uid": result_uid}
+                else:
+                    assert pending_action is not None
+                    if pending_action.action == "delete":
+                        result = await asyncio.to_thread(
+                            self._calendar_adapter.delete_task,
+                            pending_action.profile,
+                            pending_action.uid,
+                            pending_action.collection_id,
+                        )
+                        result_uid = str(result.get("uid") or pending_action.uid)
+                    else:
+                        result = await asyncio.to_thread(
+                            self._calendar_adapter.update_task,
+                            pending_action.profile,
+                            pending_action.payload,
+                        )
+                        result_uid = str(result.get("uid") or pending_action.uid)
+                    task = _pending_task_action_payload(pending_action)
             self._durable.complete_operation(operation.operation_id, result={"uid": result_uid})
             await self._refresh_tasks()
         except DurableGovernorError as exc:
@@ -397,6 +522,7 @@ class BrainToolServer:
             return web.json_response({"error": str(exc)}, status=502)
         self._pending_task_due_updates.pop(operation.operation_id, None)
         self._pending_task_creates.pop(operation.operation_id, None)
+        self._pending_task_actions.pop(operation.operation_id, None)
         return web.json_response(
             {
                 "operationId": operation.operation_id,
@@ -582,6 +708,17 @@ def _pending_task_create_payload(pending: PendingTaskCreate) -> dict[str, object
         "title": pending.title,
         "due": pending.due,
         "dueTime": pending.due_time,
+    }
+
+
+def _pending_task_action_payload(pending: PendingTaskAction) -> dict[str, object]:
+    return {
+        "uid": pending.uid,
+        "collectionId": pending.collection_id,
+        "title": pending.title,
+        "due": pending.due,
+        "dueTime": pending.due_time,
+        "action": pending.action,
     }
 
 

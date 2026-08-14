@@ -37,6 +37,12 @@ class TaskCreateRequest:
     due_time: str = "10:00"
 
 
+@dataclass(frozen=True)
+class TaskActionRequest:
+    task_title: str
+    action: str
+
+
 def parse_task_due_update(content: str, *, today: date) -> TaskDueUpdateRequest | None:
     text = " ".join(content.strip().split())
     if not text or not any(marker in text for marker in ("편집", "변경", "바꿔", "수정")):
@@ -68,6 +74,21 @@ def parse_task_create(content: str, *, today: date) -> TaskCreateRequest | None:
     if not title:
         return None
     return TaskCreateRequest(title=title, due_date=due_date.isoformat())
+
+
+def parse_task_action(content: str) -> TaskActionRequest | None:
+    text = " ".join(content.strip().split())
+    if not text:
+        return None
+    delete_marker = _first_marker(text, ("삭제해줘", "삭제", "지워줘", "지워", "없애줘", "없애"))
+    if delete_marker is not None:
+        title = _clean_action_title(text.replace(delete_marker, " ", 1))
+        return TaskActionRequest(task_title=title, action="delete") if title else None
+    complete_marker = _first_marker(text, ("완료", "끝냈어", "끝냈다", "끝냄", "끝내줘", "끝내", "처리했어", "처리"))
+    if complete_marker is not None:
+        title = _clean_action_title(text.replace(complete_marker, " ", 1))
+        return TaskActionRequest(task_title=title, action="complete") if title else None
+    return None
 
 
 def _extract_due_date(text: str, *, today: date) -> tuple[str, date] | None:
@@ -104,4 +125,18 @@ def _clean_create_title(value: str) -> str:
         title = title.removesuffix(suffix).strip(" .,")
     for prefix in ("까지", "까지로", "까지는"):
         title = title.removeprefix(prefix).strip(" .,")
+    return title
+
+
+def _first_marker(text: str, markers: tuple[str, ...]) -> str | None:
+    matches = [(text.find(marker), marker) for marker in markers if marker in text]
+    if not matches:
+        return None
+    return min(matches, key=lambda item: item[0])[1]
+
+
+def _clean_action_title(value: str) -> str:
+    title = value.strip(" .,")
+    for suffix in ("task", "태스크", "할 일", "할일"):
+        title = title.removesuffix(suffix).strip(" .,")
     return title

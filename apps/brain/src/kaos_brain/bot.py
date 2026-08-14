@@ -10,6 +10,8 @@ from .governor_tools import (
     GovernorToolClient,
     GovernorToolConfig,
     GovernorToolError,
+    render_task_action_completed,
+    render_task_action_proposal,
     render_task_create_completed,
     render_task_create_proposal,
     render_task_due_update_completed,
@@ -18,7 +20,14 @@ from .governor_tools import (
 )
 from .intent import Route, parse_request
 from .ollama import OllamaClient, OllamaConfig, OllamaError
-from .task_update_intent import TaskCreateRequest, TaskDueUpdateRequest, parse_task_create, parse_task_due_update
+from .task_update_intent import (
+    TaskActionRequest,
+    TaskCreateRequest,
+    TaskDueUpdateRequest,
+    parse_task_action,
+    parse_task_create,
+    parse_task_due_update,
+)
 from .tool_intent import ToolRequest, parse_tool_request
 
 LOGGER = logging.getLogger(__name__)
@@ -101,6 +110,10 @@ class BrainBot(discord.Client):
         )
         if task_create is not None:
             await self._propose_task_create(message, task_create)
+            return
+        task_action = parse_task_action(request.text) if request.route is Route.CHAT else None
+        if task_action is not None:
+            await self._propose_task_action(message, task_action)
             return
         async with message.channel.typing():
             try:
@@ -190,6 +203,34 @@ class BrainBot(discord.Client):
             allowed_mentions=NO_MENTIONS,
         )
 
+    async def _propose_task_action(self, message: discord.Message, request: TaskActionRequest) -> None:
+        if self.governor_tools is None:
+            await message.reply(
+                "Governor tools are not configured yet.",
+                mention_author=False,
+                allowed_mentions=NO_MENTIONS,
+            )
+            return
+        try:
+            payload = await self.governor_tools.propose_task_action(
+                request,
+                actor_id=message.author.id,
+                idempotency_key=f"discord:{message.id}",
+            )
+        except GovernorToolError as exc:
+            await message.reply(
+                f"Task action proposal failed: {exc}",
+                mention_author=False,
+                allowed_mentions=NO_MENTIONS,
+            )
+            return
+        await message.reply(
+            render_task_action_proposal(payload),
+            view=TaskActionConfirmationView(self.governor_tools, int(message.author.id), str(payload.get("confirmationId") or "")),
+            mention_author=False,
+            allowed_mentions=NO_MENTIONS,
+        )
+
 
 class TaskUpdateConfirmationView(discord.ui.View):
     def __init__(self, governor_tools: GovernorToolClient, actor_id: int, confirmation_id: str) -> None:
@@ -254,4 +295,37 @@ class TaskCreateConfirmationView(discord.ui.View):
         for item in self.children:
             item.disabled = True
         await interaction.response.edit_message(content="Task creation cancelled.", view=self, allowed_mentions=NO_MENTIONS)
+        self.stop()
+
+
+class TaskActionConfirmationView(discord.ui.View):
+    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, confirmation_id: str) -> None:
+        super().__init__(timeout=600)
+        self.governor_tools = governor_tools
+        self.actor_id = actor_id
+        self.confirmation_id = confirmation_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if int(interaction.user.id) == self.actor_id:
+            return True
+        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        try:
+            payload = await self.governor_tools.approve_confirmation(self.confirmation_id, actor_id=self.actor_id)
+            content = render_task_action_completed(payload)
+        except GovernorToolError as exc:
+            content = f"Task action failed: {exc}"
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(content=content, view=self, allowed_mentions=NO_MENTIONS)
+        self.stop()
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(content="Task action cancelled.", view=self, allowed_mentions=NO_MENTIONS)
         self.stop()

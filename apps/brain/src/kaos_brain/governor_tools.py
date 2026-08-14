@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from .task_update_intent import TaskCreateRequest, TaskDueUpdateRequest
+from .task_update_intent import TaskActionRequest, TaskCreateRequest, TaskDueUpdateRequest
 from .tool_intent import ToolKind, ToolRequest
 
 
@@ -69,6 +69,24 @@ class GovernorToolClient:
                 "title": request.title,
                 "dueDate": request.due_date,
                 "dueTime": request.due_time,
+            },
+        )
+
+    async def propose_task_action(
+        self,
+        request: TaskActionRequest,
+        *,
+        actor_id: int,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        return await self._post(
+            "/tools/tasks/action/proposals",
+            {
+                "actorId": str(actor_id),
+                "idempotencyKey": idempotency_key,
+                "profile": self.config.profile,
+                "taskTitle": request.task_title,
+                "action": request.action,
             },
         )
 
@@ -165,6 +183,33 @@ def render_task_create_completed(payload: dict[str, Any]) -> str:
     title = str(task.get("title") or "Untitled task")
     due = _due_text(str(task.get("due") or ""), str(task.get("dueTime") or ""))
     return f"Task created: {title} -> {due}"
+
+
+def render_task_action_proposal(payload: dict[str, Any]) -> str:
+    task = payload.get("task")
+    if not isinstance(task, dict):
+        return "Task action requires confirmation."
+    title = str(task.get("title") or "Untitled task")
+    action = str(task.get("action") or "update")
+    label = "complete" if action == "complete" else "delete"
+    due = _due_text(str(task.get("due") or ""), str(task.get("dueTime") or ""))
+    lines = ["## Confirm task action", f"- action: {label}", f"- task: {title}"]
+    if due:
+        lines.append(f"- due: {due}")
+    return "\n".join(lines)
+
+
+def render_task_action_completed(payload: dict[str, Any]) -> str:
+    task = payload.get("task")
+    if not isinstance(task, dict):
+        return "Task updated."
+    title = str(task.get("title") or "Untitled task")
+    action = str(task.get("action") or "")
+    if action == "delete":
+        return f"Task deleted: {title}"
+    if action == "complete":
+        return f"Task completed: {title}"
+    return f"Task updated: {title}"
 
 
 def _due_text(due_date: str, due_time: str) -> str:

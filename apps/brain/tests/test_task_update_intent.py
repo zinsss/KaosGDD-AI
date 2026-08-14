@@ -1,7 +1,7 @@
 from datetime import date
 import unittest
 
-from kaos_brain.task_update_intent import parse_task_create, parse_task_due_update
+from kaos_brain.task_update_intent import parse_task_action, parse_task_create, parse_task_due_update
 
 
 class TaskUpdateIntentTests(unittest.TestCase):
@@ -48,6 +48,27 @@ class TaskUpdateIntentTests(unittest.TestCase):
 
     def test_plain_message_does_not_create(self) -> None:
         self.assertIsNone(parse_task_create("내일 뭐 있어?", today=date(2026, 8, 14)))
+
+    def test_korean_complete_action(self) -> None:
+        request = parse_task_action("엄마 전화 완료")
+        assert request is not None
+        self.assertEqual(request.task_title, "엄마 전화")
+        self.assertEqual(request.action, "complete")
+
+    def test_korean_finished_action(self) -> None:
+        request = parse_task_action("영이 큐시미아 끝냈어")
+        assert request is not None
+        self.assertEqual(request.task_title, "영이 큐시미아")
+        self.assertEqual(request.action, "complete")
+
+    def test_korean_delete_action(self) -> None:
+        request = parse_task_action("보험 서류 삭제해줘")
+        assert request is not None
+        self.assertEqual(request.task_title, "보험 서류")
+        self.assertEqual(request.action, "delete")
+
+    def test_plain_message_does_not_action(self) -> None:
+        self.assertIsNone(parse_task_action("오늘 뭐 있어?"))
 
 
 if __name__ == "__main__":
