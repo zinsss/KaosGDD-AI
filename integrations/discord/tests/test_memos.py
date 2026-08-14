@@ -6,7 +6,12 @@ from unittest.mock import AsyncMock
 
 from kaos_governor.memos import Memo, MemoSearchPage, MemoSearchResult
 from kaos_governor_discord.access import AccessPolicy
-from kaos_governor_discord.memos import DiscordMemosCapture, render_memo_opened
+from kaos_governor_discord.memos import (
+    DiscordMemosCapture,
+    MemosCreatePromptView,
+    parse_create_memo_message,
+    render_memo_opened,
+)
 
 
 class FakeMemos:
@@ -79,7 +84,7 @@ class DiscordMemosCaptureTests(unittest.IsolatedAsyncioTestCase):
         )
         return message
 
-    async def test_plain_message_creates_memo_then_deletes_original(self) -> None:
+    async def test_plain_message_is_deleted_without_creating_memo(self) -> None:
         service = FakeMemos()
         capture = DiscordMemosCapture(
             service,  # type: ignore[arg-type]
@@ -92,11 +97,46 @@ class DiscordMemosCaptureTests(unittest.IsolatedAsyncioTestCase):
         handled = await capture.handle_message(message)  # type: ignore[arg-type]
 
         self.assertTrue(handled)
-        self.assertEqual(service.created, ["메모 내용\n#태그"])
+        self.assertEqual(service.created, [])
+        message.delete.assert_awaited_once()
+        self.assertEqual(message.channel.sent, [])
+        self.assertEqual(capture.status()["acceptedCount"], 0)
+
+    async def test_triple_plus_message_creates_memo_then_deletes_original(self) -> None:
+        service = FakeMemos()
+        capture = DiscordMemosCapture(
+            service,  # type: ignore[arg-type]
+            AccessPolicy(100, frozenset({200}), frozenset({300})),
+            channel_id=300,
+            confirmation_delete_after=1,
+        )
+        message = self.make_message("+++\n### 메모 내용\n#태그")
+
+        handled = await capture.handle_message(message)  # type: ignore[arg-type]
+
+        self.assertTrue(handled)
+        self.assertEqual(service.created, ["### 메모 내용\n#태그"])
         message.delete.assert_awaited_once()
         self.assertEqual(message.channel.sent[0][0], ("Saved to Memos: memos/42",))
         self.assertEqual(message.channel.sent[0][1]["delete_after"], 1)
         self.assertEqual(capture.status()["acceptedCount"], 1)
+
+    async def test_triple_plus_only_posts_modal_button_prompt(self) -> None:
+        service = FakeMemos()
+        capture = DiscordMemosCapture(
+            service,  # type: ignore[arg-type]
+            AccessPolicy(100, frozenset({200}), frozenset({300})),
+            channel_id=300,
+        )
+        message = self.make_message("+++")
+
+        handled = await capture.handle_message(message)  # type: ignore[arg-type]
+
+        self.assertTrue(handled)
+        self.assertEqual(service.created, [])
+        message.delete.assert_awaited_once()
+        self.assertEqual(message.channel.sent[0][0], ("## Memos\n- Add memo",))
+        self.assertIsInstance(message.channel.sent[0][1]["view"], MemosCreatePromptView)
 
     async def test_dotdot_message_searches_memos_then_deletes_original(self) -> None:
         service = FakeMemos()
@@ -160,6 +200,13 @@ class DiscordMemosCaptureTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("# Rustdesk Settings\n## For Tailscale", content)
         self.assertIn("- Relay server: 100.94.208.16", content)
         self.assertIn("@\u200beveryone", content)
+
+    def test_parse_create_memo_message_requires_triple_plus_marker(self) -> None:
+        self.assertEqual(parse_create_memo_message("+++"), "")
+        self.assertEqual(parse_create_memo_message("+++\n# Title\nBody"), "# Title\nBody")
+        self.assertEqual(parse_create_memo_message("  +++  \n# Title"), "# Title")
+        self.assertIsNone(parse_create_memo_message("plain memo"))
+        self.assertIsNone(parse_create_memo_message("+++ # Title"))
 
 
 if __name__ == "__main__":
