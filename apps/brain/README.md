@@ -22,6 +22,12 @@ Ollama directly, and leaves authoritative state changes to KaosGovernor.
 - `deep:`, `think:`, `깊게:`, and `생각:` prefixes route to the deep model.
 - Read-only KaosGovernor tool calls for today, active tasks, Memos search, and
   Paperless document search.
+- Confirmed KaosGovernor task due-date updates from narrow natural-language
+  commands.
+
+Task edits do not run directly. KaosBrain asks KaosGovernor to create a
+confirmation, shows Confirm/Cancel buttons in Discord, and only the Confirm
+button applies the Radicale task update through Governor.
 
 ## Required Environment
 
@@ -39,6 +45,16 @@ KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL=http://<kaosgovernor-tailscale-ip>:8098
 KAOSBRAIN_GOVERNOR_TOOLS_PROFILE=main
 GOVERNOR_API_TOKEN_FILE=/run/secrets/governor_api_token
 ```
+
+Supported write grammar in this slice:
+
+```text
+영이 큐시미아 다음주 월요일까지로 편집
+엄마 전화 기한 내일로 변경
+보험 서류 마감일을 2026-08-20로 수정
+```
+
+The default due time is `10:00`.
 
 Use the same Discord bot token exclusivity rule as every Discord service: never
 run two processes with the same token at the same time.

@@ -1,17 +1,27 @@
 from __future__ import annotations
 
 import logging
+from zoneinfo import ZoneInfo
 
 import discord
 
 from .config import Settings
-from .governor_tools import GovernorToolClient, GovernorToolConfig, GovernorToolError, render_tool_context
+from .governor_tools import (
+    GovernorToolClient,
+    GovernorToolConfig,
+    GovernorToolError,
+    render_task_due_update_completed,
+    render_task_due_update_proposal,
+    render_tool_context,
+)
 from .intent import Route, parse_request
 from .ollama import OllamaClient, OllamaConfig, OllamaError
+from .task_update_intent import TaskDueUpdateRequest, parse_task_due_update
 from .tool_intent import ToolRequest, parse_tool_request
 
 LOGGER = logging.getLogger(__name__)
 NO_MENTIONS = discord.AllowedMentions.none()
+KST = ZoneInfo("Asia/Seoul")
 
 
 class BrainBot(discord.Client):
@@ -74,6 +84,14 @@ class BrainBot(discord.Client):
         request = parse_request(self._strip_mention(message))
         if request is None:
             return
+        task_update = (
+            parse_task_due_update(request.text, today=message.created_at.astimezone(KST).date())
+            if request.route is Route.CHAT
+            else None
+        )
+        if task_update is not None:
+            await self._propose_task_due_update(message, task_update)
+            return
         async with message.channel.typing():
             try:
                 tool_request = parse_tool_request(request.text) if request.route is Route.CHAT else None
@@ -105,3 +123,64 @@ class BrainBot(discord.Client):
             return await self.ollama.summarize_tool_result(user_text, context)
         except OllamaError:
             return context
+
+    async def _propose_task_due_update(self, message: discord.Message, request: TaskDueUpdateRequest) -> None:
+        if self.governor_tools is None:
+            await message.reply(
+                "Governor tools are not configured yet.",
+                mention_author=False,
+                allowed_mentions=NO_MENTIONS,
+            )
+            return
+        try:
+            payload = await self.governor_tools.propose_task_due_update(
+                request,
+                actor_id=message.author.id,
+                idempotency_key=f"discord:{message.id}",
+            )
+        except GovernorToolError as exc:
+            await message.reply(
+                f"Task edit proposal failed: {exc}",
+                mention_author=False,
+                allowed_mentions=NO_MENTIONS,
+            )
+            return
+        await message.reply(
+            render_task_due_update_proposal(payload),
+            view=TaskUpdateConfirmationView(self.governor_tools, int(message.author.id), str(payload.get("confirmationId") or "")),
+            mention_author=False,
+            allowed_mentions=NO_MENTIONS,
+        )
+
+
+class TaskUpdateConfirmationView(discord.ui.View):
+    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, confirmation_id: str) -> None:
+        super().__init__(timeout=600)
+        self.governor_tools = governor_tools
+        self.actor_id = actor_id
+        self.confirmation_id = confirmation_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if int(interaction.user.id) == self.actor_id:
+            return True
+        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        try:
+            payload = await self.governor_tools.approve_confirmation(self.confirmation_id, actor_id=self.actor_id)
+            content = render_task_due_update_completed(payload)
+        except GovernorToolError as exc:
+            content = f"Task edit failed: {exc}"
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(content=content, view=self, allowed_mentions=NO_MENTIONS)
+        self.stop()
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(content="Task edit cancelled.", view=self, allowed_mentions=NO_MENTIONS)
+        self.stop()

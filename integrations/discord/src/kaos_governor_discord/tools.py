@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable, Mapping
-from datetime import date, timedelta
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta
 import hmac
 import logging
 from typing import Any
 
 from aiohttp import web
+from kaos_governor import Actor, DurableGovernorError, MemoryDurableGovernorStore, OperationRequest
 from kaos_governor.calendar import CalendarAdapterClient, CalendarAdapterError, profile_host
 from kaos_governor.documents import DocumentIntakeError, PaperlessDocumentService
 from kaos_governor.memos import MemosError, MemosService
@@ -16,6 +18,19 @@ from .calendar import weather_agenda_summary, weather_items_by_date
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class PendingTaskDueUpdate:
+    profile: str
+    uid: str
+    collection_id: str
+    title: str
+    old_due: str
+    old_due_time: str
+    new_due: str
+    new_due_time: str
+    payload: dict[str, Any]
 
 
 class BrainToolServer:
@@ -29,6 +44,7 @@ class BrainToolServer:
         memos: MemosService,
         paperless: PaperlessDocumentService,
         today_provider: Callable[[], date] | None = None,
+        durable_store: MemoryDurableGovernorStore | None = None,
     ) -> None:
         self._host = host
         self._port = port
@@ -37,6 +53,8 @@ class BrainToolServer:
         self._memos = memos
         self._paperless = paperless
         self._today_provider = today_provider or date.today
+        self._durable = durable_store or MemoryDurableGovernorStore()
+        self._pending_task_due_updates: dict[str, PendingTaskDueUpdate] = {}
         self._runner: web.AppRunner | None = None
 
     def application(self) -> web.Application:
@@ -47,6 +65,8 @@ class BrainToolServer:
         app.router.add_get("/tools/memos/search", self._search_memos)
         app.router.add_get("/tools/memos/{memo_id}", self._get_memo)
         app.router.add_get("/tools/documents/search", self._search_documents)
+        app.router.add_post("/tools/tasks/update-due/proposals", self._propose_task_due_update)
+        app.router.add_post("/tools/confirmations/{confirmation_id}/approve", self._approve_confirmation)
         return app
 
     async def start(self) -> None:
@@ -147,6 +167,146 @@ class BrainToolServer:
             LOGGER.exception("Unexpected Brain document search failure")
             return web.json_response({"error": "internal_error"}, status=500)
         return web.json_response({**page.as_dict(), "source": "paperless-live"})
+
+    async def _propose_task_due_update(self, request: web.Request) -> web.Response:
+        try:
+            body = await request.json()
+        except ValueError:
+            return web.json_response({"error": "invalid_json"}, status=400)
+        if not isinstance(body, Mapping):
+            return web.json_response({"error": "invalid_json"}, status=400)
+        profile = str(body.get("profile") or "main").strip().lower() or "main"
+        try:
+            profile_host(profile)
+        except CalendarAdapterError:
+            return web.json_response({"error": "invalid_profile"}, status=400)
+        actor_id = str(body.get("actorId") or "").strip()
+        idempotency_key = str(body.get("idempotencyKey") or "").strip()
+        task_title = " ".join(str(body.get("taskTitle") or "").split())
+        due_date = str(body.get("dueDate") or "").strip()
+        due_time = str(body.get("dueTime") or "10:00").strip() or "10:00"
+        if not actor_id or not idempotency_key or not task_title:
+            return web.json_response({"error": "task_update_missing_required_field"}, status=400)
+        if not _valid_due(due_date, due_time):
+            return web.json_response({"error": "task_update_invalid_due"}, status=400)
+        try:
+            tasks = await asyncio.to_thread(self._calendar_adapter.list_tasks, profile)
+        except CalendarAdapterError as exc:
+            return web.json_response({"error": str(exc)}, status=502)
+        matches = _match_active_tasks(tasks, task_title)
+        if not matches:
+            return web.json_response({"error": "task_not_found"}, status=404)
+        if len(matches) > 1:
+            return web.json_response(
+                {
+                    "error": "task_match_ambiguous",
+                    "matches": [task_payload(item, {}) for item in matches[:5]],
+                },
+                status=409,
+            )
+        task = matches[0]
+        title = str(task.get("summary") or "Untitled task")
+        payload = {
+            "uid": str(task.get("uid") or ""),
+            "collectionId": str(task.get("collection") or ""),
+            "title": title,
+            "memo": str(task.get("description") or ""),
+            "dueDate": due_date,
+            "dueTime": due_time,
+            "priority": str(task.get("priority") or ""),
+            "status": str(task.get("status") or ""),
+        }
+        try:
+            actor = Actor("user", actor_id, "family" if profile == "family" else "personal")
+            operation, _created = self._durable.start_operation(
+                OperationRequest(
+                    actor=actor,
+                    idempotency_key=idempotency_key,
+                    tool_name="calendar.tasks",
+                    operation_type="update_due",
+                    parameters={
+                        "profile": profile,
+                        "uid": payload["uid"],
+                        "collectionId": payload["collectionId"],
+                        "title": title,
+                        "oldDue": str(task.get("due") or ""),
+                        "oldDueTime": str(task.get("dueTime") or ""),
+                        "newDue": due_date,
+                        "newDueTime": due_time,
+                    },
+                    requires_confirmation=True,
+                )
+            )
+            confirmation = self._durable.create_confirmation(operation.operation_id, ttl=timedelta(minutes=10))
+        except DurableGovernorError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+        pending = PendingTaskDueUpdate(
+            profile=profile,
+            uid=payload["uid"],
+            collection_id=payload["collectionId"],
+            title=title,
+            old_due=str(task.get("due") or ""),
+            old_due_time=str(task.get("dueTime") or ""),
+            new_due=due_date,
+            new_due_time=due_time,
+            payload=payload,
+        )
+        self._pending_task_due_updates[operation.operation_id] = pending
+        return web.json_response(
+            {
+                "operationId": operation.operation_id,
+                "confirmationId": confirmation.confirmation_id,
+                "expiresAt": confirmation.expires_at.isoformat(),
+                "task": _pending_task_payload(pending),
+                "source": "calendar-adapter-live",
+            },
+            status=201,
+        )
+
+    async def _approve_confirmation(self, request: web.Request) -> web.Response:
+        confirmation_id = request.match_info["confirmation_id"]
+        try:
+            body = await request.json()
+        except ValueError:
+            return web.json_response({"error": "invalid_json"}, status=400)
+        if not isinstance(body, Mapping):
+            return web.json_response({"error": "invalid_json"}, status=400)
+        actor_id = str(body.get("actorId") or "").strip()
+        if not actor_id:
+            return web.json_response({"error": "actor_id_required"}, status=400)
+        confirmation = self._durable.get_confirmation(confirmation_id)
+        if confirmation is None:
+            return web.json_response({"error": "confirmation_not_found"}, status=404)
+        operation = self._durable.get_operation(confirmation.operation_id)
+        if operation is None:
+            return web.json_response({"error": "operation_not_found"}, status=404)
+        pending = self._pending_task_due_updates.get(operation.operation_id)
+        if pending is None:
+            return web.json_response({"error": "operation_payload_not_found"}, status=410)
+        try:
+            actor = Actor("user", actor_id, operation.actor.scope)
+            self._durable.approve_confirmation(
+                confirmation_id,
+                actor=actor,
+                normalized_operation_hash=operation.request_hash,
+            )
+            result = await asyncio.to_thread(self._calendar_adapter.update_task, pending.profile, pending.payload)
+            self._durable.complete_operation(operation.operation_id, result={"uid": str(result.get("uid") or pending.uid)})
+        except DurableGovernorError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+        except CalendarAdapterError as exc:
+            self._durable.fail_operation(operation.operation_id, error_code="calendar_adapter_error")
+            return web.json_response({"error": str(exc)}, status=502)
+        self._pending_task_due_updates.pop(operation.operation_id, None)
+        return web.json_response(
+            {
+                "operationId": operation.operation_id,
+                "confirmationId": confirmation_id,
+                "status": "completed",
+                "task": _pending_task_payload(pending),
+                "source": "calendar-adapter-live",
+            }
+        )
 
     def _with_weather(self, profile: str, bootstrap: Mapping[str, Any], days: list[date]) -> dict[str, Any]:
         payload = dict(bootstrap)
@@ -267,6 +427,47 @@ def item_date(item: Mapping[str, Any], key: str) -> date | None:
 
 def is_active_task(item: Mapping[str, Any]) -> bool:
     return bool(str(item.get("uid") or "")) and str(item.get("status") or "").upper() != "COMPLETED"
+
+
+def _valid_due(due_date: str, due_time: str) -> bool:
+    try:
+        datetime.strptime(f"{due_date} {due_time}", "%Y-%m-%d %H:%M")
+    except ValueError:
+        return False
+    return True
+
+
+def _match_active_tasks(tasks: list[Mapping[str, Any]], query: str) -> list[Mapping[str, Any]]:
+    normalized_query = _normalize_match_text(query)
+    active = [item for item in tasks if is_active_task(item)]
+    exact = [
+        item
+        for item in active
+        if _normalize_match_text(str(item.get("summary") or "")) == normalized_query
+    ]
+    if exact:
+        return exact
+    return [
+        item
+        for item in active
+        if normalized_query in _normalize_match_text(str(item.get("summary") or ""))
+    ]
+
+
+def _normalize_match_text(value: str) -> str:
+    return " ".join(value.casefold().split())
+
+
+def _pending_task_payload(pending: PendingTaskDueUpdate) -> dict[str, object]:
+    return {
+        "uid": pending.uid,
+        "collectionId": pending.collection_id,
+        "title": pending.title,
+        "oldDue": pending.old_due,
+        "oldDueTime": pending.old_due_time,
+        "newDue": pending.new_due,
+        "newDueTime": pending.new_due_time,
+    }
 
 
 def _profile(request: web.Request) -> str:

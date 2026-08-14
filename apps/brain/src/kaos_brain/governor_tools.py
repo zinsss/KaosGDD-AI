@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from .task_update_intent import TaskDueUpdateRequest
 from .tool_intent import ToolKind, ToolRequest
 
 
@@ -33,6 +34,31 @@ class GovernorToolClient:
             return await self._get("/tools/documents/search", {"query": request.query, "limit": "5"})
         raise GovernorToolError("unsupported Governor tool")
 
+    async def propose_task_due_update(
+        self,
+        request: TaskDueUpdateRequest,
+        *,
+        actor_id: int,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        return await self._post(
+            "/tools/tasks/update-due/proposals",
+            {
+                "actorId": str(actor_id),
+                "idempotencyKey": idempotency_key,
+                "profile": self.config.profile,
+                "taskTitle": request.task_title,
+                "dueDate": request.due_date,
+                "dueTime": request.due_time,
+            },
+        )
+
+    async def approve_confirmation(self, confirmation_id: str, *, actor_id: int) -> dict[str, Any]:
+        return await self._post(
+            f"/tools/confirmations/{confirmation_id}/approve",
+            {"actorId": str(actor_id)},
+        )
+
     async def _get(self, path: str, params: dict[str, str]) -> dict[str, Any]:
         import aiohttp
 
@@ -51,6 +77,55 @@ class GovernorToolClient:
                 raise GovernorToolError("Governor tool request timed out") from exc
             except aiohttp.ClientError as exc:
                 raise GovernorToolError("Governor tool request failed") from exc
+
+    async def _post(self, path: str, payload: dict[str, str]) -> dict[str, Any]:
+        import aiohttp
+
+        timeout = aiohttp.ClientTimeout(total=self.config.timeout_seconds)
+        headers = {"Authorization": f"Bearer {self.config.api_token}"}
+        async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+            try:
+                async with session.post(f"{self.config.base_url.rstrip('/')}{path}", json=payload) as response:
+                    data = await response.json()
+                    if response.status >= 400:
+                        raise GovernorToolError(str(data.get("error") or f"http_{response.status}"))
+                    if not isinstance(data, dict):
+                        raise GovernorToolError("invalid Governor tool response")
+                    return data
+            except TimeoutError as exc:
+                raise GovernorToolError("Governor tool request timed out") from exc
+            except aiohttp.ClientError as exc:
+                raise GovernorToolError("Governor tool request failed") from exc
+
+
+def render_task_due_update_proposal(payload: dict[str, Any]) -> str:
+    task = payload.get("task")
+    if not isinstance(task, dict):
+        return "Task update requires confirmation."
+    title = str(task.get("title") or "Untitled task")
+    old_due = _due_text(str(task.get("oldDue") or ""), str(task.get("oldDueTime") or ""))
+    new_due = _due_text(str(task.get("newDue") or ""), str(task.get("newDueTime") or ""))
+    return "\n".join(
+        [
+            "## Confirm task edit",
+            f"- task: {title}",
+            f"- from: {old_due or 'none'}",
+            f"- to: {new_due}",
+        ]
+    )
+
+
+def render_task_due_update_completed(payload: dict[str, Any]) -> str:
+    task = payload.get("task")
+    if not isinstance(task, dict):
+        return "Task updated."
+    title = str(task.get("title") or "Untitled task")
+    new_due = _due_text(str(task.get("newDue") or ""), str(task.get("newDueTime") or ""))
+    return f"Task updated: {title} -> {new_due}"
+
+
+def _due_text(due_date: str, due_time: str) -> str:
+    return " ".join(part for part in (due_date, due_time) if part).strip()
 
 
 def render_tool_context(request: ToolRequest, payload: dict[str, Any]) -> str:

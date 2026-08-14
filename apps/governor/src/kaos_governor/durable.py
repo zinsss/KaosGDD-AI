@@ -404,6 +404,10 @@ class MemoryDurableGovernorStore:
         with self._lock:
             return self._operations.get(operation_id)
 
+    def get_confirmation(self, confirmation_id: str) -> ConfirmationRecord | None:
+        with self._lock:
+            return self._confirmations.get(confirmation_id)
+
     def audit_records(self, operation_id: str | None = None) -> tuple[AuditRecord, ...]:
         with self._lock:
             if operation_id is None:
