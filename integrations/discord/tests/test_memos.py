@@ -77,8 +77,9 @@ class FakeChannel:
         self.sent = []
 
     async def send(self, *args, **kwargs):
+        message = SimpleNamespace(id=900 + len(self.sent), delete=AsyncMock())
         self.sent.append((args, kwargs))
-        return SimpleNamespace(id=900)
+        return message
 
 
 class DiscordMemosCaptureTests(unittest.IsolatedAsyncioTestCase):
@@ -156,6 +157,7 @@ class DiscordMemosCaptureTests(unittest.IsolatedAsyncioTestCase):
             service,  # type: ignore[arg-type]
             AccessPolicy(100, frozenset({200}), frozenset({300})),
             channel_id=300,
+            search_result_delete_after=0,
         )
         message = self.make_message("..printer")
 
@@ -171,6 +173,41 @@ class DiscordMemosCaptureTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("13 results in 213 memos", content)
         self.assertIn("view", message.channel.sent[0][1])
 
+    async def test_multi_result_search_message_is_temporary(self) -> None:
+        service = FakeMemos()
+        capture = DiscordMemosCapture(
+            service,  # type: ignore[arg-type]
+            AccessPolicy(100, frozenset({200}), frozenset({300})),
+            channel_id=300,
+            search_result_delete_after=1800,
+        )
+        message = self.make_message("..printer")
+
+        self.assertTrue(await capture.handle_message(message))  # type: ignore[arg-type]
+
+        self.assertEqual(capture.status()["searchResultDeleteAfterSeconds"], 1800)
+        self.assertEqual(capture._temporary_search_messages, {900})
+
+    async def test_opened_single_search_result_is_not_temporary(self) -> None:
+        class OneResultMemos(FakeMemos):
+            def search_page(self, query, tags, limit):
+                self.searches.append((query, tags, limit))
+                memo = Memo("memos/99", "# Rustdesk Settings", (), "created", "updated", "PRIVATE", False)
+                return MemoSearchPage(query, (), (MemoSearchResult(memo, "Rustdesk Settings"),), 1, 213)
+
+        service = OneResultMemos()
+        capture = DiscordMemosCapture(
+            service,  # type: ignore[arg-type]
+            AccessPolicy(100, frozenset({200}), frozenset({300})),
+            channel_id=300,
+            search_result_delete_after=1800,
+        )
+        message = self.make_message("..rustdesk")
+
+        self.assertTrue(await capture.handle_message(message))  # type: ignore[arg-type]
+
+        self.assertEqual(capture._temporary_search_messages, set())
+
     async def test_single_search_result_opens_with_close_edit_delete_buttons(self) -> None:
         class OneResultMemos(FakeMemos):
             def search_page(self, query, tags, limit):
@@ -183,6 +220,7 @@ class DiscordMemosCaptureTests(unittest.IsolatedAsyncioTestCase):
             service,  # type: ignore[arg-type]
             AccessPolicy(100, frozenset({200}), frozenset({300})),
             channel_id=300,
+            search_result_delete_after=0,
         )
         message = self.make_message("..rustdesk")
 

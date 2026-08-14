@@ -22,11 +22,14 @@ class DiscordMemosCapture:
         *,
         channel_id: int,
         confirmation_delete_after: float = 5.0,
+        search_result_delete_after: float = 1800.0,
     ) -> None:
         self.service = service
         self.policy = policy
         self.channel_id = channel_id
         self.confirmation_delete_after = confirmation_delete_after
+        self.search_result_delete_after = search_result_delete_after
+        self._temporary_search_messages: set[int] = set()
         self.accepted_count = 0
         self.rejected_count = 0
         self.last_error = ""
@@ -132,6 +135,7 @@ class DiscordMemosCapture:
             "channelId": str(self.channel_id),
             "acceptedCount": self.accepted_count,
             "rejectedCount": self.rejected_count,
+            "searchResultDeleteAfterSeconds": self.search_result_delete_after,
             "lastError": self.last_error,
         }
 
@@ -165,7 +169,9 @@ class DiscordMemosCapture:
         if len(page.results) == 1:
             content = render_memo_opened(page.query, page.results[0])
             view = MemosOpenedView(self, page.query, page.results[0].memo)
-        await message.channel.send(content, view=view, allowed_mentions=NO_MENTIONS)
+        sent = await message.channel.send(content, view=view, allowed_mentions=NO_MENTIONS)
+        if len(page.results) != 1:
+            self._track_temporary_search_message(sent)
         self.last_error = ""
 
     async def _delete_message(self, message: discord.Message) -> None:
@@ -173,6 +179,28 @@ class DiscordMemosCapture:
             await message.delete()
         except discord.HTTPException:
             LOGGER.info("Could not delete captured Memos message %s", getattr(message, "id", ""))
+
+    def preserve_search_message(self, message: discord.Message | None) -> None:
+        if message is not None:
+            self._temporary_search_messages.discard(int(message.id))
+
+    def _track_temporary_search_message(self, message: discord.Message) -> None:
+        if self.search_result_delete_after <= 0:
+            return
+        message_id = int(message.id)
+        self._temporary_search_messages.add(message_id)
+        asyncio.create_task(
+            self._delete_temporary_search_message(message, self.search_result_delete_after),
+            name=f"memos-search-cleanup-{message_id}",
+        )
+
+    async def _delete_temporary_search_message(self, message: discord.Message, delay: float) -> None:
+        await asyncio.sleep(delay)
+        message_id = int(message.id)
+        if message_id not in self._temporary_search_messages:
+            return
+        self._temporary_search_messages.discard(message_id)
+        await self._delete_message(message)
 
 
 class MemosCreatePromptView(discord.ui.View):
@@ -268,6 +296,7 @@ class MemosSearchSelect(discord.ui.Select):
         except (IndexError, TypeError, ValueError):
             await interaction.response.send_message("Memo selection expired.", ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
+        self.capture.preserve_search_message(interaction.message)
         await interaction.response.edit_message(
             content=render_memo_opened(self.page.query, result),
             view=MemosOpenedView(self.capture, self.page.query, result.memo),
