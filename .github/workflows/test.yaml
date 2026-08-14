@@ -55,3 +55,7 @@ jobs:
         run: docker build --target test --tag kaos-office-fax-connector:test --file apps/office-fax-connector/Dockerfile .
       - name: Run Office fax connector tests
         run: docker run --rm kaos-office-fax-connector:test
+      - name: Build Brain test image
+        run: docker build --target test --tag kaos-brain:test --file apps/brain/Dockerfile .
+      - name: Run Brain tests
+        run: docker run --rm kaos-brain:test
