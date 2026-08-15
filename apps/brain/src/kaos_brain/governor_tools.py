@@ -376,7 +376,17 @@ def render_tool_context(request: ToolRequest, payload: dict[str, Any]) -> str:
 
 
 def render_memo_opened(query: str, item: dict[str, Any]) -> str:
-    return f"## Memos search · {query or '..'}\n-# {item.get('name') or ''}\n{_memo_line({**item, 'full': True})}"[:1900]
+    lines = [
+        f"## {memo_option_label(item)}",
+        f"-# Memos search · {query or '..'} · {item.get('name') or ''}",
+    ]
+    tags = _memo_tags_text(item)
+    if tags:
+        lines.append(tags)
+    summary = _memo_summary(item)
+    if summary:
+        lines.extend(["### Summary", summary])
+    return "\n".join(lines)[:1900]
 
 
 def render_document_opened(query: str, item: dict[str, Any]) -> str:
@@ -392,7 +402,14 @@ def memo_option_label(item: dict[str, Any]) -> str:
 
 
 def memo_option_description(item: dict[str, Any]) -> str:
-    return _truncate(str(item.get("snippet") or item.get("content") or item.get("name") or ""), 100)
+    return _truncate(_memo_tags_text(item), 100)
+
+
+def memo_public_url(base_url: str, name: str) -> str:
+    memo_id = _memo_id(name)
+    if not base_url or not memo_id:
+        return ""
+    return f"{base_url.rstrip('/')}/m/{memo_id}"
 
 
 def document_option_label(item: dict[str, Any]) -> str:
@@ -519,6 +536,32 @@ def _memo_title(item: dict[str, Any]) -> str:
             if title:
                 return _truncate(title, 80)
     return str(item.get("name") or "Untitled memo").strip()
+
+
+def _memo_tags_text(item: dict[str, Any]) -> str:
+    tags = item.get("tags")
+    if not isinstance(tags, list):
+        return ""
+    cleaned = [str(tag).strip().lstrip("#") for tag in tags if str(tag).strip()]
+    return " ".join(f"#{tag}" for tag in cleaned)
+
+
+def _memo_summary(item: dict[str, Any]) -> str:
+    content = str(item.get("content") or item.get("snippet") or "").strip()
+    if not content:
+        return ""
+    title_seen = False
+    lines: list[str] = []
+    for raw in content.splitlines():
+        stripped = raw.strip()
+        if not stripped:
+            continue
+        if not title_seen and stripped.lstrip("#").strip() == _memo_title(item):
+            title_seen = True
+            continue
+        title_seen = True
+        lines.append(stripped)
+    return _truncate_text("\n".join(lines) or content, 700)
 
 
 def _truncate(value: str, limit: int) -> str:

@@ -78,6 +78,7 @@ class Settings:
     governor_tools_api_token: str
     governor_tools_profile: str
     governor_tools_timeout_seconds: int
+    memos_public_url: str
     log_level: str
 
     @classmethod
@@ -123,5 +124,6 @@ class Settings:
                 source.get("KAOSBRAIN_GOVERNOR_TOOLS_TIMEOUT_SECONDS", "10"),
                 "KAOSBRAIN_GOVERNOR_TOOLS_TIMEOUT_SECONDS",
             ),
+            memos_public_url=source.get("KAOSBRAIN_MEMOS_PUBLIC_URL", "").strip().rstrip("/"),
             log_level=source.get("LOG_LEVEL", "INFO").strip().upper() or "INFO",
         )

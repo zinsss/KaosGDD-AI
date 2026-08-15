@@ -15,6 +15,7 @@ from .governor_tools import (
     document_option_label,
     memo_option_description,
     memo_option_label,
+    memo_public_url,
     render_memo_create_completed,
     render_memo_create_proposal,
     render_memo_delete_completed,
@@ -179,7 +180,17 @@ class BrainBot(discord.Client):
         context = render_tool_context(tool_request, payload)
         if tool_request.kind is ToolKind.MEMO_SEARCH:
             results = search_results(payload)
-            view = BrainMemoSearchView(self.governor_tools, actor_id, tool_request.query, results) if len(results) > 1 else None
+            view = (
+                BrainMemoSearchView(
+                    self.governor_tools,
+                    actor_id,
+                    tool_request.query,
+                    results,
+                    memos_public_url=self.settings.memos_public_url,
+                )
+                if len(results) > 1
+                else None
+            )
             return context, view
         if tool_request.kind is ToolKind.DOCUMENT_SEARCH:
             results = search_results(payload)
@@ -362,12 +373,21 @@ class BrainBot(discord.Client):
 
 
 class BrainMemoSearchView(discord.ui.View):
-    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, query: str, results: list[dict[str, Any]]) -> None:
+    def __init__(
+        self,
+        governor_tools: GovernorToolClient,
+        actor_id: int,
+        query: str,
+        results: list[dict[str, Any]],
+        *,
+        memos_public_url: str = "",
+    ) -> None:
         super().__init__(timeout=600)
         self.governor_tools = governor_tools
         self.actor_id = actor_id
         self.query = query
         self.results = results[:25]
+        self.memos_public_url = memos_public_url
         self.add_item(BrainMemoSearchSelect(self))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -400,8 +420,34 @@ class BrainMemoSearchSelect(discord.ui.Select):
             content = render_memo_opened(self.parent_view.query, item)
         except (GovernorToolError, IndexError, TypeError, ValueError) as exc:
             content = f"Memo open failed: {exc}"
-        await interaction.response.edit_message(content=content, view=None, allowed_mentions=NO_MENTIONS)
-        self.parent_view.stop()
+            await interaction.response.send_message(content, ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        view = BrainOpenedMemoView(
+            self.parent_view.actor_id,
+            memo_public_url(self.parent_view.memos_public_url, str(item.get("name") or "")),
+        )
+        await interaction.response.send_message(content, view=view, allowed_mentions=NO_MENTIONS)
+
+
+class BrainOpenedMemoView(discord.ui.View):
+    def __init__(self, actor_id: int, note_url: str = "") -> None:
+        super().__init__(timeout=600)
+        self.actor_id = actor_id
+        if note_url:
+            self.add_item(discord.ui.Button(label="Open note", style=discord.ButtonStyle.link, url=note_url))
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if int(interaction.user.id) == self.actor_id:
+            return True
+        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+    @discord.ui.button(label="Close", style=discord.ButtonStyle.secondary)
+    async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if interaction.message is None:
+            await interaction.response.send_message("Closed.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.message.delete()
 
 
 class BrainDocumentSearchView(discord.ui.View):

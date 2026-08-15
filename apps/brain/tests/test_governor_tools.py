@@ -1,10 +1,13 @@
 import unittest
 
 from kaos_brain.governor_tools import (
+    memo_option_label,
     render_memo_create_completed,
     render_memo_delete_completed,
     render_memo_edit_completed,
     memo_option_description,
+    memo_public_url,
+    render_memo_opened,
     render_task_action_completed,
     render_task_create_completed,
     render_task_due_update_completed,
@@ -67,6 +70,33 @@ class GovernorToolRenderingTests(unittest.TestCase):
     def test_memo_option_description_stays_within_discord_limit(self) -> None:
         description = memo_option_description({"snippet": "x" * 200})
         self.assertLessEqual(len(description), 100)
+
+    def test_memo_dropdown_uses_title_and_tags(self) -> None:
+        item = {
+            "name": "memos/abc",
+            "snippet": "# Training note\nsecret body",
+            "tags": ["education", "work"],
+        }
+        self.assertEqual(memo_option_label(item), "Training note")
+        self.assertEqual(memo_option_description(item), "#education #work")
+
+    def test_render_opened_memo_uses_summary(self) -> None:
+        content = render_memo_opened(
+            "training",
+            {
+                "name": "memos/abc",
+                "content": "# Training note\nfirst line\nsecond line",
+                "tags": ["education"],
+            },
+        )
+        self.assertIn("## Training note", content)
+        self.assertIn("#education", content)
+        self.assertIn("### Summary\nfirst line\nsecond line", content)
+        self.assertNotIn("# Training note\nfirst line", content)
+
+    def test_memo_public_url_uses_memo_id(self) -> None:
+        self.assertEqual(memo_public_url("https://memos.example", "memos/abc"), "https://memos.example/m/abc")
+        self.assertEqual(memo_public_url("", "memos/abc"), "")
 
     def test_render_single_full_document_context(self) -> None:
         context = render_tool_context(

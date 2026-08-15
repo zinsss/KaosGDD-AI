@@ -77,6 +77,10 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.governor_tools_base_url, "http://100.64.0.1:8098")
         self.assertEqual(settings.governor_tools_profile, "family")
 
+    def test_memos_public_url_is_optional(self) -> None:
+        settings = Settings.from_env({**BASE_ENV, "KAOSBRAIN_MEMOS_PUBLIC_URL": "https://memos.example/"})
+        self.assertEqual(settings.memos_public_url, "https://memos.example")
+
 
 if __name__ == "__main__":
     unittest.main()
