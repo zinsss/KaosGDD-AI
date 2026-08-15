@@ -4,6 +4,7 @@ from kaos_brain.governor_tools import (
     render_memo_create_completed,
     render_memo_delete_completed,
     render_memo_edit_completed,
+    memo_option_description,
     render_task_action_completed,
     render_task_create_completed,
     render_task_due_update_completed,
@@ -63,6 +64,10 @@ class GovernorToolRenderingTests(unittest.TestCase):
         self.assertIn("### Online training", context)
         self.assertIn("...", context)
         self.assertNotIn("Memos search:", context)
+
+    def test_memo_option_description_stays_within_discord_limit(self) -> None:
+        description = memo_option_description({"snippet": "x" * 200})
+        self.assertLessEqual(len(description), 100)
 
     def test_render_single_full_document_context(self) -> None:
         context = render_tool_context(

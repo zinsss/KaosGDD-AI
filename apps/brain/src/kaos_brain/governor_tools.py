@@ -521,7 +521,7 @@ def _truncate(value: str, limit: int) -> str:
     collapsed = " ".join(value.split())
     if len(collapsed) <= limit:
         return collapsed
-    return f"{collapsed[:limit].rstrip()}..."
+    return f"{collapsed[: max(0, limit - 3)].rstrip()}..."
 
 
 def _truncate_text(value: str, limit: int) -> str:
