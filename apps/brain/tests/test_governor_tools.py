@@ -61,8 +61,7 @@ class GovernorToolRenderingTests(unittest.TestCase):
             },
         )
         self.assertIn("Searched..\n## training\n2 results in 213 memos", context)
-        self.assertIn("### Online training", context)
-        self.assertIn("...", context)
+        self.assertNotIn("### Online training", context)
         self.assertNotIn("Memos search:", context)
 
     def test_memo_option_description_stays_within_discord_limit(self) -> None:
@@ -105,13 +104,20 @@ class GovernorToolRenderingTests(unittest.TestCase):
                         "created": "2026-08-14T12:00:00Z",
                         "filename": "receipt.pdf",
                         "correspondent": "Clinic",
-                    }
+                    },
+                    {
+                        "id": 43,
+                        "title": "Insurance form",
+                        "created": "2026-08-15T12:00:00Z",
+                        "filename": "form.pdf",
+                        "correspondent": "Clinic",
+                    },
                 ],
             },
         )
         self.assertIn("Searched..\n## insurance\n13 results in 213 documents", context)
-        self.assertIn("- Showing first 1 results.", context)
-        self.assertIn("### Insurance receipt\n- 2026-08-14 · Clinic · receipt.pdf", context)
+        self.assertIn("- Showing first 2 results.", context)
+        self.assertNotIn("### Insurance receipt", context)
         self.assertNotIn("Document search:", context)
 
     def test_render_task_due_update_proposal(self) -> None:

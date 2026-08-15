@@ -443,6 +443,8 @@ def _render_memos(query: str, payload: dict[str, Any]) -> str:
         return "\n".join(lines)
     if result_count > len(results):
         lines.append(f"- Showing first {len(results)} results.")
+    if len(results) > 1:
+        return "\n".join(lines)
     lines.extend(_memo_line(item) for item in results[:5])
     return "\n".join(lines)
 
@@ -461,6 +463,8 @@ def _render_documents(query: str, payload: dict[str, Any]) -> str:
         return "\n".join(lines)
     if result_count > len(results):
         lines.append(f"- Showing first {len(results)} results.")
+    if len(results) > 1:
+        return "\n".join(lines)
     lines.extend(_document_line(item) for item in results[:5])
     return "\n".join(lines)
 
