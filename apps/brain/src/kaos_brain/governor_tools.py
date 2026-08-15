@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import quote
 
 from .memo_intent import MemoCreateRequest, MemoDeleteRequest, MemoEditRequest
 from .task_update_intent import TaskActionRequest, TaskCreateRequest, TaskDueUpdateRequest
@@ -30,10 +31,29 @@ class GovernorToolClient:
         if request.kind is ToolKind.ACTIVE_TASKS:
             return await self._get("/tools/tasks/active", {"profile": self.config.profile})
         if request.kind is ToolKind.MEMO_SEARCH:
-            return await self._get("/tools/memos/search", {"query": request.query, "limit": "5"})
+            payload = await self._get("/tools/memos/search", {"query": request.query, "limit": "5"})
+            return await self._with_single_memo_body(payload)
         if request.kind is ToolKind.DOCUMENT_SEARCH:
             return await self._get("/tools/documents/search", {"query": request.query, "limit": "5"})
         raise GovernorToolError("unsupported Governor tool")
+
+    async def _with_single_memo_body(self, payload: dict[str, Any]) -> dict[str, Any]:
+        results = payload.get("results")
+        if not isinstance(results, list) or len(results) != 1:
+            return payload
+        first = results[0]
+        if not isinstance(first, dict):
+            return payload
+        name = str(first.get("name") or "").strip()
+        memo_id = _memo_id(name)
+        if not memo_id:
+            return payload
+        memo_payload = await self._get(f"/tools/memos/{quote(memo_id, safe='')}", {})
+        memo = memo_payload.get("memo")
+        if isinstance(memo, dict):
+            payload = dict(payload)
+            payload["results"] = [{**first, "content": str(memo.get("content") or ""), "full": True}]
+        return payload
 
     async def propose_task_due_update(
         self,
@@ -408,6 +428,9 @@ def _task_line(item: dict[str, Any]) -> str:
 
 def _memo_line(item: dict[str, Any]) -> str:
     title = str(item.get("title") or item.get("name") or "Untitled memo").strip()
+    content = str(item.get("content") or "").strip()
+    if content and item.get("full"):
+        return f"- {title}\n{content}"
     snippet = str(item.get("snippet") or "").strip()
     return f"- {title}: {snippet}" if snippet else f"- {title}"
 
@@ -416,3 +439,10 @@ def _document_line(item: dict[str, Any]) -> str:
     title = str(item.get("title") or item.get("originalFileName") or item.get("filename") or "Untitled document").strip()
     created = str(item.get("created") or item.get("createdDate") or "").strip()
     return f"- {title} - {created}" if created else f"- {title}"
+
+
+def _memo_id(name: str) -> str:
+    if not name.startswith("memos/"):
+        return ""
+    memo_id = name.removeprefix("memos/").strip("/")
+    return memo_id if memo_id and "/" not in memo_id else ""
