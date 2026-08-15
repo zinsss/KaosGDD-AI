@@ -54,6 +54,11 @@ class PendingTaskAction:
     payload: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class PendingMemoCreate:
+    content: str
+
+
 class BrainToolServer:
     def __init__(
         self,
@@ -80,6 +85,7 @@ class BrainToolServer:
         self._pending_task_due_updates: dict[str, PendingTaskDueUpdate] = {}
         self._pending_task_creates: dict[str, PendingTaskCreate] = {}
         self._pending_task_actions: dict[str, PendingTaskAction] = {}
+        self._pending_memo_creates: dict[str, PendingMemoCreate] = {}
         self._runner: web.AppRunner | None = None
 
     def application(self) -> web.Application:
@@ -89,6 +95,7 @@ class BrainToolServer:
         app.router.add_get("/tools/tasks/active", self._active_tasks)
         app.router.add_get("/tools/memos/search", self._search_memos)
         app.router.add_get("/tools/memos/{memo_id}", self._get_memo)
+        app.router.add_post("/tools/memos/create/proposals", self._propose_memo_create)
         app.router.add_get("/tools/documents/search", self._search_documents)
         app.router.add_post("/tools/tasks/action/proposals", self._propose_task_action)
         app.router.add_post("/tools/tasks/create/proposals", self._propose_task_create)
@@ -194,6 +201,48 @@ class BrainToolServer:
             LOGGER.exception("Unexpected Brain document search failure")
             return web.json_response({"error": "internal_error"}, status=500)
         return web.json_response({**page.as_dict(), "source": "paperless-live"})
+
+    async def _propose_memo_create(self, request: web.Request) -> web.Response:
+        if not self._memos.config.enabled:
+            return web.json_response({"error": "memos_create_disabled"}, status=503)
+        try:
+            body = await request.json()
+        except ValueError:
+            return web.json_response({"error": "invalid_json"}, status=400)
+        if not isinstance(body, Mapping):
+            return web.json_response({"error": "invalid_json"}, status=400)
+        actor_id = str(body.get("actorId") or "").strip()
+        idempotency_key = str(body.get("idempotencyKey") or "").strip()
+        content = str(body.get("content") or "").strip()
+        if not actor_id or not idempotency_key or not content:
+            return web.json_response({"error": "memo_create_missing_required_field"}, status=400)
+        try:
+            actor = Actor("user", actor_id, "personal")
+            operation, _created = self._durable.start_operation(
+                OperationRequest(
+                    actor=actor,
+                    idempotency_key=idempotency_key,
+                    tool_name="memos",
+                    operation_type="create",
+                    parameters={"content": content},
+                    requires_confirmation=True,
+                )
+            )
+            confirmation = self._durable.create_confirmation(operation.operation_id, ttl=timedelta(minutes=10))
+        except DurableGovernorError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+        pending = PendingMemoCreate(content=content)
+        self._pending_memo_creates[operation.operation_id] = pending
+        return web.json_response(
+            {
+                "operationId": operation.operation_id,
+                "confirmationId": confirmation.confirmation_id,
+                "expiresAt": confirmation.expires_at.isoformat(),
+                "memo": _pending_memo_create_payload(pending),
+                "source": "memos-live",
+            },
+            status=201,
+        )
 
     async def _propose_task_due_update(self, request: web.Request) -> web.Response:
         try:
@@ -469,7 +518,8 @@ class BrainToolServer:
         pending_update = self._pending_task_due_updates.get(operation.operation_id)
         pending_create = self._pending_task_creates.get(operation.operation_id)
         pending_action = self._pending_task_actions.get(operation.operation_id)
-        if pending_update is None and pending_create is None and pending_action is None:
+        pending_memo_create = self._pending_memo_creates.get(operation.operation_id)
+        if pending_update is None and pending_create is None and pending_action is None and pending_memo_create is None:
             return web.json_response({"error": "operation_payload_not_found"}, status=410)
         try:
             actor = Actor("user", actor_id, operation.actor.scope)
@@ -486,7 +536,7 @@ class BrainToolServer:
                 )
                 task = _pending_task_payload(pending_update)
                 result_uid = str(result.get("uid") or pending_update.uid)
-            else:
+            elif pending_create is not None or pending_action is not None:
                 if pending_create is not None:
                     result = await asyncio.to_thread(
                         self._calendar_adapter.create_task,
@@ -513,24 +563,39 @@ class BrainToolServer:
                         )
                         result_uid = str(result.get("uid") or pending_action.uid)
                     task = _pending_task_action_payload(pending_action)
+            else:
+                assert pending_memo_create is not None
+                memo = await asyncio.to_thread(self._memos.create, pending_memo_create.content)
+                result_uid = memo.name
+                task = {}
+                memo_payload = {"name": memo.name, "content": memo.content}
             self._durable.complete_operation(operation.operation_id, result={"uid": result_uid})
-            await self._refresh_tasks()
+            if pending_memo_create is None:
+                await self._refresh_tasks()
         except DurableGovernorError as exc:
             return web.json_response({"error": str(exc)}, status=400)
         except CalendarAdapterError as exc:
             self._durable.fail_operation(operation.operation_id, error_code="calendar_adapter_error")
             return web.json_response({"error": str(exc)}, status=502)
+        except (ValueError, MemosError) as exc:
+            self._durable.fail_operation(operation.operation_id, error_code=str(exc))
+            return _memos_error(exc)
         self._pending_task_due_updates.pop(operation.operation_id, None)
         self._pending_task_creates.pop(operation.operation_id, None)
         self._pending_task_actions.pop(operation.operation_id, None)
+        self._pending_memo_creates.pop(operation.operation_id, None)
+        response_payload = {
+            "operationId": operation.operation_id,
+            "confirmationId": confirmation_id,
+            "status": "completed",
+            "source": "calendar-adapter-live" if pending_memo_create is None else "memos-live",
+        }
+        if pending_memo_create is None:
+            response_payload["task"] = task
+        else:
+            response_payload["memo"] = memo_payload
         return web.json_response(
-            {
-                "operationId": operation.operation_id,
-                "confirmationId": confirmation_id,
-                "status": "completed",
-                "task": task,
-                "source": "calendar-adapter-live",
-            }
+            response_payload
         )
 
     async def _refresh_tasks(self) -> None:
@@ -720,6 +785,10 @@ def _pending_task_action_payload(pending: PendingTaskAction) -> dict[str, object
         "dueTime": pending.due_time,
         "action": pending.action,
     }
+
+
+def _pending_memo_create_payload(pending: PendingMemoCreate) -> dict[str, object]:
+    return {"content": pending.content}
 
 
 def _profile(request: web.Request) -> str:

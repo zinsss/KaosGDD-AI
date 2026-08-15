@@ -108,6 +108,7 @@ class FakeMemos:
         self.config = SimpleNamespace(enabled=True)
         self.search_calls = []
         self.get_calls = []
+        self.create_calls = []
 
     def search(self, query, tags, limit):
         self.search_calls.append((query, tags, limit))
@@ -117,6 +118,10 @@ class FakeMemos:
     def get(self, name):
         self.get_calls.append(name)
         return Memo(name, "Full memo body", ("server",), "created", "updated", "PRIVATE", False)
+
+    def create(self, content):
+        self.create_calls.append(content)
+        return Memo("memos/new", content, (), "created", "updated", "PRIVATE", False)
 
 
 class FakePaperless:
@@ -198,6 +203,70 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 200)
         self.assertEqual((await response.json())["memo"]["content"], "Full memo body")
         self.assertEqual(self.memos.get_calls, ["memos/42"])
+
+    async def test_memo_create_proposal_requires_confirmation_before_write(self) -> None:
+        response = await self.client.post(
+            "/tools/memos/create/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-memo-1",
+                "content": "# Rustdesk\nUse Tailscale.",
+            },
+        )
+
+        self.assertEqual(response.status, 201)
+        payload = await response.json()
+        self.assertTrue(payload["confirmationId"].startswith("conf_"))
+        self.assertEqual(payload["memo"]["content"], "# Rustdesk\nUse Tailscale.")
+        self.assertEqual(self.memos.create_calls, [])
+
+    async def test_memo_create_approval_creates_memo(self) -> None:
+        proposal = await self.client.post(
+            "/tools/memos/create/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-memo-2",
+                "content": "# Rustdesk\nUse Tailscale.",
+            },
+        )
+        confirmation_id = (await proposal.json())["confirmationId"]
+
+        response = await self.client.post(
+            f"/tools/confirmations/{confirmation_id}/approve",
+            headers=self.headers(),
+            json={"actorId": "994579996960104529"},
+        )
+
+        self.assertEqual(response.status, 200)
+        payload = await response.json()
+        self.assertEqual(payload["status"], "completed")
+        self.assertEqual(payload["source"], "memos-live")
+        self.assertEqual(payload["memo"]["name"], "memos/new")
+        self.assertEqual(self.memos.create_calls, ["# Rustdesk\nUse Tailscale."])
+
+    async def test_memo_create_approval_rejects_wrong_actor(self) -> None:
+        proposal = await self.client.post(
+            "/tools/memos/create/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-memo-3",
+                "content": "Secret memo",
+            },
+        )
+        confirmation_id = (await proposal.json())["confirmationId"]
+
+        response = await self.client.post(
+            f"/tools/confirmations/{confirmation_id}/approve",
+            headers=self.headers(),
+            json={"actorId": "111"},
+        )
+
+        self.assertEqual(response.status, 400)
+        self.assertEqual((await response.json())["error"], "confirmation_actor_mismatch")
+        self.assertEqual(self.memos.create_calls, [])
 
     async def test_document_search_returns_paperless_results(self) -> None:
         response = await self.client.get("/tools/documents/search?query=rust%20desk", headers=self.headers())

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from .memo_intent import MemoCreateRequest
 from .task_update_intent import TaskActionRequest, TaskCreateRequest, TaskDueUpdateRequest
 from .tool_intent import ToolKind, ToolRequest
 
@@ -87,6 +88,22 @@ class GovernorToolClient:
                 "profile": self.config.profile,
                 "taskTitle": request.task_title,
                 "action": request.action,
+            },
+        )
+
+    async def propose_memo_create(
+        self,
+        request: MemoCreateRequest,
+        *,
+        actor_id: int,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        return await self._post(
+            "/tools/memos/create/proposals",
+            {
+                "actorId": str(actor_id),
+                "idempotencyKey": idempotency_key,
+                "content": request.content,
             },
         )
 
@@ -212,8 +229,35 @@ def render_task_action_completed(payload: dict[str, Any]) -> str:
     return f"Task updated: {title}"
 
 
+def render_memo_create_proposal(payload: dict[str, Any]) -> str:
+    memo = payload.get("memo")
+    if not isinstance(memo, dict):
+        return "Memo creation requires confirmation."
+    return "\n".join(
+        [
+            "## Confirm new memo",
+            _memo_preview(str(memo.get("content") or "")),
+        ]
+    )
+
+
+def render_memo_create_completed(payload: dict[str, Any]) -> str:
+    memo = payload.get("memo")
+    if not isinstance(memo, dict):
+        return "Memo created."
+    name = str(memo.get("name") or "").strip()
+    return f"Memo created: {name}" if name else "Memo created."
+
+
 def _due_text(due_date: str, due_time: str) -> str:
     return " ".join(part for part in (due_date, due_time) if part).strip()
+
+
+def _memo_preview(content: str) -> str:
+    preview = content.strip()
+    if len(preview) > 1200:
+        preview = f"{preview[:1200].rstrip()}..."
+    return preview or "(empty)"
 
 
 def render_tool_context(request: ToolRequest, payload: dict[str, Any]) -> str:
