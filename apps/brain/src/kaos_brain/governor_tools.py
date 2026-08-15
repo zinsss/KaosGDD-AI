@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from .memo_intent import MemoCreateRequest, MemoDeleteRequest
+from .memo_intent import MemoCreateRequest, MemoDeleteRequest, MemoEditRequest
 from .task_update_intent import TaskActionRequest, TaskCreateRequest, TaskDueUpdateRequest
 from .tool_intent import ToolKind, ToolRequest
 
@@ -120,6 +120,23 @@ class GovernorToolClient:
                 "actorId": str(actor_id),
                 "idempotencyKey": idempotency_key,
                 "query": request.query,
+            },
+        )
+
+    async def propose_memo_edit(
+        self,
+        request: MemoEditRequest,
+        *,
+        actor_id: int,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        return await self._post(
+            "/tools/memos/edit/proposals",
+            {
+                "actorId": str(actor_id),
+                "idempotencyKey": idempotency_key,
+                "query": request.query,
+                "content": request.content,
             },
         )
 
@@ -284,6 +301,28 @@ def render_memo_delete_completed(payload: dict[str, Any]) -> str:
         return "Memo deleted."
     name = str(memo.get("name") or "").strip()
     return f"Memo deleted: {name}" if name else "Memo deleted."
+
+
+def render_memo_edit_proposal(payload: dict[str, Any]) -> str:
+    memo = payload.get("memo")
+    if not isinstance(memo, dict):
+        return "Memo edit requires confirmation."
+    name = str(memo.get("name") or "").strip()
+    old_content = str(memo.get("oldContent") or "")
+    new_content = str(memo.get("newContent") or "")
+    lines = ["## Confirm memo edit"]
+    if name:
+        lines.append(f"- memo: {name}")
+    lines.extend(["### Current", _memo_preview(old_content), "### New", _memo_preview(new_content)])
+    return "\n".join(lines)
+
+
+def render_memo_edit_completed(payload: dict[str, Any]) -> str:
+    memo = payload.get("memo")
+    if not isinstance(memo, dict):
+        return "Memo updated."
+    name = str(memo.get("name") or "").strip()
+    return f"Memo updated: {name}" if name else "Memo updated."
 
 
 def _due_text(due_date: str, due_time: str) -> str:

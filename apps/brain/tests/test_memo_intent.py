@@ -1,6 +1,6 @@
 import unittest
 
-from kaos_brain.memo_intent import parse_memo_create, parse_memo_delete
+from kaos_brain.memo_intent import parse_memo_create, parse_memo_delete, parse_memo_edit
 
 
 class MemoIntentTests(unittest.TestCase):
@@ -34,6 +34,21 @@ class MemoIntentTests(unittest.TestCase):
 
     def test_task_delete_does_not_parse_as_memo_delete(self) -> None:
         self.assertIsNone(parse_memo_delete("러스트데스크 삭제해줘"))
+
+    def test_edit_memo_with_colon_grammar(self) -> None:
+        request = parse_memo_edit("메모 rustdesk 수정:\n# Rustdesk\nUse Tailscale.")
+        assert request is not None
+        self.assertEqual(request.query, "rustdesk")
+        self.assertEqual(request.content, "# Rustdesk\nUse Tailscale.")
+
+    def test_edit_memo_with_natural_suffix(self) -> None:
+        request = parse_memo_edit("러스트데스크 메모를 새 설정으로 수정해줘")
+        assert request is not None
+        self.assertEqual(request.query, "러스트데스크")
+        self.assertEqual(request.content, "새 설정")
+
+    def test_edit_memo_requires_memo_word(self) -> None:
+        self.assertIsNone(parse_memo_edit("rustdesk 수정: 새 설정"))
 
 
 if __name__ == "__main__":

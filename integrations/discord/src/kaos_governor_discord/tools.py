@@ -65,6 +65,13 @@ class PendingMemoDelete:
     content: str
 
 
+@dataclass(frozen=True)
+class PendingMemoEdit:
+    name: str
+    old_content: str
+    new_content: str
+
+
 class BrainToolServer:
     def __init__(
         self,
@@ -93,6 +100,7 @@ class BrainToolServer:
         self._pending_task_actions: dict[str, PendingTaskAction] = {}
         self._pending_memo_creates: dict[str, PendingMemoCreate] = {}
         self._pending_memo_deletes: dict[str, PendingMemoDelete] = {}
+        self._pending_memo_edits: dict[str, PendingMemoEdit] = {}
         self._runner: web.AppRunner | None = None
 
     def application(self) -> web.Application:
@@ -103,6 +111,7 @@ class BrainToolServer:
         app.router.add_get("/tools/memos/search", self._search_memos)
         app.router.add_get("/tools/memos/{memo_id}", self._get_memo)
         app.router.add_post("/tools/memos/create/proposals", self._propose_memo_create)
+        app.router.add_post("/tools/memos/edit/proposals", self._propose_memo_edit)
         app.router.add_post("/tools/memos/delete/proposals", self._propose_memo_delete)
         app.router.add_get("/tools/documents/search", self._search_documents)
         app.router.add_post("/tools/tasks/action/proposals", self._propose_task_action)
@@ -303,6 +312,63 @@ class BrainToolServer:
                 "confirmationId": confirmation.confirmation_id,
                 "expiresAt": confirmation.expires_at.isoformat(),
                 "memo": _pending_memo_delete_payload(pending),
+                "source": "memos-live",
+            },
+            status=201,
+        )
+
+    async def _propose_memo_edit(self, request: web.Request) -> web.Response:
+        if not self._memos.config.enabled:
+            return web.json_response({"error": "memos_edit_disabled"}, status=503)
+        try:
+            body = await request.json()
+        except ValueError:
+            return web.json_response({"error": "invalid_json"}, status=400)
+        if not isinstance(body, Mapping):
+            return web.json_response({"error": "invalid_json"}, status=400)
+        actor_id = str(body.get("actorId") or "").strip()
+        idempotency_key = str(body.get("idempotencyKey") or "").strip()
+        query = " ".join(str(body.get("query") or "").split())
+        content = str(body.get("content") or "").strip()
+        if not actor_id or not idempotency_key or not query or not content:
+            return web.json_response({"error": "memo_edit_missing_required_field"}, status=400)
+        try:
+            results = await asyncio.to_thread(self._memos.search, query, None, 3)
+            if not results:
+                return web.json_response({"error": "memo_not_found"}, status=404)
+            if len(results) > 1:
+                return web.json_response(
+                    {
+                        "error": "memo_match_ambiguous",
+                        "matches": [result.as_dict() for result in results],
+                    },
+                    status=409,
+                )
+            memo = await asyncio.to_thread(self._memos.get, results[0].memo.name)
+            actor = Actor("user", actor_id, "personal")
+            operation, _created = self._durable.start_operation(
+                OperationRequest(
+                    actor=actor,
+                    idempotency_key=idempotency_key,
+                    tool_name="memos",
+                    operation_type="edit",
+                    parameters={"name": memo.name, "query": query, "content": content},
+                    requires_confirmation=True,
+                )
+            )
+            confirmation = self._durable.create_confirmation(operation.operation_id, ttl=timedelta(minutes=10))
+        except DurableGovernorError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+        except (ValueError, MemosError) as exc:
+            return _memos_error(exc)
+        pending = PendingMemoEdit(name=memo.name, old_content=memo.content, new_content=content)
+        self._pending_memo_edits[operation.operation_id] = pending
+        return web.json_response(
+            {
+                "operationId": operation.operation_id,
+                "confirmationId": confirmation.confirmation_id,
+                "expiresAt": confirmation.expires_at.isoformat(),
+                "memo": _pending_memo_edit_payload(pending),
                 "source": "memos-live",
             },
             status=201,
@@ -584,12 +650,14 @@ class BrainToolServer:
         pending_action = self._pending_task_actions.get(operation.operation_id)
         pending_memo_create = self._pending_memo_creates.get(operation.operation_id)
         pending_memo_delete = self._pending_memo_deletes.get(operation.operation_id)
+        pending_memo_edit = self._pending_memo_edits.get(operation.operation_id)
         if (
             pending_update is None
             and pending_create is None
             and pending_action is None
             and pending_memo_create is None
             and pending_memo_delete is None
+            and pending_memo_edit is None
         ):
             return web.json_response({"error": "operation_payload_not_found"}, status=410)
         try:
@@ -639,13 +707,17 @@ class BrainToolServer:
                     memo = await asyncio.to_thread(self._memos.create, pending_memo_create.content)
                     result_uid = memo.name
                     memo_payload = {"name": memo.name, "content": memo.content, "action": "create"}
+                elif pending_memo_edit is not None:
+                    memo = await asyncio.to_thread(self._memos.update, pending_memo_edit.name, pending_memo_edit.new_content)
+                    result_uid = memo.name
+                    memo_payload = _completed_memo_edit_payload(pending_memo_edit, memo.content)
                 else:
                     assert pending_memo_delete is not None
                     await asyncio.to_thread(self._memos.delete, pending_memo_delete.name)
                     result_uid = pending_memo_delete.name
                     memo_payload = _pending_memo_delete_payload(pending_memo_delete)
             self._durable.complete_operation(operation.operation_id, result={"uid": result_uid})
-            if pending_memo_create is None and pending_memo_delete is None:
+            if pending_memo_create is None and pending_memo_delete is None and pending_memo_edit is None:
                 await self._refresh_tasks()
         except DurableGovernorError as exc:
             return web.json_response({"error": str(exc)}, status=400)
@@ -660,13 +732,16 @@ class BrainToolServer:
         self._pending_task_actions.pop(operation.operation_id, None)
         self._pending_memo_creates.pop(operation.operation_id, None)
         self._pending_memo_deletes.pop(operation.operation_id, None)
+        self._pending_memo_edits.pop(operation.operation_id, None)
         response_payload = {
             "operationId": operation.operation_id,
             "confirmationId": confirmation_id,
             "status": "completed",
-            "source": "memos-live" if pending_memo_create is not None or pending_memo_delete is not None else "calendar-adapter-live",
+            "source": "memos-live"
+            if pending_memo_create is not None or pending_memo_delete is not None or pending_memo_edit is not None
+            else "calendar-adapter-live",
         }
-        if pending_memo_create is not None or pending_memo_delete is not None:
+        if pending_memo_create is not None or pending_memo_delete is not None or pending_memo_edit is not None:
             response_payload["memo"] = memo_payload
         else:
             response_payload["task"] = task
@@ -869,6 +944,19 @@ def _pending_memo_create_payload(pending: PendingMemoCreate) -> dict[str, object
 
 def _pending_memo_delete_payload(pending: PendingMemoDelete) -> dict[str, object]:
     return {"name": pending.name, "content": pending.content, "action": "delete"}
+
+
+def _pending_memo_edit_payload(pending: PendingMemoEdit) -> dict[str, object]:
+    return {
+        "name": pending.name,
+        "oldContent": pending.old_content,
+        "newContent": pending.new_content,
+        "action": "edit",
+    }
+
+
+def _completed_memo_edit_payload(pending: PendingMemoEdit, content: str) -> dict[str, object]:
+    return {**_pending_memo_edit_payload(pending), "content": content}
 
 
 def _profile(request: web.Request) -> str:

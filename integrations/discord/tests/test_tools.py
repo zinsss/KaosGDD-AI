@@ -110,6 +110,7 @@ class FakeMemos:
         self.get_calls = []
         self.create_calls = []
         self.delete_calls = []
+        self.update_calls = []
 
     def search(self, query, tags, limit):
         self.search_calls.append((query, tags, limit))
@@ -126,6 +127,10 @@ class FakeMemos:
     def create(self, content):
         self.create_calls.append(content)
         return Memo("memos/new", content, (), "created", "updated", "PRIVATE", False)
+
+    def update(self, name, content):
+        self.update_calls.append((name, content))
+        return Memo(name, content, ("server",), "created", "updated", "PRIVATE", False)
 
     def delete(self, name):
         self.delete_calls.append(name)
@@ -357,6 +362,95 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["error"], "memo_match_ambiguous")
         self.assertEqual(len(payload["matches"]), 2)
         self.assertEqual(self.memos.delete_calls, [])
+
+    async def test_memo_edit_proposal_requires_confirmation_before_write(self) -> None:
+        response = await self.client.post(
+            "/tools/memos/edit/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-memo-edit-1",
+                "query": "rustdesk",
+                "content": "# Rustdesk\nUpdated body",
+            },
+        )
+
+        self.assertEqual(response.status, 201)
+        payload = await response.json()
+        self.assertTrue(payload["confirmationId"].startswith("conf_"))
+        self.assertEqual(payload["memo"]["name"], "memos/42")
+        self.assertEqual(payload["memo"]["oldContent"], "Full memo body")
+        self.assertEqual(payload["memo"]["newContent"], "# Rustdesk\nUpdated body")
+        self.assertEqual(self.memos.update_calls, [])
+
+    async def test_memo_edit_approval_updates_memo(self) -> None:
+        proposal = await self.client.post(
+            "/tools/memos/edit/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-memo-edit-2",
+                "query": "rustdesk",
+                "content": "# Rustdesk\nUpdated body",
+            },
+        )
+        confirmation_id = (await proposal.json())["confirmationId"]
+
+        response = await self.client.post(
+            f"/tools/confirmations/{confirmation_id}/approve",
+            headers=self.headers(),
+            json={"actorId": "994579996960104529"},
+        )
+
+        self.assertEqual(response.status, 200)
+        payload = await response.json()
+        self.assertEqual(payload["status"], "completed")
+        self.assertEqual(payload["source"], "memos-live")
+        self.assertEqual(payload["memo"]["name"], "memos/42")
+        self.assertEqual(payload["memo"]["action"], "edit")
+        self.assertEqual(payload["memo"]["content"], "# Rustdesk\nUpdated body")
+        self.assertEqual(self.memos.update_calls, [("memos/42", "# Rustdesk\nUpdated body")])
+
+    async def test_memo_edit_approval_rejects_wrong_actor(self) -> None:
+        proposal = await self.client.post(
+            "/tools/memos/edit/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-memo-edit-3",
+                "query": "rustdesk",
+                "content": "# Rustdesk\nUpdated body",
+            },
+        )
+        confirmation_id = (await proposal.json())["confirmationId"]
+
+        response = await self.client.post(
+            f"/tools/confirmations/{confirmation_id}/approve",
+            headers=self.headers(),
+            json={"actorId": "111"},
+        )
+
+        self.assertEqual(response.status, 400)
+        self.assertEqual((await response.json())["error"], "confirmation_actor_mismatch")
+        self.assertEqual(self.memos.update_calls, [])
+
+    async def test_memo_edit_rejects_ambiguous_match(self) -> None:
+        response = await self.client.post(
+            "/tools/memos/edit/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-memo-edit-4",
+                "query": "many",
+                "content": "Updated body",
+            },
+        )
+
+        self.assertEqual(response.status, 409)
+        payload = await response.json()
+        self.assertEqual(payload["error"], "memo_match_ambiguous")
+        self.assertEqual(len(payload["matches"]), 2)
+        self.assertEqual(self.memos.update_calls, [])
 
     async def test_document_search_returns_paperless_results(self) -> None:
         response = await self.client.get("/tools/documents/search?query=rust%20desk", headers=self.headers())
