@@ -303,6 +303,24 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["memo"]["content"], "Full memo body")
         self.assertEqual(self.memos.delete_calls, [])
 
+    async def test_memo_delete_proposal_can_target_exact_name(self) -> None:
+        response = await self.client.post(
+            "/tools/memos/delete/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-memo-delete-by-name-1",
+                "name": "memos/42",
+            },
+        )
+
+        self.assertEqual(response.status, 201)
+        payload = await response.json()
+        self.assertEqual(payload["memo"]["name"], "memos/42")
+        self.assertEqual(self.memos.search_calls, [])
+        self.assertEqual(self.memos.get_calls, ["memos/42"])
+        self.assertEqual(self.memos.delete_calls, [])
+
     async def test_memo_delete_approval_deletes_memo(self) -> None:
         proposal = await self.client.post(
             "/tools/memos/delete/proposals",
@@ -386,6 +404,27 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["memo"]["name"], "memos/42")
         self.assertEqual(payload["memo"]["oldContent"], "Full memo body")
         self.assertEqual(payload["memo"]["newContent"], "# Rustdesk\nUpdated body")
+        self.assertEqual(self.memos.update_calls, [])
+
+    async def test_memo_edit_proposal_can_target_exact_name(self) -> None:
+        response = await self.client.post(
+            "/tools/memos/edit/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-memo-edit-by-name-1",
+                "name": "memos/42",
+                "content": "# Rustdesk\nUpdated body",
+            },
+        )
+
+        self.assertEqual(response.status, 201)
+        payload = await response.json()
+        self.assertEqual(payload["memo"]["name"], "memos/42")
+        self.assertEqual(payload["memo"]["oldContent"], "Full memo body")
+        self.assertEqual(payload["memo"]["newContent"], "# Rustdesk\nUpdated body")
+        self.assertEqual(self.memos.search_calls, [])
+        self.assertEqual(self.memos.get_calls, ["memos/42"])
         self.assertEqual(self.memos.update_calls, [])
 
     async def test_memo_edit_approval_updates_memo(self) -> None:

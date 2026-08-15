@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 import logging
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -15,11 +16,11 @@ from .governor_tools import (
     document_option_label,
     memo_option_description,
     memo_option_label,
-    memo_public_url,
     render_memo_create_completed,
     render_memo_create_proposal,
     render_memo_delete_completed,
     render_memo_delete_proposal,
+    render_memo_deleted,
     render_memo_edit_completed,
     render_memo_edit_proposal,
     render_document_opened,
@@ -422,19 +423,17 @@ class BrainMemoSearchSelect(discord.ui.Select):
             content = f"Memo open failed: {exc}"
             await interaction.response.send_message(content, ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
-        view = BrainOpenedMemoView(
-            self.parent_view.actor_id,
-            memo_public_url(self.parent_view.memos_public_url, str(item.get("name") or "")),
-        )
+        view = BrainOpenedMemoView(self.parent_view.governor_tools, self.parent_view.actor_id, str(item.get("name") or ""), content)
         await interaction.response.send_message(content, view=view, allowed_mentions=NO_MENTIONS)
 
 
 class BrainOpenedMemoView(discord.ui.View):
-    def __init__(self, actor_id: int, note_url: str = "") -> None:
+    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, name: str, content: str) -> None:
         super().__init__(timeout=600)
+        self.governor_tools = governor_tools
         self.actor_id = actor_id
-        if note_url:
-            self.add_item(discord.ui.Button(label="Open note", style=discord.ButtonStyle.link, url=note_url))
+        self.name = name
+        self.content = content
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if int(interaction.user.id) == self.actor_id:
@@ -446,6 +445,204 @@ class BrainOpenedMemoView(discord.ui.View):
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if interaction.message is None:
             await interaction.response.send_message("Closed.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.message.delete()
+
+    @discord.ui.button(label="More...", style=discord.ButtonStyle.secondary)
+    async def more(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        view = BrainOpenedMemoActionsView(self.governor_tools, self.actor_id, self.name, self.content)
+        await interaction.response.edit_message(view=view, allowed_mentions=NO_MENTIONS)
+        self.stop()
+
+
+class BrainOpenedMemoActionsView(discord.ui.View):
+    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, name: str, content: str) -> None:
+        super().__init__(timeout=600)
+        self.governor_tools = governor_tools
+        self.actor_id = actor_id
+        self.name = name
+        self.content = content
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if int(interaction.user.id) == self.actor_id:
+            return True
+        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+    @discord.ui.button(label="Close", style=discord.ButtonStyle.secondary)
+    async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if interaction.message is None:
+            await interaction.response.send_message("Closed.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.message.delete()
+
+    @discord.ui.button(label="Edit", style=discord.ButtonStyle.primary)
+    async def edit(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        view = BrainMemoEditConfirmView(self.governor_tools, self.actor_id, self.name, self.content)
+        await interaction.response.edit_message(view=view, allowed_mentions=NO_MENTIONS)
+        self.stop()
+
+    @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger)
+    async def delete(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        view = BrainMemoDeleteConfirmView(self.governor_tools, self.actor_id, self.name, self.content)
+        await interaction.response.edit_message(view=view, allowed_mentions=NO_MENTIONS)
+        self.stop()
+
+
+class BrainMemoEditConfirmView(discord.ui.View):
+    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, name: str, content: str) -> None:
+        super().__init__(timeout=600)
+        self.governor_tools = governor_tools
+        self.actor_id = actor_id
+        self.name = name
+        self.content = content
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if int(interaction.user.id) == self.actor_id:
+            return True
+        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+    @discord.ui.button(label="Confirm Edit", style=discord.ButtonStyle.primary)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(
+            BrainMemoEditModal(self.governor_tools, self.actor_id, self.name, self.content, interaction.message)
+        )
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        view = BrainOpenedMemoView(self.governor_tools, self.actor_id, self.name, self.content)
+        await interaction.response.edit_message(view=view, allowed_mentions=NO_MENTIONS)
+        self.stop()
+
+
+class BrainMemoEditModal(discord.ui.Modal, title="Edit memo"):
+    def __init__(
+        self,
+        governor_tools: GovernorToolClient,
+        actor_id: int,
+        name: str,
+        content: str,
+        source_message: discord.Message | None,
+    ) -> None:
+        super().__init__(timeout=600)
+        self.governor_tools = governor_tools
+        self.actor_id = actor_id
+        self.name = name
+        self.source_message = source_message
+        self.content_input = discord.ui.TextInput(
+            label="Memo",
+            style=discord.TextStyle.paragraph,
+            default=content[:4000],
+            max_length=4000,
+            required=True,
+        )
+        self.add_item(self.content_input)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        content = str(self.content_input.value).strip()
+        try:
+            proposal = await self.governor_tools.propose_memo_edit_by_name(
+                self.name,
+                content,
+                actor_id=self.actor_id,
+                idempotency_key=f"brain-memo-edit-{interaction.id}",
+            )
+            payload = await self.governor_tools.approve_confirmation(
+                str(proposal.get("confirmationId") or ""),
+                actor_id=self.actor_id,
+            )
+            memo = payload.get("memo")
+            if isinstance(memo, dict):
+                content = str(memo.get("content") or content)
+        except GovernorToolError as exc:
+            await interaction.response.send_message(f"Memo edit failed: {exc}", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        if self.source_message is not None:
+            view = BrainOpenedMemoView(self.governor_tools, self.actor_id, self.name, content)
+            await interaction.response.defer(ephemeral=True)
+            await self.source_message.edit(content=content[:1900], view=view, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.response.send_message(content[:1900], view=BrainOpenedMemoView(self.governor_tools, self.actor_id, self.name, content), ephemeral=True, allowed_mentions=NO_MENTIONS)
+
+
+class BrainMemoDeleteConfirmView(discord.ui.View):
+    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, name: str, content: str) -> None:
+        super().__init__(timeout=600)
+        self.governor_tools = governor_tools
+        self.actor_id = actor_id
+        self.name = name
+        self.content = content
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if int(interaction.user.id) == self.actor_id:
+            return True
+        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+    @discord.ui.button(label="Confirm Delete", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        try:
+            proposal = await self.governor_tools.propose_memo_delete_by_name(
+                self.name,
+                actor_id=self.actor_id,
+                idempotency_key=f"brain-memo-delete-{interaction.id}",
+            )
+            await self.governor_tools.approve_confirmation(str(proposal.get("confirmationId") or ""), actor_id=self.actor_id)
+        except GovernorToolError as exc:
+            await interaction.response.send_message(f"Memo delete failed: {exc}", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        deleted_at = datetime.now(KST).strftime("%Y-%m-%d %H:%M KST")
+        view = BrainDeletedMemoView(self.governor_tools, self.actor_id, self.content)
+        await interaction.response.edit_message(content=render_memo_deleted(self.content, deleted_at), view=view, allowed_mentions=NO_MENTIONS)
+        self.stop()
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        view = BrainOpenedMemoView(self.governor_tools, self.actor_id, self.name, self.content)
+        await interaction.response.edit_message(view=view, allowed_mentions=NO_MENTIONS)
+        self.stop()
+
+
+class BrainDeletedMemoView(discord.ui.View):
+    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, content: str) -> None:
+        super().__init__(timeout=600)
+        self.governor_tools = governor_tools
+        self.actor_id = actor_id
+        self.content = content
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if int(interaction.user.id) == self.actor_id:
+            return True
+        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+    @discord.ui.button(label="Undo Delete", style=discord.ButtonStyle.primary)
+    async def undo(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        try:
+            proposal = await self.governor_tools.propose_memo_create(
+                MemoCreateRequest(self.content),
+                actor_id=self.actor_id,
+                idempotency_key=f"brain-memo-undo-delete-{interaction.id}",
+            )
+            payload = await self.governor_tools.approve_confirmation(
+                str(proposal.get("confirmationId") or ""),
+                actor_id=self.actor_id,
+            )
+            memo = payload.get("memo")
+            name = str(memo.get("name") or "") if isinstance(memo, dict) else ""
+            content = str(memo.get("content") or self.content) if isinstance(memo, dict) else self.content
+        except GovernorToolError as exc:
+            await interaction.response.send_message(f"Memo restore failed: {exc}", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        view = BrainOpenedMemoView(self.governor_tools, self.actor_id, name, content)
+        await interaction.response.edit_message(content=content[:1900], view=view, allowed_mentions=NO_MENTIONS)
+        self.stop()
+
+    @discord.ui.button(label="Delete this Message", style=discord.ButtonStyle.danger)
+    async def delete_message(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if interaction.message is None:
+            await interaction.response.send_message("Message delete failed.", ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         await interaction.message.delete()
 

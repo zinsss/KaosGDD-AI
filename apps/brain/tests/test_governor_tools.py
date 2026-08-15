@@ -4,6 +4,7 @@ from kaos_brain.governor_tools import (
     memo_option_label,
     render_memo_create_completed,
     render_memo_delete_completed,
+    render_memo_deleted,
     render_memo_edit_completed,
     memo_option_description,
     memo_public_url,
@@ -80,7 +81,7 @@ class GovernorToolRenderingTests(unittest.TestCase):
         self.assertEqual(memo_option_label(item), "Training note")
         self.assertEqual(memo_option_description(item), "#education #work")
 
-    def test_render_opened_memo_uses_summary(self) -> None:
+    def test_render_opened_memo_uses_original_markdown(self) -> None:
         content = render_memo_opened(
             "training",
             {
@@ -89,10 +90,14 @@ class GovernorToolRenderingTests(unittest.TestCase):
                 "tags": ["education"],
             },
         )
-        self.assertIn("## Training note", content)
-        self.assertIn("#education", content)
-        self.assertIn("## Person\n\n- GSEEK\n  - user@example.com\n  - password", content)
-        self.assertNotIn("# Training note\n\n## Person", content)
+        self.assertEqual(
+            content,
+            "# Training note\n\n## Person\n\n- GSEEK\n  - user@example.com\n  - password",
+        )
+
+    def test_render_deleted_memo_keeps_original_content(self) -> None:
+        content = render_memo_deleted("# Training note\n\nBody", "2026-08-15 16:30 KST")
+        self.assertEqual(content, "# Training note\n\nBody\n\nDeleted at 2026-08-15 16:30 KST")
 
     def test_memo_public_url_uses_memo_id(self) -> None:
         self.assertEqual(memo_public_url("https://memos.example", "memos/abc"), "https://memos.example/m/abc")

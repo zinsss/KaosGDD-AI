@@ -283,22 +283,15 @@ class BrainToolServer:
             return web.json_response({"error": "invalid_json"}, status=400)
         actor_id = str(body.get("actorId") or "").strip()
         idempotency_key = str(body.get("idempotencyKey") or "").strip()
+        name = str(body.get("name") or "").strip()
         query = " ".join(str(body.get("query") or "").split())
-        if not actor_id or not idempotency_key or not query:
+        if not actor_id or not idempotency_key or not (name or query):
             return web.json_response({"error": "memo_delete_missing_required_field"}, status=400)
         try:
-            results = await asyncio.to_thread(self._memos.search, query, None, 3)
-            if not results:
-                return web.json_response({"error": "memo_not_found"}, status=404)
-            if len(results) > 1:
-                return web.json_response(
-                    {
-                        "error": "memo_match_ambiguous",
-                        "matches": [result.as_dict() for result in results],
-                    },
-                    status=409,
-                )
-            memo = await asyncio.to_thread(self._memos.get, results[0].memo.name)
+            match = await self._find_memo_for_write(name=name, query=query)
+            if isinstance(match, web.Response):
+                return match
+            memo = match
             actor = Actor("user", actor_id, "personal")
             operation, _created = self._durable.start_operation(
                 OperationRequest(
@@ -339,23 +332,16 @@ class BrainToolServer:
             return web.json_response({"error": "invalid_json"}, status=400)
         actor_id = str(body.get("actorId") or "").strip()
         idempotency_key = str(body.get("idempotencyKey") or "").strip()
+        name = str(body.get("name") or "").strip()
         query = " ".join(str(body.get("query") or "").split())
         content = str(body.get("content") or "").strip()
-        if not actor_id or not idempotency_key or not query or not content:
+        if not actor_id or not idempotency_key or not (name or query) or not content:
             return web.json_response({"error": "memo_edit_missing_required_field"}, status=400)
         try:
-            results = await asyncio.to_thread(self._memos.search, query, None, 3)
-            if not results:
-                return web.json_response({"error": "memo_not_found"}, status=404)
-            if len(results) > 1:
-                return web.json_response(
-                    {
-                        "error": "memo_match_ambiguous",
-                        "matches": [result.as_dict() for result in results],
-                    },
-                    status=409,
-                )
-            memo = await asyncio.to_thread(self._memos.get, results[0].memo.name)
+            match = await self._find_memo_for_write(name=name, query=query)
+            if isinstance(match, web.Response):
+                return match
+            memo = match
             actor = Actor("user", actor_id, "personal")
             operation, _created = self._durable.start_operation(
                 OperationRequest(
@@ -384,6 +370,22 @@ class BrainToolServer:
             },
             status=201,
         )
+
+    async def _find_memo_for_write(self, *, name: str, query: str):
+        if name:
+            return await asyncio.to_thread(self._memos.get, name)
+        results = await asyncio.to_thread(self._memos.search, query, None, 3)
+        if not results:
+            return web.json_response({"error": "memo_not_found"}, status=404)
+        if len(results) > 1:
+            return web.json_response(
+                {
+                    "error": "memo_match_ambiguous",
+                    "matches": [result.as_dict() for result in results],
+                },
+                status=409,
+            )
+        return await asyncio.to_thread(self._memos.get, results[0].memo.name)
 
     async def _propose_task_due_update(self, request: web.Request) -> web.Response:
         try:

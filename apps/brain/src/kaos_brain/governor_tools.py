@@ -173,6 +173,22 @@ class GovernorToolClient:
             },
         )
 
+    async def propose_memo_delete_by_name(
+        self,
+        name: str,
+        *,
+        actor_id: int,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        return await self._post(
+            "/tools/memos/delete/proposals",
+            {
+                "actorId": str(actor_id),
+                "idempotencyKey": idempotency_key,
+                "name": name,
+            },
+        )
+
     async def propose_memo_edit(
         self,
         request: MemoEditRequest,
@@ -187,6 +203,24 @@ class GovernorToolClient:
                 "idempotencyKey": idempotency_key,
                 "query": request.query,
                 "content": request.content,
+            },
+        )
+
+    async def propose_memo_edit_by_name(
+        self,
+        name: str,
+        content: str,
+        *,
+        actor_id: int,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        return await self._post(
+            "/tools/memos/edit/proposals",
+            {
+                "actorId": str(actor_id),
+                "idempotencyKey": idempotency_key,
+                "name": name,
+                "content": content,
             },
         )
 
@@ -376,17 +410,14 @@ def render_tool_context(request: ToolRequest, payload: dict[str, Any]) -> str:
 
 
 def render_memo_opened(query: str, item: dict[str, Any]) -> str:
-    lines = [
-        f"## {memo_option_label(item)}",
-        f"-# Memos search · {query or '..'} · {item.get('name') or ''}",
-    ]
-    tags = _memo_tags_text(item)
-    if tags:
-        lines.append(tags)
-    content = str(item.get("content") or "").strip()
+    content = str(item.get("content") or item.get("snippet") or "").strip()
     if content:
-        lines.append(_strip_leading_title(content, _memo_title(item)))
-    return "\n".join(lines)[:1900]
+        return content[:1900]
+    return f"## {memo_option_label(item)}"[:1900]
+
+
+def render_memo_deleted(content: str, deleted_at: str) -> str:
+    return f"{content.strip()}\n\nDeleted at {deleted_at}".strip()[:1900]
 
 
 def render_document_opened(query: str, item: dict[str, Any]) -> str:
