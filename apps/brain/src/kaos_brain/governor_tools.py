@@ -56,6 +56,12 @@ class GovernorToolClient:
             payload["results"] = [{**first, "content": str(memo.get("content") or ""), "full": True}]
         return payload
 
+    async def get_memo(self, name: str) -> dict[str, Any]:
+        memo_id = _memo_id(name)
+        if not memo_id:
+            raise GovernorToolError("invalid memo id")
+        return await self._get(f"/tools/memos/{quote(memo_id, safe='')}", {})
+
     async def _with_single_document_detail(self, payload: dict[str, Any]) -> dict[str, Any]:
         results = payload.get("results")
         if not isinstance(results, list) or len(results) != 1:
@@ -72,6 +78,12 @@ class GovernorToolClient:
             payload = dict(payload)
             payload["results"] = [{**first, **document, "full": True}]
         return payload
+
+    async def get_document(self, document_id: object) -> dict[str, Any]:
+        normalized = _document_id(document_id)
+        if not normalized:
+            raise GovernorToolError("invalid document id")
+        return await self._get(f"/tools/documents/{normalized}", {})
 
     async def propose_task_due_update(
         self,
@@ -361,6 +373,39 @@ def render_tool_context(request: ToolRequest, payload: dict[str, Any]) -> str:
     if request.kind is ToolKind.DOCUMENT_SEARCH:
         return _render_documents(request.query, payload)
     return "No usable Governor data."
+
+
+def render_memo_opened(query: str, item: dict[str, Any]) -> str:
+    return f"## Memos search · {query or '..'}\n-# {item.get('name') or ''}\n{_memo_line({**item, 'full': True})}"[:1900]
+
+
+def render_document_opened(query: str, item: dict[str, Any]) -> str:
+    return f"## Documents search · {query or '..'}\n{_document_line(item)}"[:1900]
+
+
+def search_results(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    return _items(payload.get("results"))
+
+
+def memo_option_label(item: dict[str, Any]) -> str:
+    return _truncate(_memo_title(item), 100)
+
+
+def memo_option_description(item: dict[str, Any]) -> str:
+    return _truncate(str(item.get("snippet") or item.get("content") or item.get("name") or ""), 100)
+
+
+def document_option_label(item: dict[str, Any]) -> str:
+    return _truncate(str(item.get("title") or item.get("originalFileName") or item.get("filename") or "Untitled document"), 100)
+
+
+def document_option_description(item: dict[str, Any]) -> str:
+    details = [
+        str(item.get("created") or item.get("createdDate") or "")[:10],
+        str(item.get("correspondent") or ""),
+        str(item.get("filename") or item.get("originalFileName") or ""),
+    ]
+    return _truncate(" · ".join(detail for detail in details if detail), 100)
 
 
 def _render_today(payload: dict[str, Any]) -> str:

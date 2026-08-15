@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import discord
@@ -10,12 +11,18 @@ from .governor_tools import (
     GovernorToolClient,
     GovernorToolConfig,
     GovernorToolError,
+    document_option_description,
+    document_option_label,
+    memo_option_description,
+    memo_option_label,
     render_memo_create_completed,
     render_memo_create_proposal,
     render_memo_delete_completed,
     render_memo_delete_proposal,
     render_memo_edit_completed,
     render_memo_edit_proposal,
+    render_document_opened,
+    render_memo_opened,
     render_task_action_completed,
     render_task_action_proposal,
     render_task_create_completed,
@@ -23,6 +30,7 @@ from .governor_tools import (
     render_task_due_update_completed,
     render_task_due_update_proposal,
     render_tool_context,
+    search_results,
 )
 from .intent import Route, parse_request
 from .memo_intent import MemoCreateRequest, MemoDeleteRequest, MemoEditRequest, parse_memo_create, parse_memo_delete, parse_memo_edit
@@ -134,11 +142,12 @@ class BrainBot(discord.Client):
         if memo_create is not None:
             await self._propose_memo_create(message, memo_create)
             return
+        view: discord.ui.View | None = None
         async with message.channel.typing():
             try:
                 tool_request = parse_tool_request(request.text) if request.route is Route.CHAT else None
                 if tool_request is not None:
-                    reply = await self._answer_with_governor_tool(request.text, tool_request)
+                    reply, view = await self._answer_with_governor_tool(request.text, tool_request, actor_id=int(message.author.id))
                 elif request.route is Route.CHAT and self.settings.auto_route_enabled:
                     reply = await self.ollama.generate_auto(request.text)
                 else:
@@ -149,29 +158,39 @@ class BrainBot(discord.Client):
                 reply = f"{label}: {exc}"
         await message.reply(
             reply[: self.settings.max_reply_chars],
+            view=view,
             mention_author=False,
             allowed_mentions=NO_MENTIONS,
         )
 
-    async def _answer_with_governor_tool(self, user_text: str, tool_request: ToolRequest) -> str:
+    async def _answer_with_governor_tool(
+        self,
+        user_text: str,
+        tool_request: ToolRequest,
+        *,
+        actor_id: int,
+    ) -> tuple[str, discord.ui.View | None]:
         if self.governor_tools is None:
-            return "Governor tools are not configured yet."
+            return "Governor tools are not configured yet.", None
         try:
             payload = await self.governor_tools.fetch(tool_request)
         except GovernorToolError as exc:
-            return f"Governor tool failed: {exc}"
+            return f"Governor tool failed: {exc}", None
         context = render_tool_context(tool_request, payload)
-        if tool_request.kind in {
-            ToolKind.TODAY,
-            ToolKind.ACTIVE_TASKS,
-            ToolKind.MEMO_SEARCH,
-            ToolKind.DOCUMENT_SEARCH,
-        }:
-            return context
+        if tool_request.kind is ToolKind.MEMO_SEARCH:
+            results = search_results(payload)
+            view = BrainMemoSearchView(self.governor_tools, actor_id, tool_request.query, results) if len(results) > 1 else None
+            return context, view
+        if tool_request.kind is ToolKind.DOCUMENT_SEARCH:
+            results = search_results(payload)
+            view = BrainDocumentSearchView(self.governor_tools, actor_id, tool_request.query, results) if len(results) > 1 else None
+            return context, view
+        if tool_request.kind in {ToolKind.TODAY, ToolKind.ACTIVE_TASKS}:
+            return context, None
         try:
-            return await self.ollama.summarize_tool_result(user_text, context)
+            return await self.ollama.summarize_tool_result(user_text, context), None
         except OllamaError:
-            return context
+            return context, None
 
     async def _propose_task_due_update(self, message: discord.Message, request: TaskDueUpdateRequest) -> None:
         if self.governor_tools is None:
@@ -340,6 +359,92 @@ class BrainBot(discord.Client):
             mention_author=False,
             allowed_mentions=NO_MENTIONS,
         )
+
+
+class BrainMemoSearchView(discord.ui.View):
+    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, query: str, results: list[dict[str, Any]]) -> None:
+        super().__init__(timeout=600)
+        self.governor_tools = governor_tools
+        self.actor_id = actor_id
+        self.query = query
+        self.results = results[:25]
+        self.add_item(BrainMemoSearchSelect(self))
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if int(interaction.user.id) == self.actor_id:
+            return True
+        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+
+class BrainMemoSearchSelect(discord.ui.Select):
+    def __init__(self, parent: BrainMemoSearchView) -> None:
+        self.parent_view = parent
+        options = [
+            discord.SelectOption(
+                label=memo_option_label(item),
+                description=memo_option_description(item) or None,
+                value=str(index),
+            )
+            for index, item in enumerate(parent.results)
+        ]
+        super().__init__(placeholder="Open memo", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        try:
+            item = self.parent_view.results[int(self.values[0])]
+            payload = await self.parent_view.governor_tools.get_memo(str(item.get("name") or ""))
+            memo = payload.get("memo")
+            if isinstance(memo, dict):
+                item = {**item, **memo, "full": True}
+            content = render_memo_opened(self.parent_view.query, item)
+        except (GovernorToolError, IndexError, TypeError, ValueError) as exc:
+            content = f"Memo open failed: {exc}"
+        await interaction.response.edit_message(content=content, view=None, allowed_mentions=NO_MENTIONS)
+        self.parent_view.stop()
+
+
+class BrainDocumentSearchView(discord.ui.View):
+    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, query: str, results: list[dict[str, Any]]) -> None:
+        super().__init__(timeout=600)
+        self.governor_tools = governor_tools
+        self.actor_id = actor_id
+        self.query = query
+        self.results = results[:25]
+        self.add_item(BrainDocumentSearchSelect(self))
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if int(interaction.user.id) == self.actor_id:
+            return True
+        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+
+class BrainDocumentSearchSelect(discord.ui.Select):
+    def __init__(self, parent: BrainDocumentSearchView) -> None:
+        self.parent_view = parent
+        options = [
+            discord.SelectOption(
+                label=document_option_label(item),
+                description=document_option_description(item) or None,
+                value=str(index),
+            )
+            for index, item in enumerate(parent.results)
+        ]
+        super().__init__(placeholder="Open document", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        try:
+            item = self.parent_view.results[int(self.values[0])]
+            payload = await self.parent_view.governor_tools.get_document(item.get("id"))
+            document = payload.get("document")
+            if isinstance(document, dict):
+                item = {**item, **document, "full": True}
+            content = render_document_opened(self.parent_view.query, item)
+        except (GovernorToolError, IndexError, TypeError, ValueError) as exc:
+            content = f"Document open failed: {exc}"
+        await interaction.response.edit_message(content=content, view=None, allowed_mentions=NO_MENTIONS)
+        self.parent_view.stop()
 
 
 class TaskUpdateConfirmationView(discord.ui.View):
