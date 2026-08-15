@@ -386,10 +386,20 @@ def _render_tasks(payload: dict[str, Any]) -> str:
 
 def _render_memos(query: str, payload: dict[str, Any]) -> str:
     results = _items(payload.get("results"))
-    heading = f"Memos search: {query} ({payload.get('count', len(results))} results)"
+    result_count = _count(payload, "resultCount", "count", fallback=len(results))
+    total_count = _count(payload, "totalCount", fallback=result_count)
+    lines = [
+        "Searched..",
+        f"## {query or '..'}",
+        f"{result_count} results in {total_count} memos",
+    ]
     if not results:
-        return f"{heading}\n- none"
-    return "\n".join([heading, *(_memo_line(item) for item in results[:5])])
+        lines.append("- No matching memos.")
+        return "\n".join(lines)
+    if result_count > len(results):
+        lines.append(f"- Showing first {len(results)} results.")
+    lines.extend(_memo_line(item) for item in results[:5])
+    return "\n".join(lines)
 
 
 def _render_documents(query: str, payload: dict[str, Any]) -> str:
@@ -403,6 +413,18 @@ def _render_documents(query: str, payload: dict[str, Any]) -> str:
 
 def _items(value: object) -> list[dict[str, Any]]:
     return [dict(item) for item in value if isinstance(item, dict)] if isinstance(value, list) else []
+
+
+def _count(payload: dict[str, Any], *keys: str, fallback: int) -> int:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, bool):
+            continue
+        try:
+            return max(0, int(value))
+        except (TypeError, ValueError):
+            continue
+    return fallback
 
 
 def _event_line(item: dict[str, Any]) -> str:
@@ -422,12 +444,37 @@ def _task_line(item: dict[str, Any]) -> str:
 
 
 def _memo_line(item: dict[str, Any]) -> str:
-    title = str(item.get("title") or item.get("name") or "Untitled memo").strip()
+    title = _memo_title(item)
     content = str(item.get("content") or "").strip()
     if content and item.get("full"):
-        return f"- {title}\n{content}"
+        return f"### {title}\n{_truncate_text(content, 1400)}"
     snippet = str(item.get("snippet") or "").strip()
-    return f"- {title}: {snippet}" if snippet else f"- {title}"
+    if snippet:
+        return f"### {title}\n- {_truncate(snippet, 180)}"
+    return f"### {title}"
+
+
+def _memo_title(item: dict[str, Any]) -> str:
+    for source in (str(item.get("title") or ""), str(item.get("content") or ""), str(item.get("snippet") or "")):
+        for raw in source.splitlines():
+            title = raw.strip().lstrip("#").strip()
+            if title:
+                return _truncate(title, 80)
+    return str(item.get("name") or "Untitled memo").strip()
+
+
+def _truncate(value: str, limit: int) -> str:
+    collapsed = " ".join(value.split())
+    if len(collapsed) <= limit:
+        return collapsed
+    return f"{collapsed[:limit].rstrip()}..."
+
+
+def _truncate_text(value: str, limit: int) -> str:
+    stripped = value.strip()
+    if len(stripped) <= limit:
+        return stripped
+    return f"{stripped[:limit].rstrip()}..."
 
 
 def _document_line(item: dict[str, Any]) -> str:

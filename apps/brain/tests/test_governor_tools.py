@@ -43,8 +43,26 @@ class GovernorToolRenderingTests(unittest.TestCase):
                 "results": [{"name": "memos/42", "content": "# Rustdesk\nUse Tailscale.", "full": True}],
             },
         )
-        self.assertIn("Memos search: rustdesk (1 results)", context)
-        self.assertIn("# Rustdesk\nUse Tailscale.", context)
+        self.assertIn("Searched..\n## rustdesk\n1 results in 1 memos", context)
+        self.assertIn("### Rustdesk\n# Rustdesk\nUse Tailscale.", context)
+
+    def test_render_multiple_memos_context_uses_compact_summary(self) -> None:
+        context = render_tool_context(
+            ToolRequest(ToolKind.MEMO_SEARCH, "training"),
+            {
+                "query": "training",
+                "resultCount": 2,
+                "totalCount": 213,
+                "results": [
+                    {"name": "memos/1", "snippet": "# Online training\nID and password details " * 20},
+                    {"name": "memos/2", "snippet": "Long mandatory training list " * 20},
+                ],
+            },
+        )
+        self.assertIn("Searched..\n## training\n2 results in 213 memos", context)
+        self.assertIn("### Online training", context)
+        self.assertIn("...", context)
+        self.assertNotIn("Memos search:", context)
 
     def test_render_single_full_document_context(self) -> None:
         context = render_tool_context(
