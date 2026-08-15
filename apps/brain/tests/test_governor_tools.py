@@ -85,14 +85,14 @@ class GovernorToolRenderingTests(unittest.TestCase):
             "training",
             {
                 "name": "memos/abc",
-                "content": "# Training note\nfirst line\nsecond line",
+                "content": "# Training note\n\n## Person\n\n- GSEEK\n  - user@example.com\n  - password",
                 "tags": ["education"],
             },
         )
         self.assertIn("## Training note", content)
         self.assertIn("#education", content)
-        self.assertIn("### Summary\nfirst line\nsecond line", content)
-        self.assertNotIn("# Training note\nfirst line", content)
+        self.assertIn("## Person\n\n- GSEEK\n  - user@example.com\n  - password", content)
+        self.assertNotIn("# Training note\n\n## Person", content)
 
     def test_memo_public_url_uses_memo_id(self) -> None:
         self.assertEqual(memo_public_url("https://memos.example", "memos/abc"), "https://memos.example/m/abc")

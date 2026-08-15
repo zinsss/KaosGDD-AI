@@ -383,9 +383,9 @@ def render_memo_opened(query: str, item: dict[str, Any]) -> str:
     tags = _memo_tags_text(item)
     if tags:
         lines.append(tags)
-    summary = _memo_summary(item)
-    if summary:
-        lines.extend(["### Summary", summary])
+    content = str(item.get("content") or "").strip()
+    if content:
+        lines.append(_strip_leading_title(content, _memo_title(item)))
     return "\n".join(lines)[:1900]
 
 
@@ -546,22 +546,19 @@ def _memo_tags_text(item: dict[str, Any]) -> str:
     return " ".join(f"#{tag}" for tag in cleaned)
 
 
-def _memo_summary(item: dict[str, Any]) -> str:
-    content = str(item.get("content") or item.get("snippet") or "").strip()
-    if not content:
-        return ""
-    title_seen = False
+def _strip_leading_title(content: str, title: str) -> str:
+    normalized_title = title.strip()
     lines: list[str] = []
+    skipped = False
     for raw in content.splitlines():
-        stripped = raw.strip()
-        if not stripped:
+        if not skipped and not raw.strip():
             continue
-        if not title_seen and stripped.lstrip("#").strip() == _memo_title(item):
-            title_seen = True
+        if not skipped and raw.strip().lstrip("#").strip() == normalized_title:
+            skipped = True
             continue
-        title_seen = True
-        lines.append(stripped)
-    return _truncate_text("\n".join(lines) or content, 700)
+        skipped = True
+        lines.append(raw)
+    return _truncate_text("\n".join(lines).strip() or content, 1500)
 
 
 def _truncate(value: str, limit: int) -> str:
