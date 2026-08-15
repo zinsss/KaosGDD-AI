@@ -42,6 +42,18 @@ class GovernorToolRenderingTests(unittest.TestCase):
         context = render_tool_context(ToolRequest(ToolKind.ACTIVE_TASKS), {"tasks": []})
         self.assertEqual(context, "Active tasks: none")
 
+    def test_render_completed_tasks_context(self) -> None:
+        context = render_tool_context(
+            ToolRequest(ToolKind.COMPLETED_TASKS, start="2026-08-02", end="2026-08-15"),
+            {
+                "from": "2026-08-02",
+                "to": "2026-08-15",
+                "tasks": [{"title": "Call mom", "completedDate": "2026-08-15"}],
+            },
+        )
+        self.assertIn("Completed tasks: 2026-08-02 to 2026-08-15", context)
+        self.assertIn("- Call mom - 2026-08-15", context)
+
     def test_render_single_full_memo_context(self) -> None:
         context = render_tool_context(
             ToolRequest(ToolKind.MEMO_SEARCH, "rustdesk"),
@@ -266,6 +278,36 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(payload["results"][0]["content"], "# Rustdesk\nUse Tailscale.")
         self.assertTrue(payload["results"][0]["full"])
+
+    async def test_fetch_completed_tasks_builds_filtered_route(self) -> None:
+        from kaos_brain.governor_tools import GovernorToolClient, GovernorToolConfig
+
+        class FakeClient(GovernorToolClient):
+            async def _get(self, path: str, params: dict[str, str]):
+                return {"path": path, "params": params}
+
+        client = FakeClient(
+            GovernorToolConfig(
+                base_url="http://127.0.0.1:8098",
+                api_token="token",
+                profile="main",
+                timeout_seconds=1,
+            )
+        )
+        payload = await client.fetch(
+            ToolRequest(ToolKind.COMPLETED_TASKS, "엄마", "2026-08-02", "2026-08-15")
+        )
+        self.assertEqual(payload["path"], "/tools/tasks/completed")
+        self.assertEqual(
+            payload["params"],
+            {
+                "profile": "main",
+                "limit": "25",
+                "query": "엄마",
+                "from": "2026-08-02",
+                "to": "2026-08-15",
+            },
+        )
 
     async def test_fetch_multi_memo_search_keeps_snippets_only(self) -> None:
         from kaos_brain.governor_tools import GovernorToolClient, GovernorToolConfig

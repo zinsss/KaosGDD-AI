@@ -158,7 +158,11 @@ class BrainBot(discord.Client):
         view: discord.ui.View | None = None
         async with message.channel.typing():
             try:
-                tool_request = parse_tool_request(request.text) if request.route is Route.CHAT else None
+                tool_request = (
+                    parse_tool_request(request.text, today=message.created_at.astimezone(KST).date())
+                    if request.route is Route.CHAT
+                    else None
+                )
                 if tool_request is not None:
                     reply, view = await self._answer_with_governor_tool(request.text, tool_request, actor_id=int(message.author.id))
                 elif request.route is Route.CHAT and self.settings.auto_route_enabled:
@@ -208,7 +212,7 @@ class BrainBot(discord.Client):
             results = search_results(payload)
             view = BrainDocumentSearchView(self.governor_tools, actor_id, tool_request.query, results) if len(results) > 1 else None
             return context, view
-        if tool_request.kind in {ToolKind.TODAY, ToolKind.ACTIVE_TASKS}:
+        if tool_request.kind in {ToolKind.TODAY, ToolKind.ACTIVE_TASKS, ToolKind.COMPLETED_TASKS}:
             return context, None
         try:
             return await self.ollama.summarize_tool_result(user_text, context), None

@@ -31,6 +31,15 @@ class GovernorToolClient:
             return await self._get("/tools/today", {"profile": self.config.profile})
         if request.kind is ToolKind.ACTIVE_TASKS:
             return await self._get("/tools/tasks/active", {"profile": self.config.profile})
+        if request.kind is ToolKind.COMPLETED_TASKS:
+            params = {"profile": self.config.profile, "limit": "25"}
+            if request.query:
+                params["query"] = request.query
+            if request.start:
+                params["from"] = request.start
+            if request.end:
+                params["to"] = request.end
+            return await self._get("/tools/tasks/completed", params)
         if request.kind is ToolKind.MEMO_SEARCH:
             payload = await self._get("/tools/memos/search", {"query": request.query, "limit": "5"})
             return await self._with_single_memo_body(payload)
@@ -445,6 +454,8 @@ def render_tool_context(request: ToolRequest, payload: dict[str, Any]) -> str:
         return _render_today(payload)
     if request.kind is ToolKind.ACTIVE_TASKS:
         return _render_tasks(payload)
+    if request.kind is ToolKind.COMPLETED_TASKS:
+        return _render_completed_tasks(payload)
     if request.kind is ToolKind.MEMO_SEARCH:
         return _render_memos(request.query, payload)
     if request.kind is ToolKind.DOCUMENT_SEARCH:
@@ -520,6 +531,21 @@ def _render_tasks(payload: dict[str, Any]) -> str:
     return "\n".join(["Active tasks:", *(_task_line(item) for item in tasks[:12])])
 
 
+def _render_completed_tasks(payload: dict[str, Any]) -> str:
+    tasks = _items(payload.get("tasks"))
+    start = str(payload.get("from") or "").strip()
+    end = str(payload.get("to") or "").strip()
+    query = str(payload.get("query") or "").strip()
+    title = "Completed tasks"
+    if query:
+        title = f"{title} · {query}"
+    if start or end:
+        title = f"{title}: {start or '..'} to {end or '..'}"
+    if not tasks:
+        return f"{title}: none"
+    return "\n".join([title, *(_completed_task_line(item) for item in tasks[:25])])
+
+
 def _render_memos(query: str, payload: dict[str, Any]) -> str:
     results = _items(payload.get("results"))
     result_count = _count(payload, "resultCount", "count", fallback=len(results))
@@ -590,6 +616,12 @@ def _task_line(item: dict[str, Any]) -> str:
     due_time = str(item.get("dueTime") or "").strip()
     due_text = " ".join(part for part in (due, due_time) if part)
     return f"- {title} - {due_text}" if due_text else f"- {title}"
+
+
+def _completed_task_line(item: dict[str, Any]) -> str:
+    title = str(item.get("title") or "Untitled task").strip()
+    completed = str(item.get("completedDate") or item.get("due") or "").strip()
+    return f"- {title} - {completed}" if completed else f"- {title}"
 
 
 def _memo_line(item: dict[str, Any]) -> str:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date, timedelta
 from enum import StrEnum
 import re
 
@@ -8,6 +9,7 @@ import re
 class ToolKind(StrEnum):
     TODAY = "today"
     ACTIVE_TASKS = "active_tasks"
+    COMPLETED_TASKS = "completed_tasks"
     MEMO_SEARCH = "memo_search"
     DOCUMENT_SEARCH = "document_search"
 
@@ -16,15 +18,21 @@ class ToolKind(StrEnum):
 class ToolRequest:
     kind: ToolKind
     query: str = ""
+    start: str = ""
+    end: str = ""
 
 
-def parse_tool_request(content: str) -> ToolRequest | None:
+def parse_tool_request(content: str, *, today: date | None = None) -> ToolRequest | None:
     text = " ".join(content.strip().split())
     lowered = text.lower()
     if not text:
         return None
+    current = today or date.today()
     if _asks_today(lowered):
         return ToolRequest(ToolKind.TODAY)
+    completed = _completed_task_request(text, lowered, current)
+    if completed is not None:
+        return completed
     if _asks_active_tasks(lowered):
         return ToolRequest(ToolKind.ACTIVE_TASKS)
     memo_query = _search_query(text, ("memo", "memos", "메모"))
@@ -54,6 +62,43 @@ def _asks_active_tasks(lowered: str) -> bool:
         or "할일" in lowered
         or "active task" in lowered
         or "todo" in lowered
+    )
+
+
+def _completed_task_request(text: str, lowered: str, today: date) -> ToolRequest | None:
+    if "완료" not in lowered:
+        return None
+    if not any(marker in lowered for marker in ("할 일", "할일", "task", "todo")):
+        return None
+    days = 14 if any(marker in lowered for marker in ("최근 2주", "지난 2주", "2주")) else 30
+    query = text
+    for marker in (
+        "최근 2주",
+        "지난 2주",
+        "2주",
+        "최근 한달",
+        "지난 한달",
+        "한달",
+        "완료된",
+        "완료",
+        "할 일",
+        "할일",
+        "목록",
+        "리스트",
+        "보여줘",
+        "보여",
+        "찾아줘",
+        "찾아",
+        "검색해줘",
+        "검색",
+    ):
+        query = query.replace(marker, " ")
+    query = re.sub(r"\b(completed|complete|done|tasks?|todos?|list|show|find|search|recent)\b", " ", query, flags=re.IGNORECASE)
+    return ToolRequest(
+        ToolKind.COMPLETED_TASKS,
+        " ".join(query.split()),
+        (today - timedelta(days=days - 1)).isoformat(),
+        today.isoformat(),
     )
 
 

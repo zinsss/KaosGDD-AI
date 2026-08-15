@@ -1,4 +1,5 @@
 import unittest
+from datetime import date
 
 from kaos_brain.tool_intent import ToolKind, parse_tool_request
 
@@ -13,6 +14,20 @@ class ToolIntentTests(unittest.TestCase):
         request = parse_tool_request("뭐 해야 돼?")
         assert request is not None
         self.assertEqual(request.kind, ToolKind.ACTIVE_TASKS)
+
+    def test_completed_task_korean_request_uses_recent_two_weeks(self) -> None:
+        request = parse_tool_request("최근 2주 완료 할 일 보여줘", today=date(2026, 8, 15))
+        assert request is not None
+        self.assertEqual(request.kind, ToolKind.COMPLETED_TASKS)
+        self.assertEqual(request.start, "2026-08-02")
+        self.assertEqual(request.end, "2026-08-15")
+        self.assertEqual(request.query, "")
+
+    def test_completed_task_search_keeps_remaining_query(self) -> None:
+        request = parse_tool_request("엄마 완료 할 일 찾아줘", today=date(2026, 8, 15))
+        assert request is not None
+        self.assertEqual(request.kind, ToolKind.COMPLETED_TASKS)
+        self.assertEqual(request.query, "엄마")
 
     def test_memo_search_extracts_query(self) -> None:
         request = parse_tool_request("메모에서 rust desk 찾아줘")

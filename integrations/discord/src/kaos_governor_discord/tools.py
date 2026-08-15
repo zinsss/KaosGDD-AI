@@ -121,6 +121,7 @@ class BrainToolServer:
         app.middlewares.append(self._auth_middleware)
         app.router.add_get("/tools/today", self._today)
         app.router.add_get("/tools/tasks/active", self._active_tasks)
+        app.router.add_get("/tools/tasks/completed", self._completed_tasks)
         app.router.add_get("/tools/memos/search", self._search_memos)
         app.router.add_get("/tools/memos/{memo_id}", self._get_memo)
         app.router.add_post("/tools/memos/create/proposals", self._propose_memo_create)
@@ -183,6 +184,38 @@ class BrainToolServer:
                 "collectionId": collection_id,
                 "count": len(active),
                 "tasks": active,
+                "source": "calendar-adapter-live",
+            }
+        )
+
+    async def _completed_tasks(self, request: web.Request) -> web.Response:
+        profile = _profile(request)
+        collection_id = request.query.get("collectionId", "").strip()
+        query = " ".join(request.query.get("query", "").split())
+        start = _optional_request_date(request, "from")
+        end = _optional_request_date(request, "to")
+        limit = _limit(request, default=25)
+        try:
+            tasks = await asyncio.to_thread(self._calendar_adapter.list_tasks, profile)
+        except CalendarAdapterError as exc:
+            return web.json_response({"error": str(exc)}, status=502)
+        completed = completed_task_payloads(
+            tasks,
+            collection_id=collection_id,
+            query=query,
+            start=start,
+            end=end,
+            limit=limit,
+        )
+        return web.json_response(
+            {
+                "profile": profile,
+                "collectionId": collection_id,
+                "query": query,
+                "from": start.isoformat() if start else "",
+                "to": end.isoformat() if end else "",
+                "count": len(completed),
+                "tasks": completed,
                 "source": "calendar-adapter-live",
             }
         )
@@ -931,6 +964,34 @@ def active_task_payloads(tasks: list[Mapping[str, Any]], *, collection_id: str =
     )
 
 
+def completed_task_payloads(
+    tasks: list[Mapping[str, Any]],
+    *,
+    collection_id: str = "",
+    query: str = "",
+    start: date | None = None,
+    end: date | None = None,
+    limit: int = 25,
+) -> list[dict[str, object]]:
+    normalized_query = _normalize_match_text(query)
+    completed = [
+        task_payload(item, {})
+        for item in tasks
+        if is_completed_task(item)
+        and (not collection_id or str(item.get("collection") or "") == collection_id)
+        and _matches_optional_query(item, normalized_query)
+        and _within_optional_range(completed_task_date(item), start, end)
+    ]
+    completed.sort(
+        key=lambda item: (
+            str(item.get("title") or ""),
+            str(item.get("uid") or ""),
+        ),
+    )
+    completed.sort(key=lambda item: str(item.get("completedDate") or "0000-00-00"), reverse=True)
+    return completed[: max(limit, 0)]
+
+
 def event_payload(item: Mapping[str, Any], collections: Mapping[str, Mapping[str, Any]]) -> dict[str, object]:
     collection_id = str(item.get("collection") or "")
     collection = collections.get(collection_id, {})
@@ -949,12 +1010,15 @@ def event_payload(item: Mapping[str, Any], collections: Mapping[str, Mapping[str
 def task_payload(item: Mapping[str, Any], collections: Mapping[str, Mapping[str, Any]]) -> dict[str, object]:
     collection_id = str(item.get("collection") or "")
     collection = collections.get(collection_id, {})
+    completed_value, completed_source = completed_task_value(item)
     return {
         "uid": str(item.get("uid") or ""),
         "title": str(item.get("summary") or "Untitled task"),
         "due": str(item.get("due") or ""),
         "dueTime": str(item.get("dueTime") or ""),
         "status": str(item.get("status") or ""),
+        "completedDate": completed_value,
+        "completedDateSource": completed_source,
         "priority": str(item.get("priority") or ""),
         "collectionId": collection_id,
         "owner": str(collection.get("owner") or ""),
@@ -998,6 +1062,26 @@ def is_active_task(item: Mapping[str, Any]) -> bool:
     return bool(str(item.get("uid") or "")) and str(item.get("status") or "").upper() != "COMPLETED"
 
 
+def is_completed_task(item: Mapping[str, Any]) -> bool:
+    return bool(str(item.get("uid") or "")) and str(item.get("status") or "").upper() == "COMPLETED"
+
+
+def completed_task_date(item: Mapping[str, Any]) -> date | None:
+    value, _source = completed_task_value(item)
+    try:
+        return date.fromisoformat(value[:10]) if value else None
+    except ValueError:
+        return None
+
+
+def completed_task_value(item: Mapping[str, Any]) -> tuple[str, str]:
+    for key in ("completed", "completedAt", "completedDate", "lastModified", "updated", "due"):
+        raw = str(item.get(key) or "").strip()
+        if raw:
+            return raw[:10], key
+    return "", ""
+
+
 def _valid_due(due_date: str, due_time: str) -> bool:
     try:
         datetime.strptime(f"{due_date} {due_time}", "%Y-%m-%d %H:%M")
@@ -1033,6 +1117,29 @@ def _match_active_tasks(tasks: list[Mapping[str, Any]], query: str) -> list[Mapp
 
 def _normalize_match_text(value: str) -> str:
     return " ".join(value.casefold().split())
+
+
+def _matches_optional_query(item: Mapping[str, Any], normalized_query: str) -> bool:
+    if not normalized_query:
+        return True
+    haystack = " ".join(
+        (
+            str(item.get("summary") or ""),
+            str(item.get("description") or ""),
+            " ".join(str(value) for value in item.get("categories", []) if str(value)),
+        )
+    )
+    return normalized_query in _normalize_match_text(haystack)
+
+
+def _within_optional_range(value: date | None, start: date | None, end: date | None) -> bool:
+    if value is None:
+        return start is None and end is None
+    if start is not None and value < start:
+        return False
+    if end is not None and value > end:
+        return False
+    return True
 
 
 def _pending_task_payload(pending: PendingTaskDueUpdate) -> dict[str, object]:
@@ -1113,6 +1220,16 @@ def _request_date(request: web.Request, *, default: date) -> date:
     raw = request.query.get("date", "").strip()
     if not raw:
         return default
+    try:
+        return date.fromisoformat(raw[:10])
+    except ValueError as exc:
+        raise web.HTTPBadRequest(text='{"error": "invalid_date"}', content_type="application/json") from exc
+
+
+def _optional_request_date(request: web.Request, name: str) -> date | None:
+    raw = request.query.get(name, "").strip()
+    if not raw:
+        return None
     try:
         return date.fromisoformat(raw[:10])
     except ValueError as exc:

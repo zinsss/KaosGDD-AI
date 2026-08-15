@@ -25,6 +25,14 @@ class FakeCalendarAdapter:
                 "collection": "zin:tasks",
             },
             {"uid": "TASK-3", "summary": "Done", "due": "2026-08-14", "status": "COMPLETED"},
+            {
+                "uid": "TASK-4",
+                "summary": "Done lately",
+                "due": "2026-08-10",
+                "status": "COMPLETED",
+                "completed": "2026-08-15",
+                "collection": "zin:tasks",
+            },
         ]
         self.updated = []
         self.created = []
@@ -206,6 +214,29 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 200)
         payload = await response.json()
         self.assertEqual([item["uid"] for item in payload["tasks"]], ["TASK-1", "TASK-2"])
+
+    async def test_completed_tasks_returns_completed_tasks_in_date_window(self) -> None:
+        response = await self.client.get(
+            "/tools/tasks/completed?profile=main&from=2026-08-15&to=2026-08-15",
+            headers=self.headers(),
+        )
+
+        self.assertEqual(response.status, 200)
+        payload = await response.json()
+        self.assertEqual(payload["count"], 1)
+        self.assertEqual(payload["tasks"][0]["uid"], "TASK-4")
+        self.assertEqual(payload["tasks"][0]["completedDate"], "2026-08-15")
+        self.assertEqual(payload["tasks"][0]["completedDateSource"], "completed")
+
+    async def test_completed_tasks_can_search_title(self) -> None:
+        response = await self.client.get(
+            "/tools/tasks/completed?profile=main&query=lately",
+            headers=self.headers(),
+        )
+
+        self.assertEqual(response.status, 200)
+        payload = await response.json()
+        self.assertEqual([item["uid"] for item in payload["tasks"]], ["TASK-4"])
 
     async def test_memos_search_returns_snippets_only(self) -> None:
         response = await self.client.get(
