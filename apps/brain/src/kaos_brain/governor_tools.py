@@ -555,9 +555,10 @@ def _render_today(payload: dict[str, Any]) -> str:
 
 def _render_tasks(payload: dict[str, Any]) -> str:
     tasks = _items(payload.get("tasks"))
+    title = _task_list_title(payload, completed=False)
     if not tasks:
-        return "Active tasks: none"
-    return "\n".join(["Active tasks:", *(_task_line(item) for item in tasks[:12])])
+        return f"## {title}\n- none"
+    return "\n".join([f"## {title}", *(_task_line(item) for item in tasks[:12])])
 
 
 def _render_completed_tasks(payload: dict[str, Any]) -> str:
@@ -565,14 +566,24 @@ def _render_completed_tasks(payload: dict[str, Any]) -> str:
     start = str(payload.get("from") or "").strip()
     end = str(payload.get("to") or "").strip()
     query = str(payload.get("query") or "").strip()
-    title = "Completed tasks"
+    title = _task_list_title(payload, completed=True)
     if query:
         title = f"{title} · {query}"
     if start or end:
         title = f"{title}: {start or '..'} to {end or '..'}"
     if not tasks:
-        return f"{title}: none"
-    return "\n".join([title, *(_completed_task_line(item) for item in tasks[:25])])
+        return f"## {title}\n- none"
+    return "\n".join([f"## {title}", *(_completed_task_line(item) for item in tasks[:25])])
+
+
+def _task_list_title(payload: dict[str, Any], *, completed: bool) -> str:
+    profile = str(payload.get("profile") or "").strip().lower()
+    collection_id = str(payload.get("collectionId") or "").strip().lower()
+    if profile == "supplies" or "supplies" in collection_id:
+        return "완료한 준비물" if completed else "준비물"
+    if profile == "family":
+        return "완료한 가족 할 일" if completed else "가족 할 일"
+    return "완료한 할 일" if completed else "할 일"
 
 
 def _render_memos(query: str, payload: dict[str, Any]) -> str:

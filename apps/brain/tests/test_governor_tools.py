@@ -40,7 +40,14 @@ class GovernorToolRenderingTests(unittest.TestCase):
 
     def test_render_empty_tasks_context(self) -> None:
         context = render_tool_context(ToolRequest(ToolKind.ACTIVE_TASKS), {"tasks": []})
-        self.assertEqual(context, "Active tasks: none")
+        self.assertEqual(context, "## 할 일\n- none")
+
+    def test_render_supplies_context_uses_scope_title_and_omits_empty_due(self) -> None:
+        context = render_tool_context(
+            ToolRequest(ToolKind.ACTIVE_TASKS, profile="supplies"),
+            {"profile": "supplies", "tasks": [{"title": "Soap"}]},
+        )
+        self.assertEqual(context, "## 준비물\n- Soap")
 
     def test_render_completed_tasks_context(self) -> None:
         context = render_tool_context(
@@ -51,8 +58,15 @@ class GovernorToolRenderingTests(unittest.TestCase):
                 "tasks": [{"title": "Call mom", "completedDate": "2026-08-15"}],
             },
         )
-        self.assertIn("Completed tasks: 2026-08-02 to 2026-08-15", context)
+        self.assertIn("## 완료한 할 일: 2026-08-02 to 2026-08-15", context)
         self.assertIn("- Call mom - 2026-08-15", context)
+
+    def test_render_family_tasks_context_uses_scope_title(self) -> None:
+        context = render_tool_context(
+            ToolRequest(ToolKind.ACTIVE_TASKS, profile="family"),
+            {"profile": "family", "tasks": [{"title": "Call mom", "due": "2026-08-17", "dueTime": "10:00"}]},
+        )
+        self.assertEqual(context, "## 가족 할 일\n- Call mom - 2026-08-17 10:00")
 
     def test_render_single_full_memo_context(self) -> None:
         context = render_tool_context(

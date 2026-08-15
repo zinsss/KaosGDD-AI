@@ -746,6 +746,52 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.calendar.created[0][1]["collectionId"], "supplies:abc")
         self.assertEqual(self.calendar.created[0][1]["dueDate"], "")
 
+    async def test_task_create_strips_supplies_due_dates(self) -> None:
+        proposal = await self.client.post(
+            "/tools/tasks/create/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-create-supplies-2",
+                "profile": "supplies",
+                "collectionId": "supplies:abc",
+                "title": "Toothbrush",
+                "dueDate": "2026-08-17",
+                "dueTime": "10:00",
+            },
+        )
+        self.assertEqual(proposal.status, 201)
+        confirmation_id = (await proposal.json())["confirmationId"]
+
+        response = await self.client.post(
+            f"/tools/confirmations/{confirmation_id}/approve",
+            headers=self.headers(),
+            json={"actorId": "994579996960104529"},
+        )
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(self.calendar.created[0][1]["collectionId"], "supplies:abc")
+        self.assertEqual(self.calendar.created[0][1]["dueDate"], "")
+        self.assertEqual(self.calendar.created[0][1]["dueTime"], "")
+
+    async def test_task_due_update_rejects_supplies_collection(self) -> None:
+        response = await self.client.post(
+            "/tools/tasks/update-due/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-supplies-due-1",
+                "profile": "supplies",
+                "collectionId": "supplies:abc",
+                "taskTitle": "Soap",
+                "dueDate": "2026-08-17",
+                "dueTime": "10:00",
+            },
+        )
+
+        self.assertEqual(response.status, 400)
+        self.assertEqual((await response.json())["error"], "supplies_due_not_allowed")
+
     async def test_task_create_approval_rejects_wrong_actor(self) -> None:
         proposal = await self.client.post(
             "/tools/tasks/create/proposals",

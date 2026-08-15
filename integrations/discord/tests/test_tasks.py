@@ -397,7 +397,39 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(await surface.handle_message(message))  # type: ignore[arg-type]
 
             self.assertEqual(adapter.created[0][1]["collectionId"], "zin:supplies")
+            self.assertEqual(adapter.created[0][1]["dueDate"], "")
+            self.assertEqual(adapter.created[0][1]["dueTime"], "")
             self.assertEqual(channel.sent[1]["content"], "## Paper towels")
+
+    async def test_supplies_surface_strips_due_dates_as_rule(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            adapter = FakeAdapter(tasks=[])
+            surface = DiscordTasksSurface(
+                FakeBot(channel),  # type: ignore[arg-type]
+                AccessPolicy(100, frozenset({200}), frozenset({300})),
+                channel_id=300,
+                profile="main",
+                state_path=Path(temporary) / "supplies.json",
+                adapter=adapter,  # type: ignore[arg-type]
+                surface_name="supplies",
+                button_prefix="supplies",
+                collection_id="zin:supplies",
+                show_due=False,
+            )
+            message = SimpleNamespace(
+                id=1,
+                content="+ Paper towels\n:2026-08-17 10:00",
+                channel=SimpleNamespace(id=300),
+                author=SimpleNamespace(id=200, bot=False),
+                delete=AsyncMock(),
+            )
+
+            self.assertTrue(await surface.handle_message(message))  # type: ignore[arg-type]
+
+            self.assertEqual(adapter.created[0][1]["collectionId"], "zin:supplies")
+            self.assertEqual(adapter.created[0][1]["dueDate"], "")
+            self.assertEqual(adapter.created[0][1]["dueTime"], "")
 
     async def test_ensure_message_deletes_legacy_combined_message(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

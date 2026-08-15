@@ -15,6 +15,7 @@ from kaos_governor.documents import DocumentIntakeError, PaperlessDocumentServic
 from kaos_governor.memos import MemosError, MemosService
 
 from .calendar import weather_agenda_summary, weather_items_by_date
+from .tasks import is_supplies_collection, normalize_supplies_due
 
 
 LOGGER = logging.getLogger(__name__)
@@ -451,6 +452,8 @@ class BrainToolServer:
         idempotency_key = str(body.get("idempotencyKey") or "").strip()
         task_title = " ".join(str(body.get("taskTitle") or "").split())
         collection_id = str(body.get("collectionId") or "").strip()
+        if profile == "supplies" or is_supplies_collection(collection_id):
+            return web.json_response({"error": "supplies_due_not_allowed"}, status=400)
         due_date = str(body.get("dueDate") or "").strip()
         due_time = str(body.get("dueTime") or "10:00").strip() or "10:00"
         if not actor_id or not idempotency_key or not task_title:
@@ -565,6 +568,7 @@ class BrainToolServer:
         }
         if collection_id:
             payload["collectionId"] = collection_id
+        payload = normalize_supplies_due(payload, collection_id=collection_id or profile)
         try:
             actor = Actor("user", actor_id, "family" if profile == "family" else "personal")
             operation, _created = self._durable.start_operation(
@@ -658,6 +662,7 @@ class BrainToolServer:
             "priority": str(task.get("priority") or ""),
             "status": _task_action_status(action, task),
         }
+        payload = normalize_supplies_due(payload, collection_id=collection_id or profile)
         try:
             actor = Actor("user", actor_id, "family" if profile == "family" else "personal")
             operation, _created = self._durable.start_operation(

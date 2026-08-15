@@ -128,6 +128,7 @@ class DiscordTasksSurface:
         }
         if self.collection_id:
             payload["collectionId"] = self.collection_id
+        payload = normalize_supplies_due(payload, collection_id=self.collection_id)
         result = await asyncio.to_thread(self.adapter.create_task, self.profile, payload)
         uid = str(result.get("uid") or "")
         if not uid:
@@ -140,6 +141,7 @@ class DiscordTasksSurface:
         if task is None:
             return False
         payload = task_payload(task, status="COMPLETED")
+        payload = normalize_supplies_due(payload, collection_id=self.collection_id or str(task.get("collection") or ""))
         await asyncio.to_thread(self.adapter.update_task, self.profile, payload)
         message_id = self.state.message_ids.pop(key, 0)
         self._tasks_by_key.pop(key, None)
@@ -443,6 +445,19 @@ def task_payload(task: Mapping[str, Any], *, status: str) -> dict[str, Any]:
         "priority": str(task.get("priority") or ""),
         "status": status,
     }
+
+
+def normalize_supplies_due(payload: dict[str, Any], *, collection_id: str = "") -> dict[str, Any]:
+    resolved_collection_id = collection_id or str(payload.get("collectionId") or "")
+    if is_supplies_collection(resolved_collection_id):
+        payload = dict(payload)
+        payload["dueDate"] = ""
+        payload["dueTime"] = ""
+    return payload
+
+
+def is_supplies_collection(collection_id: str) -> bool:
+    return "supplies" in collection_id.lower()
 
 
 def task_key(task: Mapping[str, Any]) -> str:
