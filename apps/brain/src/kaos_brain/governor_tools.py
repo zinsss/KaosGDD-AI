@@ -404,11 +404,20 @@ def _render_memos(query: str, payload: dict[str, Any]) -> str:
 
 def _render_documents(query: str, payload: dict[str, Any]) -> str:
     results = _items(payload.get("results"))
-    total = payload.get("total") or payload.get("totalCount") or payload.get("resultCount") or payload.get("count") or len(results)
-    heading = f"Document search: {query} ({total} results)"
+    result_count = _count(payload, "resultCount", "count", fallback=len(results))
+    total_count = _count(payload, "totalCount", "total", fallback=result_count)
+    lines = [
+        "Searched..",
+        f"## {query or '..'}",
+        f"{result_count} results in {total_count} documents",
+    ]
     if not results:
-        return f"{heading}\n- none"
-    return "\n".join([heading, *(_document_line(item) for item in results[:5])])
+        lines.append("- No matching documents.")
+        return "\n".join(lines)
+    if result_count > len(results):
+        lines.append(f"- Showing first {len(results)} results.")
+    lines.extend(_document_line(item) for item in results[:5])
+    return "\n".join(lines)
 
 
 def _items(value: object) -> list[dict[str, Any]]:
@@ -478,15 +487,14 @@ def _truncate_text(value: str, limit: int) -> str:
 
 
 def _document_line(item: dict[str, Any]) -> str:
-    title = str(item.get("title") or item.get("originalFileName") or item.get("filename") or "Untitled document").strip()
+    title = _truncate(str(item.get("title") or item.get("originalFileName") or item.get("filename") or "Untitled document").strip(), 80)
     created = str(item.get("created") or item.get("createdDate") or "").strip()
     filename = str(item.get("filename") or item.get("originalFileName") or "").strip()
     correspondent = str(item.get("correspondent") or "").strip()
     details = [value for value in (created[:10], correspondent, filename) if value]
-    suffix = " - " + " / ".join(details) if details else ""
-    if item.get("full"):
-        return f"- {title}{suffix}"
-    return f"- {title} - {created}" if created else f"- {title}"
+    if details:
+        return f"### {title}\n- {_truncate(' · '.join(details), 180)}"
+    return f"### {title}"
 
 
 def _memo_id(name: str) -> str:

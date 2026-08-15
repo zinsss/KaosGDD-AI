@@ -83,8 +83,31 @@ class GovernorToolRenderingTests(unittest.TestCase):
                 ],
             },
         )
-        self.assertIn("Document search: rustdesk (12 results)", context)
-        self.assertIn("- Rustdesk setup - 2026-08-14 / Clinic / rustdesk.pdf", context)
+        self.assertIn("Searched..\n## rustdesk\n1 results in 12 documents", context)
+        self.assertIn("### Rustdesk setup\n- 2026-08-14 · Clinic · rustdesk.pdf", context)
+
+    def test_render_multiple_documents_context_uses_compact_summary(self) -> None:
+        context = render_tool_context(
+            ToolRequest(ToolKind.DOCUMENT_SEARCH, "insurance"),
+            {
+                "query": "insurance",
+                "resultCount": 13,
+                "totalCount": 213,
+                "results": [
+                    {
+                        "id": 42,
+                        "title": "Insurance receipt",
+                        "created": "2026-08-14T12:00:00Z",
+                        "filename": "receipt.pdf",
+                        "correspondent": "Clinic",
+                    }
+                ],
+            },
+        )
+        self.assertIn("Searched..\n## insurance\n13 results in 213 documents", context)
+        self.assertIn("- Showing first 1 results.", context)
+        self.assertIn("### Insurance receipt\n- 2026-08-14 · Clinic · receipt.pdf", context)
+        self.assertNotIn("Document search:", context)
 
     def test_render_task_due_update_proposal(self) -> None:
         content = render_task_due_update_proposal(
