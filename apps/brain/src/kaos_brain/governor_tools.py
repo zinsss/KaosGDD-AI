@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from .memo_intent import MemoCreateRequest
+from .memo_intent import MemoCreateRequest, MemoDeleteRequest
 from .task_update_intent import TaskActionRequest, TaskCreateRequest, TaskDueUpdateRequest
 from .tool_intent import ToolKind, ToolRequest
 
@@ -104,6 +104,22 @@ class GovernorToolClient:
                 "actorId": str(actor_id),
                 "idempotencyKey": idempotency_key,
                 "content": request.content,
+            },
+        )
+
+    async def propose_memo_delete(
+        self,
+        request: MemoDeleteRequest,
+        *,
+        actor_id: int,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        return await self._post(
+            "/tools/memos/delete/proposals",
+            {
+                "actorId": str(actor_id),
+                "idempotencyKey": idempotency_key,
+                "query": request.query,
             },
         )
 
@@ -247,6 +263,27 @@ def render_memo_create_completed(payload: dict[str, Any]) -> str:
         return "Memo created."
     name = str(memo.get("name") or "").strip()
     return f"Memo created: {name}" if name else "Memo created."
+
+
+def render_memo_delete_proposal(payload: dict[str, Any]) -> str:
+    memo = payload.get("memo")
+    if not isinstance(memo, dict):
+        return "Memo delete requires confirmation."
+    name = str(memo.get("name") or "").strip()
+    content = str(memo.get("content") or memo.get("snippet") or "")
+    lines = ["## Confirm memo delete"]
+    if name:
+        lines.append(f"- memo: {name}")
+    lines.append(_memo_preview(content))
+    return "\n".join(lines)
+
+
+def render_memo_delete_completed(payload: dict[str, Any]) -> str:
+    memo = payload.get("memo")
+    if not isinstance(memo, dict):
+        return "Memo deleted."
+    name = str(memo.get("name") or "").strip()
+    return f"Memo deleted: {name}" if name else "Memo deleted."
 
 
 def _due_text(due_date: str, due_time: str) -> str:

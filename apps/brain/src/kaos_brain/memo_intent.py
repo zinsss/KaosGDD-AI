@@ -16,6 +16,11 @@ class MemoCreateRequest:
     content: str
 
 
+@dataclass(frozen=True)
+class MemoDeleteRequest:
+    query: str
+
+
 def parse_memo_create(content: str) -> MemoCreateRequest | None:
     text = content.strip()
     if not text:
@@ -27,6 +32,20 @@ def parse_memo_create(content: str) -> MemoCreateRequest | None:
         parsed = _content_before_suffix(text, marker)
         if parsed:
             return MemoCreateRequest(parsed)
+    return None
+
+
+def parse_memo_delete(content: str) -> MemoDeleteRequest | None:
+    text = " ".join(content.strip().split())
+    if "메모" not in text:
+        return None
+    for marker in ("삭제해줘", "삭제", "지워줘", "지워", "없애줘", "없애"):
+        if marker not in text:
+            continue
+        query = text.replace(marker, " ", 1).replace("메모", " ")
+        query = " ".join(query.split()).strip(" :")
+        if query:
+            return MemoDeleteRequest(query)
     return None
 
 

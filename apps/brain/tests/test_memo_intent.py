@@ -1,6 +1,6 @@
 import unittest
 
-from kaos_brain.memo_intent import parse_memo_create
+from kaos_brain.memo_intent import parse_memo_create, parse_memo_delete
 
 
 class MemoIntentTests(unittest.TestCase):
@@ -21,6 +21,19 @@ class MemoIntentTests(unittest.TestCase):
 
     def test_search_like_message_does_not_create(self) -> None:
         self.assertIsNone(parse_memo_create("메모에서 rustdesk 찾아줘"))
+
+    def test_delete_memo_suffix(self) -> None:
+        request = parse_memo_delete("러스트데스크 메모 삭제해줘")
+        assert request is not None
+        self.assertEqual(request.query, "러스트데스크")
+
+    def test_delete_memo_prefix(self) -> None:
+        request = parse_memo_delete("메모 rustdesk 지워줘")
+        assert request is not None
+        self.assertEqual(request.query, "rustdesk")
+
+    def test_task_delete_does_not_parse_as_memo_delete(self) -> None:
+        self.assertIsNone(parse_memo_delete("러스트데스크 삭제해줘"))
 
 
 if __name__ == "__main__":

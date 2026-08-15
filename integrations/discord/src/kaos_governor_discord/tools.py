@@ -59,6 +59,12 @@ class PendingMemoCreate:
     content: str
 
 
+@dataclass(frozen=True)
+class PendingMemoDelete:
+    name: str
+    content: str
+
+
 class BrainToolServer:
     def __init__(
         self,
@@ -86,6 +92,7 @@ class BrainToolServer:
         self._pending_task_creates: dict[str, PendingTaskCreate] = {}
         self._pending_task_actions: dict[str, PendingTaskAction] = {}
         self._pending_memo_creates: dict[str, PendingMemoCreate] = {}
+        self._pending_memo_deletes: dict[str, PendingMemoDelete] = {}
         self._runner: web.AppRunner | None = None
 
     def application(self) -> web.Application:
@@ -96,6 +103,7 @@ class BrainToolServer:
         app.router.add_get("/tools/memos/search", self._search_memos)
         app.router.add_get("/tools/memos/{memo_id}", self._get_memo)
         app.router.add_post("/tools/memos/create/proposals", self._propose_memo_create)
+        app.router.add_post("/tools/memos/delete/proposals", self._propose_memo_delete)
         app.router.add_get("/tools/documents/search", self._search_documents)
         app.router.add_post("/tools/tasks/action/proposals", self._propose_task_action)
         app.router.add_post("/tools/tasks/create/proposals", self._propose_task_create)
@@ -239,6 +247,62 @@ class BrainToolServer:
                 "confirmationId": confirmation.confirmation_id,
                 "expiresAt": confirmation.expires_at.isoformat(),
                 "memo": _pending_memo_create_payload(pending),
+                "source": "memos-live",
+            },
+            status=201,
+        )
+
+    async def _propose_memo_delete(self, request: web.Request) -> web.Response:
+        if not self._memos.config.enabled:
+            return web.json_response({"error": "memos_delete_disabled"}, status=503)
+        try:
+            body = await request.json()
+        except ValueError:
+            return web.json_response({"error": "invalid_json"}, status=400)
+        if not isinstance(body, Mapping):
+            return web.json_response({"error": "invalid_json"}, status=400)
+        actor_id = str(body.get("actorId") or "").strip()
+        idempotency_key = str(body.get("idempotencyKey") or "").strip()
+        query = " ".join(str(body.get("query") or "").split())
+        if not actor_id or not idempotency_key or not query:
+            return web.json_response({"error": "memo_delete_missing_required_field"}, status=400)
+        try:
+            results = await asyncio.to_thread(self._memos.search, query, None, 3)
+            if not results:
+                return web.json_response({"error": "memo_not_found"}, status=404)
+            if len(results) > 1:
+                return web.json_response(
+                    {
+                        "error": "memo_match_ambiguous",
+                        "matches": [result.as_dict() for result in results],
+                    },
+                    status=409,
+                )
+            memo = await asyncio.to_thread(self._memos.get, results[0].memo.name)
+            actor = Actor("user", actor_id, "personal")
+            operation, _created = self._durable.start_operation(
+                OperationRequest(
+                    actor=actor,
+                    idempotency_key=idempotency_key,
+                    tool_name="memos",
+                    operation_type="delete",
+                    parameters={"name": memo.name, "query": query},
+                    requires_confirmation=True,
+                )
+            )
+            confirmation = self._durable.create_confirmation(operation.operation_id, ttl=timedelta(minutes=10))
+        except DurableGovernorError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+        except (ValueError, MemosError) as exc:
+            return _memos_error(exc)
+        pending = PendingMemoDelete(name=memo.name, content=memo.content)
+        self._pending_memo_deletes[operation.operation_id] = pending
+        return web.json_response(
+            {
+                "operationId": operation.operation_id,
+                "confirmationId": confirmation.confirmation_id,
+                "expiresAt": confirmation.expires_at.isoformat(),
+                "memo": _pending_memo_delete_payload(pending),
                 "source": "memos-live",
             },
             status=201,
@@ -519,7 +583,14 @@ class BrainToolServer:
         pending_create = self._pending_task_creates.get(operation.operation_id)
         pending_action = self._pending_task_actions.get(operation.operation_id)
         pending_memo_create = self._pending_memo_creates.get(operation.operation_id)
-        if pending_update is None and pending_create is None and pending_action is None and pending_memo_create is None:
+        pending_memo_delete = self._pending_memo_deletes.get(operation.operation_id)
+        if (
+            pending_update is None
+            and pending_create is None
+            and pending_action is None
+            and pending_memo_create is None
+            and pending_memo_delete is None
+        ):
             return web.json_response({"error": "operation_payload_not_found"}, status=410)
         try:
             actor = Actor("user", actor_id, operation.actor.scope)
@@ -564,13 +635,17 @@ class BrainToolServer:
                         result_uid = str(result.get("uid") or pending_action.uid)
                     task = _pending_task_action_payload(pending_action)
             else:
-                assert pending_memo_create is not None
-                memo = await asyncio.to_thread(self._memos.create, pending_memo_create.content)
-                result_uid = memo.name
-                task = {}
-                memo_payload = {"name": memo.name, "content": memo.content}
+                if pending_memo_create is not None:
+                    memo = await asyncio.to_thread(self._memos.create, pending_memo_create.content)
+                    result_uid = memo.name
+                    memo_payload = {"name": memo.name, "content": memo.content, "action": "create"}
+                else:
+                    assert pending_memo_delete is not None
+                    await asyncio.to_thread(self._memos.delete, pending_memo_delete.name)
+                    result_uid = pending_memo_delete.name
+                    memo_payload = _pending_memo_delete_payload(pending_memo_delete)
             self._durable.complete_operation(operation.operation_id, result={"uid": result_uid})
-            if pending_memo_create is None:
+            if pending_memo_create is None and pending_memo_delete is None:
                 await self._refresh_tasks()
         except DurableGovernorError as exc:
             return web.json_response({"error": str(exc)}, status=400)
@@ -584,16 +659,17 @@ class BrainToolServer:
         self._pending_task_creates.pop(operation.operation_id, None)
         self._pending_task_actions.pop(operation.operation_id, None)
         self._pending_memo_creates.pop(operation.operation_id, None)
+        self._pending_memo_deletes.pop(operation.operation_id, None)
         response_payload = {
             "operationId": operation.operation_id,
             "confirmationId": confirmation_id,
             "status": "completed",
-            "source": "calendar-adapter-live" if pending_memo_create is None else "memos-live",
+            "source": "memos-live" if pending_memo_create is not None or pending_memo_delete is not None else "calendar-adapter-live",
         }
-        if pending_memo_create is None:
-            response_payload["task"] = task
-        else:
+        if pending_memo_create is not None or pending_memo_delete is not None:
             response_payload["memo"] = memo_payload
+        else:
+            response_payload["task"] = task
         return web.json_response(
             response_payload
         )
@@ -789,6 +865,10 @@ def _pending_task_action_payload(pending: PendingTaskAction) -> dict[str, object
 
 def _pending_memo_create_payload(pending: PendingMemoCreate) -> dict[str, object]:
     return {"content": pending.content}
+
+
+def _pending_memo_delete_payload(pending: PendingMemoDelete) -> dict[str, object]:
+    return {"name": pending.name, "content": pending.content, "action": "delete"}
 
 
 def _profile(request: web.Request) -> str:
