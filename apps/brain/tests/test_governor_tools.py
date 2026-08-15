@@ -1,6 +1,15 @@
 import unittest
 
-from kaos_brain.governor_tools import render_task_due_update_completed, render_task_due_update_proposal, render_tool_context
+from kaos_brain.governor_tools import (
+    render_memo_create_completed,
+    render_memo_delete_completed,
+    render_memo_edit_completed,
+    render_task_action_completed,
+    render_task_create_completed,
+    render_task_due_update_completed,
+    render_task_due_update_proposal,
+    render_tool_context,
+)
 from kaos_brain.task_update_intent import TaskDueUpdateRequest
 from kaos_brain.tool_intent import ToolKind, ToolRequest
 
@@ -71,7 +80,31 @@ class GovernorToolRenderingTests(unittest.TestCase):
         content = render_task_due_update_completed(
             {"task": {"title": "Call mom", "newDue": "2026-08-17", "newDueTime": "10:00"}}
         )
-        self.assertEqual(content, "Task updated: Call mom -> 2026-08-17 10:00")
+        self.assertEqual(content, "## 할 일을 수정했어요.\n- Call mom\n- 2026-08-17 10:00")
+
+    def test_render_task_create_completed(self) -> None:
+        content = render_task_create_completed(
+            {"task": {"title": "Call school", "due": "2026-08-17", "dueTime": "10:00"}}
+        )
+        self.assertEqual(content, "## 할 일을 새로 저장했어요.\n- Call school\n- 2026-08-17 10:00")
+
+    def test_render_task_delete_completed(self) -> None:
+        content = render_task_action_completed({"task": {"title": "Call school", "action": "delete"}})
+        self.assertEqual(content, "## 할 일을 삭제했어요.\n- Call school")
+
+    def test_render_memo_completion_messages(self) -> None:
+        self.assertEqual(
+            render_memo_create_completed({"memo": {"name": "memos/42"}}),
+            "## 메모를 새로 저장했어요.\n- memos/42",
+        )
+        self.assertEqual(
+            render_memo_delete_completed({"memo": {"name": "memos/42"}}),
+            "## 메모를 삭제했어요.\n- memos/42",
+        )
+        self.assertEqual(
+            render_memo_edit_completed({"memo": {"name": "memos/42"}}),
+            "## 메모를 수정했어요.\n- memos/42",
+        )
 
 
 class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
