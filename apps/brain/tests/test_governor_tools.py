@@ -37,6 +37,28 @@ class GovernorToolRenderingTests(unittest.TestCase):
         self.assertIn("Memos search: rustdesk (1 results)", context)
         self.assertIn("# Rustdesk\nUse Tailscale.", context)
 
+    def test_render_single_full_document_context(self) -> None:
+        context = render_tool_context(
+            ToolRequest(ToolKind.DOCUMENT_SEARCH, "rustdesk"),
+            {
+                "query": "rustdesk",
+                "resultCount": 1,
+                "totalCount": 12,
+                "results": [
+                    {
+                        "id": 42,
+                        "title": "Rustdesk setup",
+                        "created": "2026-08-14T12:00:00Z",
+                        "filename": "rustdesk.pdf",
+                        "correspondent": "Clinic",
+                        "full": True,
+                    }
+                ],
+            },
+        )
+        self.assertIn("Document search: rustdesk (12 results)", context)
+        self.assertIn("- Rustdesk setup - 2026-08-14 / Clinic / rustdesk.pdf", context)
+
     def test_render_task_due_update_proposal(self) -> None:
         content = render_task_due_update_proposal(
             {"task": {"title": "Call mom", "oldDue": "2026-08-14", "oldDueTime": "10:00", "newDue": "2026-08-17", "newDueTime": "10:00"}}
@@ -132,6 +154,63 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
         payload = await client.fetch(ToolRequest(ToolKind.MEMO_SEARCH, "rustdesk"))
         self.assertEqual(client.calls, [("/tools/memos/search", {"query": "rustdesk", "limit": "5"})])
         self.assertNotIn("content", payload["results"][0])
+
+    async def test_fetch_single_document_search_gets_detail(self) -> None:
+        from kaos_brain.governor_tools import GovernorToolClient, GovernorToolConfig
+
+        class FakeClient(GovernorToolClient):
+            def __init__(self, config: GovernorToolConfig) -> None:
+                super().__init__(config)
+                self.calls = []
+
+            async def _get(self, path: str, params: dict[str, str]):
+                self.calls.append((path, params))
+                if path == "/tools/documents/search":
+                    return {"query": "rustdesk", "resultCount": 1, "totalCount": 12, "results": [{"id": 42, "title": "Rustdesk"}]}
+                return {"document": {"id": 42, "title": "Rustdesk setup", "filename": "rustdesk.pdf", "correspondent": "Clinic"}}
+
+        client = FakeClient(
+            GovernorToolConfig(
+                base_url="http://127.0.0.1:8098",
+                api_token="token",
+                profile="main",
+                timeout_seconds=1,
+            )
+        )
+        payload = await client.fetch(ToolRequest(ToolKind.DOCUMENT_SEARCH, "rustdesk"))
+        self.assertEqual(
+            client.calls,
+            [
+                ("/tools/documents/search", {"query": "rustdesk", "limit": "5"}),
+                ("/tools/documents/42", {}),
+            ],
+        )
+        self.assertEqual(payload["results"][0]["title"], "Rustdesk setup")
+        self.assertTrue(payload["results"][0]["full"])
+
+    async def test_fetch_multi_document_search_keeps_search_rows(self) -> None:
+        from kaos_brain.governor_tools import GovernorToolClient, GovernorToolConfig
+
+        class FakeClient(GovernorToolClient):
+            def __init__(self, config: GovernorToolConfig) -> None:
+                super().__init__(config)
+                self.calls = []
+
+            async def _get(self, path: str, params: dict[str, str]):
+                self.calls.append((path, params))
+                return {"query": "rustdesk", "resultCount": 2, "results": [{"id": 42, "title": "One"}, {"id": 43, "title": "Two"}]}
+
+        client = FakeClient(
+            GovernorToolConfig(
+                base_url="http://127.0.0.1:8098",
+                api_token="token",
+                profile="main",
+                timeout_seconds=1,
+            )
+        )
+        payload = await client.fetch(ToolRequest(ToolKind.DOCUMENT_SEARCH, "rustdesk"))
+        self.assertEqual(client.calls, [("/tools/documents/search", {"query": "rustdesk", "limit": "5"})])
+        self.assertNotIn("full", payload["results"][0])
 
     async def test_propose_task_due_update_posts_contract(self) -> None:
         from kaos_brain.governor_tools import GovernorToolClient, GovernorToolConfig

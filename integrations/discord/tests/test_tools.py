@@ -139,6 +139,7 @@ class FakeMemos:
 class FakePaperless:
     def __init__(self) -> None:
         self.search_calls = []
+        self.get_calls = []
 
     def search_page(self, query, *, limit):
         self.search_calls.append((query, limit))
@@ -148,6 +149,10 @@ class FakePaperless:
             1,
             12,
         )
+
+    def get(self, document_id):
+        self.get_calls.append(document_id)
+        return PaperlessSearchResult(42, "Rustdesk setup detail", "2026-08-14", "rustdesk.pdf", "Clinic")
 
 
 class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
@@ -460,6 +465,16 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["source"], "paperless-live")
         self.assertEqual(payload["results"][0]["title"], "Rustdesk setup")
         self.assertEqual(self.paperless.search_calls, [("rust desk", 5)])
+
+    async def test_document_get_returns_paperless_document(self) -> None:
+        response = await self.client.get("/tools/documents/42", headers=self.headers())
+
+        self.assertEqual(response.status, 200)
+        payload = await response.json()
+        self.assertEqual(payload["source"], "paperless-live")
+        self.assertEqual(payload["document"]["id"], 42)
+        self.assertEqual(payload["document"]["title"], "Rustdesk setup detail")
+        self.assertEqual(self.paperless.get_calls, ["42"])
 
     async def test_task_due_update_proposal_requires_confirmation_before_write(self) -> None:
         response = await self.client.post(

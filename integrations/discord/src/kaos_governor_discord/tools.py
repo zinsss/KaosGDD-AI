@@ -114,6 +114,7 @@ class BrainToolServer:
         app.router.add_post("/tools/memos/edit/proposals", self._propose_memo_edit)
         app.router.add_post("/tools/memos/delete/proposals", self._propose_memo_delete)
         app.router.add_get("/tools/documents/search", self._search_documents)
+        app.router.add_get("/tools/documents/{document_id}", self._get_document)
         app.router.add_post("/tools/tasks/action/proposals", self._propose_task_action)
         app.router.add_post("/tools/tasks/create/proposals", self._propose_task_create)
         app.router.add_post("/tools/tasks/update-due/proposals", self._propose_task_due_update)
@@ -218,6 +219,16 @@ class BrainToolServer:
             LOGGER.exception("Unexpected Brain document search failure")
             return web.json_response({"error": "internal_error"}, status=500)
         return web.json_response({**page.as_dict(), "source": "paperless-live"})
+
+    async def _get_document(self, request: web.Request) -> web.Response:
+        try:
+            document = await asyncio.to_thread(self._paperless.get, request.match_info["document_id"])
+        except DocumentIntakeError as exc:
+            return _document_error(exc)
+        except Exception:
+            LOGGER.exception("Unexpected Brain document fetch failure")
+            return web.json_response({"error": "internal_error"}, status=500)
+        return web.json_response({"document": document.as_dict(), "source": "paperless-live"})
 
     async def _propose_memo_create(self, request: web.Request) -> web.Response:
         if not self._memos.config.enabled:

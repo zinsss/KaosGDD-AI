@@ -34,7 +34,8 @@ class GovernorToolClient:
             payload = await self._get("/tools/memos/search", {"query": request.query, "limit": "5"})
             return await self._with_single_memo_body(payload)
         if request.kind is ToolKind.DOCUMENT_SEARCH:
-            return await self._get("/tools/documents/search", {"query": request.query, "limit": "5"})
+            payload = await self._get("/tools/documents/search", {"query": request.query, "limit": "5"})
+            return await self._with_single_document_detail(payload)
         raise GovernorToolError("unsupported Governor tool")
 
     async def _with_single_memo_body(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -53,6 +54,23 @@ class GovernorToolClient:
         if isinstance(memo, dict):
             payload = dict(payload)
             payload["results"] = [{**first, "content": str(memo.get("content") or ""), "full": True}]
+        return payload
+
+    async def _with_single_document_detail(self, payload: dict[str, Any]) -> dict[str, Any]:
+        results = payload.get("results")
+        if not isinstance(results, list) or len(results) != 1:
+            return payload
+        first = results[0]
+        if not isinstance(first, dict):
+            return payload
+        document_id = _document_id(first.get("id"))
+        if not document_id:
+            return payload
+        document_payload = await self._get(f"/tools/documents/{document_id}", {})
+        document = document_payload.get("document")
+        if isinstance(document, dict):
+            payload = dict(payload)
+            payload["results"] = [{**first, **document, "full": True}]
         return payload
 
     async def propose_task_due_update(
@@ -399,7 +417,7 @@ def _render_memos(query: str, payload: dict[str, Any]) -> str:
 
 def _render_documents(query: str, payload: dict[str, Any]) -> str:
     results = _items(payload.get("results"))
-    total = payload.get("total") or payload.get("count") or len(results)
+    total = payload.get("total") or payload.get("totalCount") or payload.get("resultCount") or payload.get("count") or len(results)
     heading = f"Document search: {query} ({total} results)"
     if not results:
         return f"{heading}\n- none"
@@ -438,6 +456,12 @@ def _memo_line(item: dict[str, Any]) -> str:
 def _document_line(item: dict[str, Any]) -> str:
     title = str(item.get("title") or item.get("originalFileName") or item.get("filename") or "Untitled document").strip()
     created = str(item.get("created") or item.get("createdDate") or "").strip()
+    filename = str(item.get("filename") or item.get("originalFileName") or "").strip()
+    correspondent = str(item.get("correspondent") or "").strip()
+    details = [value for value in (created[:10], correspondent, filename) if value]
+    suffix = " - " + " / ".join(details) if details else ""
+    if item.get("full"):
+        return f"- {title}{suffix}"
     return f"- {title} - {created}" if created else f"- {title}"
 
 
@@ -446,3 +470,13 @@ def _memo_id(name: str) -> str:
         return ""
     memo_id = name.removeprefix("memos/").strip("/")
     return memo_id if memo_id and "/" not in memo_id else ""
+
+
+def _document_id(value: object) -> str:
+    if isinstance(value, bool):
+        return ""
+    try:
+        document_id = int(value)
+    except (TypeError, ValueError):
+        return ""
+    return str(document_id) if document_id > 0 else ""

@@ -121,6 +121,21 @@ class PaperlessDocumentService:
     def search(self, query: object, *, limit: int = 5) -> list[PaperlessSearchResult]:
         return list(self.search_page(query, limit=limit).results)
 
+    def get(self, document_id: object) -> PaperlessSearchResult:
+        if not self.config.enabled:
+            raise DocumentIntakeError("paperless_not_configured")
+        normalized_id = normalize_document_id(document_id)
+        try:
+            payload = self._request_document(normalized_id)
+        except urllib.error.HTTPError as exc:
+            self.last_error = f"paperless_http_{exc.code}"
+            raise DocumentIntakeError(self.last_error) from exc
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            self.last_error = "paperless_request_failed"
+            raise DocumentIntakeError(self.last_error) from exc
+        self.last_error = ""
+        return paperless_search_result(payload)
+
     def search_page(self, query: object, *, limit: int = 5) -> PaperlessSearchPage:
         if not self.config.enabled:
             raise DocumentIntakeError("paperless_not_configured")
@@ -295,6 +310,22 @@ class PaperlessDocumentService:
             raise DocumentIntakeError(f"paperless_http_{response.status}")
         return decode_payload(body)
 
+    def _request_document(self, document_id: int) -> Mapping[str, object]:
+        request = urllib.request.Request(
+            f"{self.config.base_url.rstrip('/')}/api/documents/{document_id}/",
+            method="GET",
+            headers={
+                "Authorization": f"Token {self.config.api_token}",
+                "Accept": "application/json",
+                "User-Agent": self.config.user_agent,
+            },
+        )
+        with self._urlopen(request, timeout=self.config.timeout_seconds) as response:
+            body = response.read()
+        if response.status < 200 or response.status >= 300:
+            raise DocumentIntakeError(f"paperless_http_{response.status}")
+        return decode_payload(body)
+
     def status(self) -> dict[str, object]:
         return {
             "enabled": self.config.enabled,
@@ -337,6 +368,18 @@ def normalize_search_query(value: object) -> str:
     if len(query) > 300:
         raise DocumentIntakeError("paperless_query_too_long")
     return query
+
+
+def normalize_document_id(value: object) -> int:
+    if isinstance(value, bool):
+        raise DocumentIntakeError("paperless_document_id_invalid")
+    try:
+        document_id = int(value)
+    except (TypeError, ValueError) as exc:
+        raise DocumentIntakeError("paperless_document_id_invalid") from exc
+    if document_id <= 0:
+        raise DocumentIntakeError("paperless_document_id_invalid")
+    return document_id
 
 
 def paperless_search_result(payload: Mapping[str, object]) -> PaperlessSearchResult:

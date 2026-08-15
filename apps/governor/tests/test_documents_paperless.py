@@ -114,6 +114,37 @@ class PaperlessDocumentServiceTests(unittest.TestCase):
         self.assertEqual(len(page.results), 2)
         self.assertEqual(service.status()["lastResultCount"], 13)
 
+    def test_get_document_uses_paperless_detail_endpoint(self) -> None:
+        urlopen = mock.Mock(
+            return_value=FakeResponse(
+                body=(
+                    b'{"id":42,"title":"Clinic bill","created":"2026-08-13",'
+                    b'"original_file_name":"bill.pdf","correspondent":{"name":"Clinic"}}'
+                )
+            )
+        )
+        service = PaperlessDocumentService(self.config(), urlopen=urlopen)
+
+        document = service.get(42)
+
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.get_method(), "GET")
+        self.assertEqual(request.full_url, "http://paperless:8000/api/documents/42/")
+        self.assertEqual(request.get_header("Authorization"), "Token not-a-real-token")
+        self.assertEqual(document.document_id, 42)
+        self.assertEqual(document.title, "Clinic bill")
+        self.assertEqual(document.filename, "bill.pdf")
+        self.assertEqual(document.correspondent, "Clinic")
+
+    def test_get_document_rejects_invalid_id_before_network(self) -> None:
+        urlopen = mock.Mock()
+        service = PaperlessDocumentService(self.config(), urlopen=urlopen)
+
+        with self.assertRaisesRegex(DocumentIntakeError, "paperless_document_id_invalid"):
+            service.get("nope")
+
+        urlopen.assert_not_called()
+
     def test_rejects_non_pdf_and_oversize_before_network(self) -> None:
         urlopen = mock.Mock()
         service = PaperlessDocumentService(self.config(), urlopen=urlopen)
