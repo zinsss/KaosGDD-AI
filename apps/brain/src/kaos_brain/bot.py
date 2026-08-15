@@ -35,7 +35,7 @@ from .task_update_intent import (
     parse_task_create,
     parse_task_due_update,
 )
-from .tool_intent import ToolRequest, parse_tool_request
+from .tool_intent import ToolKind, ToolRequest, parse_tool_request
 
 LOGGER = logging.getLogger(__name__)
 NO_MENTIONS = discord.AllowedMentions.none()
