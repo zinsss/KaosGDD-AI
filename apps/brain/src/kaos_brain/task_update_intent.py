@@ -69,6 +69,11 @@ def parse_task_create(content: str, *, today: date) -> TaskCreateRequest | None:
     text = " ".join(content.strip().split())
     if not text or any(marker in text for marker in ("편집", "변경", "바꿔", "수정")):
         return None
+    supplies_request = _is_supplies(text)
+    if supplies_request:
+        supplies_create = _parse_supplies_create(text)
+        if supplies_create is not None:
+            return supplies_create
     if not any(marker in text for marker in ("해야", "할 일", "해야돼", "해야되", "해야 해", "필요")):
         return None
     profile, collection_id = _scope(text)
@@ -159,11 +164,27 @@ def _clean_action_title(value: str) -> str:
 
 def _scope(text: str) -> tuple[str, str]:
     lowered = text.lower()
-    if any(marker in lowered for marker in ("준비물", "용품", "supplies", "supply")):
+    if _is_supplies(text):
         return "supplies", ""
     if "가족" in text or "family" in lowered:
         return "family", ""
     return "", ""
+
+
+def _parse_supplies_create(text: str) -> TaskCreateRequest | None:
+    marker = _first_marker(text, ("추가해줘", "추가", "저장해줘", "저장", "등록해줘", "등록"))
+    if marker is None:
+        return None
+    title = _strip_scope_words(text.replace(marker, " ", 1))
+    title = _clean_action_title(title)
+    if not title:
+        return None
+    return TaskCreateRequest(title=title, due_date="", due_time="", profile="supplies")
+
+
+def _is_supplies(text: str) -> bool:
+    lowered = text.lower()
+    return any(marker in lowered for marker in ("준비물", "용품", "supplies", "supply"))
 
 
 def _strip_scope_words(value: str) -> str:

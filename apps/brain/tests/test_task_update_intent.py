@@ -53,6 +53,14 @@ class TaskUpdateIntentTests(unittest.TestCase):
         self.assertEqual(request.title, "엄마한테 전화")
         self.assertEqual(request.profile, "family")
 
+    def test_supplies_create_without_due_date(self) -> None:
+        request = parse_task_create("준비물 비누 추가해줘", today=date(2026, 8, 14))
+        assert request is not None
+        self.assertEqual(request.title, "비누")
+        self.assertEqual(request.due_date, "")
+        self.assertEqual(request.due_time, "")
+        self.assertEqual(request.profile, "supplies")
+
     def test_iso_date_create(self) -> None:
         request = parse_task_create("2026-08-20까지 보험 서류 준비해야돼", today=date(2026, 8, 14))
         assert request is not None

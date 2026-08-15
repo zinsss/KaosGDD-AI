@@ -727,13 +727,12 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
                 "profile": "supplies",
                 "collectionId": "supplies:abc",
                 "title": "Toothpaste",
-                "dueDate": "2026-08-17",
-                "dueTime": "10:00",
             },
         )
         self.assertEqual(proposal.status, 201)
         proposal_payload = await proposal.json()
         self.assertEqual(proposal_payload["task"]["collectionId"], "supplies:abc")
+        self.assertEqual(proposal_payload["task"]["due"], "")
         confirmation_id = proposal_payload["confirmationId"]
 
         response = await self.client.post(
@@ -745,6 +744,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 200)
         self.assertEqual(self.calendar.created[0][0], "supplies")
         self.assertEqual(self.calendar.created[0][1]["collectionId"], "supplies:abc")
+        self.assertEqual(self.calendar.created[0][1]["dueDate"], "")
 
     async def test_task_create_approval_rejects_wrong_actor(self) -> None:
         proposal = await self.client.post(

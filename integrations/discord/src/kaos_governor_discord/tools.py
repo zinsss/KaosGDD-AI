@@ -549,11 +549,12 @@ class BrainToolServer:
         idempotency_key = str(body.get("idempotencyKey") or "").strip()
         title = " ".join(str(body.get("title") or "").split())
         due_date = str(body.get("dueDate") or "").strip()
-        due_time = str(body.get("dueTime") or "10:00").strip() or "10:00"
+        due_time = str(body.get("dueTime") or ("10:00" if due_date else "")).strip()
         collection_id = str(body.get("collectionId") or "").strip()
         if not actor_id or not idempotency_key or not title:
             return web.json_response({"error": "task_create_missing_required_field"}, status=400)
-        if not _valid_due(due_date, due_time):
+        allow_empty_due = bool(collection_id) and not due_date and not due_time
+        if not allow_empty_due and not _valid_due(due_date, due_time):
             return web.json_response({"error": "task_create_invalid_due"}, status=400)
         payload = {
             "title": title,

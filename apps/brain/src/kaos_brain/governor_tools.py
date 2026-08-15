@@ -123,17 +123,20 @@ class GovernorToolClient:
         actor_id: int,
         idempotency_key: str,
     ) -> dict[str, Any]:
+        payload = {
+            "actorId": str(actor_id),
+            "idempotencyKey": idempotency_key,
+            "profile": self._profile(request.profile),
+            **self._collection_payload(request.profile, request.collection_id),
+            "title": request.title,
+        }
+        if request.due_date:
+            payload["dueDate"] = request.due_date
+        if request.due_time:
+            payload["dueTime"] = request.due_time
         return await self._post(
             "/tools/tasks/create/proposals",
-            {
-                "actorId": str(actor_id),
-                "idempotencyKey": idempotency_key,
-                "profile": self._profile(request.profile),
-                **self._collection_payload(request.profile, request.collection_id),
-                "title": request.title,
-                "dueDate": request.due_date,
-                "dueTime": request.due_time,
-            },
+            payload,
         )
 
     async def propose_task_action(
