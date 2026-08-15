@@ -574,7 +574,7 @@ def _memo_tags_text(item: dict[str, Any]) -> str:
     if not isinstance(tags, list):
         return ""
     cleaned = [str(tag).strip().lstrip("#") for tag in tags if str(tag).strip()]
-    return " ".join(f"#{tag}" for tag in cleaned)
+    return ", ".join(f"#{tag}" for tag in cleaned)
 
 
 def _strip_leading_title(content: str, title: str) -> str:

@@ -79,7 +79,7 @@ class GovernorToolRenderingTests(unittest.TestCase):
             "tags": ["education", "work"],
         }
         self.assertEqual(memo_option_label(item), "Training note")
-        self.assertEqual(memo_option_description(item), "#education #work")
+        self.assertEqual(memo_option_description(item), "#education, #work")
 
     def test_render_opened_memo_uses_original_markdown(self) -> None:
         content = render_memo_opened(
