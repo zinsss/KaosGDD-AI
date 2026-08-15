@@ -241,12 +241,7 @@ def render_task_due_update_proposal(payload: dict[str, Any]) -> str:
 
 
 def render_task_due_update_completed(payload: dict[str, Any]) -> str:
-    task = payload.get("task")
-    if not isinstance(task, dict):
-        return "할 일을 수정했어요."
-    title = str(task.get("title") or "Untitled task")
-    new_due = _due_text(str(task.get("newDue") or ""), str(task.get("newDueTime") or ""))
-    return _completed_message("할 일을 수정했어요.", title, new_due)
+    return "할 일 수정했어요."
 
 
 def render_task_create_proposal(payload: dict[str, Any]) -> str:
@@ -265,12 +260,7 @@ def render_task_create_proposal(payload: dict[str, Any]) -> str:
 
 
 def render_task_create_completed(payload: dict[str, Any]) -> str:
-    task = payload.get("task")
-    if not isinstance(task, dict):
-        return "할 일을 새로 저장했어요."
-    title = str(task.get("title") or "Untitled task")
-    due = _due_text(str(task.get("due") or ""), str(task.get("dueTime") or ""))
-    return _completed_message("할 일을 새로 저장했어요.", title, due)
+    return "할 일 저장했어요."
 
 
 def render_task_action_proposal(payload: dict[str, Any]) -> str:
@@ -290,14 +280,13 @@ def render_task_action_proposal(payload: dict[str, Any]) -> str:
 def render_task_action_completed(payload: dict[str, Any]) -> str:
     task = payload.get("task")
     if not isinstance(task, dict):
-        return "할 일을 수정했어요."
-    title = str(task.get("title") or "Untitled task")
+        return "할 일 수정했어요."
     action = str(task.get("action") or "")
     if action == "delete":
-        return _completed_message("할 일을 삭제했어요.", title)
+        return "할 일 삭제했어요."
     if action == "complete":
-        return _completed_message("할 일을 완료했어요.", title)
-    return _completed_message("할 일을 수정했어요.", title)
+        return "할 일 완료했어요."
+    return "할 일 수정했어요."
 
 
 def render_memo_create_proposal(payload: dict[str, Any]) -> str:
@@ -313,11 +302,7 @@ def render_memo_create_proposal(payload: dict[str, Any]) -> str:
 
 
 def render_memo_create_completed(payload: dict[str, Any]) -> str:
-    memo = payload.get("memo")
-    if not isinstance(memo, dict):
-        return "메모를 새로 저장했어요."
-    name = str(memo.get("name") or "").strip()
-    return _completed_message("메모를 새로 저장했어요.", name)
+    return "메모 저장했어요."
 
 
 def render_memo_delete_proposal(payload: dict[str, Any]) -> str:
@@ -334,11 +319,7 @@ def render_memo_delete_proposal(payload: dict[str, Any]) -> str:
 
 
 def render_memo_delete_completed(payload: dict[str, Any]) -> str:
-    memo = payload.get("memo")
-    if not isinstance(memo, dict):
-        return "메모를 삭제했어요."
-    name = str(memo.get("name") or "").strip()
-    return _completed_message("메모를 삭제했어요.", name)
+    return "메모 삭제했어요."
 
 
 def render_memo_edit_proposal(payload: dict[str, Any]) -> str:
@@ -356,24 +337,11 @@ def render_memo_edit_proposal(payload: dict[str, Any]) -> str:
 
 
 def render_memo_edit_completed(payload: dict[str, Any]) -> str:
-    memo = payload.get("memo")
-    if not isinstance(memo, dict):
-        return "메모를 수정했어요."
-    name = str(memo.get("name") or "").strip()
-    return _completed_message("메모를 수정했어요.", name)
+    return "메모 수정했어요."
 
 
 def _due_text(due_date: str, due_time: str) -> str:
     return " ".join(part for part in (due_date, due_time) if part).strip()
-
-
-def _completed_message(heading: str, primary: str = "", secondary: str = "") -> str:
-    lines = [f"## {heading}"]
-    if primary:
-        lines.append(f"- {primary}")
-    if secondary:
-        lines.append(f"- {secondary}")
-    return "\n".join(lines)
 
 
 def _memo_preview(content: str) -> str:

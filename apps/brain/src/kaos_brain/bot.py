@@ -161,6 +161,13 @@ class BrainBot(discord.Client):
         except GovernorToolError as exc:
             return f"Governor tool failed: {exc}"
         context = render_tool_context(tool_request, payload)
+        if tool_request.kind in {
+            ToolKind.TODAY,
+            ToolKind.ACTIVE_TASKS,
+            ToolKind.MEMO_SEARCH,
+            ToolKind.DOCUMENT_SEARCH,
+        }:
+            return context
         try:
             return await self.ollama.summarize_tool_result(user_text, context)
         except OllamaError:

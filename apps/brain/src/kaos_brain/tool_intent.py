@@ -61,7 +61,7 @@ def _search_query(text: str, nouns: tuple[str, ...]) -> str:
     lowered = text.lower()
     if not any(noun in lowered for noun in nouns):
         return ""
-    if not any(marker in lowered for marker in ("찾", "검색", "search", "find")):
+    if not any(marker in lowered for marker in ("찾", "검색", "보여", "관련", "search", "find", "show")):
         return ""
     query = text
     for noun in sorted(nouns, key=len, reverse=True):
@@ -69,7 +69,7 @@ def _search_query(text: str, nouns: tuple[str, ...]) -> str:
         query = query.replace(f"{noun}에서", " ")
         query = query.replace(f"{noun}을", " ")
         query = query.replace(f"{noun}를", " ")
-    query = re.sub(r"\b(search|find)\b", " ", query, flags=re.IGNORECASE)
-    for marker in ("찾아줘", "찾아", "찾", "검색해줘", "검색해", "검색"):
+    query = re.sub(r"\b(search|find|show)\b", " ", query, flags=re.IGNORECASE)
+    for marker in ("찾아줘", "찾아", "찾", "검색해줘", "검색해", "검색", "보여줘", "보여", "관련"):
         query = query.replace(marker, " ")
     return " ".join(query.split())

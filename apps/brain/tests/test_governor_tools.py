@@ -80,30 +80,30 @@ class GovernorToolRenderingTests(unittest.TestCase):
         content = render_task_due_update_completed(
             {"task": {"title": "Call mom", "newDue": "2026-08-17", "newDueTime": "10:00"}}
         )
-        self.assertEqual(content, "## 할 일을 수정했어요.\n- Call mom\n- 2026-08-17 10:00")
+        self.assertEqual(content, "할 일 수정했어요.")
 
     def test_render_task_create_completed(self) -> None:
         content = render_task_create_completed(
             {"task": {"title": "Call school", "due": "2026-08-17", "dueTime": "10:00"}}
         )
-        self.assertEqual(content, "## 할 일을 새로 저장했어요.\n- Call school\n- 2026-08-17 10:00")
+        self.assertEqual(content, "할 일 저장했어요.")
 
     def test_render_task_delete_completed(self) -> None:
         content = render_task_action_completed({"task": {"title": "Call school", "action": "delete"}})
-        self.assertEqual(content, "## 할 일을 삭제했어요.\n- Call school")
+        self.assertEqual(content, "할 일 삭제했어요.")
 
     def test_render_memo_completion_messages(self) -> None:
         self.assertEqual(
             render_memo_create_completed({"memo": {"name": "memos/42"}}),
-            "## 메모를 새로 저장했어요.\n- memos/42",
+            "메모 저장했어요.",
         )
         self.assertEqual(
             render_memo_delete_completed({"memo": {"name": "memos/42"}}),
-            "## 메모를 삭제했어요.\n- memos/42",
+            "메모 삭제했어요.",
         )
         self.assertEqual(
             render_memo_edit_completed({"memo": {"name": "memos/42"}}),
-            "## 메모를 수정했어요.\n- memos/42",
+            "메모 수정했어요.",
         )
 
 

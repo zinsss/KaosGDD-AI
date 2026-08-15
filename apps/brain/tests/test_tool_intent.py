@@ -20,6 +20,12 @@ class ToolIntentTests(unittest.TestCase):
         self.assertEqual(request.kind, ToolKind.MEMO_SEARCH)
         self.assertEqual(request.query, "rust desk")
 
+    def test_memo_show_extracts_query(self) -> None:
+        request = parse_tool_request("rustdesk관련 메모 보여줘")
+        assert request is not None
+        self.assertEqual(request.kind, ToolKind.MEMO_SEARCH)
+        self.assertEqual(request.query, "rustdesk")
+
     def test_document_search_extracts_query(self) -> None:
         request = parse_tool_request("문서에서 보험 찾아줘")
         assert request is not None
