@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 import json
 import logging
 from pathlib import Path
@@ -24,6 +24,7 @@ DUE_LINE_PATTERN = re.compile(r"^:(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}))?$")
 @dataclass
 class DiscordTasksState:
     message_ids: dict[str, int] = field(default_factory=dict)
+    completed_archive_message_id: int = 0
     legacy_message_id: int = 0
 
 
@@ -70,6 +71,8 @@ class DiscordTasksSurface:
         if self.state.legacy_message_id:
             await self._delete_message_id(channel, self.state.legacy_message_id)
             self.state.legacy_message_id = 0
+        archive_message = await self._upsert_completed_archive_message(channel, tasks)
+        self.state.completed_archive_message_id = int(archive_message.id)
         next_message_ids: dict[str, int] = {}
         for task in active:
             key = task_key(task)
@@ -143,6 +146,7 @@ class DiscordTasksSurface:
         self._save_state()
         if message_id:
             await self._mark_message_completed(message_id, {**task, "status": "COMPLETED"})
+        await self.ensure_message()
         return True
 
     async def delete_task(self, key: str) -> bool:
@@ -166,6 +170,7 @@ class DiscordTasksSurface:
             "collectionId": self.collection_id,
             "messageCount": len(self.state.message_ids),
             "messageIds": [str(value) for value in self.state.message_ids.values()],
+            "completedArchiveMessageId": str(self.state.completed_archive_message_id),
         }
 
     async def channel(self) -> discord.abc.Messageable:
@@ -192,6 +197,25 @@ class DiscordTasksSurface:
                 LOGGER.info("%s message %s missing; recreating", self.surface_name.capitalize(), message_id)
         return await channel.send(content=content, view=view, allowed_mentions=NO_MENTIONS)
 
+    async def _upsert_completed_archive_message(
+        self,
+        channel: discord.abc.Messageable,
+        tasks: list[Mapping[str, Any]],
+    ) -> discord.Message:
+        content = render_completed_archive_message(tasks, collection_id=self.collection_id)
+        message_id = self.state.completed_archive_message_id
+        if message_id and hasattr(channel, "fetch_message"):
+            try:
+                message = await channel.fetch_message(message_id)
+                return await message.edit(content=content, view=None, allowed_mentions=NO_MENTIONS)
+            except (discord.NotFound, discord.HTTPException):
+                LOGGER.info(
+                    "%s completed archive message %s missing; recreating",
+                    self.surface_name.capitalize(),
+                    message_id,
+                )
+        return await channel.send(content=content, view=None, allowed_mentions=NO_MENTIONS)
+
     def _load_state(self) -> DiscordTasksState:
         try:
             raw = json.loads(self.state_path.read_text(encoding="utf-8"))
@@ -205,6 +229,7 @@ class DiscordTasksSurface:
             }
             return DiscordTasksState(
                 message_ids=message_ids,
+                completed_archive_message_id=int(raw.get("completedArchiveMessageId") or 0),
                 legacy_message_id=int(raw.get("messageId") or 0),
             )
         except (TypeError, ValueError):
@@ -214,6 +239,7 @@ class DiscordTasksSurface:
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "messageIds": self.state.message_ids,
+            "completedArchiveMessageId": self.state.completed_archive_message_id,
         }
         temporary = self.state_path.with_suffix(f"{self.state_path.suffix}.tmp")
         temporary.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
@@ -320,6 +346,44 @@ def active_tasks(tasks: list[Mapping[str, Any]], *, collection_id: str = "") -> 
     return sorted(active, key=lambda item: (str(item.get("due") or "9999-12-31"), str(item.get("summary") or ""), str(item.get("uid") or "")))[:MAX_VISIBLE_TASKS]
 
 
+def completed_tasks_for_month(
+    tasks: list[Mapping[str, Any]],
+    *,
+    collection_id: str = "",
+    month: date | None = None,
+) -> list[dict[str, Any]]:
+    current = month or date.today()
+    completed = [
+        dict(item)
+        for item in tasks
+        if str(item.get("status") or "").upper() == "COMPLETED"
+        and str(item.get("uid") or "")
+        and (not collection_id or str(item.get("collection") or "") == collection_id)
+        and _task_month_date(item) is not None
+        and _task_month_date(item).year == current.year
+        and _task_month_date(item).month == current.month
+    ]
+    completed.sort(key=lambda item: (str(item.get("summary") or ""), str(item.get("uid") or "")))
+    completed.sort(key=lambda item: _task_month_date(item) or date.min, reverse=True)
+    return completed[:MAX_VISIBLE_TASKS]
+
+
+def render_completed_archive_message(
+    tasks: list[Mapping[str, Any]],
+    *,
+    collection_id: str = "",
+    month: date | None = None,
+) -> str:
+    current = month or date.today()
+    completed = completed_tasks_for_month(tasks, collection_id=collection_id, month=current)
+    lines = [f"## Completed · {current:%Y.%m}"]
+    if not completed:
+        lines.append("- none")
+    else:
+        lines.extend(_completed_archive_line(item) for item in completed)
+    return "\n".join(lines)[:1990]
+
+
 def parse_add_task_message(content: str) -> AddTaskCommand | None:
     lines = [line.strip() for line in content.strip().splitlines() if line.strip()]
     if not lines or not lines[0].startswith("+"):
@@ -383,3 +447,22 @@ def task_payload(task: Mapping[str, Any], *, status: str) -> dict[str, Any]:
 
 def task_key(task: Mapping[str, Any]) -> str:
     return f"{task.get('collection') or ''}|{task.get('uid') or ''}"
+
+
+def _completed_archive_line(task: Mapping[str, Any]) -> str:
+    completed = _task_month_date(task)
+    date_text = completed.strftime("%Y.%m.%d") if completed else "unknown"
+    title = escape_text(task.get("summary") or "Untitled task")
+    return f"- {date_text} {title}"
+
+
+def _task_month_date(task: Mapping[str, Any]) -> date | None:
+    for key in ("completed", "completedAt", "completedDate", "lastModified", "updated", "due"):
+        raw = str(task.get(key) or "").strip()
+        if not raw:
+            continue
+        try:
+            return date.fromisoformat(raw[:10])
+        except ValueError:
+            continue
+    return None

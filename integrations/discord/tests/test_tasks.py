@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
 import json
@@ -13,8 +14,10 @@ from kaos_governor_discord.tasks import (
     DiscordTasksSurface,
     TaskView,
     active_tasks,
+    completed_tasks_for_month,
     parse_add_task_message,
     parse_due_line,
+    render_completed_archive_message,
     render_task_message,
     task_payload,
 )
@@ -36,6 +39,7 @@ TASKS = [
         "collection": "family:tasks",
         "summary": "Done already",
         "due": "2026-08-12",
+        "completed": "2026-08-15",
         "status": "COMPLETED",
     },
 ]
@@ -166,6 +170,24 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(completed, "## ~~Buy milk~~")
         self.assertNotIn("No due date", content)
 
+    def test_completed_archive_renders_current_month_history(self) -> None:
+        content = render_completed_archive_message(TASKS, month=date(2026, 8, 15))
+
+        self.assertIn("## Completed · 2026.08", content)
+        self.assertIn("- 2026.08.15 Done already", content)
+
+    def test_completed_archive_filters_collection(self) -> None:
+        completed = completed_tasks_for_month(
+            [
+                {**TASKS[1], "collection": "family:tasks"},
+                {**TASKS[1], "uid": "SUPPLY-1", "collection": "zin:supplies", "summary": "Soap"},
+            ],
+            collection_id="zin:supplies",
+            month=date(2026, 8, 15),
+        )
+
+        self.assertEqual([item["summary"] for item in completed], ["Soap"])
+
     def test_parse_add_task_message_accepts_plus_title_only(self) -> None:
         self.assertEqual(parse_add_task_message("+ Call mom"), AddTaskCommand(title="Call mom"))
         self.assertEqual(parse_add_task_message("  +   엄마한테 전화  "), AddTaskCommand(title="엄마한테 전화"))
@@ -224,11 +246,12 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
 
             await surface.ensure_message()
 
-            self.assertEqual(len(channel.sent), 2)
-            self.assertIn("## Buy milk", channel.sent[0]["content"])
-            self.assertIn("## Call school", channel.sent[1]["content"])
-            self.assertIsInstance(channel.sent[0]["view"], TaskView)
-            buttons = channel.sent[0]["view"].children
+            self.assertEqual(len(channel.sent), 3)
+            self.assertIn("## Completed", channel.sent[0]["content"])
+            self.assertIn("## Buy milk", channel.sent[1]["content"])
+            self.assertIn("## Call school", channel.sent[2]["content"])
+            self.assertIsInstance(channel.sent[1]["view"], TaskView)
+            buttons = channel.sent[1]["view"].children
             self.assertEqual([button.label for button in buttons], ["Done", "Edit", "Delete"])
             self.assertEqual([button.custom_id for button in buttons], ["tasks:done", "tasks:edit", "tasks:delete"])
             self.assertTrue(buttons[1].disabled)
@@ -256,10 +279,11 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
 
             await surface.ensure_message()
 
-            self.assertEqual(len(channel.sent), 1)
-            self.assertIn("## Paper towels", channel.sent[0]["content"])
-            self.assertNotIn("- due:", channel.sent[0]["content"])
-            buttons = channel.sent[0]["view"].children
+            self.assertEqual(len(channel.sent), 2)
+            self.assertIn("## Completed", channel.sent[0]["content"])
+            self.assertIn("## Paper towels", channel.sent[1]["content"])
+            self.assertNotIn("- due:", channel.sent[1]["content"])
+            buttons = channel.sent[1]["view"].children
             self.assertEqual([button.custom_id for button in buttons], ["supplies:done", "supplies:edit", "supplies:delete"])
             self.assertEqual(surface.status()["collectionId"], "zin:supplies")
 
@@ -284,8 +308,10 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(adapter.created[0][1]["title"], "Call mom")
             self.assertEqual(adapter.created[0][1]["dueDate"], "")
             self.assertNotIn("collectionId", adapter.created[0][1])
-            self.assertEqual(len(channel.sent), 1)
-            self.assertEqual(channel.sent[0]["content"], "## Call mom")
+            self.assertEqual(len(channel.sent), 2)
+            self.assertIn("## Completed", channel.sent[0]["content"])
+            self.assertIn("- none", channel.sent[0]["content"])
+            self.assertEqual(channel.sent[1]["content"], "## Call mom")
 
     async def test_plus_message_creates_task_with_strict_due_date_time(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -305,7 +331,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(adapter.created[0][1]["title"], "Call mom")
             self.assertEqual(adapter.created[0][1]["dueDate"], "2026-08-15")
             self.assertEqual(adapter.created[0][1]["dueTime"], "14:30")
-            self.assertEqual(channel.sent[0]["content"], "## Call mom\n- due: 2026-08-15 14:30")
+            self.assertEqual(channel.sent[1]["content"], "## Call mom\n- due: 2026-08-15 14:30")
 
     async def test_plus_message_defaults_due_time_to_ten(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -371,7 +397,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(await surface.handle_message(message))  # type: ignore[arg-type]
 
             self.assertEqual(adapter.created[0][1]["collectionId"], "zin:supplies")
-            self.assertEqual(channel.sent[0]["content"], "## Paper towels")
+            self.assertEqual(channel.sent[1]["content"], "## Paper towels")
 
     async def test_ensure_message_deletes_legacy_combined_message(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -399,7 +425,10 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(await surface.complete_task("zin:tasks|TASK-1"))
             self.assertEqual(adapter.updated[0][1]["status"], "COMPLETED")
             self.assertEqual(surface.state.message_ids, {})
-            completed_message = channel.messages[700]
+            summary_message = channel.messages[700]
+            completed_message = channel.messages[701]
+            self.assertIn("## Completed", summary_message.edits[-1]["content"])
+            self.assertIn("Buy milk", summary_message.edits[-1]["content"])
             self.assertFalse(completed_message.deleted)
             self.assertIn("## ~~Buy milk~~", completed_message.edits[-1]["content"])
             self.assertIsNone(completed_message.edits[-1]["view"])
@@ -421,13 +450,13 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
 
             await surface.repost_active_messages()
 
-            self.assertEqual(len(channel.sent), 4)
+            self.assertEqual(len(channel.sent), 5)
             self.assertTrue(channel.messages[first_ids["zin:tasks|TASK-1"]].deleted)
             self.assertTrue(channel.messages[first_ids["zin:tasks|TASK-3"]].deleted)
             self.assertEqual(set(surface.state.message_ids), set(first_ids))
             self.assertNotEqual(surface.state.message_ids, first_ids)
-            self.assertIn("## Buy milk", channel.sent[2]["content"])
-            self.assertIn("## Call school", channel.sent[3]["content"])
+            self.assertIn("## Buy milk", channel.sent[3]["content"])
+            self.assertIn("## Call school", channel.sent[4]["content"])
 
     async def test_user_messages_in_tasks_channel_are_deleted(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
