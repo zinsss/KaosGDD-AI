@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 import discord
 
 from .config import Settings
+from .event_intent import EventCreateRequest, parse_event_create
 from .governor_tools import (
     GovernorToolClient,
     GovernorToolConfig,
@@ -24,6 +25,8 @@ from .governor_tools import (
     render_memo_edit_completed,
     render_memo_edit_proposal,
     render_document_opened,
+    render_event_create_completed,
+    render_event_create_proposal,
     render_memo_opened,
     render_task_action_completed,
     render_task_action_proposal,
@@ -131,6 +134,14 @@ class BrainBot(discord.Client):
         task_action = parse_task_action(request.text) if request.route is Route.CHAT else None
         if task_action is not None:
             await self._propose_task_action(message, task_action)
+            return
+        event_create = (
+            parse_event_create(request.text, today=message.created_at.astimezone(KST).date())
+            if request.route is Route.CHAT
+            else None
+        )
+        if event_create is not None:
+            await self._propose_event_create(message, event_create)
             return
         memo_edit = parse_memo_edit(request.text) if request.route is Route.CHAT else None
         if memo_edit is not None:
@@ -284,6 +295,34 @@ class BrainBot(discord.Client):
         await message.reply(
             render_task_action_proposal(payload),
             view=TaskActionConfirmationView(self.governor_tools, int(message.author.id), str(payload.get("confirmationId") or "")),
+            mention_author=False,
+            allowed_mentions=NO_MENTIONS,
+        )
+
+    async def _propose_event_create(self, message: discord.Message, request: EventCreateRequest) -> None:
+        if self.governor_tools is None:
+            await message.reply(
+                "Governor tools are not configured yet.",
+                mention_author=False,
+                allowed_mentions=NO_MENTIONS,
+            )
+            return
+        try:
+            payload = await self.governor_tools.propose_event_create(
+                request,
+                actor_id=message.author.id,
+                idempotency_key=f"discord:{message.id}",
+            )
+        except GovernorToolError as exc:
+            await message.reply(
+                f"Event creation proposal failed: {exc}",
+                mention_author=False,
+                allowed_mentions=NO_MENTIONS,
+            )
+            return
+        await message.reply(
+            render_event_create_proposal(payload),
+            view=EventCreateConfirmationView(self.governor_tools, int(message.author.id), str(payload.get("confirmationId") or "")),
             mention_author=False,
             allowed_mentions=NO_MENTIONS,
         )
@@ -753,6 +792,39 @@ class TaskCreateConfirmationView(discord.ui.View):
         for item in self.children:
             item.disabled = True
         await interaction.response.edit_message(content="Task creation cancelled.", view=self, allowed_mentions=NO_MENTIONS)
+        self.stop()
+
+
+class EventCreateConfirmationView(discord.ui.View):
+    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, confirmation_id: str) -> None:
+        super().__init__(timeout=600)
+        self.governor_tools = governor_tools
+        self.actor_id = actor_id
+        self.confirmation_id = confirmation_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if int(interaction.user.id) == self.actor_id:
+            return True
+        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        try:
+            payload = await self.governor_tools.approve_confirmation(self.confirmation_id, actor_id=self.actor_id)
+            content = render_event_create_completed(payload)
+        except GovernorToolError as exc:
+            content = f"Event creation failed: {exc}"
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(content=content, view=self, allowed_mentions=NO_MENTIONS)
+        self.stop()
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(content="Event creation cancelled.", view=self, allowed_mentions=NO_MENTIONS)
         self.stop()
 
 

@@ -55,6 +55,18 @@ class PendingTaskAction:
 
 
 @dataclass(frozen=True)
+class PendingEventCreate:
+    profile: str
+    title: str
+    start_date: str
+    end_date: str
+    all_day: bool
+    memo: str
+    collection_id: str
+    payload: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class PendingMemoCreate:
     content: str
 
@@ -98,6 +110,7 @@ class BrainToolServer:
         self._pending_task_due_updates: dict[str, PendingTaskDueUpdate] = {}
         self._pending_task_creates: dict[str, PendingTaskCreate] = {}
         self._pending_task_actions: dict[str, PendingTaskAction] = {}
+        self._pending_event_creates: dict[str, PendingEventCreate] = {}
         self._pending_memo_creates: dict[str, PendingMemoCreate] = {}
         self._pending_memo_deletes: dict[str, PendingMemoDelete] = {}
         self._pending_memo_edits: dict[str, PendingMemoEdit] = {}
@@ -118,6 +131,7 @@ class BrainToolServer:
         app.router.add_post("/tools/tasks/action/proposals", self._propose_task_action)
         app.router.add_post("/tools/tasks/create/proposals", self._propose_task_create)
         app.router.add_post("/tools/tasks/update-due/proposals", self._propose_task_due_update)
+        app.router.add_post("/tools/events/create/proposals", self._propose_event_create)
         app.router.add_post("/tools/confirmations/{confirmation_id}/approve", self._approve_confirmation)
         return app
 
@@ -641,6 +655,86 @@ class BrainToolServer:
             status=201,
         )
 
+    async def _propose_event_create(self, request: web.Request) -> web.Response:
+        try:
+            body = await request.json()
+        except ValueError:
+            return web.json_response({"error": "invalid_json"}, status=400)
+        if not isinstance(body, Mapping):
+            return web.json_response({"error": "invalid_json"}, status=400)
+        profile = str(body.get("profile") or "main").strip().lower() or "main"
+        try:
+            profile_host(profile)
+        except CalendarAdapterError:
+            return web.json_response({"error": "invalid_profile"}, status=400)
+        actor_id = str(body.get("actorId") or "").strip()
+        idempotency_key = str(body.get("idempotencyKey") or "").strip()
+        title = " ".join(str(body.get("title") or "").split())
+        start_date = str(body.get("startDate") or "").strip()
+        end_date = str(body.get("endDate") or start_date).strip() or start_date
+        memo = str(body.get("memo") or "").strip()
+        all_day = bool(body.get("allDay", True))
+        collection_id = str(body.get("collectionId") or "").strip()
+        if not collection_id and profile == "family":
+            collection_id = "family:events"
+        if not actor_id or not idempotency_key or not title or not start_date:
+            return web.json_response({"error": "event_create_missing_required_field"}, status=400)
+        if not _valid_date(start_date) or not _valid_date(end_date):
+            return web.json_response({"error": "event_create_invalid_date"}, status=400)
+        payload = {
+            "title": title,
+            "startDate": start_date,
+            "endDate": end_date,
+            "allDay": all_day,
+            "memo": memo,
+        }
+        if collection_id:
+            payload["collectionId"] = collection_id
+        try:
+            actor = Actor("user", actor_id, "family" if profile == "family" else "personal")
+            operation, _created = self._durable.start_operation(
+                OperationRequest(
+                    actor=actor,
+                    idempotency_key=idempotency_key,
+                    tool_name="calendar.events",
+                    operation_type="create",
+                    parameters={
+                        "profile": profile,
+                        "title": title,
+                        "startDate": start_date,
+                        "endDate": end_date,
+                        "allDay": all_day,
+                        "memo": memo,
+                        "collectionId": collection_id,
+                    },
+                    requires_confirmation=True,
+                )
+            )
+            confirmation = self._durable.create_confirmation(operation.operation_id, ttl=timedelta(minutes=10))
+        except DurableGovernorError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+        pending = PendingEventCreate(
+            profile=profile,
+            title=title,
+            start_date=start_date,
+            end_date=end_date,
+            all_day=all_day,
+            memo=memo,
+            collection_id=collection_id,
+            payload=payload,
+        )
+        self._pending_event_creates[operation.operation_id] = pending
+        return web.json_response(
+            {
+                "operationId": operation.operation_id,
+                "confirmationId": confirmation.confirmation_id,
+                "expiresAt": confirmation.expires_at.isoformat(),
+                "event": _pending_event_create_payload(pending),
+                "source": "calendar-adapter-live",
+            },
+            status=201,
+        )
+
     async def _approve_confirmation(self, request: web.Request) -> web.Response:
         confirmation_id = request.match_info["confirmation_id"]
         try:
@@ -661,6 +755,7 @@ class BrainToolServer:
         pending_update = self._pending_task_due_updates.get(operation.operation_id)
         pending_create = self._pending_task_creates.get(operation.operation_id)
         pending_action = self._pending_task_actions.get(operation.operation_id)
+        pending_event_create = self._pending_event_creates.get(operation.operation_id)
         pending_memo_create = self._pending_memo_creates.get(operation.operation_id)
         pending_memo_delete = self._pending_memo_deletes.get(operation.operation_id)
         pending_memo_edit = self._pending_memo_edits.get(operation.operation_id)
@@ -668,6 +763,7 @@ class BrainToolServer:
             pending_update is None
             and pending_create is None
             and pending_action is None
+            and pending_event_create is None
             and pending_memo_create is None
             and pending_memo_delete is None
             and pending_memo_edit is None
@@ -715,6 +811,14 @@ class BrainToolServer:
                         )
                         result_uid = str(result.get("uid") or pending_action.uid)
                     task = _pending_task_action_payload(pending_action)
+            elif pending_event_create is not None:
+                result = await asyncio.to_thread(
+                    self._calendar_adapter.create_event,
+                    pending_event_create.profile,
+                    pending_event_create.payload,
+                )
+                result_uid = str(result.get("uid") or "")
+                event = {**_pending_event_create_payload(pending_event_create), "uid": result_uid}
             else:
                 if pending_memo_create is not None:
                     memo = await asyncio.to_thread(self._memos.create, pending_memo_create.content)
@@ -743,6 +847,7 @@ class BrainToolServer:
         self._pending_task_due_updates.pop(operation.operation_id, None)
         self._pending_task_creates.pop(operation.operation_id, None)
         self._pending_task_actions.pop(operation.operation_id, None)
+        self._pending_event_creates.pop(operation.operation_id, None)
         self._pending_memo_creates.pop(operation.operation_id, None)
         self._pending_memo_deletes.pop(operation.operation_id, None)
         self._pending_memo_edits.pop(operation.operation_id, None)
@@ -756,6 +861,8 @@ class BrainToolServer:
         }
         if pending_memo_create is not None or pending_memo_delete is not None or pending_memo_edit is not None:
             response_payload["memo"] = memo_payload
+        elif pending_event_create is not None:
+            response_payload["event"] = event
         else:
             response_payload["task"] = task
         return web.json_response(
@@ -899,6 +1006,14 @@ def _valid_due(due_date: str, due_time: str) -> bool:
     return True
 
 
+def _valid_date(value: str) -> bool:
+    try:
+        date.fromisoformat(value)
+    except ValueError:
+        return False
+    return True
+
+
 def _match_active_tasks(tasks: list[Mapping[str, Any]], query: str) -> list[Mapping[str, Any]]:
     normalized_query = _normalize_match_text(query)
     active = [item for item in tasks if is_active_task(item)]
@@ -949,6 +1064,19 @@ def _pending_task_action_payload(pending: PendingTaskAction) -> dict[str, object
         "dueTime": pending.due_time,
         "action": pending.action,
     }
+
+
+def _pending_event_create_payload(pending: PendingEventCreate) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "title": pending.title,
+        "startDate": pending.start_date,
+        "endDate": pending.end_date,
+        "allDay": pending.all_day,
+        "memo": pending.memo,
+    }
+    if pending.collection_id:
+        payload["collectionId"] = pending.collection_id
+    return payload
 
 
 def _pending_memo_create_payload(pending: PendingMemoCreate) -> dict[str, object]:

@@ -114,6 +114,19 @@ class CalendarAdapterBoundaryTests(unittest.TestCase):
         with self.assertRaisesRegex(adapter.CalendarAdapterError, "calendar_adapter_missing_uid"):
             client.create_task("main", {"uid": "task-1"})
 
+    def test_create_event_uses_event_route_and_requires_uid(self) -> None:
+        urlopen = mock.Mock(return_value=FakeResponse(status=201, body=b'{"ok":true,"uid":"EVENT-1"}'))
+        client = adapter.CalendarAdapterClient(self.config(), urlopen=urlopen)
+
+        result = client.create_event("family", {"title": "Trip", "startDate": "2026-08-15"})
+
+        request = urlopen.call_args.args[0]
+        self.assertEqual(result["uid"], "EVENT-1")
+        self.assertEqual(request.full_url, "http://adapter:8091/api/calendar/events")
+        self.assertEqual(request.get_method(), "POST")
+        self.assertEqual(json.loads(request.data.decode("utf-8")), {"title": "Trip", "startDate": "2026-08-15"})
+        self.assertEqual(request.get_header("Host"), "family.kaosgdd.net")
+
     def test_update_and_delete_task_use_existing_adapter_routes(self) -> None:
         urlopen = mock.Mock(
             side_effect=[

@@ -28,6 +28,7 @@ class FakeCalendarAdapter:
         ]
         self.updated = []
         self.created = []
+        self.created_events = []
         self.deleted = []
 
     def bootstrap(self, profile):
@@ -96,6 +97,10 @@ class FakeCalendarAdapter:
             }
         )
         return {"uid": uid}
+
+    def create_event(self, profile, payload):
+        self.created_events.append((profile, dict(payload)))
+        return {"uid": f"EVENT-CREATED-{len(self.created_events)}"}
 
     def delete_task(self, profile, uid, collection_id):
         self.deleted.append((profile, uid, collection_id))
@@ -705,6 +710,73 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 400)
         self.assertEqual((await response.json())["error"], "confirmation_actor_mismatch")
         self.assertEqual(self.calendar.created, [])
+
+    async def test_event_create_proposal_requires_confirmation_before_write(self) -> None:
+        response = await self.client.post(
+            "/tools/events/create/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-event-create-1",
+                "profile": "family",
+                "title": "엔소쿠료칸",
+                "startDate": "2026-08-15",
+                "endDate": "2026-08-15",
+                "allDay": True,
+                "memo": "포항 조사리",
+                "collectionId": "family:events",
+            },
+        )
+
+        self.assertEqual(response.status, 201)
+        payload = await response.json()
+        self.assertTrue(payload["confirmationId"].startswith("conf_"))
+        self.assertEqual(payload["event"]["title"], "엔소쿠료칸")
+        self.assertEqual(payload["event"]["startDate"], "2026-08-15")
+        self.assertEqual(payload["event"]["memo"], "포항 조사리")
+        self.assertEqual(payload["event"]["collectionId"], "family:events")
+        self.assertEqual(self.calendar.created_events, [])
+
+    async def test_event_create_approval_creates_family_event(self) -> None:
+        proposal = await self.client.post(
+            "/tools/events/create/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-event-create-2",
+                "profile": "family",
+                "title": "엔소쿠료칸",
+                "startDate": "2026-08-15",
+                "endDate": "2026-08-15",
+                "allDay": True,
+                "memo": "포항 조사리",
+                "collectionId": "family:events",
+            },
+        )
+        confirmation_id = (await proposal.json())["confirmationId"]
+
+        response = await self.client.post(
+            f"/tools/confirmations/{confirmation_id}/approve",
+            headers=self.headers(),
+            json={"actorId": "994579996960104529"},
+        )
+
+        self.assertEqual(response.status, 200)
+        payload = await response.json()
+        self.assertEqual(payload["status"], "completed")
+        self.assertEqual(payload["event"]["uid"], "EVENT-CREATED-1")
+        self.assertEqual(self.calendar.created_events[0][0], "family")
+        self.assertEqual(
+            self.calendar.created_events[0][1],
+            {
+                "title": "엔소쿠료칸",
+                "startDate": "2026-08-15",
+                "endDate": "2026-08-15",
+                "allDay": True,
+                "memo": "포항 조사리",
+                "collectionId": "family:events",
+            },
+        )
 
     async def test_task_complete_proposal_requires_confirmation_before_write(self) -> None:
         response = await self.client.post(

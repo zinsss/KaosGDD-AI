@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote
 
+from .event_intent import EventCreateRequest
 from .memo_intent import MemoCreateRequest, MemoDeleteRequest, MemoEditRequest
 from .task_update_intent import TaskActionRequest, TaskCreateRequest, TaskDueUpdateRequest
 from .tool_intent import ToolKind, ToolRequest
@@ -138,6 +139,27 @@ class GovernorToolClient:
                 "profile": self.config.profile,
                 "taskTitle": request.task_title,
                 "action": request.action,
+            },
+        )
+
+    async def propose_event_create(
+        self,
+        request: EventCreateRequest,
+        *,
+        actor_id: int,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        return await self._post(
+            "/tools/events/create/proposals",
+            {
+                "actorId": str(actor_id),
+                "idempotencyKey": idempotency_key,
+                "profile": request.profile or self.config.profile,
+                "title": request.title,
+                "startDate": request.start_date,
+                "endDate": request.end_date,
+                "allDay": request.all_day,
+                "memo": request.memo,
             },
         )
 
@@ -333,6 +355,27 @@ def render_task_action_completed(payload: dict[str, Any]) -> str:
     if action == "complete":
         return "할 일 완료했어요."
     return "할 일 수정했어요."
+
+
+def render_event_create_proposal(payload: dict[str, Any]) -> str:
+    event = payload.get("event")
+    if not isinstance(event, dict):
+        return "Event creation requires confirmation."
+    lines = [
+        "## Confirm new event",
+        f"- event: {event.get('title') or 'Untitled event'}",
+        f"- date: {event.get('startDate') or ''}",
+    ]
+    if event.get("allDay"):
+        lines.append("- all day")
+    memo = str(event.get("memo") or "").strip()
+    if memo:
+        lines.append(f"- memo: {memo}")
+    return "\n".join(lines)
+
+
+def render_event_create_completed(payload: dict[str, Any]) -> str:
+    return "일정 저장했어요."
 
 
 def render_memo_create_proposal(payload: dict[str, Any]) -> str:

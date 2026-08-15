@@ -2,6 +2,8 @@ import unittest
 
 from kaos_brain.governor_tools import (
     memo_option_label,
+    render_event_create_completed,
+    render_event_create_proposal,
     render_memo_create_completed,
     render_memo_delete_completed,
     render_memo_deleted,
@@ -15,6 +17,7 @@ from kaos_brain.governor_tools import (
     render_task_due_update_proposal,
     render_tool_context,
 )
+from kaos_brain.event_intent import EventCreateRequest
 from kaos_brain.task_update_intent import TaskDueUpdateRequest
 from kaos_brain.tool_intent import ToolKind, ToolRequest
 
@@ -179,6 +182,23 @@ class GovernorToolRenderingTests(unittest.TestCase):
         content = render_task_action_completed({"task": {"title": "Call school", "action": "delete"}})
         self.assertEqual(content, "할 일 삭제했어요.")
 
+    def test_render_event_create_messages(self) -> None:
+        proposal = render_event_create_proposal(
+            {
+                "event": {
+                    "title": "엔소쿠료칸",
+                    "startDate": "2026-08-15",
+                    "allDay": True,
+                    "memo": "포항 조사리",
+                }
+            }
+        )
+        self.assertIn("## Confirm new event", proposal)
+        self.assertIn("- event: 엔소쿠료칸", proposal)
+        self.assertIn("- date: 2026-08-15", proposal)
+        self.assertIn("- memo: 포항 조사리", proposal)
+        self.assertEqual(render_event_create_completed({"event": {"uid": "EVENT-1"}}), "일정 저장했어요.")
+
     def test_render_memo_completion_messages(self) -> None:
         self.assertEqual(
             render_memo_create_completed({"memo": {"name": "memos/42"}}),
@@ -274,6 +294,52 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
         payload = await client.fetch(ToolRequest(ToolKind.MEMO_SEARCH, "rustdesk"))
         self.assertEqual(client.calls, [("/tools/memos/search", {"query": "rustdesk", "limit": "5"})])
         self.assertNotIn("content", payload["results"][0])
+
+    async def test_event_create_uses_request_profile(self) -> None:
+        from kaos_brain.governor_tools import GovernorToolClient, GovernorToolConfig
+
+        class FakeClient(GovernorToolClient):
+            def __init__(self, config: GovernorToolConfig) -> None:
+                super().__init__(config)
+                self.calls = []
+
+            async def _post(self, path: str, payload: dict[str, object]):
+                self.calls.append((path, payload))
+                return {"ok": True}
+
+        client = FakeClient(
+            GovernorToolConfig(
+                base_url="http://127.0.0.1:8098",
+                api_token="token",
+                profile="main",
+                timeout_seconds=1,
+            )
+        )
+        await client.propose_event_create(
+            EventCreateRequest(
+                title="엔소쿠료칸",
+                start_date="2026-08-15",
+                end_date="2026-08-15",
+                memo="포항 조사리",
+                profile="family",
+            ),
+            actor_id=123,
+            idempotency_key="k",
+        )
+        self.assertEqual(client.calls[0][0], "/tools/events/create/proposals")
+        self.assertEqual(
+            client.calls[0][1],
+            {
+                "actorId": "123",
+                "idempotencyKey": "k",
+                "profile": "family",
+                "title": "엔소쿠료칸",
+                "startDate": "2026-08-15",
+                "endDate": "2026-08-15",
+                "allDay": True,
+                "memo": "포항 조사리",
+            },
+        )
 
     async def test_fetch_single_document_search_gets_detail(self) -> None:
         from kaos_brain.governor_tools import GovernorToolClient, GovernorToolConfig

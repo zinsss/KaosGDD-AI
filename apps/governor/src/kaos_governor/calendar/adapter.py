@@ -105,6 +105,13 @@ class CalendarAdapterClient:
             raise CalendarAdapterError("calendar_adapter_missing_uid")
         return result
 
+    def create_event(self, profile: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+        result = self.request_json(profile, "POST", "/api/calendar/events", payload=payload)
+        uid = str(result.get("uid") or "").strip()
+        if not uid:
+            raise CalendarAdapterError("calendar_adapter_missing_uid")
+        return result
+
     def update_task(self, profile: str, payload: Mapping[str, Any]) -> dict[str, Any]:
         result = self.request_json(profile, "PUT", "/api/calendar/tasks", payload=payload)
         uid = str(result.get("uid") or "").strip()
