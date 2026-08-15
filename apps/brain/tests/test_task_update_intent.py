@@ -19,6 +19,12 @@ class TaskUpdateIntentTests(unittest.TestCase):
         self.assertEqual(request.task_title, "엄마 전화")
         self.assertEqual(request.due_date, "2026-08-15")
 
+    def test_family_task_update_sets_profile(self) -> None:
+        request = parse_task_due_update("가족 엄마 전화 기한 내일로 변경", today=date(2026, 8, 14))
+        assert request is not None
+        self.assertEqual(request.task_title, "엄마 전화")
+        self.assertEqual(request.profile, "family")
+
     def test_iso_date_update(self) -> None:
         request = parse_task_due_update("보험 서류 마감일을 2026-08-20로 수정", today=date(2026, 8, 14))
         assert request is not None
@@ -40,6 +46,12 @@ class TaskUpdateIntentTests(unittest.TestCase):
         assert request is not None
         self.assertEqual(request.title, "영이 큐시미아 확인")
         self.assertEqual(request.due_date, "2026-08-17")
+
+    def test_family_task_create_sets_profile(self) -> None:
+        request = parse_task_create("가족 내일까지 엄마한테 전화해야돼", today=date(2026, 8, 14))
+        assert request is not None
+        self.assertEqual(request.title, "엄마한테 전화")
+        self.assertEqual(request.profile, "family")
 
     def test_iso_date_create(self) -> None:
         request = parse_task_create("2026-08-20까지 보험 서류 준비해야돼", today=date(2026, 8, 14))
@@ -79,6 +91,13 @@ class TaskUpdateIntentTests(unittest.TestCase):
         assert request is not None
         self.assertEqual(request.task_title, "영이 큐시미아")
         self.assertEqual(request.action, "reopen")
+
+    def test_supplies_reopen_action_sets_profile(self) -> None:
+        request = parse_task_action("준비물 비누 다시 살려줘")
+        assert request is not None
+        self.assertEqual(request.task_title, "비누")
+        self.assertEqual(request.action, "reopen")
+        self.assertEqual(request.profile, "supplies")
 
     def test_plain_message_does_not_action(self) -> None:
         self.assertIsNone(parse_task_action("오늘 뭐 있어?"))

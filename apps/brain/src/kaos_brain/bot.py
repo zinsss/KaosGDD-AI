@@ -77,6 +77,7 @@ class BrainBot(discord.Client):
                     base_url=settings.governor_tools_base_url,
                     api_token=settings.governor_tools_api_token,
                     profile=settings.governor_tools_profile,
+                    supplies_collection_id=settings.governor_tools_supplies_collection_id,
                     timeout_seconds=settings.governor_tools_timeout_seconds,
                 )
             )

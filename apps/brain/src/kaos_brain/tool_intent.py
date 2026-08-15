@@ -20,6 +20,8 @@ class ToolRequest:
     query: str = ""
     start: str = ""
     end: str = ""
+    profile: str = ""
+    collection_id: str = ""
 
 
 def parse_tool_request(content: str, *, today: date | None = None) -> ToolRequest | None:
@@ -28,13 +30,14 @@ def parse_tool_request(content: str, *, today: date | None = None) -> ToolReques
     if not text:
         return None
     current = today or date.today()
+    profile, collection_id = _scope(text, lowered)
     if _asks_today(lowered):
-        return ToolRequest(ToolKind.TODAY)
-    completed = _completed_task_request(text, lowered, current)
+        return ToolRequest(ToolKind.TODAY, profile=profile)
+    completed = _completed_task_request(text, lowered, current, profile=profile, collection_id=collection_id)
     if completed is not None:
         return completed
-    if _asks_active_tasks(lowered):
-        return ToolRequest(ToolKind.ACTIVE_TASKS)
+    if _asks_active_tasks(lowered) or _asks_supplies(lowered):
+        return ToolRequest(ToolKind.ACTIVE_TASKS, profile=profile, collection_id=collection_id)
     memo_query = _search_query(text, ("memo", "memos", "메모"))
     if memo_query:
         return ToolRequest(ToolKind.MEMO_SEARCH, memo_query)
@@ -65,13 +68,20 @@ def _asks_active_tasks(lowered: str) -> bool:
     )
 
 
-def _completed_task_request(text: str, lowered: str, today: date) -> ToolRequest | None:
+def _completed_task_request(
+    text: str,
+    lowered: str,
+    today: date,
+    *,
+    profile: str,
+    collection_id: str,
+) -> ToolRequest | None:
     if "완료" not in lowered:
         return None
-    if not any(marker in lowered for marker in ("할 일", "할일", "task", "todo")):
+    if not any(marker in lowered for marker in ("할 일", "할일", "task", "todo", "준비물", "용품", "supplies", "supply")):
         return None
     days = 14 if any(marker in lowered for marker in ("최근 2주", "지난 2주", "2주")) else 30
-    query = text
+    query = _strip_scope_words(text)
     for marker in (
         "최근 2주",
         "지난 2주",
@@ -99,7 +109,29 @@ def _completed_task_request(text: str, lowered: str, today: date) -> ToolRequest
         " ".join(query.split()),
         (today - timedelta(days=days - 1)).isoformat(),
         today.isoformat(),
+        profile,
+        collection_id,
     )
+
+
+def _scope(text: str, lowered: str) -> tuple[str, str]:
+    if _asks_supplies(lowered):
+        return "supplies", ""
+    if "가족" in text or "family" in lowered:
+        return "family", ""
+    return "", ""
+
+
+def _asks_supplies(lowered: str) -> bool:
+    return any(marker in lowered for marker in ("준비물", "용품", "supplies", "supply"))
+
+
+def _strip_scope_words(value: str) -> str:
+    query = value
+    for marker in ("가족", "family", "준비물", "용품", "supplies", "supply"):
+        query = re.sub(rf"\b{re.escape(marker)}\b", " ", query, flags=re.IGNORECASE)
+        query = query.replace(marker, " ")
+    return query
 
 
 def _search_query(text: str, nouns: tuple[str, ...]) -> str:

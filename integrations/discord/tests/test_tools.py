@@ -717,6 +717,35 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.calendar.created[0][1]["title"], "Call school")
         self.assertEqual(self.calendar.created[0][1]["dueDate"], "2026-08-17")
 
+    async def test_task_create_approval_preserves_collection_id(self) -> None:
+        proposal = await self.client.post(
+            "/tools/tasks/create/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-create-supplies-1",
+                "profile": "supplies",
+                "collectionId": "supplies:abc",
+                "title": "Toothpaste",
+                "dueDate": "2026-08-17",
+                "dueTime": "10:00",
+            },
+        )
+        self.assertEqual(proposal.status, 201)
+        proposal_payload = await proposal.json()
+        self.assertEqual(proposal_payload["task"]["collectionId"], "supplies:abc")
+        confirmation_id = proposal_payload["confirmationId"]
+
+        response = await self.client.post(
+            f"/tools/confirmations/{confirmation_id}/approve",
+            headers=self.headers(),
+            json={"actorId": "994579996960104529"},
+        )
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(self.calendar.created[0][0], "supplies")
+        self.assertEqual(self.calendar.created[0][1]["collectionId"], "supplies:abc")
+
     async def test_task_create_approval_rejects_wrong_actor(self) -> None:
         proposal = await self.client.post(
             "/tools/tasks/create/proposals",
@@ -853,6 +882,41 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["task"]["action"], "complete")
         self.assertEqual(self.calendar.updated[0][1]["uid"], "TASK-1")
         self.assertEqual(self.calendar.updated[0][1]["status"], "COMPLETED")
+
+    async def test_task_action_filters_by_collection_id(self) -> None:
+        self.calendar.tasks.append(
+            {
+                "uid": "SUPPLY-1",
+                "summary": "Soap",
+                "status": "NEEDS-ACTION",
+                "collection": "supplies:abc",
+            }
+        )
+        proposal = await self.client.post(
+            "/tools/tasks/action/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-complete-supplies-1",
+                "profile": "supplies",
+                "collectionId": "supplies:abc",
+                "taskTitle": "Soap",
+                "action": "complete",
+            },
+        )
+        self.assertEqual(proposal.status, 201)
+        confirmation_id = (await proposal.json())["confirmationId"]
+
+        response = await self.client.post(
+            f"/tools/confirmations/{confirmation_id}/approve",
+            headers=self.headers(),
+            json={"actorId": "994579996960104529"},
+        )
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(self.calendar.updated[0][0], "supplies")
+        self.assertEqual(self.calendar.updated[0][1]["uid"], "SUPPLY-1")
+        self.assertEqual(self.calendar.updated[0][1]["collectionId"], "supplies:abc")
 
     async def test_task_delete_approval_deletes_calendar_task(self) -> None:
         proposal = await self.client.post(

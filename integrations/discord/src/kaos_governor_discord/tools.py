@@ -36,6 +36,7 @@ class PendingTaskDueUpdate:
 @dataclass(frozen=True)
 class PendingTaskCreate:
     profile: str
+    collection_id: str
     title: str
     due: str
     due_time: str
@@ -449,6 +450,7 @@ class BrainToolServer:
         actor_id = str(body.get("actorId") or "").strip()
         idempotency_key = str(body.get("idempotencyKey") or "").strip()
         task_title = " ".join(str(body.get("taskTitle") or "").split())
+        collection_id = str(body.get("collectionId") or "").strip()
         due_date = str(body.get("dueDate") or "").strip()
         due_time = str(body.get("dueTime") or "10:00").strip() or "10:00"
         if not actor_id or not idempotency_key or not task_title:
@@ -460,6 +462,8 @@ class BrainToolServer:
         except CalendarAdapterError as exc:
             return web.json_response({"error": str(exc)}, status=502)
         matches = _match_active_tasks(tasks, task_title)
+        if collection_id:
+            matches = [task for task in matches if str(task.get("collection") or "") == collection_id]
         if not matches:
             return web.json_response({"error": "task_not_found"}, status=404)
         if len(matches) > 1:
@@ -546,6 +550,7 @@ class BrainToolServer:
         title = " ".join(str(body.get("title") or "").split())
         due_date = str(body.get("dueDate") or "").strip()
         due_time = str(body.get("dueTime") or "10:00").strip() or "10:00"
+        collection_id = str(body.get("collectionId") or "").strip()
         if not actor_id or not idempotency_key or not title:
             return web.json_response({"error": "task_create_missing_required_field"}, status=400)
         if not _valid_due(due_date, due_time):
@@ -557,6 +562,8 @@ class BrainToolServer:
             "dueTime": due_time,
             "priority": "",
         }
+        if collection_id:
+            payload["collectionId"] = collection_id
         try:
             actor = Actor("user", actor_id, "family" if profile == "family" else "personal")
             operation, _created = self._durable.start_operation(
@@ -570,6 +577,7 @@ class BrainToolServer:
                         "title": title,
                         "dueDate": due_date,
                         "dueTime": due_time,
+                        "collectionId": collection_id,
                     },
                     requires_confirmation=True,
                 )
@@ -579,6 +587,7 @@ class BrainToolServer:
             return web.json_response({"error": str(exc)}, status=400)
         pending = PendingTaskCreate(
             profile=profile,
+            collection_id=collection_id,
             title=title,
             due=due_date,
             due_time=due_time,
@@ -611,6 +620,7 @@ class BrainToolServer:
         actor_id = str(body.get("actorId") or "").strip()
         idempotency_key = str(body.get("idempotencyKey") or "").strip()
         task_title = " ".join(str(body.get("taskTitle") or "").split())
+        collection_id = str(body.get("collectionId") or "").strip()
         action = str(body.get("action") or "").strip().lower()
         if action not in {"complete", "delete", "reopen"}:
             return web.json_response({"error": "task_action_invalid_action"}, status=400)
@@ -621,6 +631,8 @@ class BrainToolServer:
         except CalendarAdapterError as exc:
             return web.json_response({"error": str(exc)}, status=502)
         matches = _match_completed_tasks(tasks, task_title) if action == "reopen" else _match_active_tasks(tasks, task_title)
+        if collection_id:
+            matches = [task for task in matches if str(task.get("collection") or "") == collection_id]
         if not matches:
             return web.json_response({"error": "task_not_found"}, status=404)
         if len(matches) > 1:
@@ -1180,11 +1192,14 @@ def _pending_task_payload(pending: PendingTaskDueUpdate) -> dict[str, object]:
 
 
 def _pending_task_create_payload(pending: PendingTaskCreate) -> dict[str, object]:
-    return {
+    payload: dict[str, object] = {
         "title": pending.title,
         "due": pending.due,
         "dueTime": pending.due_time,
     }
+    if pending.collection_id:
+        payload["collectionId"] = pending.collection_id
+    return payload
 
 
 def _pending_task_action_payload(pending: PendingTaskAction) -> dict[str, object]:

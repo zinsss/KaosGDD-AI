@@ -18,7 +18,7 @@ from kaos_brain.governor_tools import (
     render_tool_context,
 )
 from kaos_brain.event_intent import EventCreateRequest
-from kaos_brain.task_update_intent import TaskDueUpdateRequest
+from kaos_brain.task_update_intent import TaskActionRequest, TaskCreateRequest, TaskDueUpdateRequest
 from kaos_brain.tool_intent import ToolKind, ToolRequest
 
 
@@ -313,6 +313,26 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
             },
         )
 
+    async def test_fetch_supplies_active_tasks_adds_collection(self) -> None:
+        from kaos_brain.governor_tools import GovernorToolClient, GovernorToolConfig
+
+        class FakeClient(GovernorToolClient):
+            async def _get(self, path: str, params: dict[str, str]):
+                return {"path": path, "params": params}
+
+        client = FakeClient(
+            GovernorToolConfig(
+                base_url="http://127.0.0.1:8098",
+                api_token="token",
+                profile="main",
+                timeout_seconds=1,
+                supplies_collection_id="supplies:abc",
+            )
+        )
+        payload = await client.fetch(ToolRequest(ToolKind.ACTIVE_TASKS, profile="supplies"))
+        self.assertEqual(payload["path"], "/tools/tasks/active")
+        self.assertEqual(payload["params"], {"profile": "supplies", "collectionId": "supplies:abc"})
+
     async def test_fetch_multi_memo_search_keeps_snippets_only(self) -> None:
         from kaos_brain.governor_tools import GovernorToolClient, GovernorToolConfig
 
@@ -467,6 +487,42 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["path"], "/tools/tasks/update-due/proposals")
         self.assertEqual(payload["payload"]["taskTitle"], "Call mom")
         self.assertEqual(payload["payload"]["dueTime"], "10:00")
+
+    async def test_task_proposals_use_request_scope(self) -> None:
+        from kaos_brain.governor_tools import GovernorToolClient, GovernorToolConfig
+
+        class FakeClient(GovernorToolClient):
+            def __init__(self, config: GovernorToolConfig) -> None:
+                super().__init__(config)
+                self.calls = []
+
+            async def _post(self, path: str, payload: dict[str, str]):
+                self.calls.append((path, payload))
+                return {"ok": True}
+
+        client = FakeClient(
+            GovernorToolConfig(
+                base_url="http://127.0.0.1:8098",
+                api_token="token",
+                profile="main",
+                timeout_seconds=1,
+                supplies_collection_id="supplies:abc",
+            )
+        )
+        await client.propose_task_create(
+            TaskCreateRequest("Soap", "2026-08-17", profile="supplies"),
+            actor_id=994,
+            idempotency_key="discord:1",
+        )
+        await client.propose_task_action(
+            TaskActionRequest("Soap", "reopen", profile="supplies"),
+            actor_id=994,
+            idempotency_key="discord:2",
+        )
+        self.assertEqual(client.calls[0][1]["profile"], "supplies")
+        self.assertEqual(client.calls[0][1]["collectionId"], "supplies:abc")
+        self.assertEqual(client.calls[1][1]["profile"], "supplies")
+        self.assertEqual(client.calls[1][1]["collectionId"], "supplies:abc")
 
 
 if __name__ == "__main__":

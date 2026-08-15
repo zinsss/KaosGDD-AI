@@ -77,6 +77,7 @@ class Settings:
     governor_tools_base_url: str
     governor_tools_api_token: str
     governor_tools_profile: str
+    governor_tools_supplies_collection_id: str
     governor_tools_timeout_seconds: int
     memos_public_url: str
     log_level: str
@@ -120,6 +121,7 @@ class Settings:
             governor_tools_base_url=governor_tools_base_url,
             governor_tools_api_token=governor_tools_api_token,
             governor_tools_profile=source.get("KAOSBRAIN_GOVERNOR_TOOLS_PROFILE", "main").strip() or "main",
+            governor_tools_supplies_collection_id=source.get("KAOSBRAIN_SUPPLIES_COLLECTION_ID", "").strip(),
             governor_tools_timeout_seconds=_positive_int(
                 source.get("KAOSBRAIN_GOVERNOR_TOOLS_TIMEOUT_SECONDS", "10"),
                 "KAOSBRAIN_GOVERNOR_TOOLS_TIMEOUT_SECONDS",

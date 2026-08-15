@@ -20,6 +20,7 @@ class GovernorToolConfig:
     api_token: str
     profile: str
     timeout_seconds: int
+    supplies_collection_id: str = ""
 
 
 class GovernorToolClient:
@@ -28,11 +29,11 @@ class GovernorToolClient:
 
     async def fetch(self, request: ToolRequest) -> dict[str, Any]:
         if request.kind is ToolKind.TODAY:
-            return await self._get("/tools/today", {"profile": self.config.profile})
+            return await self._get("/tools/today", {"profile": self._profile(request.profile)})
         if request.kind is ToolKind.ACTIVE_TASKS:
-            return await self._get("/tools/tasks/active", {"profile": self.config.profile})
+            return await self._get("/tools/tasks/active", self._task_params(request.profile, request.collection_id))
         if request.kind is ToolKind.COMPLETED_TASKS:
-            params = {"profile": self.config.profile, "limit": "25"}
+            params = {**self._task_params(request.profile, request.collection_id), "limit": "25"}
             if request.query:
                 params["query"] = request.query
             if request.start:
@@ -107,7 +108,8 @@ class GovernorToolClient:
             {
                 "actorId": str(actor_id),
                 "idempotencyKey": idempotency_key,
-                "profile": self.config.profile,
+                "profile": self._profile(request.profile),
+                **self._collection_payload(request.profile, request.collection_id),
                 "taskTitle": request.task_title,
                 "dueDate": request.due_date,
                 "dueTime": request.due_time,
@@ -126,7 +128,8 @@ class GovernorToolClient:
             {
                 "actorId": str(actor_id),
                 "idempotencyKey": idempotency_key,
-                "profile": self.config.profile,
+                "profile": self._profile(request.profile),
+                **self._collection_payload(request.profile, request.collection_id),
                 "title": request.title,
                 "dueDate": request.due_date,
                 "dueTime": request.due_time,
@@ -145,7 +148,8 @@ class GovernorToolClient:
             {
                 "actorId": str(actor_id),
                 "idempotencyKey": idempotency_key,
-                "profile": self.config.profile,
+                "profile": self._profile(request.profile),
+                **self._collection_payload(request.profile, request.collection_id),
                 "taskTitle": request.task_title,
                 "action": request.action,
             },
@@ -260,6 +264,26 @@ class GovernorToolClient:
             f"/tools/confirmations/{confirmation_id}/approve",
             {"actorId": str(actor_id)},
         )
+
+    def _profile(self, profile: str) -> str:
+        return profile or self.config.profile
+
+    def _collection_id(self, profile: str, collection_id: str) -> str:
+        if collection_id:
+            return collection_id
+        if self._profile(profile) == "supplies":
+            return self.config.supplies_collection_id
+        return ""
+
+    def _collection_payload(self, profile: str, collection_id: str) -> dict[str, str]:
+        normalized = self._collection_id(profile, collection_id)
+        return {"collectionId": normalized} if normalized else {}
+
+    def _task_params(self, profile: str, collection_id: str) -> dict[str, str]:
+        params = {"profile": self._profile(profile)}
+        if resolved_collection_id := self._collection_id(profile, collection_id):
+            params["collectionId"] = resolved_collection_id
+        return params
 
     async def _get(self, path: str, params: dict[str, str]) -> dict[str, Any]:
         import aiohttp

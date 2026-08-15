@@ -70,12 +70,14 @@ class SettingsTests(unittest.TestCase):
                 "KAOSBRAIN_GOVERNOR_TOOLS_ENABLED": "true",
                 "KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL": "http://100.64.0.1:8098",
                 "KAOSBRAIN_GOVERNOR_TOOLS_PROFILE": "family",
+                "KAOSBRAIN_SUPPLIES_COLLECTION_ID": "supplies:abc",
                 "GOVERNOR_API_TOKEN": "token",
             }
         )
         self.assertTrue(settings.governor_tools_enabled)
         self.assertEqual(settings.governor_tools_base_url, "http://100.64.0.1:8098")
         self.assertEqual(settings.governor_tools_profile, "family")
+        self.assertEqual(settings.governor_tools_supplies_collection_id, "supplies:abc")
 
     def test_memos_public_url_is_optional(self) -> None:
         settings = Settings.from_env({**BASE_ENV, "KAOSBRAIN_MEMOS_PUBLIC_URL": "https://memos.example/"})
