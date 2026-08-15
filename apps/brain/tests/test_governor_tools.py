@@ -194,6 +194,10 @@ class GovernorToolRenderingTests(unittest.TestCase):
         content = render_task_action_completed({"task": {"title": "Call school", "action": "delete"}})
         self.assertEqual(content, "할 일 삭제했어요.")
 
+    def test_render_task_reopen_completed(self) -> None:
+        content = render_task_action_completed({"task": {"title": "Call school", "action": "reopen"}})
+        self.assertEqual(content, "할 일 다시 열었어요.")
+
     def test_render_event_create_messages(self) -> None:
         proposal = render_event_create_proposal(
             {

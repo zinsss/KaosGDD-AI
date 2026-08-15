@@ -879,6 +879,51 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["task"]["action"], "delete")
         self.assertEqual(self.calendar.deleted, [("main", "TASK-1", "zin:tasks")])
 
+    async def test_task_reopen_proposal_matches_completed_tasks_only(self) -> None:
+        response = await self.client.post(
+            "/tools/tasks/action/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-reopen-1",
+                "profile": "main",
+                "taskTitle": "Done lately",
+                "action": "reopen",
+            },
+        )
+
+        self.assertEqual(response.status, 201)
+        payload = await response.json()
+        self.assertEqual(payload["task"]["title"], "Done lately")
+        self.assertEqual(payload["task"]["action"], "reopen")
+        self.assertEqual(self.calendar.updated, [])
+
+    async def test_task_reopen_approval_marks_task_needs_action(self) -> None:
+        proposal = await self.client.post(
+            "/tools/tasks/action/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-reopen-2",
+                "profile": "main",
+                "taskTitle": "Done lately",
+                "action": "reopen",
+            },
+        )
+        confirmation_id = (await proposal.json())["confirmationId"]
+
+        response = await self.client.post(
+            f"/tools/confirmations/{confirmation_id}/approve",
+            headers=self.headers(),
+            json={"actorId": "994579996960104529"},
+        )
+
+        self.assertEqual(response.status, 200)
+        payload = await response.json()
+        self.assertEqual(payload["task"]["action"], "reopen")
+        self.assertEqual(self.calendar.updated[0][1]["uid"], "TASK-4")
+        self.assertEqual(self.calendar.updated[0][1]["status"], "NEEDS-ACTION")
+
     async def test_task_action_approval_rejects_wrong_actor(self) -> None:
         proposal = await self.client.post(
             "/tools/tasks/action/proposals",

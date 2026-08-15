@@ -68,6 +68,18 @@ class TaskUpdateIntentTests(unittest.TestCase):
         self.assertEqual(request.task_title, "보험 서류")
         self.assertEqual(request.action, "delete")
 
+    def test_korean_reopen_action(self) -> None:
+        request = parse_task_action("엄마 전화 완료 취소해줘")
+        assert request is not None
+        self.assertEqual(request.task_title, "엄마 전화")
+        self.assertEqual(request.action, "reopen")
+
+    def test_korean_reopen_action_with_restore_word(self) -> None:
+        request = parse_task_action("영이 큐시미아 다시 살려줘")
+        assert request is not None
+        self.assertEqual(request.task_title, "영이 큐시미아")
+        self.assertEqual(request.action, "reopen")
+
     def test_plain_message_does_not_action(self) -> None:
         self.assertIsNone(parse_task_action("오늘 뭐 있어?"))
 

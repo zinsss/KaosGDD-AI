@@ -612,7 +612,7 @@ class BrainToolServer:
         idempotency_key = str(body.get("idempotencyKey") or "").strip()
         task_title = " ".join(str(body.get("taskTitle") or "").split())
         action = str(body.get("action") or "").strip().lower()
-        if action not in {"complete", "delete"}:
+        if action not in {"complete", "delete", "reopen"}:
             return web.json_response({"error": "task_action_invalid_action"}, status=400)
         if not actor_id or not idempotency_key or not task_title:
             return web.json_response({"error": "task_action_missing_required_field"}, status=400)
@@ -620,7 +620,7 @@ class BrainToolServer:
             tasks = await asyncio.to_thread(self._calendar_adapter.list_tasks, profile)
         except CalendarAdapterError as exc:
             return web.json_response({"error": str(exc)}, status=502)
-        matches = _match_active_tasks(tasks, task_title)
+        matches = _match_completed_tasks(tasks, task_title) if action == "reopen" else _match_active_tasks(tasks, task_title)
         if not matches:
             return web.json_response({"error": "task_not_found"}, status=404)
         if len(matches) > 1:
@@ -643,7 +643,7 @@ class BrainToolServer:
             "dueDate": str(task.get("due") or ""),
             "dueTime": str(task.get("dueTime") or ""),
             "priority": str(task.get("priority") or ""),
-            "status": "COMPLETED" if action == "complete" else str(task.get("status") or ""),
+            "status": _task_action_status(action, task),
         }
         try:
             actor = Actor("user", actor_id, "family" if profile == "family" else "personal")
@@ -1113,6 +1113,31 @@ def _match_active_tasks(tasks: list[Mapping[str, Any]], query: str) -> list[Mapp
         for item in active
         if normalized_query in _normalize_match_text(str(item.get("summary") or ""))
     ]
+
+
+def _match_completed_tasks(tasks: list[Mapping[str, Any]], query: str) -> list[Mapping[str, Any]]:
+    normalized_query = _normalize_match_text(query)
+    completed = [item for item in tasks if is_completed_task(item)]
+    exact = [
+        item
+        for item in completed
+        if _normalize_match_text(str(item.get("summary") or "")) == normalized_query
+    ]
+    if exact:
+        return exact
+    return [
+        item
+        for item in completed
+        if normalized_query in _normalize_match_text(str(item.get("summary") or ""))
+    ]
+
+
+def _task_action_status(action: str, task: Mapping[str, Any]) -> str:
+    if action == "complete":
+        return "COMPLETED"
+    if action == "reopen":
+        return "NEEDS-ACTION"
+    return str(task.get("status") or "")
 
 
 def _normalize_match_text(value: str) -> str:

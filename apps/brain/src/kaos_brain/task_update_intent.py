@@ -84,6 +84,10 @@ def parse_task_action(content: str) -> TaskActionRequest | None:
     if delete_marker is not None:
         title = _clean_action_title(text.replace(delete_marker, " ", 1))
         return TaskActionRequest(task_title=title, action="delete") if title else None
+    reopen_marker = _first_marker(text, ("완료 취소", "완료취소", "다시 살려줘", "다시 살려", "살려줘", "살려", "되돌려줘", "되돌려", "undo"))
+    if reopen_marker is not None:
+        title = _clean_action_title(text.replace(reopen_marker, " ", 1))
+        return TaskActionRequest(task_title=title, action="reopen") if title else None
     complete_marker = _first_marker(text, ("완료", "끝냈어", "끝냈다", "끝냄", "끝내줘", "끝내", "처리했어", "처리"))
     if complete_marker is not None:
         title = _clean_action_title(text.replace(complete_marker, " ", 1))
@@ -137,6 +141,8 @@ def _first_marker(text: str, markers: tuple[str, ...]) -> str | None:
 
 def _clean_action_title(value: str) -> str:
     title = value.strip(" .,")
+    for suffix in ("해줘", "해", "줘"):
+        title = title.removesuffix(suffix).strip(" .,")
     for suffix in ("task", "태스크", "할 일", "할일"):
         title = title.removesuffix(suffix).strip(" .,")
     return title

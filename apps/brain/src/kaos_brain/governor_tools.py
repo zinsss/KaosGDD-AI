@@ -346,7 +346,7 @@ def render_task_action_proposal(payload: dict[str, Any]) -> str:
         return "Task action requires confirmation."
     title = str(task.get("title") or "Untitled task")
     action = str(task.get("action") or "update")
-    label = "complete" if action == "complete" else "delete"
+    label = {"complete": "complete", "delete": "delete", "reopen": "reopen"}.get(action, "update")
     due = _due_text(str(task.get("due") or ""), str(task.get("dueTime") or ""))
     lines = ["## Confirm task action", f"- action: {label}", f"- task: {title}"]
     if due:
@@ -363,6 +363,8 @@ def render_task_action_completed(payload: dict[str, Any]) -> str:
         return "할 일 삭제했어요."
     if action == "complete":
         return "할 일 완료했어요."
+    if action == "reopen":
+        return "할 일 다시 열었어요."
     return "할 일 수정했어요."
 
 
