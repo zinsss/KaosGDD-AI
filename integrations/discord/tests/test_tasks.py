@@ -12,6 +12,7 @@ from kaos_governor_discord.access import AccessPolicy
 from kaos_governor_discord.tasks import (
     AddTaskCommand,
     DiscordTasksSurface,
+    RecentSuppliesView,
     TaskView,
     active_tasks,
     completed_tasks_for_month,
@@ -403,6 +404,10 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(adapter.created[0][1]["dueTime"], "")
             self.assertEqual(channel.sent[1]["content"], "## Paper towels")
             self.assertEqual(channel.sent[2]["content"], "## 최근 준비물\n- + Paper towels")
+            self.assertIsInstance(channel.sent[2]["view"], RecentSuppliesView)
+            select = channel.sent[2]["view"].children[0]
+            self.assertEqual(select.custom_id, "supplies:recent:add")
+            self.assertEqual([option.label for option in select.options], ["Paper towels"])
 
     async def test_supplies_recent_message_keeps_latest_25_inputs_at_bottom(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -431,7 +436,10 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             latest_content = channel.sent[-1]["content"]
             self.assertIn("## 최근 준비물", latest_content)
             self.assertIn("- + Item 05", latest_content.splitlines()[1])
-            self.assertEqual(channel.sent[-1]["view"], None)
+            self.assertIsInstance(channel.sent[-1]["view"], RecentSuppliesView)
+            select = channel.sent[-1]["view"].children[0]
+            self.assertEqual(len(select.options), 25)
+            self.assertEqual(select.options[0].label, "Item 05")
             self.assertEqual(surface.status()["recentSuppliesCount"], 25)
 
     async def test_supplies_surface_strips_due_dates_as_rule(self) -> None:

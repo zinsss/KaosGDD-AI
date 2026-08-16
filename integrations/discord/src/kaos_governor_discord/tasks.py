@@ -313,9 +313,10 @@ class DiscordTasksSurface:
         if self.state.recent_supplies_message_id:
             await self._delete_message_id(channel, self.state.recent_supplies_message_id)
             self.state.recent_supplies_message_id = 0
+        view = RecentSuppliesView(self, self.state.recent_supplies) if self.state.recent_supplies else None
         return await channel.send(
             content=render_recent_supplies_message(self.state.recent_supplies),
-            view=None,
+            view=view,
             allowed_mentions=NO_MENTIONS,
         )
 
@@ -372,6 +373,46 @@ class TaskView(discord.ui.View):
                     ephemeral=True,
                     allowed_mentions=NO_MENTIONS,
                 )
+
+        return callback
+
+
+class RecentSuppliesView(discord.ui.View):
+    def __init__(self, surface: DiscordTasksSurface, items: list[str]) -> None:
+        super().__init__(timeout=None)
+        self.surface = surface
+        self.items = items[:MAX_RECENT_SUPPLIES]
+        select = discord.ui.Select(
+            placeholder="다시 추가할 준비물 선택",
+            min_values=1,
+            max_values=1,
+            custom_id=f"{surface.button_prefix}:recent:add",
+            options=[
+                discord.SelectOption(label=_select_option_label(item), value=str(index))
+                for index, item in enumerate(self.items)
+            ],
+        )
+        select.callback = self._select_callback(select)
+        self.add_item(select)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if self.surface.policy.allows(interaction.guild_id, interaction.channel_id, interaction.user.id):
+            return True
+        if interaction.response.is_done():
+            await interaction.followup.send("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        else:
+            await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+    def _select_callback(self, select: discord.ui.Select):
+        async def callback(interaction: discord.Interaction) -> None:
+            await interaction.response.defer(ephemeral=True)
+            raw_value = select.values[0] if select.values else ""
+            try:
+                title = self.items[int(raw_value)]
+            except (IndexError, ValueError):
+                return
+            await self.surface.create_task(title)
 
         return callback
 
@@ -528,3 +569,8 @@ def _task_month_date(task: Mapping[str, Any]) -> date | None:
         except ValueError:
             continue
     return None
+
+
+def _select_option_label(value: str) -> str:
+    label = value.strip() or "Untitled"
+    return label[:100]
