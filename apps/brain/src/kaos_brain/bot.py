@@ -60,6 +60,18 @@ NO_MENTIONS = discord.AllowedMentions.none()
 KST = ZoneInfo("Asia/Seoul")
 
 
+def _tool_unavailable() -> str:
+    return "Governor 연결이 아직 없어요."
+
+
+def _tool_failed(action: str) -> str:
+    return f"{action} 실패했어요."
+
+
+def _tool_cancelled(action: str) -> str:
+    return f"{action} 취소했어요."
+
+
 class BrainBot(discord.Client):
     def __init__(self, settings: Settings, ollama: OllamaClient | None = None) -> None:
         intents = discord.Intents.none()
@@ -198,11 +210,12 @@ class BrainBot(discord.Client):
         actor_id: int,
     ) -> tuple[str, discord.ui.View | None]:
         if self.governor_tools is None:
-            return "Governor tools are not configured yet.", None
+            return _tool_unavailable(), None
         try:
             payload = await self.governor_tools.fetch(tool_request)
         except GovernorToolError as exc:
-            return f"Governor tool failed: {exc}", None
+            LOGGER.warning("Governor tool failed kind=%s: %s", tool_request.kind.value, exc)
+            return _tool_failed("조회"), None
         context = render_tool_context(tool_request, payload)
         if tool_request.kind is ToolKind.MEMO_SEARCH:
             results = search_results(payload)
@@ -240,7 +253,7 @@ class BrainBot(discord.Client):
     async def _propose_task_due_update(self, message: discord.Message, request: TaskDueUpdateRequest) -> None:
         if self.governor_tools is None:
             await message.reply(
-                "Governor tools are not configured yet.",
+                _tool_unavailable(),
                 mention_author=False,
                 allowed_mentions=NO_MENTIONS,
             )
@@ -252,8 +265,9 @@ class BrainBot(discord.Client):
                 idempotency_key=f"discord:{message.id}",
             )
         except GovernorToolError as exc:
+            LOGGER.warning("Task due edit proposal failed: %s", exc)
             await message.reply(
-                f"Task edit proposal failed: {exc}",
+                _tool_failed("할 일 수정"),
                 mention_author=False,
                 allowed_mentions=NO_MENTIONS,
             )
@@ -268,7 +282,7 @@ class BrainBot(discord.Client):
     async def _propose_task_create(self, message: discord.Message, request: TaskCreateRequest) -> None:
         if self.governor_tools is None:
             await message.reply(
-                "Governor tools are not configured yet.",
+                _tool_unavailable(),
                 mention_author=False,
                 allowed_mentions=NO_MENTIONS,
             )
@@ -280,8 +294,9 @@ class BrainBot(discord.Client):
                 idempotency_key=f"discord:{message.id}",
             )
         except GovernorToolError as exc:
+            LOGGER.warning("Task creation proposal failed: %s", exc)
             await message.reply(
-                f"Task creation proposal failed: {exc}",
+                _tool_failed("할 일 저장"),
                 mention_author=False,
                 allowed_mentions=NO_MENTIONS,
             )
@@ -296,7 +311,7 @@ class BrainBot(discord.Client):
     async def _propose_task_action(self, message: discord.Message, request: TaskActionRequest) -> None:
         if self.governor_tools is None:
             await message.reply(
-                "Governor tools are not configured yet.",
+                _tool_unavailable(),
                 mention_author=False,
                 allowed_mentions=NO_MENTIONS,
             )
@@ -308,8 +323,9 @@ class BrainBot(discord.Client):
                 idempotency_key=f"discord:{message.id}",
             )
         except GovernorToolError as exc:
+            LOGGER.warning("Task action proposal failed: %s", exc)
             await message.reply(
-                f"Task action proposal failed: {exc}",
+                _tool_failed("할 일 변경"),
                 mention_author=False,
                 allowed_mentions=NO_MENTIONS,
             )
@@ -324,7 +340,7 @@ class BrainBot(discord.Client):
     async def _propose_task_edit(self, message: discord.Message, request: TaskTextEditRequest) -> None:
         if self.governor_tools is None:
             await message.reply(
-                "Governor tools are not configured yet.",
+                _tool_unavailable(),
                 mention_author=False,
                 allowed_mentions=NO_MENTIONS,
             )
@@ -345,8 +361,9 @@ class BrainBot(discord.Client):
                 idempotency_key=f"discord:{message.id}",
             )
         except GovernorToolError as exc:
+            LOGGER.warning("Task edit proposal failed: %s", exc)
             await message.reply(
-                f"Task edit proposal failed: {exc}",
+                _tool_failed("할 일 수정"),
                 mention_author=False,
                 allowed_mentions=NO_MENTIONS,
             )
@@ -361,7 +378,7 @@ class BrainBot(discord.Client):
     async def _propose_event_create(self, message: discord.Message, request: EventCreateRequest) -> None:
         if self.governor_tools is None:
             await message.reply(
-                "Governor tools are not configured yet.",
+                _tool_unavailable(),
                 mention_author=False,
                 allowed_mentions=NO_MENTIONS,
             )
@@ -373,8 +390,9 @@ class BrainBot(discord.Client):
                 idempotency_key=f"discord:{message.id}",
             )
         except GovernorToolError as exc:
+            LOGGER.warning("Event creation proposal failed: %s", exc)
             await message.reply(
-                f"Event creation proposal failed: {exc}",
+                _tool_failed("일정 저장"),
                 mention_author=False,
                 allowed_mentions=NO_MENTIONS,
             )
@@ -389,7 +407,7 @@ class BrainBot(discord.Client):
     async def _propose_memo_create(self, message: discord.Message, request: MemoCreateRequest) -> None:
         if self.governor_tools is None:
             await message.reply(
-                "Governor tools are not configured yet.",
+                _tool_unavailable(),
                 mention_author=False,
                 allowed_mentions=NO_MENTIONS,
             )
@@ -401,8 +419,9 @@ class BrainBot(discord.Client):
                 idempotency_key=f"discord:{message.id}",
             )
         except GovernorToolError as exc:
+            LOGGER.warning("Memo creation proposal failed: %s", exc)
             await message.reply(
-                f"Memo creation proposal failed: {exc}",
+                _tool_failed("메모 저장"),
                 mention_author=False,
                 allowed_mentions=NO_MENTIONS,
             )
@@ -417,7 +436,7 @@ class BrainBot(discord.Client):
     async def _propose_memo_delete(self, message: discord.Message, request: MemoDeleteRequest) -> None:
         if self.governor_tools is None:
             await message.reply(
-                "Governor tools are not configured yet.",
+                _tool_unavailable(),
                 mention_author=False,
                 allowed_mentions=NO_MENTIONS,
             )
@@ -429,8 +448,9 @@ class BrainBot(discord.Client):
                 idempotency_key=f"discord:{message.id}",
             )
         except GovernorToolError as exc:
+            LOGGER.warning("Memo delete proposal failed: %s", exc)
             await message.reply(
-                f"Memo delete proposal failed: {exc}",
+                _tool_failed("메모 삭제"),
                 mention_author=False,
                 allowed_mentions=NO_MENTIONS,
             )
@@ -445,7 +465,7 @@ class BrainBot(discord.Client):
     async def _propose_memo_edit(self, message: discord.Message, request: MemoEditRequest) -> None:
         if self.governor_tools is None:
             await message.reply(
-                "Governor tools are not configured yet.",
+                _tool_unavailable(),
                 mention_author=False,
                 allowed_mentions=NO_MENTIONS,
             )
@@ -457,8 +477,9 @@ class BrainBot(discord.Client):
                 idempotency_key=f"discord:{message.id}",
             )
         except GovernorToolError as exc:
+            LOGGER.warning("Memo edit proposal failed: %s", exc)
             await message.reply(
-                f"Memo edit proposal failed: {exc}",
+                _tool_failed("메모 수정"),
                 mention_author=False,
                 allowed_mentions=NO_MENTIONS,
             )
@@ -518,7 +539,8 @@ class BrainMemoSearchSelect(discord.ui.Select):
                 item = {**item, **memo, "full": True}
             content = render_memo_opened(self.parent_view.query, item)
         except (GovernorToolError, IndexError, TypeError, ValueError) as exc:
-            content = f"Memo open failed: {exc}"
+            LOGGER.warning("Memo open failed: %s", exc)
+            content = _tool_failed("메모 열기")
             await interaction.response.send_message(content, ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         view = BrainOpenedMemoView(self.parent_view.governor_tools, self.parent_view.actor_id, str(item.get("name") or ""), content)
@@ -655,7 +677,8 @@ class BrainMemoEditModal(discord.ui.Modal, title="Edit memo"):
             if isinstance(memo, dict):
                 content = str(memo.get("content") or content)
         except GovernorToolError as exc:
-            await interaction.response.send_message(f"Memo edit failed: {exc}", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            LOGGER.warning("Memo edit failed: %s", exc)
+            await interaction.response.send_message(_tool_failed("메모 수정"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         if self.source_message is not None:
             view = BrainOpenedMemoView(self.governor_tools, self.actor_id, self.name, content)
@@ -689,7 +712,8 @@ class BrainMemoDeleteConfirmView(discord.ui.View):
             )
             await self.governor_tools.approve_confirmation(str(proposal.get("confirmationId") or ""), actor_id=self.actor_id)
         except GovernorToolError as exc:
-            await interaction.response.send_message(f"Memo delete failed: {exc}", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            LOGGER.warning("Memo delete failed: %s", exc)
+            await interaction.response.send_message(_tool_failed("메모 삭제"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         deleted_at = datetime.now(KST).strftime("%Y-%m-%d %H:%M")
         view = BrainDeletedMemoView(self.governor_tools, self.actor_id, self.content)
@@ -732,7 +756,8 @@ class BrainDeletedMemoView(discord.ui.View):
             name = str(memo.get("name") or "") if isinstance(memo, dict) else ""
             content = str(memo.get("content") or self.content) if isinstance(memo, dict) else self.content
         except GovernorToolError as exc:
-            await interaction.response.send_message(f"Memo restore failed: {exc}", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            LOGGER.warning("Memo restore failed: %s", exc)
+            await interaction.response.send_message(_tool_failed("메모 복구"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         view = BrainOpenedMemoView(self.governor_tools, self.actor_id, name, content)
         await interaction.response.edit_message(content=content[:1900], view=view, allowed_mentions=NO_MENTIONS)
@@ -741,7 +766,7 @@ class BrainDeletedMemoView(discord.ui.View):
     @discord.ui.button(label="Delete this Message", style=discord.ButtonStyle.danger)
     async def delete_message(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if interaction.message is None:
-            await interaction.response.send_message("Message delete failed.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            await interaction.response.send_message(_tool_failed("메시지 삭제"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         await interaction.message.delete()
 
@@ -784,7 +809,8 @@ class BrainDocumentSearchSelect(discord.ui.Select):
                 item = {**item, **document, "full": True}
             content = render_document_opened(self.parent_view.query, item)
         except (GovernorToolError, IndexError, TypeError, ValueError) as exc:
-            content = f"Document open failed: {exc}"
+            LOGGER.warning("Document open failed: %s", exc)
+            content = _tool_failed("문서 열기")
         await interaction.response.defer()
         await interaction.followup.send(content, allowed_mentions=NO_MENTIONS)
         self.parent_view.stop()
@@ -836,7 +862,8 @@ class BrainCompletedTasksSelect(discord.ui.Select):
                 idempotency_key=f"brain-task-reopen-{interaction.id}",
             )
         except (GovernorToolError, IndexError, TypeError, ValueError) as exc:
-            await interaction.response.send_message(f"Task reopen failed: {exc}", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            LOGGER.warning("Task reopen failed: %s", exc)
+            await interaction.response.send_message(_tool_failed("할 일 다시 열기"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         await interaction.response.defer()
         await interaction.followup.send(
@@ -886,7 +913,8 @@ class BrainActiveTasksSelect(discord.ui.Select):
             if not title:
                 raise ValueError("missing task title")
         except (IndexError, TypeError, ValueError) as exc:
-            await interaction.response.send_message(f"Task selection failed: {exc}", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            LOGGER.warning("Task selection failed: %s", exc)
+            await interaction.response.send_message(_tool_failed("할 일 선택"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         await interaction.response.defer()
         await interaction.followup.send(
@@ -948,7 +976,8 @@ class BrainActiveTaskActionsView(discord.ui.View):
                 idempotency_key=f"brain-task-{action}-{interaction.id}",
             )
         except GovernorToolError as exc:
-            await interaction.response.send_message(f"Task {action} failed: {exc}", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            LOGGER.warning("Task action failed action=%s: %s", action, exc)
+            await interaction.response.send_message(_tool_failed("할 일 변경"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         await interaction.response.edit_message(
             content=render_task_action_proposal(payload),
@@ -1032,7 +1061,8 @@ class BrainTaskEditModal(discord.ui.Modal):
                 idempotency_key=f"brain-task-edit-{interaction.id}",
             )
         except GovernorToolError as exc:
-            await interaction.response.send_message(f"Task edit failed: {exc}", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            LOGGER.warning("Task edit proposal failed: %s", exc)
+            await interaction.response.send_message(_tool_failed("할 일 수정"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         await interaction.response.send_message(
             render_task_edit_proposal(payload),
@@ -1064,7 +1094,8 @@ class TaskEditConfirmationView(discord.ui.View):
             payload = await self.governor_tools.approve_confirmation(self.confirmation_id, actor_id=self.actor_id)
             content = render_task_edit_completed(payload)
         except GovernorToolError as exc:
-            content = f"Task edit failed: {exc}"
+            LOGGER.warning("Task edit approval failed: %s", exc)
+            content = _tool_failed("할 일 수정")
         for item in self.children:
             item.disabled = True
         await interaction.response.edit_message(content=content, view=self, allowed_mentions=NO_MENTIONS)
@@ -1074,7 +1105,7 @@ class TaskEditConfirmationView(discord.ui.View):
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         for item in self.children:
             item.disabled = True
-        await interaction.response.edit_message(content="Task edit cancelled.", view=self, allowed_mentions=NO_MENTIONS)
+        await interaction.response.edit_message(content=_tool_cancelled("할 일 수정"), view=self, allowed_mentions=NO_MENTIONS)
         self.stop()
 
 
@@ -1097,7 +1128,8 @@ class TaskUpdateConfirmationView(discord.ui.View):
             payload = await self.governor_tools.approve_confirmation(self.confirmation_id, actor_id=self.actor_id)
             content = render_task_due_update_completed(payload)
         except GovernorToolError as exc:
-            content = f"Task edit failed: {exc}"
+            LOGGER.warning("Task due edit approval failed: %s", exc)
+            content = _tool_failed("할 일 수정")
         for item in self.children:
             item.disabled = True
         await interaction.response.edit_message(content=content, view=self, allowed_mentions=NO_MENTIONS)
@@ -1107,7 +1139,7 @@ class TaskUpdateConfirmationView(discord.ui.View):
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         for item in self.children:
             item.disabled = True
-        await interaction.response.edit_message(content="Task edit cancelled.", view=self, allowed_mentions=NO_MENTIONS)
+        await interaction.response.edit_message(content=_tool_cancelled("할 일 수정"), view=self, allowed_mentions=NO_MENTIONS)
         self.stop()
 
 
@@ -1130,7 +1162,8 @@ class TaskCreateConfirmationView(discord.ui.View):
             payload = await self.governor_tools.approve_confirmation(self.confirmation_id, actor_id=self.actor_id)
             content = render_task_create_completed(payload)
         except GovernorToolError as exc:
-            content = f"Task creation failed: {exc}"
+            LOGGER.warning("Task creation approval failed: %s", exc)
+            content = _tool_failed("할 일 저장")
         for item in self.children:
             item.disabled = True
         await interaction.response.edit_message(content=content, view=self, allowed_mentions=NO_MENTIONS)
@@ -1140,7 +1173,7 @@ class TaskCreateConfirmationView(discord.ui.View):
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         for item in self.children:
             item.disabled = True
-        await interaction.response.edit_message(content="Task creation cancelled.", view=self, allowed_mentions=NO_MENTIONS)
+        await interaction.response.edit_message(content=_tool_cancelled("할 일 저장"), view=self, allowed_mentions=NO_MENTIONS)
         self.stop()
 
 
@@ -1163,7 +1196,8 @@ class EventCreateConfirmationView(discord.ui.View):
             payload = await self.governor_tools.approve_confirmation(self.confirmation_id, actor_id=self.actor_id)
             content = render_event_create_completed(payload)
         except GovernorToolError as exc:
-            content = f"Event creation failed: {exc}"
+            LOGGER.warning("Event creation approval failed: %s", exc)
+            content = _tool_failed("일정 저장")
         for item in self.children:
             item.disabled = True
         await interaction.response.edit_message(content=content, view=self, allowed_mentions=NO_MENTIONS)
@@ -1173,7 +1207,7 @@ class EventCreateConfirmationView(discord.ui.View):
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         for item in self.children:
             item.disabled = True
-        await interaction.response.edit_message(content="Event creation cancelled.", view=self, allowed_mentions=NO_MENTIONS)
+        await interaction.response.edit_message(content=_tool_cancelled("일정 저장"), view=self, allowed_mentions=NO_MENTIONS)
         self.stop()
 
 
@@ -1196,7 +1230,8 @@ class TaskActionConfirmationView(discord.ui.View):
             payload = await self.governor_tools.approve_confirmation(self.confirmation_id, actor_id=self.actor_id)
             content = render_task_action_completed(payload)
         except GovernorToolError as exc:
-            content = f"Task action failed: {exc}"
+            LOGGER.warning("Task action approval failed: %s", exc)
+            content = _tool_failed("할 일 변경")
         for item in self.children:
             item.disabled = True
         await interaction.response.edit_message(content=content, view=self, allowed_mentions=NO_MENTIONS)
@@ -1206,7 +1241,7 @@ class TaskActionConfirmationView(discord.ui.View):
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         for item in self.children:
             item.disabled = True
-        await interaction.response.edit_message(content="Task action cancelled.", view=self, allowed_mentions=NO_MENTIONS)
+        await interaction.response.edit_message(content=_tool_cancelled("할 일 변경"), view=self, allowed_mentions=NO_MENTIONS)
         self.stop()
 
 
@@ -1229,7 +1264,8 @@ class MemoCreateConfirmationView(discord.ui.View):
             payload = await self.governor_tools.approve_confirmation(self.confirmation_id, actor_id=self.actor_id)
             content = render_memo_create_completed(payload)
         except GovernorToolError as exc:
-            content = f"Memo creation failed: {exc}"
+            LOGGER.warning("Memo creation approval failed: %s", exc)
+            content = _tool_failed("메모 저장")
         for item in self.children:
             item.disabled = True
         await interaction.response.edit_message(content=content, view=self, allowed_mentions=NO_MENTIONS)
@@ -1239,7 +1275,7 @@ class MemoCreateConfirmationView(discord.ui.View):
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         for item in self.children:
             item.disabled = True
-        await interaction.response.edit_message(content="Memo creation cancelled.", view=self, allowed_mentions=NO_MENTIONS)
+        await interaction.response.edit_message(content=_tool_cancelled("메모 저장"), view=self, allowed_mentions=NO_MENTIONS)
         self.stop()
 
 
@@ -1262,7 +1298,8 @@ class MemoDeleteConfirmationView(discord.ui.View):
             payload = await self.governor_tools.approve_confirmation(self.confirmation_id, actor_id=self.actor_id)
             content = render_memo_delete_completed(payload)
         except GovernorToolError as exc:
-            content = f"Memo delete failed: {exc}"
+            LOGGER.warning("Memo delete approval failed: %s", exc)
+            content = _tool_failed("메모 삭제")
         for item in self.children:
             item.disabled = True
         await interaction.response.edit_message(content=content, view=self, allowed_mentions=NO_MENTIONS)
@@ -1272,7 +1309,7 @@ class MemoDeleteConfirmationView(discord.ui.View):
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         for item in self.children:
             item.disabled = True
-        await interaction.response.edit_message(content="Memo delete cancelled.", view=self, allowed_mentions=NO_MENTIONS)
+        await interaction.response.edit_message(content=_tool_cancelled("메모 삭제"), view=self, allowed_mentions=NO_MENTIONS)
         self.stop()
 
 
@@ -1295,7 +1332,8 @@ class MemoEditConfirmationView(discord.ui.View):
             payload = await self.governor_tools.approve_confirmation(self.confirmation_id, actor_id=self.actor_id)
             content = render_memo_edit_completed(payload)
         except GovernorToolError as exc:
-            content = f"Memo edit failed: {exc}"
+            LOGGER.warning("Memo edit approval failed: %s", exc)
+            content = _tool_failed("메모 수정")
         for item in self.children:
             item.disabled = True
         await interaction.response.edit_message(content=content, view=self, allowed_mentions=NO_MENTIONS)
@@ -1305,7 +1343,7 @@ class MemoEditConfirmationView(discord.ui.View):
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         for item in self.children:
             item.disabled = True
-        await interaction.response.edit_message(content="Memo edit cancelled.", view=self, allowed_mentions=NO_MENTIONS)
+        await interaction.response.edit_message(content=_tool_cancelled("메모 수정"), view=self, allowed_mentions=NO_MENTIONS)
         self.stop()
 
 
