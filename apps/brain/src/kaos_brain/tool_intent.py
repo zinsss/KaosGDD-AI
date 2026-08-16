@@ -31,6 +31,9 @@ def parse_tool_request(content: str, *, today: date | None = None) -> ToolReques
         return None
     current = today or date.today()
     profile, collection_id = _scope(text, lowered)
+    dotdot = _dotdot_request(text)
+    if dotdot is not None:
+        return dotdot
     if _asks_today(lowered):
         return ToolRequest(ToolKind.TODAY, profile=profile)
     completed = _completed_task_request(text, lowered, current, profile=profile, collection_id=collection_id)
@@ -45,6 +48,22 @@ def parse_tool_request(content: str, *, today: date | None = None) -> ToolReques
     if document_query:
         return ToolRequest(ToolKind.DOCUMENT_SEARCH, document_query)
     return None
+
+
+def _dotdot_request(text: str) -> ToolRequest | None:
+    if not text.startswith(".."):
+        return None
+    query = " ".join(text[2:].strip().split())
+    if not query:
+        return None
+    lowered = query.lower()
+    document_nouns = ("document", "documents", "paperless", "문서", "서류")
+    memo_nouns = ("memo", "memos", "메모")
+    if any(marker in lowered for marker in document_nouns):
+        return ToolRequest(ToolKind.DOCUMENT_SEARCH, _strip_search_nouns(query, document_nouns) or query)
+    if any(marker in lowered for marker in memo_nouns):
+        return ToolRequest(ToolKind.MEMO_SEARCH, _strip_search_nouns(query, memo_nouns) or query)
+    return ToolRequest(ToolKind.MEMO_SEARCH, query)
 
 
 def _asks_today(lowered: str) -> bool:
@@ -150,4 +169,14 @@ def _search_query(text: str, nouns: tuple[str, ...]) -> str:
     query = re.sub(r"\b(search|find|show)\b", " ", query, flags=re.IGNORECASE)
     for marker in ("찾아줘", "찾아", "찾", "검색해줘", "검색해", "검색", "보여줘", "보여", "관련"):
         query = query.replace(marker, " ")
+    return " ".join(query.split())
+
+
+def _strip_search_nouns(text: str, nouns: tuple[str, ...]) -> str:
+    query = text
+    for noun in sorted(nouns, key=len, reverse=True):
+        query = re.sub(rf"\b{re.escape(noun)}\b", " ", query, flags=re.IGNORECASE)
+        query = query.replace(f"{noun}에서", " ")
+        query = query.replace(f"{noun}을", " ")
+        query = query.replace(f"{noun}를", " ")
     return " ".join(query.split())

@@ -108,7 +108,8 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
 
         interaction.response.defer.assert_awaited_once()
         content = interaction.followup.send.await_args.args[0]
-        self.assertIn("## Documents search · 보험", content)
+        self.assertIn("## Insurance receipt", content)
+        self.assertNotIn("Documents search", content)
         self.assertIn("Insurance receipt", content)
 
     def test_memo_confirm_buttons_match_governor_labels(self) -> None:

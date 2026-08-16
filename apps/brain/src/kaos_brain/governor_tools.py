@@ -568,7 +568,21 @@ def render_memo_deleted(content: str, deleted_at: str) -> str:
 
 
 def render_document_opened(query: str, item: dict[str, Any]) -> str:
-    return f"## Documents search · {query or '..'}\n{_document_line(item)}"[:1900]
+    title = _truncate(
+        str(item.get("title") or item.get("originalFileName") or item.get("filename") or "Untitled document").strip(),
+        80,
+    )
+    created = str(item.get("created") or item.get("createdDate") or "").strip()
+    filename = str(item.get("filename") or item.get("originalFileName") or "").strip()
+    correspondent = str(item.get("correspondent") or "").strip()
+    details = [value for value in (created[:10], correspondent, filename) if value]
+    lines = [f"## {title}"]
+    if details:
+        lines.append(f"- {_truncate(' · '.join(details), 180)}")
+    url = str(item.get("url") or item.get("publicUrl") or "").strip()
+    if url:
+        lines.append(url)
+    return "\n".join(lines)[:1900]
 
 
 def search_results(payload: dict[str, Any]) -> list[dict[str, Any]]:

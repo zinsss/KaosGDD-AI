@@ -106,6 +106,24 @@ class ToolIntentTests(unittest.TestCase):
         self.assertEqual(request.kind, ToolKind.DOCUMENT_SEARCH)
         self.assertEqual(request.query, "rust desk setup")
 
+    def test_dotdot_defaults_to_memo_search(self) -> None:
+        request = parse_tool_request("..rust   desk setup")
+        assert request is not None
+        self.assertEqual(request.kind, ToolKind.MEMO_SEARCH)
+        self.assertEqual(request.query, "rust desk setup")
+
+    def test_dotdot_can_target_document_search(self) -> None:
+        request = parse_tool_request("..paperless rust   desk setup")
+        assert request is not None
+        self.assertEqual(request.kind, ToolKind.DOCUMENT_SEARCH)
+        self.assertEqual(request.query, "rust desk setup")
+
+    def test_dotdot_can_target_korean_document_search(self) -> None:
+        request = parse_tool_request("..문서 보험")
+        assert request is not None
+        self.assertEqual(request.kind, ToolKind.DOCUMENT_SEARCH)
+        self.assertEqual(request.query, "보험")
+
     def test_plain_chat_does_not_trigger_tool(self) -> None:
         self.assertIsNone(parse_tool_request("안녕"))
 

@@ -11,6 +11,7 @@ from kaos_brain.governor_tools import (
     memo_option_description,
     memo_public_url,
     render_memo_opened,
+    render_document_opened,
     render_task_action_completed,
     render_task_create_completed,
     render_task_edit_completed,
@@ -156,6 +157,24 @@ class GovernorToolRenderingTests(unittest.TestCase):
         )
         self.assertIn("Searched..\n## rustdesk\n1 results in 12 documents", context)
         self.assertIn("### Rustdesk setup\n- 2026-08-14 · Clinic · rustdesk.pdf", context)
+
+    def test_render_opened_document_uses_title_as_header(self) -> None:
+        content = render_document_opened(
+            "insurance",
+            {
+                "id": 42,
+                "title": "Insurance receipt",
+                "created": "2026-08-14T12:00:00Z",
+                "filename": "receipt.pdf",
+                "correspondent": "Clinic",
+                "url": "https://paperless.example/documents/42/details",
+            },
+        )
+
+        self.assertEqual(
+            content,
+            "## Insurance receipt\n- 2026-08-14 · Clinic · receipt.pdf\nhttps://paperless.example/documents/42/details",
+        )
 
     def test_render_multiple_documents_context_uses_compact_summary(self) -> None:
         context = render_tool_context(
