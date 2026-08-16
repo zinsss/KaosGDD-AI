@@ -10,8 +10,18 @@ class ToolIntentTests(unittest.TestCase):
         assert request is not None
         self.assertEqual(request.kind, ToolKind.TODAY)
 
+    def test_today_task_request_uses_today_context(self) -> None:
+        request = parse_tool_request("오늘 할 일 알려줘")
+        assert request is not None
+        self.assertEqual(request.kind, ToolKind.TODAY)
+
     def test_active_task_korean_request(self) -> None:
         request = parse_tool_request("뭐 해야 돼?")
+        assert request is not None
+        self.assertEqual(request.kind, ToolKind.ACTIVE_TASKS)
+
+    def test_active_task_compact_korean_request(self) -> None:
+        request = parse_tool_request("내가 뭐 해야하지")
         assert request is not None
         self.assertEqual(request.kind, ToolKind.ACTIVE_TASKS)
 
@@ -23,6 +33,12 @@ class ToolIntentTests(unittest.TestCase):
 
     def test_supplies_active_request_sets_profile(self) -> None:
         request = parse_tool_request("준비물 보여줘")
+        assert request is not None
+        self.assertEqual(request.kind, ToolKind.ACTIVE_TASKS)
+        self.assertEqual(request.profile, "supplies")
+
+    def test_remaining_supplies_request_sets_profile(self) -> None:
+        request = parse_tool_request("남은 준비물 뭐야")
         assert request is not None
         self.assertEqual(request.kind, ToolKind.ACTIVE_TASKS)
         self.assertEqual(request.profile, "supplies")
@@ -61,6 +77,12 @@ class ToolIntentTests(unittest.TestCase):
         self.assertEqual(request.kind, ToolKind.MEMO_SEARCH)
         self.assertEqual(request.query, "rust desk")
 
+    def test_korean_memo_search_extracts_query(self) -> None:
+        request = parse_tool_request("의무교육 메모 찾아줘")
+        assert request is not None
+        self.assertEqual(request.kind, ToolKind.MEMO_SEARCH)
+        self.assertEqual(request.query, "의무교육")
+
     def test_memo_show_extracts_query(self) -> None:
         request = parse_tool_request("rustdesk관련 메모 보여줘")
         assert request is not None
@@ -72,6 +94,12 @@ class ToolIntentTests(unittest.TestCase):
         assert request is not None
         self.assertEqual(request.kind, ToolKind.DOCUMENT_SEARCH)
         self.assertEqual(request.query, "보험")
+
+    def test_document_search_keeps_multi_word_query(self) -> None:
+        request = parse_tool_request("rust desk setup 문서 찾아줘")
+        assert request is not None
+        self.assertEqual(request.kind, ToolKind.DOCUMENT_SEARCH)
+        self.assertEqual(request.query, "rust desk setup")
 
     def test_plain_chat_does_not_trigger_tool(self) -> None:
         self.assertIsNone(parse_tool_request("안녕"))

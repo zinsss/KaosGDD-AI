@@ -50,6 +50,7 @@ def parse_tool_request(content: str, *, today: date | None = None) -> ToolReques
 def _asks_today(lowered: str) -> bool:
     return (
         ("오늘" in lowered and any(word in lowered for word in ("뭐", "일정", "있", "agenda")))
+        or ("오늘" in lowered and any(word in lowered for word in ("할 일", "할일", "해야", "todo", "task")))
         or lowered in {"today", "today?", "agenda", "agenda?"}
         or lowered.startswith("what's on today")
         or lowered.startswith("whats on today")
