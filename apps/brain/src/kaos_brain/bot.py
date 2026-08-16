@@ -238,6 +238,11 @@ class BrainBot(discord.Client):
             return context, view
         if tool_request.kind is ToolKind.DOCUMENT_SEARCH:
             results = search_results(payload)
+            if len(results) == 1:
+                item = results[0]
+                content = render_document_opened(tool_request.query, item)
+                view = BrainOpenedDocumentView(actor_id)
+                return content, view
             view = BrainDocumentSearchView(self.governor_tools, actor_id, tool_request.query, results) if len(results) > 1 else None
             return context, view
         if tool_request.kind is ToolKind.COMPLETED_TASKS:
@@ -817,8 +822,27 @@ class BrainDocumentSearchSelect(discord.ui.Select):
             LOGGER.warning("Document open failed: %s", exc)
             content = _tool_failed("문서 열기")
         await interaction.response.defer()
-        await interaction.followup.send(content, allowed_mentions=NO_MENTIONS)
+        await interaction.followup.send(content, view=BrainOpenedDocumentView(self.parent_view.actor_id), allowed_mentions=NO_MENTIONS)
         self.parent_view.stop()
+
+
+class BrainOpenedDocumentView(discord.ui.View):
+    def __init__(self, actor_id: int) -> None:
+        super().__init__(timeout=600)
+        self.actor_id = actor_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if int(interaction.user.id) == self.actor_id:
+            return True
+        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+    @discord.ui.button(label="Close", style=discord.ButtonStyle.secondary)
+    async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if interaction.message is None:
+            await interaction.response.send_message("Closed.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.message.delete()
 
 
 class BrainCompletedTasksView(discord.ui.View):

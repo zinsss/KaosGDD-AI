@@ -21,6 +21,26 @@ class MemoGovernorTools:
         }
 
 
+class DocumentGovernorTools:
+    async def fetch(self, request: ToolRequest):
+        return {
+            "query": request.query,
+            "resultCount": 1,
+            "totalCount": 1,
+            "results": [
+                {
+                    "id": 42,
+                    "title": "Insurance receipt",
+                    "created": "2026-08-14T12:00:00Z",
+                    "filename": "receipt.pdf",
+                    "correspondent": "Clinic",
+                    "url": "https://paperless.example/documents/42/details",
+                    "full": True,
+                }
+            ],
+        }
+
+
 class BrainToolResponseTests(unittest.IsolatedAsyncioTestCase):
     async def test_missing_governor_tools_uses_short_korean_message(self) -> None:
         brain = SimpleNamespace(governor_tools=None)
@@ -64,6 +84,24 @@ class BrainToolResponseTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(view)
         assert view is not None
         self.assertEqual([item.label for item in view.children], ["Close", "More..."])
+
+    async def test_single_document_search_opens_document_with_close(self) -> None:
+        brain = SimpleNamespace(governor_tools=DocumentGovernorTools())
+
+        reply, view = await BrainBot._answer_with_governor_tool(  # type: ignore[arg-type]
+            brain,
+            "보험 문서 찾아줘",
+            ToolRequest(ToolKind.DOCUMENT_SEARCH, "보험"),
+            actor_id=200,
+        )
+
+        self.assertEqual(
+            reply,
+            "## Insurance receipt\n- 2026-08-14 · Clinic · receipt.pdf\nhttps://paperless.example/documents/42/details",
+        )
+        self.assertIsNotNone(view)
+        assert view is not None
+        self.assertEqual([item.label for item in view.children], ["Close"])
 
 
 if __name__ == "__main__":

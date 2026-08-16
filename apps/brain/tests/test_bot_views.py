@@ -15,6 +15,7 @@ from kaos_brain.bot import (
     BrainDocumentSearchView,
     BrainMemoDeleteConfirmView,
     BrainMemoEditConfirmView,
+    BrainOpenedDocumentView,
     BrainMemoSearchSelect,
     BrainMemoSearchView,
 )
@@ -111,6 +112,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("## Insurance receipt", content)
         self.assertNotIn("Documents search", content)
         self.assertIn("Insurance receipt", content)
+        self.assertIsInstance(interaction.followup.send.await_args.kwargs["view"], BrainOpenedDocumentView)
 
     def test_memo_confirm_buttons_match_governor_labels(self) -> None:
         edit = BrainMemoEditConfirmView(FakeGovernorTools(), 200, "memos/42", "# Memo")  # type: ignore[arg-type]
