@@ -231,10 +231,17 @@ status = payload.get("status", "unknown")
 discord_ready = payload.get("discordReady", payload.get("discord_ready", "unknown"))
 brain_tools = payload.get("brainTools", payload.get("brain_tools", {}))
 service_status = payload.get("serviceStatus", payload.get("service_status", {}))
-checks = service_status.get("checks", []) if isinstance(service_status, dict) else []
+raw_checks = service_status.get("checks", []) if isinstance(service_status, dict) else []
+if isinstance(raw_checks, dict):
+    checks = raw_checks.values()
+else:
+    checks = raw_checks
 states = {}
 for check in checks:
-    states[check.get("status", "unknown")] = states.get(check.get("status", "unknown"), 0) + 1
+    if not isinstance(check, dict):
+        continue
+    status_value = check.get("status", "unknown")
+    states[status_value] = states.get(status_value, 0) + 1
 state_text = ", ".join(f"{key}={value}" for key, value in sorted(states.items())) or "no services"
 print(f"{'Governor health':<34} {status} ({payload.get('hostname', 'unknown host')})")
 print(f"{'Governor Discord':<34} ok (ready={discord_ready})")
