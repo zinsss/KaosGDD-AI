@@ -213,7 +213,11 @@ class BrainBot(discord.Client):
             results = search_results(payload)
             view = BrainDocumentSearchView(self.governor_tools, actor_id, tool_request.query, results) if len(results) > 1 else None
             return context, view
-        if tool_request.kind in {ToolKind.TODAY, ToolKind.ACTIVE_TASKS, ToolKind.COMPLETED_TASKS}:
+        if tool_request.kind is ToolKind.COMPLETED_TASKS:
+            tasks = _task_results(payload)
+            view = BrainCompletedTasksView(self.governor_tools, actor_id, tool_request, tasks) if tasks else None
+            return context, view
+        if tool_request.kind in {ToolKind.TODAY, ToolKind.ACTIVE_TASKS}:
             return context, None
         try:
             return await self.ollama.summarize_tool_result(user_text, context), None
@@ -736,6 +740,66 @@ class BrainDocumentSearchSelect(discord.ui.Select):
         self.parent_view.stop()
 
 
+class BrainCompletedTasksView(discord.ui.View):
+    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, request: ToolRequest, tasks: list[dict[str, Any]]) -> None:
+        super().__init__(timeout=600)
+        self.governor_tools = governor_tools
+        self.actor_id = actor_id
+        self.request = request
+        self.tasks = tasks[:25]
+        self.add_item(BrainCompletedTasksSelect(self))
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if int(interaction.user.id) == self.actor_id:
+            return True
+        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+
+class BrainCompletedTasksSelect(discord.ui.Select):
+    def __init__(self, parent: BrainCompletedTasksView) -> None:
+        self.parent_view = parent
+        options = [
+            discord.SelectOption(
+                label=_task_option_label(task),
+                description=_task_option_description(task) or None,
+                value=str(index),
+            )
+            for index, task in enumerate(parent.tasks)
+        ]
+        super().__init__(placeholder="Reopen completed item", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        try:
+            task = self.parent_view.tasks[int(self.values[0])]
+            title = str(task.get("title") or task.get("summary") or "").strip()
+            if not title:
+                raise ValueError("missing task title")
+            payload = await self.parent_view.governor_tools.propose_task_action(
+                TaskActionRequest(
+                    title,
+                    "reopen",
+                    profile=self.parent_view.request.profile,
+                    collection_id=self.parent_view.request.collection_id,
+                ),
+                actor_id=self.parent_view.actor_id,
+                idempotency_key=f"brain-task-reopen-{interaction.id}",
+            )
+        except (GovernorToolError, IndexError, TypeError, ValueError) as exc:
+            await interaction.response.send_message(f"Task reopen failed: {exc}", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.response.defer()
+        await interaction.followup.send(
+            render_task_action_proposal(payload),
+            view=TaskActionConfirmationView(
+                self.parent_view.governor_tools,
+                self.parent_view.actor_id,
+                str(payload.get("confirmationId") or ""),
+            ),
+            allowed_mentions=NO_MENTIONS,
+        )
+
+
 class TaskUpdateConfirmationView(discord.ui.View):
     def __init__(self, governor_tools: GovernorToolClient, actor_id: int, confirmation_id: str) -> None:
         super().__init__(timeout=600)
@@ -965,3 +1029,26 @@ class MemoEditConfirmationView(discord.ui.View):
             item.disabled = True
         await interaction.response.edit_message(content="Memo edit cancelled.", view=self, allowed_mentions=NO_MENTIONS)
         self.stop()
+
+
+def _task_results(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    value = payload.get("tasks")
+    return [dict(item) for item in value if isinstance(item, dict)] if isinstance(value, list) else []
+
+
+def _task_option_label(task: dict[str, Any]) -> str:
+    return _compact_select_text(str(task.get("title") or task.get("summary") or "Untitled task"), 100)
+
+
+def _task_option_description(task: dict[str, Any]) -> str:
+    completed = str(task.get("completedDate") or task.get("completed") or task.get("completedAt") or "").strip()[:10]
+    due = str(task.get("due") or task.get("dueDate") or "").strip()
+    parts = [part for part in (completed, due) if part]
+    return _compact_select_text(" · ".join(parts), 100)
+
+
+def _compact_select_text(value: str, limit: int) -> str:
+    text = " ".join(value.split()).strip()
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 3)].rstrip() + "..."

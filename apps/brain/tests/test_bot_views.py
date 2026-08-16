@@ -5,6 +5,8 @@ import unittest
 from unittest.mock import AsyncMock
 
 from kaos_brain.bot import (
+    BrainCompletedTasksSelect,
+    BrainCompletedTasksView,
     BrainDocumentSearchSelect,
     BrainDocumentSearchView,
     BrainMemoDeleteConfirmView,
@@ -12,9 +14,13 @@ from kaos_brain.bot import (
     BrainMemoSearchSelect,
     BrainMemoSearchView,
 )
+from kaos_brain.tool_intent import ToolKind, ToolRequest
 
 
 class FakeGovernorTools:
+    def __init__(self) -> None:
+        self.task_action_calls = []
+
     async def get_memo(self, name: str):
         return {"memo": {"name": name, "content": "# Rustdesk\nUse Tailscale."}}
 
@@ -26,6 +32,18 @@ class FakeGovernorTools:
                 "filename": "receipt.pdf",
                 "correspondent": "Clinic",
             }
+        }
+
+    async def propose_task_action(self, request, *, actor_id: int, idempotency_key: str):
+        self.task_action_calls.append((request, actor_id, idempotency_key))
+        return {
+            "confirmationId": "confirm-1",
+            "task": {
+                "title": request.task_title,
+                "action": request.action,
+                "due": "",
+                "dueTime": "",
+            },
         }
 
 
@@ -80,6 +98,36 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual([item.label for item in edit.children], ["Edit Memo", "Cancel"])
         self.assertEqual([item.label for item in delete.children], ["Delete Memo", "Cancel"])
+
+    async def test_completed_task_select_sends_reopen_confirmation_message(self) -> None:
+        tools = FakeGovernorTools()
+        view = BrainCompletedTasksView(
+            tools,  # type: ignore[arg-type]
+            200,
+            ToolRequest(ToolKind.COMPLETED_TASKS, profile="supplies"),
+            [{"title": "Soap", "completedDate": "2026-08-15"}],
+        )
+        select = next(child for child in view.children if isinstance(child, BrainCompletedTasksSelect))
+        select._values = ["0"]
+        interaction = SimpleNamespace(
+            id=777,
+            user=SimpleNamespace(id=200),
+            response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+            followup=SimpleNamespace(send=AsyncMock()),
+        )
+
+        await select.callback(interaction)  # type: ignore[arg-type]
+
+        request, actor_id, idempotency_key = tools.task_action_calls[0]
+        self.assertEqual(request.task_title, "Soap")
+        self.assertEqual(request.action, "reopen")
+        self.assertEqual(request.profile, "supplies")
+        self.assertEqual(actor_id, 200)
+        self.assertEqual(idempotency_key, "brain-task-reopen-777")
+        interaction.response.defer.assert_awaited_once()
+        content = interaction.followup.send.await_args.args[0]
+        self.assertIn("## Confirm task action", content)
+        self.assertIn("- action: reopen", content)
 
 
 if __name__ == "__main__":
