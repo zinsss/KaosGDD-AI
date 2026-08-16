@@ -19,6 +19,7 @@ from .markdown import NO_MENTIONS, escape_text
 LOGGER = logging.getLogger(__name__)
 MAX_VISIBLE_TASKS = 25
 MAX_RECENT_SUPPLIES = 25
+TASK_PRIORITIES = {"", "1", "5", "9"}
 DUE_LINE_PATTERN = re.compile(r"^:(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}))?$")
 
 
@@ -158,6 +159,52 @@ class DiscordTasksSurface:
             await self._mark_message_completed(message_id, {**task, "status": "COMPLETED"})
         await self.ensure_message()
         return True
+
+    async def edit_task(
+        self,
+        key: str,
+        *,
+        title: str,
+        memo: str,
+        due_date: str = "",
+        due_time: str = "",
+        priority: str = "",
+    ) -> tuple[bool, str]:
+        task = self._tasks_by_key.get(key)
+        if task is None:
+            return False, f"{self.surface_name}_not_active"
+        clean_title = " ".join(title.strip().split())
+        if not clean_title:
+            return False, "title_required"
+        clean_memo = memo.strip()
+        clean_due_date = due_date.strip()
+        clean_due_time = due_time.strip()
+        clean_priority = priority.strip()
+        if self._uses_supplies_rules():
+            clean_due_date = ""
+            clean_due_time = ""
+            clean_priority = ""
+        else:
+            normalized_due = validate_edit_due(clean_due_date, clean_due_time)
+            if normalized_due is None:
+                return False, "invalid_due"
+            clean_due_date, clean_due_time = normalized_due
+            if clean_priority not in TASK_PRIORITIES:
+                return False, "invalid_priority"
+        payload = {
+            "uid": str(task.get("uid") or ""),
+            "collectionId": str(task.get("collection") or ""),
+            "title": clean_title,
+            "memo": clean_memo,
+            "dueDate": clean_due_date,
+            "dueTime": clean_due_time,
+            "priority": clean_priority,
+            "status": str(task.get("status") or "NEEDS-ACTION"),
+        }
+        payload = normalize_supplies_due(payload, collection_id=self.collection_id or str(task.get("collection") or ""))
+        await asyncio.to_thread(self.adapter.update_task, self.profile, payload)
+        await self.ensure_message()
+        return True, ""
 
     async def delete_task(self, key: str) -> bool:
         task = self._tasks_by_key.get(key)
@@ -332,7 +379,6 @@ class TaskView(discord.ui.View):
             label="Edit",
             style=discord.ButtonStyle.secondary,
             custom_id=f"{surface.button_prefix}:edit",
-            disabled=True,
         )
         delete = discord.ui.Button(
             label="Delete",
@@ -340,6 +386,7 @@ class TaskView(discord.ui.View):
             custom_id=f"{surface.button_prefix}:delete",
         )
         done.callback = self._complete_callback(key)
+        edit.callback = self._edit_callback(key)
         delete.callback = self._delete_callback(key)
         self.add_item(done)
         self.add_item(edit)
@@ -366,6 +413,20 @@ class TaskView(discord.ui.View):
 
         return callback
 
+    def _edit_callback(self, key: str):
+        async def callback(interaction: discord.Interaction) -> None:
+            task = self.surface._tasks_by_key.get(key)
+            if task is None:
+                await interaction.response.send_message(
+                    f"{self.surface.surface_name.capitalize()} is no longer active.",
+                    ephemeral=True,
+                    allowed_mentions=NO_MENTIONS,
+                )
+                return
+            await interaction.response.send_modal(TaskEditModal(self.surface, key, task))
+
+        return callback
+
     def _delete_callback(self, key: str):
         async def callback(interaction: discord.Interaction) -> None:
             await interaction.response.defer(ephemeral=True)
@@ -377,6 +438,82 @@ class TaskView(discord.ui.View):
                 )
 
         return callback
+
+
+class TaskEditModal(discord.ui.Modal):
+    def __init__(self, surface: DiscordTasksSurface, key: str, task: Mapping[str, Any]) -> None:
+        super().__init__(title="Edit Supply" if surface._uses_supplies_rules() else "Edit Task", timeout=600)
+        self.surface = surface
+        self.key = key
+        self.title_input = discord.ui.TextInput(
+            label="Title",
+            style=discord.TextStyle.short,
+            required=True,
+            default=str(task.get("summary") or "")[:100],
+            max_length=100,
+            custom_id=f"{surface.button_prefix}:edit:title",
+        )
+        self.memo_input = discord.ui.TextInput(
+            label="Memo",
+            style=discord.TextStyle.paragraph,
+            required=False,
+            default=str(task.get("description") or "")[:1000],
+            max_length=1000,
+            custom_id=f"{surface.button_prefix}:edit:memo",
+        )
+        self.add_item(self.title_input)
+        self.add_item(self.memo_input)
+        if not surface._uses_supplies_rules():
+            self.due_date_input = discord.ui.TextInput(
+                label="Due date",
+                style=discord.TextStyle.short,
+                required=False,
+                default=str(task.get("due") or "")[:10],
+                placeholder="yyyy-mm-dd",
+                max_length=10,
+                custom_id=f"{surface.button_prefix}:edit:due-date",
+            )
+            self.due_time_input = discord.ui.TextInput(
+                label="Due time",
+                style=discord.TextStyle.short,
+                required=False,
+                default=str(task.get("dueTime") or "")[:5],
+                placeholder="HH:MM",
+                max_length=5,
+                custom_id=f"{surface.button_prefix}:edit:due-time",
+            )
+            self.priority_input = discord.ui.TextInput(
+                label="Priority",
+                style=discord.TextStyle.short,
+                required=False,
+                default=str(task.get("priority") or "")[:1],
+                placeholder="blank, 1, 5, or 9",
+                max_length=1,
+                custom_id=f"{surface.button_prefix}:edit:priority",
+            )
+            self.add_item(self.due_date_input)
+            self.add_item(self.due_time_input)
+            self.add_item(self.priority_input)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
+        due_date = str(getattr(self, "due_date_input", SimpleTextInput()).value or "")
+        due_time = str(getattr(self, "due_time_input", SimpleTextInput()).value or "")
+        priority = str(getattr(self, "priority_input", SimpleTextInput()).value or "")
+        ok, error = await self.surface.edit_task(
+            self.key,
+            title=str(self.title_input.value or ""),
+            memo=str(self.memo_input.value or ""),
+            due_date=due_date,
+            due_time=due_time,
+            priority=priority,
+        )
+        if not ok:
+            await interaction.followup.send(error, ephemeral=True, allowed_mentions=NO_MENTIONS)
+
+
+class SimpleTextInput:
+    value = ""
 
 
 class RecentSuppliesView(discord.ui.View):
@@ -551,6 +688,16 @@ def parse_due_line(line: str) -> tuple[str, str] | None:
     except ValueError:
         return None
     return due_date, due_time
+
+
+def validate_edit_due(due_date: str, due_time: str) -> tuple[str, str] | None:
+    clean_due_date = due_date.strip()
+    clean_due_time = due_time.strip()
+    if not clean_due_date:
+        return None if clean_due_time else ("", "")
+    if clean_due_time:
+        return parse_due_line(f":{clean_due_date} {clean_due_time}")
+    return parse_due_line(f":{clean_due_date}")
 
 
 def render_task_message(task: Mapping[str, Any], *, show_due: bool = True, completed: bool | None = None) -> str:

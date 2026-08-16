@@ -14,6 +14,7 @@ from kaos_governor_discord.tasks import (
     CompletedTasksView,
     DiscordTasksSurface,
     RecentSuppliesView,
+    TaskEditModal,
     TaskView,
     active_tasks,
     completed_tasks_for_month,
@@ -23,6 +24,7 @@ from kaos_governor_discord.tasks import (
     render_recent_supplies_message,
     render_task_message,
     task_payload,
+    validate_edit_due,
 )
 
 
@@ -241,6 +243,13 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(parse_due_line(":2026-08-15 24:00"))
         self.assertIsNone(parse_due_line(":10:00"))
 
+    def test_validate_edit_due_accepts_blank_or_date_and_rejects_time_only(self) -> None:
+        self.assertEqual(validate_edit_due("", ""), ("", ""))
+        self.assertEqual(validate_edit_due("2026-08-15", ""), ("2026-08-15", "10:00"))
+        self.assertEqual(validate_edit_due("2026-08-15", "14:30"), ("2026-08-15", "14:30"))
+        self.assertIsNone(validate_edit_due("", "14:30"))
+        self.assertIsNone(validate_edit_due("2026-02-30", "10:00"))
+
     def test_active_tasks_can_filter_to_supplies_collection(self) -> None:
         active = active_tasks(
             [
@@ -278,7 +287,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             buttons = channel.sent[1]["view"].children
             self.assertEqual([button.label for button in buttons], ["Done", "Edit", "Delete"])
             self.assertEqual([button.custom_id for button in buttons], ["tasks:done", "tasks:edit", "tasks:delete"])
-            self.assertTrue(buttons[1].disabled)
+            self.assertFalse(buttons[1].disabled)
             self.assertEqual(len(surface.state.message_ids), 2)
 
     async def test_supplies_surface_uses_own_button_prefix_and_collection_filter(self) -> None:
@@ -543,6 +552,128 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(await surface.delete_task("zin:tasks|TASK-1"))
             self.assertEqual(adapter.deleted[0], ("main", "TASK-1", "zin:tasks"))
             self.assertEqual(surface.state.message_ids, {})
+
+    async def test_edit_button_opens_prefilled_task_modal(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            surface = self.make_surface(Path(temporary) / "tasks.json", channel)
+            await surface.ensure_message()
+            view = channel.sent[1]["view"]
+            edit = view.children[1]
+            interaction = SimpleNamespace(
+                guild_id=100,
+                channel_id=300,
+                user=SimpleNamespace(id=200),
+                response=SimpleNamespace(send_modal=AsyncMock(), is_done=lambda: False),
+                followup=SimpleNamespace(send=AsyncMock()),
+            )
+
+            await edit.callback(interaction)  # type: ignore[arg-type]
+
+            modal = interaction.response.send_modal.await_args.args[0]
+            self.assertIsInstance(modal, TaskEditModal)
+            self.assertEqual(len(modal.children), 5)
+            self.assertEqual(str(modal.title_input.default), "Buy milk")
+            self.assertEqual(str(modal.memo_input.default), "2L")
+
+    async def test_task_edit_modal_updates_title_memo_due_and_priority(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            adapter = FakeAdapter()
+            surface = self.make_surface(Path(temporary) / "tasks.json", channel, adapter)
+            await surface.ensure_message()
+            modal = TaskEditModal(surface, "zin:tasks|TASK-1", TASKS[0])
+            modal.title_input.default = "Buy oat milk"
+            modal.memo_input.default = "1L"
+            modal.due_date_input.default = "2026-08-20"
+            modal.due_time_input.default = "14:30"
+            modal.priority_input.default = "1"
+            modal.title_input._value = "Buy oat milk"
+            modal.memo_input._value = "1L"
+            modal.due_date_input._value = "2026-08-20"
+            modal.due_time_input._value = "14:30"
+            modal.priority_input._value = "1"
+            interaction = SimpleNamespace(
+                response=SimpleNamespace(defer=AsyncMock()),
+                followup=SimpleNamespace(send=AsyncMock()),
+            )
+
+            await modal.on_submit(interaction)  # type: ignore[arg-type]
+
+            self.assertEqual(adapter.updated[-1][1]["title"], "Buy oat milk")
+            self.assertEqual(adapter.updated[-1][1]["memo"], "1L")
+            self.assertEqual(adapter.updated[-1][1]["dueDate"], "2026-08-20")
+            self.assertEqual(adapter.updated[-1][1]["dueTime"], "14:30")
+            self.assertEqual(adapter.updated[-1][1]["priority"], "1")
+            interaction.followup.send.assert_not_called()
+
+    async def test_supplies_edit_modal_uses_title_and_memo_only_and_strips_due(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            adapter = FakeAdapter(
+                tasks=[
+                    {
+                        **TASKS[0],
+                        "uid": "SUPPLY-1",
+                        "collection": "zin:supplies",
+                        "summary": "Paper towels",
+                        "description": "kitchen",
+                        "due": "2026-08-20",
+                        "dueTime": "14:30",
+                    }
+                ]
+            )
+            surface = DiscordTasksSurface(
+                FakeBot(channel),  # type: ignore[arg-type]
+                AccessPolicy(100, frozenset({200}), frozenset({300})),
+                channel_id=300,
+                profile="main",
+                state_path=Path(temporary) / "supplies.json",
+                adapter=adapter,  # type: ignore[arg-type]
+                surface_name="supplies",
+                button_prefix="supplies",
+                collection_id="zin:supplies",
+                show_due=False,
+            )
+            await surface.ensure_message()
+            modal = TaskEditModal(surface, "zin:supplies|SUPPLY-1", adapter.tasks[0])
+            self.assertEqual(len(modal.children), 2)
+            modal.title_input._value = "Napkins"
+            modal.memo_input._value = "table"
+            interaction = SimpleNamespace(
+                response=SimpleNamespace(defer=AsyncMock()),
+                followup=SimpleNamespace(send=AsyncMock()),
+            )
+
+            await modal.on_submit(interaction)  # type: ignore[arg-type]
+
+            self.assertEqual(adapter.updated[-1][1]["title"], "Napkins")
+            self.assertEqual(adapter.updated[-1][1]["memo"], "table")
+            self.assertEqual(adapter.updated[-1][1]["dueDate"], "")
+            self.assertEqual(adapter.updated[-1][1]["dueTime"], "")
+            self.assertEqual(adapter.updated[-1][1]["priority"], "")
+
+    async def test_task_edit_modal_rejects_invalid_due(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            adapter = FakeAdapter()
+            surface = self.make_surface(Path(temporary) / "tasks.json", channel, adapter)
+            await surface.ensure_message()
+            modal = TaskEditModal(surface, "zin:tasks|TASK-1", TASKS[0])
+            modal.title_input._value = "Buy milk"
+            modal.memo_input._value = ""
+            modal.due_date_input._value = ""
+            modal.due_time_input._value = "14:30"
+            modal.priority_input._value = ""
+            interaction = SimpleNamespace(
+                response=SimpleNamespace(defer=AsyncMock()),
+                followup=SimpleNamespace(send=AsyncMock()),
+            )
+
+            await modal.on_submit(interaction)  # type: ignore[arg-type]
+
+            self.assertEqual(adapter.updated, [])
+            interaction.followup.send.assert_awaited_once()
 
     async def test_recreate_completed_task_preserves_due_for_tasks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
