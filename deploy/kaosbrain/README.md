@@ -53,6 +53,7 @@ systemctl status kaosbrain.service --no-pager
 docker ps --filter name=kaos-brain
 curl -fsS http://127.0.0.1:11434/api/tags >/dev/null
 ./deploy/kaosbrain/kaosbrain status
+./deploy/kaosbrain/kaosbrain doctor
 ```
 
 Then smoke test in the configured Discord `#brain` channel:

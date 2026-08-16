@@ -121,6 +121,137 @@ smoke() {
   die "KaosBrain container did not become running"
 }
 
+check_line() {
+  local label=$1
+  local state=$2
+  local detail=${3:-}
+  if [[ -n "${detail}" ]]; then
+    printf '%-34s %s (%s)\n' "${label}" "${state}" "${detail}"
+  else
+    printf '%-34s %s\n' "${label}" "${state}"
+  fi
+}
+
+doctor() {
+  require_command curl
+  require_command docker
+  require_command sudo
+  load_env
+
+  local failures=0
+  local sha="unknown"
+  if git -C "${REPO_ROOT}" rev-parse --short=12 HEAD >/dev/null 2>&1; then
+    sha=$(git -C "${REPO_ROOT}" rev-parse --short=12 HEAD)
+  fi
+  check_line "Repository" "ok" "${sha}"
+
+  if systemctl is-active --quiet "${SERVICE_NAME}"; then
+    check_line "Systemd active" "ok" "${SERVICE_NAME}"
+  else
+    check_line "Systemd active" "fail" "${SERVICE_NAME}"
+    failures=$((failures + 1))
+  fi
+
+  if systemctl is-enabled --quiet "${SERVICE_NAME}"; then
+    check_line "Systemd enabled" "ok" "${SERVICE_NAME}"
+  else
+    check_line "Systemd enabled" "fail" "${SERVICE_NAME}"
+    failures=$((failures + 1))
+  fi
+
+  local container_status
+  container_status=$(docker ps --filter "name=${CONTAINER_NAME}" --format '{{.Status}}' | head -n 1 || true)
+  if [[ -n "${container_status}" ]]; then
+    check_line "Container" "ok" "${container_status}"
+  else
+    check_line "Container" "fail" "${CONTAINER_NAME} not running"
+    failures=$((failures + 1))
+  fi
+
+  local image_id
+  image_id=$(docker image inspect "${IMAGE_NAME}" --format '{{.Id}}' 2>/dev/null | cut -d: -f2 | cut -c1-12 || true)
+  if [[ -n "${image_id}" ]]; then
+    check_line "Image" "ok" "${IMAGE_NAME}@${image_id}"
+  else
+    check_line "Image" "fail" "${IMAGE_NAME} missing"
+    failures=$((failures + 1))
+  fi
+
+  local ollama_tags
+  if ollama_tags=$(curl --fail --silent --show-error "${OLLAMA_BASE_URL:-http://127.0.0.1:11434}/api/tags"); then
+    check_line "Ollama" "ok" "${OLLAMA_BASE_URL:-http://127.0.0.1:11434}"
+    python3 - "$ollama_tags" "${KAOSBRAIN_CHAT_MODEL:-}" "${KAOSBRAIN_DEEP_MODEL:-}" <<'PY'
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+chat = sys.argv[2]
+deep = sys.argv[3]
+names = {model.get("name", "") for model in payload.get("models", [])}
+for label, model in (("Chat model", chat), ("Deep model", deep)):
+    state = "ok" if model and model in names else "missing"
+    print(f"{label:<34} {state} ({model or 'unset'})")
+PY
+  else
+    check_line "Ollama" "fail" "${OLLAMA_BASE_URL:-http://127.0.0.1:11434}"
+    failures=$((failures + 1))
+  fi
+
+  if [[ "${KAOSBRAIN_GOVERNOR_TOOLS_ENABLED:-false}" == "true" ]]; then
+    local tools_url=${KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL:-}
+    if [[ -z "${tools_url}" ]]; then
+      check_line "Governor tools" "fail" "missing KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL"
+      failures=$((failures + 1))
+    else
+      local tools_code
+      tools_code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+        "${tools_url%/}/tools/today?profile=${KAOSBRAIN_GOVERNOR_TOOLS_PROFILE:-main}" || true)
+      case "${tools_code}" in
+        200|401|403) check_line "Governor tools route" "ok" "http ${tools_code}" ;;
+        *) check_line "Governor tools route" "fail" "http ${tools_code:-000}"; failures=$((failures + 1)) ;;
+      esac
+    fi
+  else
+    check_line "Governor tools" "disabled"
+  fi
+
+  if [[ -n "${KAOSBRAIN_GOVERNOR_HEALTH_URL:-}" ]]; then
+    local health_payload
+    if health_payload=$(curl --fail --silent --show-error "${KAOSBRAIN_GOVERNOR_HEALTH_URL}"); then
+      python3 - "$health_payload" <<'PY'
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+status = payload.get("status", "unknown")
+discord_ready = payload.get("discordReady", payload.get("discord_ready", "unknown"))
+brain_tools = payload.get("brainTools", payload.get("brain_tools", {}))
+service_status = payload.get("serviceStatus", payload.get("service_status", {}))
+checks = service_status.get("checks", []) if isinstance(service_status, dict) else []
+states = {}
+for check in checks:
+    states[check.get("status", "unknown")] = states.get(check.get("status", "unknown"), 0) + 1
+state_text = ", ".join(f"{key}={value}" for key, value in sorted(states.items())) or "no services"
+print(f"{'Governor health':<34} {status} ({payload.get('hostname', 'unknown host')})")
+print(f"{'Governor Discord':<34} ok (ready={discord_ready})")
+if isinstance(brain_tools, dict):
+    print(f"{'Governor brain tools':<34} ok (enabled={brain_tools.get('enabled', 'unknown')})")
+if isinstance(service_status, dict):
+    print(f"{'System controller':<34} ok (enabled={service_status.get('enabled', 'unknown')}, {state_text})")
+PY
+    else
+      check_line "System controller" "fail" "${KAOSBRAIN_GOVERNOR_HEALTH_URL}"
+      failures=$((failures + 1))
+    fi
+  else
+    check_line "System controller" "not configured" "KAOSBRAIN_GOVERNOR_HEALTH_URL"
+  fi
+
+  if [[ "${failures}" -gt 0 ]]; then
+    die "doctor found ${failures} failing check(s)"
+  fi
+}
+
 up() {
   preflight
   build_image
@@ -154,6 +285,7 @@ Commands:
   build      Build the runtime image
   up         Run preflight, build, restart, and smoke check
   deploy     git pull --ff-only origin main, then up
+  doctor     Check Brain service, Ollama, Governor tools, and system controller
   status     Show systemd and container status
   logs [n]   Show recent container logs
 EOF
@@ -166,6 +298,7 @@ case "${1:-}" in
   build) build_image ;;
   up) up ;;
   deploy) deploy ;;
+  doctor) doctor ;;
   status) status ;;
   logs) shift; logs "$@" ;;
   ""|-h|--help|help) usage ;;
