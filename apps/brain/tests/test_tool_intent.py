@@ -15,6 +15,11 @@ class ToolIntentTests(unittest.TestCase):
         assert request is not None
         self.assertEqual(request.kind, ToolKind.TODAY)
 
+    def test_today_schedule_request_uses_today_context(self) -> None:
+        request = parse_tool_request("오늘 스케줄 알려줘")
+        assert request is not None
+        self.assertEqual(request.kind, ToolKind.TODAY)
+
     def test_active_task_korean_request(self) -> None:
         request = parse_tool_request("뭐 해야 돼?")
         assert request is not None
@@ -22,6 +27,11 @@ class ToolIntentTests(unittest.TestCase):
 
     def test_active_task_compact_korean_request(self) -> None:
         request = parse_tool_request("내가 뭐 해야하지")
+        assert request is not None
+        self.assertEqual(request.kind, ToolKind.ACTIVE_TASKS)
+
+    def test_open_task_korean_request(self) -> None:
+        request = parse_tool_request("남은 할 일 보여줘")
         assert request is not None
         self.assertEqual(request.kind, ToolKind.ACTIVE_TASKS)
 
@@ -123,6 +133,16 @@ class ToolIntentTests(unittest.TestCase):
         assert request is not None
         self.assertEqual(request.kind, ToolKind.DOCUMENT_SEARCH)
         self.assertEqual(request.query, "보험")
+
+    def test_dotdot_can_target_korean_paperless_search(self) -> None:
+        request = parse_tool_request("..페이퍼리스 보험")
+        assert request is not None
+        self.assertEqual(request.kind, ToolKind.DOCUMENT_SEARCH)
+        self.assertEqual(request.query, "보험")
+
+    def test_mutation_words_do_not_trigger_readonly_tool_lookup(self) -> None:
+        self.assertIsNone(parse_tool_request("엄마 전화 할 일 추가해줘"))
+        self.assertIsNone(parse_tool_request("영이 큐시미아 다음주 월요일까지로 수정"))
 
     def test_plain_chat_does_not_trigger_tool(self) -> None:
         self.assertIsNone(parse_tool_request("안녕"))

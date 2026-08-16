@@ -29,6 +29,8 @@ def parse_tool_request(content: str, *, today: date | None = None) -> ToolReques
     lowered = text.lower()
     if not text:
         return None
+    if _looks_like_mutation(lowered):
+        return None
     current = today or date.today()
     profile, collection_id = _scope(text, lowered)
     dotdot = _dotdot_request(text)
@@ -57,7 +59,7 @@ def _dotdot_request(text: str) -> ToolRequest | None:
     if not query:
         return None
     lowered = query.lower()
-    document_nouns = ("document", "documents", "paperless", "문서", "서류")
+    document_nouns = ("document", "documents", "paperless", "페이퍼리스", "문서", "서류")
     memo_nouns = ("memo", "memos", "메모")
     if any(marker in lowered for marker in document_nouns):
         return ToolRequest(ToolKind.DOCUMENT_SEARCH, _strip_search_nouns(query, document_nouns) or query)
@@ -68,8 +70,9 @@ def _dotdot_request(text: str) -> ToolRequest | None:
 
 def _asks_today(lowered: str) -> bool:
     return (
-        ("오늘" in lowered and any(word in lowered for word in ("뭐", "일정", "있", "agenda")))
+        ("오늘" in lowered and any(word in lowered for word in ("뭐", "일정", "스케줄", "있", "agenda", "calendar")))
         or ("오늘" in lowered and any(word in lowered for word in ("할 일", "할일", "해야", "todo", "task")))
+        or any(phrase in lowered for phrase in ("오늘 일정", "오늘 스케줄", "오늘 캘린더"))
         or lowered in {"today", "today?", "agenda", "agenda?"}
         or lowered.startswith("what's on today")
         or lowered.startswith("whats on today")
@@ -79,11 +82,17 @@ def _asks_today(lowered: str) -> bool:
 def _asks_active_tasks(lowered: str) -> bool:
     return (
         "뭐 해야" in lowered
+        or "뭘 해야" in lowered
         or "해야 돼" in lowered
         or "해야되" in lowered
+        or "해야하지" in lowered
+        or "남은 할" in lowered
+        or "열린 할" in lowered
+        or "활성 할" in lowered
         or "할 일" in lowered
         or "할일" in lowered
         or "active task" in lowered
+        or "open task" in lowered
         or "todo" in lowered
     )
 
@@ -131,6 +140,34 @@ def _completed_task_request(
         today.isoformat(),
         profile,
         collection_id,
+    )
+
+
+def _looks_like_mutation(lowered: str) -> bool:
+    if lowered.startswith(".."):
+        return False
+    if any(marker in lowered for marker in ("보여", "찾", "검색", "목록", "리스트", "알려", "뭐", "what", "show", "find", "search", "list")):
+        return False
+    return any(
+        marker in lowered
+        for marker in (
+            "추가",
+            "등록",
+            "저장",
+            "삭제",
+            "지워",
+            "없애",
+            "완료",
+            "끝냈",
+            "끝내",
+            "처리",
+            "다시 살려",
+            "되돌려",
+            "수정",
+            "편집",
+            "변경",
+            "바꿔",
+        )
     )
 
 
