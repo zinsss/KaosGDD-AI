@@ -21,6 +21,7 @@ MAX_VISIBLE_TASKS = 25
 MAX_RECENT_SUPPLIES = 25
 TASK_PRIORITIES = {"", "1", "5", "9"}
 DUE_LINE_PATTERN = re.compile(r"^:(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}))?$")
+MESSAGE_REFRESH_DELAY_SECONDS = 0.35
 
 
 @dataclass
@@ -64,6 +65,7 @@ class DiscordTasksSurface:
         self.button_prefix = button_prefix
         self.collection_id = collection_id
         self.show_due = show_due
+        self.message_refresh_delay_seconds = MESSAGE_REFRESH_DELAY_SECONDS
         self.state = self._load_state()
         self._tasks_by_key: dict[str, dict[str, Any]] = {}
 
@@ -77,23 +79,31 @@ class DiscordTasksSurface:
             self.state.legacy_message_id = 0
         archive_message = await self._upsert_completed_archive_message(channel, tasks)
         self.state.completed_archive_message_id = int(archive_message.id)
+        await self._pace_message_refresh()
         next_message_ids: dict[str, int] = {}
+        message_order_changed = False
         for task in active:
             key = task_key(task)
+            message_id = self.state.message_ids.get(key, 0)
+            if not message_id:
+                message_order_changed = True
             message = await self._upsert_task_message(
                 channel,
                 key,
                 task,
-                message_id=self.state.message_ids.get(key, 0),
+                message_id=message_id,
             )
             next_message_ids[key] = int(message.id)
+            await self._pace_message_refresh()
         for key, message_id in self.state.message_ids.items():
             if key not in next_message_ids:
                 await self._delete_message_id(channel, message_id)
+                message_order_changed = True
         self.state.message_ids = next_message_ids
         if self._uses_supplies_rules():
-            recent_message = await self._recreate_recent_supplies_message(channel)
+            recent_message = await self._recreate_recent_supplies_message(channel, force_recreate=message_order_changed)
             self.state.recent_supplies_message_id = int(recent_message.id)
+            await self._pace_message_refresh()
         self._save_state()
 
     async def repost_active_messages(self) -> None:
@@ -251,6 +261,8 @@ class DiscordTasksSurface:
         if message_id and hasattr(channel, "fetch_message"):
             try:
                 message = await channel.fetch_message(message_id)
+                if _message_matches(message, content=content, view=view):
+                    return message
                 return await message.edit(content=content, view=view, allowed_mentions=NO_MENTIONS)
             except (discord.NotFound, discord.HTTPException):
                 LOGGER.info("%s message %s missing; recreating", self.surface_name.capitalize(), message_id)
@@ -268,6 +280,8 @@ class DiscordTasksSurface:
         if message_id and hasattr(channel, "fetch_message"):
             try:
                 message = await channel.fetch_message(message_id)
+                if _message_matches(message, content=content, view=view):
+                    return message
                 return await message.edit(content=content, view=view, allowed_mentions=NO_MENTIONS)
             except (discord.NotFound, discord.HTTPException):
                 LOGGER.info(
@@ -276,6 +290,10 @@ class DiscordTasksSurface:
                     message_id,
                 )
         return await channel.send(content=content, view=view, allowed_mentions=NO_MENTIONS)
+
+    async def _pace_message_refresh(self) -> None:
+        if self.message_refresh_delay_seconds > 0:
+            await asyncio.sleep(self.message_refresh_delay_seconds)
 
     def _load_state(self) -> DiscordTasksState:
         try:
@@ -358,13 +376,29 @@ class DiscordTasksSurface:
         previous = [item for item in self.state.recent_supplies if item.casefold() != clean_title.casefold()]
         self.state.recent_supplies = [clean_title, *previous][:MAX_RECENT_SUPPLIES]
 
-    async def _recreate_recent_supplies_message(self, channel: discord.abc.Messageable) -> discord.Message:
-        if self.state.recent_supplies_message_id:
-            await self._delete_message_id(channel, self.state.recent_supplies_message_id)
-            self.state.recent_supplies_message_id = 0
+    async def _recreate_recent_supplies_message(
+        self,
+        channel: discord.abc.Messageable,
+        *,
+        force_recreate: bool = False,
+    ) -> discord.Message:
         view = RecentSuppliesView(self, self.state.recent_supplies) if self.state.recent_supplies else None
+        content = render_recent_supplies_message(self.state.recent_supplies)
+        if self.state.recent_supplies_message_id and hasattr(channel, "fetch_message"):
+            try:
+                message = await channel.fetch_message(self.state.recent_supplies_message_id)
+                if force_recreate:
+                    await message.delete()
+                    self.state.recent_supplies_message_id = 0
+                    return await channel.send(content=content, view=view, allowed_mentions=NO_MENTIONS)
+                if _message_matches(message, content=content, view=view):
+                    return message
+                return await message.edit(content=content, view=view, allowed_mentions=NO_MENTIONS)
+            except (discord.NotFound, discord.HTTPException):
+                LOGGER.info("%s recent supplies message %s missing; recreating", self.surface_name.capitalize(), self.state.recent_supplies_message_id)
+                self.state.recent_supplies_message_id = 0
         return await channel.send(
-            content=render_recent_supplies_message(self.state.recent_supplies),
+            content=content,
             view=view,
             allowed_mentions=NO_MENTIONS,
         )
@@ -741,6 +775,23 @@ def normalize_supplies_due(payload: dict[str, Any], *, collection_id: str = "") 
 
 def is_supplies_collection(collection_id: str) -> bool:
     return "supplies" in collection_id.lower()
+
+
+def _message_matches(message: discord.Message, *, content: str, view: discord.ui.View | None) -> bool:
+    return str(getattr(message, "content", "") or "") == content and _view_signature(getattr(message, "view", None)) == _view_signature(view)
+
+
+def _view_signature(view: discord.ui.View | None) -> tuple[tuple[str, str, str], ...]:
+    if view is None:
+        return ()
+    return tuple(
+        (
+            item.__class__.__name__,
+            str(getattr(item, "custom_id", "") or ""),
+            str(getattr(item, "label", "") or ""),
+        )
+        for item in getattr(view, "children", [])
+    )
 
 
 def task_key(task: Mapping[str, Any]) -> str:

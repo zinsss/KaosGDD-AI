@@ -24,6 +24,7 @@ LOGGER = logging.getLogger(__name__)
 EMBED_COLOR_HEALTHY = 0xA3BE8C
 EMBED_COLOR_DOWN = 0xBF616A
 EMBED_COLOR_UNKNOWN = 0x4C566A
+MESSAGE_REFRESH_DELAY_SECONDS = 0.35
 
 
 @dataclass(frozen=True)
@@ -93,6 +94,7 @@ class DiscordServiceStatusSurface:
         self.environment = os.environ if environment is None else environment
         self.timeout_seconds = service_status_timeout_seconds(self.environment)
         self.refresh_seconds = service_status_refresh_seconds(self.environment)
+        self.message_refresh_delay_seconds = MESSAGE_REFRESH_DELAY_SECONDS
         self.last_results: dict[str, ServiceProbeResult] = {}
 
     async def ensure_message(self) -> None:
@@ -111,6 +113,7 @@ class DiscordServiceStatusSurface:
                 message_id=current_message_ids.get(item.key, 0),
             )
             next_message_ids[item.key] = int(message.id)
+            await self._pace_message_refresh()
         for key, message_id in current_message_ids.items():
             if key not in next_message_ids:
                 await self._delete_message_id(channel, message_id)
@@ -191,10 +194,16 @@ class DiscordServiceStatusSurface:
         if message_id and hasattr(channel, "fetch_message"):
             try:
                 message = await channel.fetch_message(message_id)
+                if _message_matches(message, content=content, embed=embed, view=view):
+                    return message
                 return await message.edit(content=content, embed=embed, view=view, allowed_mentions=NO_MENTIONS)
             except (discord.NotFound, discord.HTTPException):
                 LOGGER.info("Service status message %s for %s missing; recreating", message_id, item.key)
         return await channel.send(content=content, embed=embed, view=view, allowed_mentions=NO_MENTIONS)
+
+    async def _pace_message_refresh(self) -> None:
+        if self.message_refresh_delay_seconds > 0:
+            await asyncio.sleep(self.message_refresh_delay_seconds)
 
     async def _delete_message_id(self, channel: discord.abc.Messageable, message_id: int) -> None:
         if not message_id or not hasattr(channel, "fetch_message"):
@@ -398,3 +407,35 @@ def stable_error(exc: BaseException) -> str:
     if reason:
         return str(reason)[:120]
     return exc.__class__.__name__
+
+
+def _message_matches(
+    message: discord.Message,
+    *,
+    content: str,
+    embed: discord.Embed | None,
+    view: discord.ui.View | None,
+) -> bool:
+    current_embed = getattr(message, "embeds", [])[:1]
+    return (
+        str(getattr(message, "content", "") or "") == content
+        and _embed_signature(current_embed[0] if current_embed else None) == _embed_signature(embed)
+        and _view_signature(getattr(message, "view", None)) == _view_signature(view)
+    )
+
+
+def _embed_signature(embed: discord.Embed | None) -> dict[str, object]:
+    return embed.to_dict() if embed is not None else {}
+
+
+def _view_signature(view: discord.ui.View | None) -> tuple[tuple[str, str, str], ...]:
+    if view is None:
+        return ()
+    return tuple(
+        (
+            item.__class__.__name__,
+            str(getattr(item, "custom_id", "") or ""),
+            str(getattr(item, "label", "") or ""),
+        )
+        for item in getattr(view, "children", [])
+    )

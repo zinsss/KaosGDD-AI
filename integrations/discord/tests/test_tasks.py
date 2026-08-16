@@ -94,13 +94,17 @@ class FakeAdapter:
 
 
 class FakeMessage:
-    def __init__(self, message_id):
+    def __init__(self, message_id, *, content="", view=None):
         self.id = message_id
+        self.content = content
+        self.view = view
         self.edits = []
         self.deleted = False
 
     async def edit(self, **kwargs):
         self.edits.append(kwargs)
+        self.content = kwargs.get("content", self.content)
+        self.view = kwargs.get("view", self.view)
         return self
 
     async def delete(self):
@@ -114,7 +118,7 @@ class FakeChannel:
         self.next_id = 700
 
     async def send(self, **kwargs):
-        message = FakeMessage(self.next_id)
+        message = FakeMessage(self.next_id, content=kwargs.get("content", ""), view=kwargs.get("view"))
         self.next_id += 1
         self.sent.append(kwargs)
         self.messages[message.id] = message
@@ -144,7 +148,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
         adapter: FakeAdapter | None = None,
     ) -> DiscordTasksSurface:
         channel = channel or FakeChannel()
-        return DiscordTasksSurface(
+        surface = DiscordTasksSurface(
             FakeBot(channel),  # type: ignore[arg-type]
             AccessPolicy(100, frozenset({200}), frozenset({300})),
             channel_id=300,
@@ -152,6 +156,8 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             state_path=path,
             adapter=adapter or FakeAdapter(),  # type: ignore[arg-type]
         )
+        surface.message_refresh_delay_seconds = 0
+        return surface
 
     def test_active_tasks_skip_completed_and_render_due_dates(self) -> None:
         active = active_tasks(TASKS)
@@ -309,6 +315,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
                 collection_id="zin:supplies",
                 show_due=False,
             )
+            surface.message_refresh_delay_seconds = 0
 
             await surface.ensure_message()
 
@@ -422,6 +429,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
                 collection_id="zin:supplies",
                 show_due=False,
             )
+            surface.message_refresh_delay_seconds = 0
             message = SimpleNamespace(
                 id=1,
                 content="+ Paper towels",
@@ -458,6 +466,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
                 collection_id="zin:supplies",
                 show_due=False,
             )
+            surface.message_refresh_delay_seconds = 0
 
             for index in range(27):
                 self.assertTrue(await surface.create_task(f"Item {index:02d}"))
@@ -491,6 +500,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
                 collection_id="zin:supplies",
                 show_due=False,
             )
+            surface.message_refresh_delay_seconds = 0
             message = SimpleNamespace(
                 id=1,
                 content="+ Paper towels\n:2026-08-17 10:00",
@@ -527,6 +537,18 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             state = json.loads(state_path.read_text(encoding="utf-8"))
             self.assertNotIn("messageId", state)
             self.assertIn("messageIds", state)
+
+    async def test_ensure_message_skips_unchanged_existing_messages(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            surface = self.make_surface(Path(temporary) / "tasks.json", channel)
+            await surface.ensure_message()
+
+            messages = list(channel.messages.values())
+            await surface.ensure_message()
+
+            self.assertEqual(channel.next_id, 702)
+            self.assertTrue(all(not message.edits for message in messages))
 
     async def test_complete_and_delete_task_buttons_use_adapter_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -635,6 +657,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
                 collection_id="zin:supplies",
                 show_due=False,
             )
+            surface.message_refresh_delay_seconds = 0
             await surface.ensure_message()
             modal = TaskEditModal(surface, "zin:supplies|SUPPLY-1", adapter.tasks[0])
             self.assertEqual(len(modal.children), 2)
@@ -735,6 +758,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
                 collection_id="zin:supplies",
                 show_due=False,
             )
+            surface.message_refresh_delay_seconds = 0
 
             await surface.ensure_message()
             view = channel.sent[0]["view"]

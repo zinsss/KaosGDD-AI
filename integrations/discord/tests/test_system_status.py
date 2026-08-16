@@ -24,13 +24,20 @@ from kaos_governor_discord.system_status import (
 
 
 class FakeMessage:
-    def __init__(self, message_id):
+    def __init__(self, message_id, *, content="", embed=None, view=None):
         self.id = message_id
+        self.content = content
+        self.embeds = [embed] if embed is not None else []
+        self.view = view
         self.edits = []
         self.deleted = False
 
     async def edit(self, **kwargs):
         self.edits.append(kwargs)
+        self.content = kwargs.get("content", self.content)
+        if "embed" in kwargs:
+            self.embeds = [kwargs["embed"]] if kwargs["embed"] is not None else []
+        self.view = kwargs.get("view", self.view)
         return self
 
     async def delete(self):
@@ -44,7 +51,7 @@ class FakeChannel:
         self.next_id = 700
 
     async def send(self, **kwargs):
-        message = FakeMessage(self.next_id)
+        message = FakeMessage(self.next_id, content=kwargs.get("content", ""), embed=kwargs.get("embed"), view=kwargs.get("view"))
         self.next_id += 1
         self.sent.append(kwargs)
         self.messages[message.id] = message
@@ -69,13 +76,15 @@ class FakeBot:
 class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
     def make_surface(self, path: Path, channel: FakeChannel | None = None) -> DiscordServiceStatusSurface:
         channel = channel or FakeChannel()
-        return DiscordServiceStatusSurface(
+        surface = DiscordServiceStatusSurface(
             FakeBot(channel),  # type: ignore[arg-type]
             AccessPolicy(100, frozenset({200}), frozenset({300})),
             channel_id=300,
             state_path=path,
             environment={"SERVICE_STATUS_DEFAULT_PROBES_ENABLED": "false"},
         )
+        surface.message_refresh_delay_seconds = 0
+        return surface
 
     def test_service_rows_match_requested_buttons(self) -> None:
         labels = [item.label for item in SERVICES]
@@ -131,6 +140,19 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(message.edits[0]["content"], "")
             self.assertEqual(message.edits[0]["embed"].title, "KaosBrain")
             self.assertIn("Unknown", message.edits[0]["embed"].description)
+
+    async def test_ensure_message_skips_unchanged_existing_messages(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            path = Path(temporary) / "status.json"
+            surface = self.make_surface(path, channel)
+            await surface.ensure_message()
+
+            messages = list(channel.messages.values())
+            await surface.ensure_message()
+
+            self.assertEqual(channel.next_id, 710)
+            self.assertTrue(all(not message.edits for message in messages))
 
     async def test_ensure_message_deletes_legacy_combined_message(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
