@@ -193,7 +193,7 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(content, "")
         self.assertEqual(embed.title, "KaosGovernor")
         self.assertIn("Healthy", embed.description)
-        self.assertIn("09:15:00", embed.description)
+        self.assertNotIn("09:15:00", embed.description)
         self.assertIn("HTTP 200", embed.description)
         self.assertEqual(embed.color.value, EMBED_COLOR_HEALTHY)
 

@@ -288,11 +288,10 @@ def render_service_message(item: ServiceStatusItem, result: ServiceProbeResult |
 def render_service_embed(item: ServiceStatusItem, result: ServiceProbeResult | None = None) -> discord.Embed:
     result = result or ServiceProbeResult(item.key, "unknown", "", "No health probe configured.")
     status = status_label(result)
-    checked = f" · {result.checked_at}" if result.checked_at else ""
     detail = f"\n{result.detail}" if result.detail else ""
     embed = discord.Embed(
         title=item.label,
-        description=f"{item.description}\n\n**{status}**{checked}{detail}",
+        description=f"{item.description}\n\n**{status}**{detail}",
         color=service_embed_color(result),
     )
     return embed
