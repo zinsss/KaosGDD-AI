@@ -216,8 +216,12 @@ PY
   fi
 
   if [[ -n "${KAOSBRAIN_GOVERNOR_HEALTH_URL:-}" ]]; then
+    local health_url=${KAOSBRAIN_GOVERNOR_HEALTH_URL%/}
+    if [[ "${health_url}" != */health ]]; then
+      health_url="${health_url}/health"
+    fi
     local health_payload
-    if health_payload=$(curl --fail --silent --show-error "${KAOSBRAIN_GOVERNOR_HEALTH_URL}"); then
+    if health_payload=$(curl --fail --silent --show-error "${health_url}"); then
       python3 - "$health_payload" <<'PY'
 import json
 import sys
@@ -240,7 +244,7 @@ if isinstance(service_status, dict):
     print(f"{'System controller':<34} ok (enabled={service_status.get('enabled', 'unknown')}, {state_text})")
 PY
     else
-      check_line "System controller" "fail" "${KAOSBRAIN_GOVERNOR_HEALTH_URL}"
+      check_line "System controller" "fail" "${health_url}"
       failures=$((failures + 1))
     fi
   else
