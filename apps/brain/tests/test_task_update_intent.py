@@ -1,7 +1,7 @@
 from datetime import date
 import unittest
 
-from kaos_brain.task_update_intent import parse_task_action, parse_task_create, parse_task_due_update
+from kaos_brain.task_update_intent import parse_task_action, parse_task_create, parse_task_edit, parse_task_due_update
 from kaos_brain.event_intent import parse_event_create
 
 
@@ -19,6 +19,18 @@ class TaskUpdateIntentTests(unittest.TestCase):
         self.assertEqual(request.task_title, "엄마 전화")
         self.assertEqual(request.due_date, "2026-08-15")
 
+    def test_korean_month_day_update_with_afternoon_time(self) -> None:
+        request = parse_task_due_update("엄마 전화 8월 20일 오후 3시까지로 수정", today=date(2026, 8, 14))
+        assert request is not None
+        self.assertEqual(request.task_title, "엄마 전화")
+        self.assertEqual(request.due_date, "2026-08-20")
+        self.assertEqual(request.due_time, "15:00")
+
+    def test_short_month_day_rolls_to_next_year_when_past(self) -> None:
+        request = parse_task_due_update("보험 서류 08-01까지로 수정", today=date(2026, 8, 14))
+        assert request is not None
+        self.assertEqual(request.due_date, "2027-08-01")
+
     def test_family_task_update_sets_profile(self) -> None:
         request = parse_task_due_update("가족 엄마 전화 기한 내일로 변경", today=date(2026, 8, 14))
         assert request is not None
@@ -33,6 +45,20 @@ class TaskUpdateIntentTests(unittest.TestCase):
 
     def test_plain_message_does_not_update(self) -> None:
         self.assertIsNone(parse_task_due_update("오늘 뭐 있어?", today=date(2026, 8, 14)))
+
+    def test_title_edit_intent(self) -> None:
+        request = parse_task_edit("엄마 전화 제목을 아빠 전화로 수정")
+        assert request is not None
+        self.assertEqual(request.task_title, "엄마 전화")
+        self.assertEqual(request.title, "아빠 전화")
+        self.assertEqual(request.memo, "")
+
+    def test_memo_edit_intent(self) -> None:
+        request = parse_task_edit("영이 큐시미아 메모를 약 남은 개수 확인으로 변경")
+        assert request is not None
+        self.assertEqual(request.task_title, "영이 큐시미아")
+        self.assertEqual(request.title, "영이 큐시미아")
+        self.assertEqual(request.memo, "약 남은 개수 확인")
 
     def test_korean_tomorrow_create(self) -> None:
         request = parse_task_create("내일까지 엄마한테 전화해야돼", today=date(2026, 8, 14))
@@ -53,6 +79,13 @@ class TaskUpdateIntentTests(unittest.TestCase):
         self.assertEqual(request.title, "엄마한테 전화")
         self.assertEqual(request.profile, "family")
 
+    def test_explicit_task_create_without_due(self) -> None:
+        request = parse_task_create("엄마 전화 할 일 추가해줘", today=date(2026, 8, 14))
+        assert request is not None
+        self.assertEqual(request.title, "엄마 전화")
+        self.assertEqual(request.due_date, "")
+        self.assertEqual(request.due_time, "")
+
     def test_supplies_create_without_due_date(self) -> None:
         request = parse_task_create("준비물 비누 추가해줘", today=date(2026, 8, 14))
         assert request is not None
@@ -66,6 +99,13 @@ class TaskUpdateIntentTests(unittest.TestCase):
         assert request is not None
         self.assertEqual(request.title, "보험 서류 준비")
         self.assertEqual(request.due_date, "2026-08-20")
+
+    def test_korean_date_time_create(self) -> None:
+        request = parse_task_create("8월 20일 오전 9시까지 보험 서류 준비해야돼", today=date(2026, 8, 14))
+        assert request is not None
+        self.assertEqual(request.title, "보험 서류 준비")
+        self.assertEqual(request.due_date, "2026-08-20")
+        self.assertEqual(request.due_time, "09:00")
 
     def test_plain_message_does_not_create(self) -> None:
         self.assertIsNone(parse_task_create("내일 뭐 있어?", today=date(2026, 8, 14)))

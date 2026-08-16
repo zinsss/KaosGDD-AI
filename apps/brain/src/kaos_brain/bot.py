@@ -13,7 +13,7 @@ from .governor_tools import (
     GovernorToolClient,
     GovernorToolConfig,
     GovernorToolError,
-    TaskEditRequest,
+    TaskEditRequest as GovernorTaskEditRequest,
     document_option_description,
     document_option_label,
     memo_option_description,
@@ -47,8 +47,10 @@ from .task_update_intent import (
     TaskActionRequest,
     TaskCreateRequest,
     TaskDueUpdateRequest,
+    TaskTextEditRequest,
     parse_task_action,
     parse_task_create,
+    parse_task_edit,
     parse_task_due_update,
 )
 from .tool_intent import ToolKind, ToolRequest, parse_tool_request
@@ -126,6 +128,10 @@ class BrainBot(discord.Client):
         )
         if task_update is not None:
             await self._propose_task_due_update(message, task_update)
+            return
+        task_edit = parse_task_edit(request.text) if request.route is Route.CHAT else None
+        if task_edit is not None:
+            await self._propose_task_edit(message, task_edit)
             return
         task_create = (
             parse_task_create(request.text, today=message.created_at.astimezone(KST).date())
@@ -311,6 +317,43 @@ class BrainBot(discord.Client):
         await message.reply(
             render_task_action_proposal(payload),
             view=TaskActionConfirmationView(self.governor_tools, int(message.author.id), str(payload.get("confirmationId") or "")),
+            mention_author=False,
+            allowed_mentions=NO_MENTIONS,
+        )
+
+    async def _propose_task_edit(self, message: discord.Message, request: TaskTextEditRequest) -> None:
+        if self.governor_tools is None:
+            await message.reply(
+                "Governor tools are not configured yet.",
+                mention_author=False,
+                allowed_mentions=NO_MENTIONS,
+            )
+            return
+        try:
+            payload = await self.governor_tools.propose_task_edit(
+                GovernorTaskEditRequest(
+                    request.task_title,
+                    request.title,
+                    request.memo,
+                    due_date=request.due_date,
+                    due_time=request.due_time,
+                    priority=request.priority,
+                    profile=request.profile,
+                    collection_id=request.collection_id,
+                ),
+                actor_id=message.author.id,
+                idempotency_key=f"discord:{message.id}",
+            )
+        except GovernorToolError as exc:
+            await message.reply(
+                f"Task edit proposal failed: {exc}",
+                mention_author=False,
+                allowed_mentions=NO_MENTIONS,
+            )
+            return
+        await message.reply(
+            render_task_edit_proposal(payload),
+            view=TaskEditConfirmationView(self.governor_tools, int(message.author.id), str(payload.get("confirmationId") or "")),
             mention_author=False,
             allowed_mentions=NO_MENTIONS,
         )
@@ -974,7 +1017,7 @@ class BrainTaskEditModal(discord.ui.Modal):
         priority = str(getattr(self, "priority_input", _EmptyInput()).value or "")
         try:
             payload = await self.governor_tools.propose_task_edit(
-                TaskEditRequest(
+                GovernorTaskEditRequest(
                     old_title,
                     str(self.title_input.value or ""),
                     str(self.memo_input.value or ""),
