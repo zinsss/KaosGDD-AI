@@ -640,7 +640,7 @@ def _render_tasks(payload: dict[str, Any]) -> str:
     tasks = _items(payload.get("tasks"))
     title = _task_list_title(payload, completed=False)
     if not tasks:
-        return f"## {title}\n- none"
+        return f"## {title}\n- 없음"
     return "\n".join([f"## {title}", *(_task_line(item) for item in tasks[:12])])
 
 
@@ -653,9 +653,9 @@ def _render_completed_tasks(payload: dict[str, Any]) -> str:
     if query:
         title = f"{title} · {query}"
     if start or end:
-        title = f"{title}: {start or '..'} to {end or '..'}"
+        title = f"{title} · {start or '..'} ~ {end or '..'}"
     if not tasks:
-        return f"## {title}\n- none"
+        return f"## {title}\n- 없음"
     return "\n".join([f"## {title}", *(_completed_task_line(item) for item in tasks[:25])])
 
 
