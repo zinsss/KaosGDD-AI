@@ -5,6 +5,9 @@ import unittest
 from unittest.mock import AsyncMock
 
 from kaos_brain.bot import (
+    BrainActiveTaskActionsView,
+    BrainActiveTasksSelect,
+    BrainActiveTasksView,
     BrainCompletedTasksSelect,
     BrainCompletedTasksView,
     BrainDocumentSearchSelect,
@@ -128,6 +131,79 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         content = interaction.followup.send.await_args.args[0]
         self.assertIn("## Confirm task action", content)
         self.assertIn("- action: reopen", content)
+
+    async def test_active_task_select_sends_action_buttons(self) -> None:
+        tools = FakeGovernorTools()
+        view = BrainActiveTasksView(
+            tools,  # type: ignore[arg-type]
+            200,
+            ToolRequest(ToolKind.ACTIVE_TASKS, profile="supplies"),
+            [{"title": "Soap"}],
+        )
+        select = next(child for child in view.children if isinstance(child, BrainActiveTasksSelect))
+        select._values = ["0"]
+        interaction = SimpleNamespace(
+            id=888,
+            user=SimpleNamespace(id=200),
+            response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+            followup=SimpleNamespace(send=AsyncMock()),
+        )
+
+        await select.callback(interaction)  # type: ignore[arg-type]
+
+        interaction.response.defer.assert_awaited_once()
+        self.assertEqual(interaction.followup.send.await_args.args[0], "## Soap")
+        action_view = interaction.followup.send.await_args.kwargs["view"]
+        self.assertIsInstance(action_view, BrainActiveTaskActionsView)
+        self.assertEqual([item.label for item in action_view.children], ["Complete", "Delete", "Close"])
+
+    async def test_active_task_complete_button_sends_confirmation(self) -> None:
+        tools = FakeGovernorTools()
+        view = BrainActiveTaskActionsView(
+            tools,  # type: ignore[arg-type]
+            200,
+            ToolRequest(ToolKind.ACTIVE_TASKS, profile="family"),
+            "Call mom",
+        )
+        interaction = SimpleNamespace(
+            id=999,
+            user=SimpleNamespace(id=200),
+            response=SimpleNamespace(edit_message=AsyncMock(), send_message=AsyncMock()),
+        )
+
+        await view.children[0].callback(interaction)  # type: ignore[arg-type,union-attr]
+
+        request, actor_id, idempotency_key = tools.task_action_calls[0]
+        self.assertEqual(request.task_title, "Call mom")
+        self.assertEqual(request.action, "complete")
+        self.assertEqual(request.profile, "family")
+        self.assertEqual(actor_id, 200)
+        self.assertEqual(idempotency_key, "brain-task-complete-999")
+        content = interaction.response.edit_message.await_args.kwargs["content"]
+        self.assertIn("## Confirm task action", content)
+        self.assertIn("- action: complete", content)
+
+    async def test_active_task_delete_button_sends_confirmation(self) -> None:
+        tools = FakeGovernorTools()
+        view = BrainActiveTaskActionsView(
+            tools,  # type: ignore[arg-type]
+            200,
+            ToolRequest(ToolKind.ACTIVE_TASKS, profile="supplies"),
+            "Soap",
+        )
+        interaction = SimpleNamespace(
+            id=1000,
+            user=SimpleNamespace(id=200),
+            response=SimpleNamespace(edit_message=AsyncMock(), send_message=AsyncMock()),
+        )
+
+        await view.children[1].callback(interaction)  # type: ignore[arg-type,union-attr]
+
+        request, _, idempotency_key = tools.task_action_calls[0]
+        self.assertEqual(request.task_title, "Soap")
+        self.assertEqual(request.action, "delete")
+        self.assertEqual(request.profile, "supplies")
+        self.assertEqual(idempotency_key, "brain-task-delete-1000")
 
 
 if __name__ == "__main__":

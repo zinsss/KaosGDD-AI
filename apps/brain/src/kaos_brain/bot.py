@@ -217,7 +217,11 @@ class BrainBot(discord.Client):
             tasks = _task_results(payload)
             view = BrainCompletedTasksView(self.governor_tools, actor_id, tool_request, tasks) if tasks else None
             return context, view
-        if tool_request.kind in {ToolKind.TODAY, ToolKind.ACTIVE_TASKS}:
+        if tool_request.kind is ToolKind.ACTIVE_TASKS:
+            tasks = _task_results(payload)
+            view = BrainActiveTasksView(self.governor_tools, actor_id, tool_request, tasks) if tasks else None
+            return context, view
+        if tool_request.kind is ToolKind.TODAY:
             return context, None
         try:
             return await self.ollama.summarize_tool_result(user_text, context), None
@@ -798,6 +802,109 @@ class BrainCompletedTasksSelect(discord.ui.Select):
             ),
             allowed_mentions=NO_MENTIONS,
         )
+
+
+class BrainActiveTasksView(discord.ui.View):
+    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, request: ToolRequest, tasks: list[dict[str, Any]]) -> None:
+        super().__init__(timeout=600)
+        self.governor_tools = governor_tools
+        self.actor_id = actor_id
+        self.request = request
+        self.tasks = tasks[:25]
+        self.add_item(BrainActiveTasksSelect(self))
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if int(interaction.user.id) == self.actor_id:
+            return True
+        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+
+class BrainActiveTasksSelect(discord.ui.Select):
+    def __init__(self, parent: BrainActiveTasksView) -> None:
+        self.parent_view = parent
+        options = [
+            discord.SelectOption(
+                label=_task_option_label(task),
+                description=_task_option_description(task) or None,
+                value=str(index),
+            )
+            for index, task in enumerate(parent.tasks)
+        ]
+        super().__init__(placeholder="Choose active item", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        try:
+            task = self.parent_view.tasks[int(self.values[0])]
+            title = str(task.get("title") or task.get("summary") or "").strip()
+            if not title:
+                raise ValueError("missing task title")
+        except (IndexError, TypeError, ValueError) as exc:
+            await interaction.response.send_message(f"Task selection failed: {exc}", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.response.defer()
+        await interaction.followup.send(
+            f"## {title}",
+            view=BrainActiveTaskActionsView(
+                self.parent_view.governor_tools,
+                self.parent_view.actor_id,
+                self.parent_view.request,
+                title,
+            ),
+            allowed_mentions=NO_MENTIONS,
+        )
+
+
+class BrainActiveTaskActionsView(discord.ui.View):
+    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, request: ToolRequest, title: str) -> None:
+        super().__init__(timeout=600)
+        self.governor_tools = governor_tools
+        self.actor_id = actor_id
+        self.request = request
+        self.title = title
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if int(interaction.user.id) == self.actor_id:
+            return True
+        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+    @discord.ui.button(label="Complete", style=discord.ButtonStyle.success)
+    async def complete(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await self._propose(interaction, "complete")
+
+    @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger)
+    async def delete(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await self._propose(interaction, "delete")
+
+    @discord.ui.button(label="Close", style=discord.ButtonStyle.secondary)
+    async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if interaction.message is None:
+            await interaction.response.send_message("Closed.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.message.delete()
+
+    async def _propose(self, interaction: discord.Interaction, action: str) -> None:
+        try:
+            payload = await self.governor_tools.propose_task_action(
+                TaskActionRequest(
+                    self.title,
+                    action,
+                    profile=self.request.profile,
+                    collection_id=self.request.collection_id,
+                ),
+                actor_id=self.actor_id,
+                idempotency_key=f"brain-task-{action}-{interaction.id}",
+            )
+        except GovernorToolError as exc:
+            await interaction.response.send_message(f"Task {action} failed: {exc}", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.response.edit_message(
+            content=render_task_action_proposal(payload),
+            view=TaskActionConfirmationView(self.governor_tools, self.actor_id, str(payload.get("confirmationId") or "")),
+            allowed_mentions=NO_MENTIONS,
+        )
+        self.stop()
 
 
 class TaskUpdateConfirmationView(discord.ui.View):
