@@ -16,15 +16,11 @@ OpenClaw is intentionally not part of this deployment.
 
 ## Install
 
-From a fresh clone or copied checkout:
+From a fresh clone:
 
 ```bash
 cd /srv/projects/KaosGDD-AI
-docker build --target runtime --tag kaos-brain:current --file apps/brain/Dockerfile .
-sudo install -d -m 0750 -o "$USER" -g "$(id -gn)" /srv/kaos/brain /srv/kaos/secrets
-cp deploy/kaosbrain/.env.example /srv/kaos/brain/kaosbrain.env
-sed -i "s/^KAOS_HOST_UID=.*/KAOS_HOST_UID=$(id -u)/" /srv/kaos/brain/kaosbrain.env
-sed -i "s/^KAOS_HOST_GID=.*/KAOS_HOST_GID=$(id -g)/" /srv/kaos/brain/kaosbrain.env
+./deploy/kaosbrain/kaosbrain setup
 ```
 
 Create the secret file without printing it:
@@ -36,12 +32,18 @@ unset TOKEN
 chmod 0640 /srv/kaos/secrets/kaosbrain_discord_bot_token
 ```
 
-Install the unit:
+Edit `/srv/kaos/brain/kaosbrain.env`, then test and start:
 
 ```bash
-sudo cp deploy/kaosbrain/kaosbrain.service /etc/systemd/system/kaosbrain.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now kaosbrain.service
+./deploy/kaosbrain/kaosbrain test
+./deploy/kaosbrain/kaosbrain up
+```
+
+After the first install, update from the host checkout with:
+
+```bash
+cd /srv/projects/KaosGDD-AI
+./deploy/kaosbrain/kaosbrain deploy
 ```
 
 ## Verify
@@ -50,6 +52,7 @@ sudo systemctl enable --now kaosbrain.service
 systemctl status kaosbrain.service --no-pager
 docker ps --filter name=kaos-brain
 curl -fsS http://127.0.0.1:11434/api/tags >/dev/null
+./deploy/kaosbrain/kaosbrain status
 ```
 
 Then smoke test in the configured Discord `#brain` channel:

@@ -1,0 +1,154 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DEPLOY_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(cd -- "${DEPLOY_DIR}/../.." && pwd)
+ENV_DIR=${KAOSBRAIN_ENV_DIR:-/srv/kaos/brain}
+ENV_FILE=${KAOSBRAIN_ENV_FILE:-${ENV_DIR}/kaosbrain.env}
+SECRETS_DIR=${KAOSBRAIN_SECRETS_DIR:-/srv/kaos/secrets}
+TOKEN_FILE=${KAOSBRAIN_TOKEN_FILE:-${SECRETS_DIR}/kaosbrain_discord_bot_token}
+SERVICE_NAME=${KAOSBRAIN_SERVICE_NAME:-kaosbrain.service}
+IMAGE_NAME=${KAOSBRAIN_IMAGE_NAME:-kaos-brain:current}
+CONTAINER_NAME=${KAOSBRAIN_CONTAINER_NAME:-kaos-brain}
+
+die() {
+  printf 'ERROR: %s\n' "$*" >&2
+  exit 1
+}
+
+info() {
+  printf '%s\n' "$*"
+}
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || die "$1 is required"
+}
+
+load_env() {
+  [[ -f "${ENV_FILE}" ]] || die "missing env file: ${ENV_FILE}; run ${0} setup"
+  set -a
+  # shellcheck disable=SC1090
+  source "${ENV_FILE}"
+  set +a
+}
+
+setup() {
+  require_command docker
+  require_command sudo
+  sudo install -d -m 0750 -o "$USER" -g "$(id -gn)" "${ENV_DIR}" "${SECRETS_DIR}"
+  if [[ ! -f "${ENV_FILE}" ]]; then
+    cp "${DEPLOY_DIR}/.env.example" "${ENV_FILE}"
+    sed -i "s/^KAOS_HOST_UID=.*/KAOS_HOST_UID=$(id -u)/" "${ENV_FILE}"
+    sed -i "s/^KAOS_HOST_GID=.*/KAOS_HOST_GID=$(id -g)/" "${ENV_FILE}"
+    info "Created ${ENV_FILE}"
+  fi
+  if [[ ! -e "${TOKEN_FILE}" ]]; then
+    : > "${TOKEN_FILE}"
+  fi
+  chmod 0640 "${TOKEN_FILE}"
+  sudo cp "${DEPLOY_DIR}/kaosbrain.service" "/etc/systemd/system/${SERVICE_NAME}"
+  sudo systemctl daemon-reload
+  sudo systemctl enable "${SERVICE_NAME}" >/dev/null
+  info "Setup complete. Fill ${ENV_FILE} and ${TOKEN_FILE}, then run:"
+  info "  ${0} test"
+  info "  ${0} up"
+}
+
+preflight() {
+  require_command docker
+  require_command curl
+  require_command sudo
+  load_env
+  [[ -s "${TOKEN_FILE}" ]] || die "missing or empty token file: ${TOKEN_FILE}"
+  [[ "${DISCORD_GUILD_ID:-}" != "123456789012345678" ]] || die "replace the example Discord guild ID"
+  [[ "${DISCORD_BRAIN_CHANNEL_ID:-}" != "123456789012345678" ]] || die "replace the example Discord brain channel ID"
+  [[ "${DISCORD_ALLOWED_USER_IDS:-}" != *"123456789012345678"* ]] || die "replace the example Discord user ID"
+  if [[ "${KAOSBRAIN_GOVERNOR_TOOLS_ENABLED:-false}" == "true" ]]; then
+    [[ -n "${KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL:-}" ]] || die "KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL is required"
+  fi
+  curl --fail --silent --show-error "${OLLAMA_BASE_URL:-http://127.0.0.1:11434}/api/tags" >/dev/null \
+    || die "Ollama is not reachable"
+  info "Preflight passed."
+}
+
+test_image() {
+  require_command docker
+  docker build --target test \
+    --tag kaosgdd-ai-brain:test \
+    --file "${REPO_ROOT}/apps/brain/Dockerfile" \
+    "${REPO_ROOT}"
+  docker run --rm kaosgdd-ai-brain:test
+}
+
+build_image() {
+  require_command docker
+  docker build --target runtime \
+    --tag "${IMAGE_NAME}" \
+    --file "${REPO_ROOT}/apps/brain/Dockerfile" \
+    "${REPO_ROOT}"
+}
+
+smoke() {
+  local attempt
+  for attempt in $(seq 1 20); do
+    if docker ps --filter "name=${CONTAINER_NAME}" --filter "status=running" --format '{{.Names}}' | grep -qx "${CONTAINER_NAME}"; then
+      docker logs --since 30s "${CONTAINER_NAME}" 2>&1 | tail -40
+      return
+    fi
+    sleep 1
+  done
+  sudo systemctl status "${SERVICE_NAME}" --no-pager >&2 || true
+  docker logs --tail 80 "${CONTAINER_NAME}" >&2 || true
+  die "KaosBrain container did not become running"
+}
+
+up() {
+  preflight
+  build_image
+  sudo systemctl restart "${SERVICE_NAME}"
+  smoke
+}
+
+deploy() {
+  require_command git
+  git -C "${REPO_ROOT}" pull --ff-only origin main
+  up
+}
+
+status() {
+  sudo systemctl status "${SERVICE_NAME}" --no-pager
+  docker ps --filter "name=${CONTAINER_NAME}" --format '{{.Names}} {{.Image}} {{.Status}}'
+}
+
+logs() {
+  docker logs --tail "${1:-120}" "${CONTAINER_NAME}"
+}
+
+usage() {
+  cat <<EOF
+Usage: ${0} <command>
+
+Commands:
+  setup      Create env/secret paths and install the systemd unit
+  preflight  Validate host, env, secret, and Ollama reachability
+  test       Build and run the Brain test image
+  build      Build the runtime image
+  up         Run preflight, build, restart, and smoke check
+  deploy     git pull --ff-only origin main, then up
+  status     Show systemd and container status
+  logs [n]   Show recent container logs
+EOF
+}
+
+case "${1:-}" in
+  setup) setup ;;
+  preflight) preflight ;;
+  test) test_image ;;
+  build) build_image ;;
+  up) up ;;
+  deploy) deploy ;;
+  status) status ;;
+  logs) shift; logs "$@" ;;
+  ""|-h|--help|help) usage ;;
+  *) die "unknown command: $1" ;;
+esac
