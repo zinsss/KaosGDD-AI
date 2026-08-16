@@ -468,7 +468,8 @@ class BrainMemoSearchSelect(discord.ui.Select):
             await interaction.response.send_message(content, ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         view = BrainOpenedMemoView(self.parent_view.governor_tools, self.parent_view.actor_id, str(item.get("name") or ""), content)
-        await interaction.response.send_message(content, view=view, allowed_mentions=NO_MENTIONS)
+        await interaction.response.defer()
+        await interaction.followup.send(content, view=view, allowed_mentions=NO_MENTIONS)
 
 
 class BrainOpenedMemoView(discord.ui.View):
@@ -547,7 +548,7 @@ class BrainMemoEditConfirmView(discord.ui.View):
         await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
         return False
 
-    @discord.ui.button(label="Confirm Edit", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="Edit Memo", style=discord.ButtonStyle.primary)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(
             BrainMemoEditModal(self.governor_tools, self.actor_id, self.name, self.content, interaction.message)
@@ -624,7 +625,7 @@ class BrainMemoDeleteConfirmView(discord.ui.View):
         await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
         return False
 
-    @discord.ui.button(label="Confirm Delete", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label="Delete Memo", style=discord.ButtonStyle.danger)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         try:
             proposal = await self.governor_tools.propose_memo_delete_by_name(
@@ -636,7 +637,7 @@ class BrainMemoDeleteConfirmView(discord.ui.View):
         except GovernorToolError as exc:
             await interaction.response.send_message(f"Memo delete failed: {exc}", ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
-        deleted_at = datetime.now(KST).strftime("%Y-%m-%d %H:%M KST")
+        deleted_at = datetime.now(KST).strftime("%Y-%m-%d %H:%M")
         view = BrainDeletedMemoView(self.governor_tools, self.actor_id, self.content)
         await interaction.response.edit_message(content=render_memo_deleted(self.content, deleted_at), view=view, allowed_mentions=NO_MENTIONS)
         self.stop()
@@ -730,7 +731,8 @@ class BrainDocumentSearchSelect(discord.ui.Select):
             content = render_document_opened(self.parent_view.query, item)
         except (GovernorToolError, IndexError, TypeError, ValueError) as exc:
             content = f"Document open failed: {exc}"
-        await interaction.response.edit_message(content=content, view=None, allowed_mentions=NO_MENTIONS)
+        await interaction.response.defer()
+        await interaction.followup.send(content, allowed_mentions=NO_MENTIONS)
         self.parent_view.stop()
 
 
