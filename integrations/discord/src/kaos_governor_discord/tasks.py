@@ -215,18 +215,20 @@ class DiscordTasksSurface:
         tasks: list[Mapping[str, Any]],
     ) -> discord.Message:
         content = render_completed_archive_message(tasks, collection_id=self.collection_id)
+        completed = completed_tasks_for_month(tasks, collection_id=self.collection_id)
+        view = CompletedTasksView(self, completed) if completed else None
         message_id = self.state.completed_archive_message_id
         if message_id and hasattr(channel, "fetch_message"):
             try:
                 message = await channel.fetch_message(message_id)
-                return await message.edit(content=content, view=None, allowed_mentions=NO_MENTIONS)
+                return await message.edit(content=content, view=view, allowed_mentions=NO_MENTIONS)
             except (discord.NotFound, discord.HTTPException):
                 LOGGER.info(
                     "%s completed archive message %s missing; recreating",
                     self.surface_name.capitalize(),
                     message_id,
                 )
-        return await channel.send(content=content, view=None, allowed_mentions=NO_MENTIONS)
+        return await channel.send(content=content, view=view, allowed_mentions=NO_MENTIONS)
 
     def _load_state(self) -> DiscordTasksState:
         try:
@@ -413,6 +415,52 @@ class RecentSuppliesView(discord.ui.View):
             except (IndexError, ValueError):
                 return
             await self.surface.create_task(title)
+
+        return callback
+
+
+class CompletedTasksView(discord.ui.View):
+    def __init__(self, surface: DiscordTasksSurface, tasks: list[Mapping[str, Any]]) -> None:
+        super().__init__(timeout=None)
+        self.surface = surface
+        self.tasks = [dict(item) for item in tasks[:MAX_VISIBLE_TASKS]]
+        select = discord.ui.Select(
+            placeholder="완료 항목 다시 만들기",
+            min_values=1,
+            max_values=1,
+            custom_id=f"{surface.button_prefix}:completed:recreate",
+            options=[
+                discord.SelectOption(label=_select_option_label(item.get("summary") or "Untitled task"), value=str(index))
+                for index, item in enumerate(self.tasks)
+            ],
+        )
+        select.callback = self._select_callback(select)
+        self.add_item(select)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if self.surface.policy.allows(interaction.guild_id, interaction.channel_id, interaction.user.id):
+            return True
+        if interaction.response.is_done():
+            await interaction.followup.send("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        else:
+            await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+    def _select_callback(self, select: discord.ui.Select):
+        async def callback(interaction: discord.Interaction) -> None:
+            await interaction.response.defer(ephemeral=True)
+            raw_value = select.values[0] if select.values else ""
+            try:
+                task = self.tasks[int(raw_value)]
+            except (IndexError, ValueError):
+                return
+            await self.surface.create_task(
+                AddTaskCommand(
+                    title=str(task.get("summary") or "Untitled task"),
+                    due_date=str(task.get("due") or ""),
+                    due_time=str(task.get("dueTime") or ""),
+                )
+            )
 
         return callback
 

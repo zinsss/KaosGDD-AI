@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock
 from kaos_governor_discord.access import AccessPolicy
 from kaos_governor_discord.tasks import (
     AddTaskCommand,
+    CompletedTasksView,
     DiscordTasksSurface,
     RecentSuppliesView,
     TaskView,
@@ -190,6 +191,26 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual([item["summary"] for item in completed], ["Soap"])
 
+    def test_completed_archive_limits_restore_dropdown_to_25_items(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            tasks = [
+                {
+                    **TASKS[1],
+                    "uid": f"DONE-{index:02d}",
+                    "summary": f"Done {index:02d}",
+                    "completed": f"2026-08-{(index % 28) + 1:02d}",
+                }
+                for index in range(30)
+            ]
+            surface = self.make_surface(Path(temporary) / "tasks.json", channel, FakeAdapter(tasks=tasks))
+
+            view = CompletedTasksView(surface, completed_tasks_for_month(tasks, month=date(2026, 8, 15)))
+            select = view.children[0]
+
+            self.assertEqual(len(select.options), 25)
+            self.assertEqual(select.custom_id, "tasks:completed:recreate")
+
     def test_parse_add_task_message_accepts_plus_title_only(self) -> None:
         self.assertEqual(parse_add_task_message("+ Call mom"), AddTaskCommand(title="Call mom"))
         self.assertEqual(parse_add_task_message("  +   엄마한테 전화  "), AddTaskCommand(title="엄마한테 전화"))
@@ -252,6 +273,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("## Completed", channel.sent[0]["content"])
             self.assertIn("## Buy milk", channel.sent[1]["content"])
             self.assertIn("## Call school", channel.sent[2]["content"])
+            self.assertIsNone(channel.sent[0]["view"])
             self.assertIsInstance(channel.sent[1]["view"], TaskView)
             buttons = channel.sent[1]["view"].children
             self.assertEqual([button.label for button in buttons], ["Done", "Edit", "Delete"])
@@ -283,6 +305,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(len(channel.sent), 3)
             self.assertIn("## Completed", channel.sent[0]["content"])
+            self.assertIsNone(channel.sent[0]["view"])
             self.assertIn("## Paper towels", channel.sent[1]["content"])
             self.assertIn("## 최근 준비물", channel.sent[2]["content"])
             self.assertNotIn("- due:", channel.sent[1]["content"])
@@ -314,6 +337,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(channel.sent), 2)
             self.assertIn("## Completed", channel.sent[0]["content"])
             self.assertIn("- none", channel.sent[0]["content"])
+            self.assertIsNone(channel.sent[0]["view"])
             self.assertEqual(channel.sent[1]["content"], "## Call mom")
 
     async def test_plus_message_creates_task_with_strict_due_date_time(self) -> None:
@@ -509,6 +533,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             completed_message = channel.messages[701]
             self.assertIn("## Completed", summary_message.edits[-1]["content"])
             self.assertIn("Buy milk", summary_message.edits[-1]["content"])
+            self.assertIsInstance(summary_message.edits[-1]["view"], CompletedTasksView)
             self.assertFalse(completed_message.deleted)
             self.assertIn("## ~~Buy milk~~", completed_message.edits[-1]["content"])
             self.assertIsNone(completed_message.edits[-1]["view"])
@@ -518,6 +543,87 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(await surface.delete_task("zin:tasks|TASK-1"))
             self.assertEqual(adapter.deleted[0], ("main", "TASK-1", "zin:tasks"))
             self.assertEqual(surface.state.message_ids, {})
+
+    async def test_recreate_completed_task_preserves_due_for_tasks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            adapter = FakeAdapter(
+                tasks=[
+                    {
+                        **TASKS[1],
+                        "uid": "DONE-1",
+                        "collection": "zin:tasks",
+                        "summary": "Renew license",
+                        "due": "2026-08-20",
+                        "dueTime": "14:30",
+                    }
+                ]
+            )
+            surface = self.make_surface(Path(temporary) / "tasks.json", channel, adapter)
+
+            await surface.ensure_message()
+            view = channel.sent[0]["view"]
+            interaction = SimpleNamespace(
+                guild_id=100,
+                channel_id=300,
+                user=SimpleNamespace(id=200),
+                response=SimpleNamespace(defer=AsyncMock(), is_done=lambda: True),
+                followup=SimpleNamespace(send=AsyncMock()),
+            )
+
+            await view._select_callback(SimpleNamespace(values=["0"]))(interaction)  # type: ignore[attr-defined,arg-type]
+
+            self.assertEqual(adapter.created[-1][1]["title"], "Renew license")
+            self.assertEqual(adapter.created[-1][1]["dueDate"], "2026-08-20")
+            self.assertEqual(adapter.created[-1][1]["dueTime"], "14:30")
+
+    async def test_recreate_completed_supply_strips_due_date(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            adapter = FakeAdapter(
+                tasks=[
+                    {
+                        **TASKS[1],
+                        "uid": "SUPPLY-DONE-1",
+                        "collection": "zin:supplies",
+                        "summary": "Paper towels",
+                        "due": "2026-08-20",
+                        "dueTime": "14:30",
+                    }
+                ]
+            )
+            surface = DiscordTasksSurface(
+                FakeBot(channel),  # type: ignore[arg-type]
+                AccessPolicy(100, frozenset({200}), frozenset({300})),
+                channel_id=300,
+                profile="main",
+                state_path=Path(temporary) / "supplies.json",
+                adapter=adapter,  # type: ignore[arg-type]
+                surface_name="supplies",
+                button_prefix="supplies",
+                collection_id="zin:supplies",
+                show_due=False,
+            )
+
+            await surface.ensure_message()
+            view = channel.sent[0]["view"]
+            self.assertIsInstance(view, CompletedTasksView)
+            select = view.children[0]
+            self.assertEqual(select.custom_id, "supplies:completed:recreate")
+            interaction = SimpleNamespace(
+                guild_id=100,
+                channel_id=300,
+                user=SimpleNamespace(id=200),
+                response=SimpleNamespace(defer=AsyncMock(), is_done=lambda: True),
+                followup=SimpleNamespace(send=AsyncMock()),
+            )
+
+            await view._select_callback(SimpleNamespace(values=["0"]))(interaction)  # type: ignore[attr-defined,arg-type]
+
+            self.assertEqual(adapter.created[-1][1]["title"], "Paper towels")
+            self.assertEqual(adapter.created[-1][1]["collectionId"], "zin:supplies")
+            self.assertEqual(adapter.created[-1][1]["dueDate"], "")
+            self.assertEqual(adapter.created[-1][1]["dueTime"], "")
 
     async def test_repost_active_messages_moves_active_items_to_channel_bottom(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
