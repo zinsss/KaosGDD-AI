@@ -420,7 +420,7 @@ def _message_matches(
     return (
         str(getattr(message, "content", "") or "") == content
         and _embed_signature(current_embed[0] if current_embed else None) == _embed_signature(embed)
-        and _view_signature(getattr(message, "view", None)) == _view_signature(view)
+        and _message_view_signature(message) == _view_signature(view)
     )
 
 
@@ -428,12 +428,22 @@ def _embed_signature(embed: discord.Embed | None) -> dict[str, object]:
     return embed.to_dict() if embed is not None else {}
 
 
-def _view_signature(view: discord.ui.View | None) -> tuple[tuple[str, str, str], ...]:
+def _message_view_signature(message: discord.Message) -> tuple[tuple[str, str], ...]:
+    view = getattr(message, "view", None)
+    if view is not None:
+        return _view_signature(view)
+    signature: list[tuple[str, str]] = []
+    for row in getattr(message, "components", []) or []:
+        for item in getattr(row, "children", []) or []:
+            signature.append((str(getattr(item, "custom_id", "") or ""), str(getattr(item, "label", "") or "")))
+    return tuple(signature)
+
+
+def _view_signature(view: discord.ui.View | None) -> tuple[tuple[str, str], ...]:
     if view is None:
         return ()
     return tuple(
         (
-            item.__class__.__name__,
             str(getattr(item, "custom_id", "") or ""),
             str(getattr(item, "label", "") or ""),
         )

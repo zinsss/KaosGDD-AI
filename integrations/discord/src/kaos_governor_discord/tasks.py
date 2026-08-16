@@ -778,15 +778,25 @@ def is_supplies_collection(collection_id: str) -> bool:
 
 
 def _message_matches(message: discord.Message, *, content: str, view: discord.ui.View | None) -> bool:
-    return str(getattr(message, "content", "") or "") == content and _view_signature(getattr(message, "view", None)) == _view_signature(view)
+    return str(getattr(message, "content", "") or "") == content and _message_view_signature(message) == _view_signature(view)
 
 
-def _view_signature(view: discord.ui.View | None) -> tuple[tuple[str, str, str], ...]:
+def _message_view_signature(message: discord.Message) -> tuple[tuple[str, str], ...]:
+    view = getattr(message, "view", None)
+    if view is not None:
+        return _view_signature(view)
+    signature: list[tuple[str, str]] = []
+    for row in getattr(message, "components", []) or []:
+        for item in getattr(row, "children", []) or []:
+            signature.append((str(getattr(item, "custom_id", "") or ""), str(getattr(item, "label", "") or "")))
+    return tuple(signature)
+
+
+def _view_signature(view: discord.ui.View | None) -> tuple[tuple[str, str], ...]:
     if view is None:
         return ()
     return tuple(
         (
-            item.__class__.__name__,
             str(getattr(item, "custom_id", "") or ""),
             str(getattr(item, "label", "") or ""),
         )
