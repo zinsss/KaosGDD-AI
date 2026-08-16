@@ -536,7 +536,7 @@ def _task_noun(payload: dict[str, Any]) -> str:
 
 
 def _memo_preview(content: str) -> str:
-    preview = content.strip()
+    preview = _escape_mentions(content).strip()
     if len(preview) > 1200:
         preview = f"{preview[:1200].rstrip()}..."
     return preview or "(empty)"
@@ -557,14 +557,14 @@ def render_tool_context(request: ToolRequest, payload: dict[str, Any]) -> str:
 
 
 def render_memo_opened(query: str, item: dict[str, Any]) -> str:
-    content = str(item.get("content") or item.get("snippet") or "").strip()
+    content = _escape_mentions(str(item.get("content") or item.get("snippet") or "")).strip()
     if content:
         return content[:1900]
     return f"## {memo_option_label(item)}"[:1900]
 
 
 def render_memo_deleted(content: str, deleted_at: str) -> str:
-    return f"{content.strip()}\n\nDeleted at {deleted_at}".strip()[:1900]
+    return f"{_escape_mentions(content).strip()}\n\nDeleted at {deleted_at}".strip()[:1900]
 
 
 def render_document_opened(query: str, item: dict[str, Any]) -> str:
@@ -594,7 +594,7 @@ def memo_option_label(item: dict[str, Any]) -> str:
 
 
 def memo_option_description(item: dict[str, Any]) -> str:
-    return _truncate(_memo_tags_text(item), 100)
+    return _truncate(_memo_tags_text(item) or "No tags", 100)
 
 
 def memo_public_url(base_url: str, name: str) -> str:
@@ -797,6 +797,16 @@ def _truncate_text(value: str, limit: int) -> str:
     if len(stripped) <= limit:
         return stripped
     return f"{stripped[:limit].rstrip()}..."
+
+
+def _escape_mentions(value: str) -> str:
+    return (
+        value.replace("@everyone", "@\u200beveryone")
+        .replace("@here", "@\u200bhere")
+        .replace("<@&", "<@&\u200b")
+        .replace("<@", "<@\u200b")
+        .replace("<#", "<#\u200b")
+    )
 
 
 def _document_line(item: dict[str, Any]) -> str:

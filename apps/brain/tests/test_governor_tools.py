@@ -105,6 +105,9 @@ class GovernorToolRenderingTests(unittest.TestCase):
         description = memo_option_description({"snippet": "x" * 200})
         self.assertLessEqual(len(description), 100)
 
+    def test_memo_option_description_uses_no_tags_placeholder(self) -> None:
+        self.assertEqual(memo_option_description({"snippet": "# Training note"}), "No tags")
+
     def test_memo_dropdown_uses_title_and_tags(self) -> None:
         item = {
             "name": "memos/abc",
@@ -127,6 +130,12 @@ class GovernorToolRenderingTests(unittest.TestCase):
             content,
             "# Training note\n\n## Person\n\n- GSEEK\n  - user@example.com\n  - password",
         )
+
+    def test_render_opened_memo_escapes_mentions(self) -> None:
+        content = render_memo_opened("training", {"name": "memos/abc", "content": "# Training\n@everyone\n<@123>"})
+
+        self.assertIn("@\u200beveryone", content)
+        self.assertIn("<@\u200b123>", content)
 
     def test_render_deleted_memo_keeps_original_content(self) -> None:
         content = render_memo_deleted("# Training note\n\nBody", "2026-08-15 16:30 KST")

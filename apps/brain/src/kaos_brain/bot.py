@@ -219,6 +219,11 @@ class BrainBot(discord.Client):
         context = render_tool_context(tool_request, payload)
         if tool_request.kind is ToolKind.MEMO_SEARCH:
             results = search_results(payload)
+            if len(results) == 1:
+                item = results[0]
+                content = render_memo_opened(tool_request.query, item)
+                view = BrainOpenedMemoView(self.governor_tools, actor_id, str(item.get("name") or ""), content)
+                return content, view
             view = (
                 BrainMemoSearchView(
                     self.governor_tools,

@@ -11,6 +11,16 @@ class FailingGovernorTools:
         raise GovernorToolError("upstream exploded with details")
 
 
+class MemoGovernorTools:
+    async def fetch(self, request: ToolRequest):
+        return {
+            "query": request.query,
+            "resultCount": 1,
+            "totalCount": 1,
+            "results": [{"name": "memos/42", "content": "# Rustdesk\nUse Tailscale.", "full": True}],
+        }
+
+
 class BrainToolResponseTests(unittest.IsolatedAsyncioTestCase):
     async def test_missing_governor_tools_uses_short_korean_message(self) -> None:
         brain = SimpleNamespace(governor_tools=None)
@@ -39,6 +49,21 @@ class BrainToolResponseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reply, "조회 실패했어요.")
         self.assertNotIn("upstream exploded", reply)
         self.assertIsNone(view)
+
+    async def test_single_memo_search_opens_original_memo_with_actions(self) -> None:
+        brain = SimpleNamespace(governor_tools=MemoGovernorTools())
+
+        reply, view = await BrainBot._answer_with_governor_tool(  # type: ignore[arg-type]
+            brain,
+            "rustdesk 메모 찾아줘",
+            ToolRequest(ToolKind.MEMO_SEARCH, "rustdesk"),
+            actor_id=200,
+        )
+
+        self.assertEqual(reply, "# Rustdesk\nUse Tailscale.")
+        self.assertIsNotNone(view)
+        assert view is not None
+        self.assertEqual([item.label for item in view.children], ["Close", "More..."])
 
 
 if __name__ == "__main__":
