@@ -382,7 +382,7 @@ def render_task_due_update_proposal(payload: dict[str, Any]) -> str:
 
 
 def render_task_due_update_completed(payload: dict[str, Any]) -> str:
-    return "할 일 수정했어요."
+    return f"{_task_noun(payload)} 수정했어요."
 
 
 def render_task_edit_proposal(payload: dict[str, Any]) -> str:
@@ -400,7 +400,7 @@ def render_task_edit_proposal(payload: dict[str, Any]) -> str:
 
 
 def render_task_edit_completed(payload: dict[str, Any]) -> str:
-    return "할 일 수정했어요."
+    return f"{_task_noun(payload)} 수정했어요."
 
 
 def render_task_create_proposal(payload: dict[str, Any]) -> str:
@@ -419,7 +419,7 @@ def render_task_create_proposal(payload: dict[str, Any]) -> str:
 
 
 def render_task_create_completed(payload: dict[str, Any]) -> str:
-    return "할 일 저장했어요."
+    return f"{_task_noun(payload)} 저장했어요."
 
 
 def render_task_action_proposal(payload: dict[str, Any]) -> str:
@@ -439,15 +439,16 @@ def render_task_action_proposal(payload: dict[str, Any]) -> str:
 def render_task_action_completed(payload: dict[str, Any]) -> str:
     task = payload.get("task")
     if not isinstance(task, dict):
-        return "할 일 수정했어요."
+        return f"{_task_noun(payload)} 수정했어요."
     action = str(task.get("action") or "")
+    noun = _task_noun(payload)
     if action == "delete":
-        return "할 일 삭제했어요."
+        return f"{noun} 삭제했어요."
     if action == "complete":
-        return "할 일 완료했어요."
+        return f"{noun} 완료했어요."
     if action == "reopen":
-        return "할 일 다시 열었어요."
-    return "할 일 수정했어요."
+        return f"{noun} 다시 열었어요."
+    return f"{noun} 수정했어요."
 
 
 def render_event_create_proposal(payload: dict[str, Any]) -> str:
@@ -524,6 +525,14 @@ def render_memo_edit_completed(payload: dict[str, Any]) -> str:
 
 def _due_text(due_date: str, due_time: str) -> str:
     return " ".join(part for part in (due_date, due_time) if part).strip()
+
+
+def _task_noun(payload: dict[str, Any]) -> str:
+    task = payload.get("task")
+    task_payload = task if isinstance(task, dict) else payload
+    profile = str(task_payload.get("profile") or payload.get("profile") or "").strip().lower()
+    collection_id = str(task_payload.get("collectionId") or payload.get("collectionId") or "").strip().lower()
+    return "비품" if profile == "supplies" or "supplies" in collection_id else "할 일"
 
 
 def _memo_preview(content: str) -> str:
