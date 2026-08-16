@@ -7,6 +7,7 @@ ENV_DIR=${KAOSBRAIN_ENV_DIR:-/srv/kaos/brain}
 ENV_FILE=${KAOSBRAIN_ENV_FILE:-${ENV_DIR}/kaosbrain.env}
 SECRETS_DIR=${KAOSBRAIN_SECRETS_DIR:-/srv/kaos/secrets}
 TOKEN_FILE=${KAOSBRAIN_TOKEN_FILE:-${SECRETS_DIR}/kaosbrain_discord_bot_token}
+GOVERNOR_TOKEN_FILE=${KAOSBRAIN_GOVERNOR_TOKEN_FILE:-${SECRETS_DIR}/governor_api_token}
 SERVICE_NAME=${KAOSBRAIN_SERVICE_NAME:-kaosbrain.service}
 IMAGE_NAME=${KAOSBRAIN_IMAGE_NAME:-kaos-brain:current}
 CONTAINER_NAME=${KAOSBRAIN_CONTAINER_NAME:-kaos-brain}
@@ -32,6 +33,15 @@ load_env() {
   set +a
 }
 
+host_secret_path() {
+  local path=$1
+  if [[ "${path}" == /run/secrets/* ]]; then
+    printf '%s/%s' "${SECRETS_DIR}" "${path##*/}"
+    return
+  fi
+  printf '%s' "${path}"
+}
+
 setup() {
   require_command docker
   require_command sudo
@@ -45,7 +55,11 @@ setup() {
   if [[ ! -e "${TOKEN_FILE}" ]]; then
     : > "${TOKEN_FILE}"
   fi
+  if [[ ! -e "${GOVERNOR_TOKEN_FILE}" ]]; then
+    : > "${GOVERNOR_TOKEN_FILE}"
+  fi
   chmod 0640 "${TOKEN_FILE}"
+  chmod 0640 "${GOVERNOR_TOKEN_FILE}"
   sudo cp "${DEPLOY_DIR}/kaosbrain.service" "/etc/systemd/system/${SERVICE_NAME}"
   sudo systemctl daemon-reload
   sudo systemctl enable "${SERVICE_NAME}" >/dev/null
@@ -65,6 +79,11 @@ preflight() {
   [[ "${DISCORD_ALLOWED_USER_IDS:-}" != *"123456789012345678"* ]] || die "replace the example Discord user ID"
   if [[ "${KAOSBRAIN_GOVERNOR_TOOLS_ENABLED:-false}" == "true" ]]; then
     [[ -n "${KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL:-}" ]] || die "KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL is required"
+    if [[ -z "${GOVERNOR_API_TOKEN:-}" ]]; then
+      local governor_token_path
+      governor_token_path=$(host_secret_path "${GOVERNOR_API_TOKEN_FILE:-/run/secrets/governor_api_token}")
+      [[ -s "${governor_token_path}" ]] || die "missing or empty Governor token file: ${governor_token_path}"
+    fi
   fi
   curl --fail --silent --show-error "${OLLAMA_BASE_URL:-http://127.0.0.1:11434}/api/tags" >/dev/null \
     || die "Ollama is not reachable"
