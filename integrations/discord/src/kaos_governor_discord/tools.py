@@ -569,6 +569,8 @@ class BrainToolServer:
         if collection_id:
             payload["collectionId"] = collection_id
         payload = normalize_supplies_due(payload, collection_id=collection_id or profile)
+        due_date = str(payload.get("dueDate") or "")
+        due_time = str(payload.get("dueTime") or "")
         try:
             actor = Actor("user", actor_id, "family" if profile == "family" else "personal")
             operation, _created = self._durable.start_operation(

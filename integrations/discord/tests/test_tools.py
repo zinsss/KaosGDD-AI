@@ -761,7 +761,10 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
             },
         )
         self.assertEqual(proposal.status, 201)
-        confirmation_id = (await proposal.json())["confirmationId"]
+        proposal_payload = await proposal.json()
+        self.assertEqual(proposal_payload["task"]["due"], "")
+        self.assertEqual(proposal_payload["task"]["dueTime"], "")
+        confirmation_id = proposal_payload["confirmationId"]
 
         response = await self.client.post(
             f"/tools/confirmations/{confirmation_id}/approve",
