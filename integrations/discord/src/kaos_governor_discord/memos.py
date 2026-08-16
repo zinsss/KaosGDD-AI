@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime
 
 import discord
 from kaos_governor.memos import Memo, MemoSearchPage, MemoSearchResult, MemosError, MemosService
@@ -297,7 +298,8 @@ class MemosSearchSelect(discord.ui.Select):
             await interaction.response.send_message("Memo selection expired.", ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         self.capture.preserve_search_message(interaction.message)
-        await interaction.response.edit_message(
+        await interaction.response.defer()
+        await interaction.followup.send(
             content=render_memo_opened(self.page.query, result),
             view=MemosOpenedView(self.capture, self.page.query, result.memo),
             allowed_mentions=NO_MENTIONS,
@@ -311,8 +313,39 @@ class MemosOpenedView(discord.ui.View):
         self.query = query
         self.memo = memo
         close = discord.ui.Button(label="Close", style=discord.ButtonStyle.secondary, custom_id="memos-open:close")
-        edit = discord.ui.Button(label="Edit", style=discord.ButtonStyle.primary, custom_id="memos-open:edit")
-        delete = discord.ui.Button(label="Delete", style=discord.ButtonStyle.danger, custom_id="memos-open:delete")
+        more = discord.ui.Button(label="More...", style=discord.ButtonStyle.secondary, custom_id="memos-open:more")
+        close.callback = self._close
+        more.callback = self._more
+        self.add_item(close)
+        self.add_item(more)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if self.capture.policy.allows(interaction.guild_id, interaction.channel_id, interaction.user.id):
+            return True
+        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+    async def _close(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
+        if interaction.message is not None:
+            await interaction.message.delete()
+
+    async def _more(self, interaction: discord.Interaction) -> None:
+        await interaction.response.edit_message(
+            view=MemosMoreView(self.capture, self.query, self.memo),
+            allowed_mentions=NO_MENTIONS,
+        )
+
+
+class MemosMoreView(discord.ui.View):
+    def __init__(self, capture: DiscordMemosCapture, query: str, memo: Memo) -> None:
+        super().__init__(timeout=600)
+        self.capture = capture
+        self.query = query
+        self.memo = memo
+        close = discord.ui.Button(label="Close", style=discord.ButtonStyle.secondary, custom_id="memos-more:close")
+        edit = discord.ui.Button(label="Edit", style=discord.ButtonStyle.primary, custom_id="memos-more:edit")
+        delete = discord.ui.Button(label="Delete", style=discord.ButtonStyle.danger, custom_id="memos-more:delete")
         close.callback = self._close
         edit.callback = self._edit
         delete.callback = self._delete
@@ -332,9 +365,73 @@ class MemosOpenedView(discord.ui.View):
             await interaction.message.delete()
 
     async def _edit(self, interaction: discord.Interaction) -> None:
-        await interaction.response.send_modal(MemosEditModal(self.capture, self.query, self.memo))
+        await interaction.response.edit_message(
+            view=MemosEditConfirmView(self.capture, self.query, self.memo),
+            allowed_mentions=NO_MENTIONS,
+        )
 
     async def _delete(self, interaction: discord.Interaction) -> None:
+        await interaction.response.edit_message(
+            view=MemosDeleteConfirmView(self.capture, self.query, self.memo),
+            allowed_mentions=NO_MENTIONS,
+        )
+
+
+class MemosEditConfirmView(discord.ui.View):
+    def __init__(self, capture: DiscordMemosCapture, query: str, memo: Memo) -> None:
+        super().__init__(timeout=600)
+        self.capture = capture
+        self.query = query
+        self.memo = memo
+        cancel = discord.ui.Button(label="Cancel", style=discord.ButtonStyle.secondary, custom_id="memos-edit-confirm:cancel")
+        confirm = discord.ui.Button(label="Edit Memo", style=discord.ButtonStyle.primary, custom_id="memos-edit-confirm:confirm")
+        cancel.callback = self._cancel
+        confirm.callback = self._confirm
+        self.add_item(cancel)
+        self.add_item(confirm)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if self.capture.policy.allows(interaction.guild_id, interaction.channel_id, interaction.user.id):
+            return True
+        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+    async def _cancel(self, interaction: discord.Interaction) -> None:
+        await interaction.response.edit_message(
+            view=MemosMoreView(self.capture, self.query, self.memo),
+            allowed_mentions=NO_MENTIONS,
+        )
+
+    async def _confirm(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_modal(MemosEditModal(self.capture, self.query, self.memo))
+
+
+class MemosDeleteConfirmView(discord.ui.View):
+    def __init__(self, capture: DiscordMemosCapture, query: str, memo: Memo) -> None:
+        super().__init__(timeout=600)
+        self.capture = capture
+        self.query = query
+        self.memo = memo
+        cancel = discord.ui.Button(label="Cancel", style=discord.ButtonStyle.secondary, custom_id="memos-delete-confirm:cancel")
+        confirm = discord.ui.Button(label="Delete Memo", style=discord.ButtonStyle.danger, custom_id="memos-delete-confirm:confirm")
+        cancel.callback = self._cancel
+        confirm.callback = self._confirm
+        self.add_item(cancel)
+        self.add_item(confirm)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if self.capture.policy.allows(interaction.guild_id, interaction.channel_id, interaction.user.id):
+            return True
+        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+    async def _cancel(self, interaction: discord.Interaction) -> None:
+        await interaction.response.edit_message(
+            view=MemosMoreView(self.capture, self.query, self.memo),
+            allowed_mentions=NO_MENTIONS,
+        )
+
+    async def _confirm(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
         try:
             await self.capture.delete_memo(self.memo.name)
@@ -345,6 +442,57 @@ class MemosOpenedView(discord.ui.View):
                 allowed_mentions=NO_MENTIONS,
             )
             return
+        if interaction.message is not None:
+            await interaction.message.edit(
+                content=render_memo_deleted(self.memo),
+                view=MemosDeletedView(self.capture, self.query, self.memo),
+                allowed_mentions=NO_MENTIONS,
+            )
+
+
+class MemosDeletedView(discord.ui.View):
+    def __init__(self, capture: DiscordMemosCapture, query: str, memo: Memo) -> None:
+        super().__init__(timeout=600)
+        self.capture = capture
+        self.query = query
+        self.memo = memo
+        undo = discord.ui.Button(label="Undo Delete", style=discord.ButtonStyle.primary, custom_id="memos-deleted:undo")
+        delete_message = discord.ui.Button(
+            label="Delete this Message",
+            style=discord.ButtonStyle.danger,
+            custom_id="memos-deleted:delete-message",
+        )
+        undo.callback = self._undo
+        delete_message.callback = self._delete_message
+        self.add_item(undo)
+        self.add_item(delete_message)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if self.capture.policy.allows(interaction.guild_id, interaction.channel_id, interaction.user.id):
+            return True
+        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+    async def _undo(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
+        try:
+            memo = await self.capture.create_memo(self.memo.content)
+        except Exception:
+            await interaction.followup.send(
+                f"Memos restore rejected: {self.capture.last_error or 'internal_error'}",
+                ephemeral=True,
+                allowed_mentions=NO_MENTIONS,
+            )
+            return
+        if interaction.message is not None:
+            await interaction.message.edit(
+                content=render_memo_opened(self.query, MemoSearchResult(memo, "")),
+                view=MemosOpenedView(self.capture, self.query, memo),
+                allowed_mentions=NO_MENTIONS,
+            )
+
+    async def _delete_message(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         if interaction.message is not None:
             await interaction.message.delete()
 
@@ -410,25 +558,41 @@ def render_memos_search_summary(page: MemoSearchPage) -> str:
 
 def render_memo_opened(query: str, result: MemoSearchResult) -> str:
     memo = result.memo
-    lines = [
-        f"## Memos search · {escape_text(query or '..')}",
-        f"-# {escape_text(memo.name)}",
-    ]
     content = discord.utils.escape_mentions(memo.content).strip()
+    return (content or f"-# {escape_text(memo.name)}")[:1990]
+
+
+def render_memo_deleted(memo: Memo) -> str:
+    content = discord.utils.escape_mentions(memo.content).strip()
+    deleted_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+    lines = []
     if content:
         lines.append(content)
-    return "\n".join(lines)[:1990]
+    lines.append(f"Deleted at {deleted_at}")
+    return "\n\n".join(lines)[:1990]
 
 
 def memo_option_label(result: MemoSearchResult) -> str:
-    content = " ".join(result.memo.content.split())
-    for raw in result.memo.content.splitlines():
-        title = raw.strip().lstrip("#").strip()
-        if title:
-            return title[:100]
-    return (content or result.memo.name)[:100]
+    return compact_select_text(memo_title(result.memo), 100)
 
 
 def memo_option_description(result: MemoSearchResult) -> str:
-    snippet = " ".join((result.snippet or result.memo.content).split())
-    return snippet[:100]
+    tags = tuple(tag.strip().lstrip("#") for tag in result.memo.tags if tag.strip())
+    if not tags:
+        return "No tags"
+    return compact_select_text(", ".join(f"#{tag}" for tag in tags), 100)
+
+
+def memo_title(memo: Memo) -> str:
+    for raw in memo.content.splitlines():
+        title = raw.strip().lstrip("#").strip()
+        if title:
+            return title
+    return memo.name
+
+
+def compact_select_text(value: str, limit: int) -> str:
+    text = " ".join(value.split()).strip()
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rstrip() + "…"
