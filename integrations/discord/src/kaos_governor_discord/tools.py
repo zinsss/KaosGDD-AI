@@ -115,6 +115,7 @@ class BrainToolServer:
         memos: MemosService,
         paperless: PaperlessDocumentService,
         task_refresh_callback: Callable[[], Awaitable[None]] | None = None,
+        calendar_refresh_callback: Callable[[], Awaitable[None]] | None = None,
         today_provider: Callable[[], date] | None = None,
         durable_store: MemoryDurableGovernorStore | None = None,
     ) -> None:
@@ -124,7 +125,7 @@ class BrainToolServer:
         self._calendar_adapter = calendar_adapter
         self._memos = memos
         self._paperless = paperless
-        self._task_refresh_callback = task_refresh_callback
+        self._calendar_refresh_callback = calendar_refresh_callback or task_refresh_callback
         self._today_provider = today_provider or date.today
         self._durable = durable_store or MemoryDurableGovernorStore()
         self._pending_task_due_updates: dict[str, PendingTaskDueUpdate] = {}
@@ -1049,7 +1050,7 @@ class BrainToolServer:
                     memo_payload = _pending_memo_delete_payload(pending_memo_delete)
             self._durable.complete_operation(operation.operation_id, result={"uid": result_uid})
             if pending_memo_create is None and pending_memo_delete is None and pending_memo_edit is None:
-                await self._refresh_tasks()
+                await self._refresh_calendar_surfaces()
         except DurableGovernorError as exc:
             return web.json_response({"error": str(exc)}, status=400)
         except CalendarAdapterError as exc:
@@ -1084,13 +1085,13 @@ class BrainToolServer:
             response_payload
         )
 
-    async def _refresh_tasks(self) -> None:
-        if self._task_refresh_callback is None:
+    async def _refresh_calendar_surfaces(self) -> None:
+        if self._calendar_refresh_callback is None:
             return
         try:
-            await self._task_refresh_callback()
+            await self._calendar_refresh_callback()
         except Exception:
-            LOGGER.exception("Brain tool task refresh failed")
+            LOGGER.exception("Brain tool calendar surface refresh failed")
 
     def _with_weather(self, profile: str, bootstrap: Mapping[str, Any], days: list[date]) -> dict[str, Any]:
         payload = dict(bootstrap)

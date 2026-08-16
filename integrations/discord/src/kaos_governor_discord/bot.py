@@ -265,7 +265,7 @@ class GovernorBot(discord.Client):
                 calendar_adapter=self.calendar_adapter,
                 memos=self.memos,
                 paperless=self.paperless,
-                task_refresh_callback=self.discord_tasks.ensure_message if self.discord_tasks else None,
+                calendar_refresh_callback=self._refresh_calendar_surfaces,
             )
             if settings.brain_tools_enabled
             else None
@@ -641,6 +641,14 @@ class GovernorBot(discord.Client):
                 self.fax_service.record_error(exc)
                 LOGGER.exception("Fax cycle failed")
             await asyncio.sleep(self.fax_service.config.poll_seconds)
+
+    async def _refresh_calendar_surfaces(self) -> None:
+        if self.discord_calendar is not None:
+            await self.discord_calendar.ensure_messages()
+        if self.discord_tasks is not None:
+            await self.discord_tasks.ensure_message()
+        if self.discord_supplies is not None:
+            await self.discord_supplies.ensure_message()
 
     async def _calendar_midnight_loop(self) -> None:
         if self.discord_calendar is None:

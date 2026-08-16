@@ -175,6 +175,11 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.calendar = FakeCalendarAdapter()
         self.memos = FakeMemos()
         self.paperless = FakePaperless()
+        self.calendar_refresh_count = 0
+
+        async def refresh_calendar_surfaces() -> None:
+            self.calendar_refresh_count += 1
+
         server = BrainToolServer(
             "127.0.0.1",
             8098,
@@ -182,6 +187,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
             calendar_adapter=self.calendar,  # type: ignore[arg-type]
             memos=self.memos,  # type: ignore[arg-type]
             paperless=self.paperless,  # type: ignore[arg-type]
+            calendar_refresh_callback=refresh_calendar_surfaces,
             today_provider=lambda: date(2026, 8, 14),
         )
         self.client = TestClient(TestServer(server.application()))
@@ -300,6 +306,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["source"], "memos-live")
         self.assertEqual(payload["memo"]["name"], "memos/new")
         self.assertEqual(self.memos.create_calls, ["# Rustdesk\nUse Tailscale."])
+        self.assertEqual(self.calendar_refresh_count, 0)
 
     async def test_memo_create_approval_rejects_wrong_actor(self) -> None:
         proposal = await self.client.post(
@@ -601,6 +608,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.calendar.updated[0][0], "main")
         self.assertEqual(self.calendar.updated[0][1]["uid"], "TASK-1")
         self.assertEqual(self.calendar.updated[0][1]["dueDate"], "2026-08-17")
+        self.assertEqual(self.calendar_refresh_count, 1)
 
     async def test_task_due_update_approval_rejects_wrong_actor(self) -> None:
         proposal = await self.client.post(
@@ -729,6 +737,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.calendar.updated[0][1]["dueDate"], "2026-08-20")
         self.assertEqual(self.calendar.updated[0][1]["dueTime"], "14:30")
         self.assertEqual(self.calendar.updated[0][1]["priority"], "1")
+        self.assertEqual(self.calendar_refresh_count, 1)
 
     async def test_task_edit_strips_supplies_due_dates(self) -> None:
         self.calendar.tasks.append(
@@ -824,6 +833,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.calendar.created[0][0], "main")
         self.assertEqual(self.calendar.created[0][1]["title"], "Call school")
         self.assertEqual(self.calendar.created[0][1]["dueDate"], "2026-08-17")
+        self.assertEqual(self.calendar_refresh_count, 1)
 
     async def test_task_create_approval_preserves_collection_id(self) -> None:
         proposal = await self.client.post(
@@ -853,6 +863,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.calendar.created[0][0], "supplies")
         self.assertEqual(self.calendar.created[0][1]["collectionId"], "supplies:abc")
         self.assertEqual(self.calendar.created[0][1]["dueDate"], "")
+        self.assertEqual(self.calendar_refresh_count, 1)
 
     async def test_task_create_strips_supplies_due_dates(self) -> None:
         proposal = await self.client.post(
@@ -994,6 +1005,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
                 "collectionId": "family:events",
             },
         )
+        self.assertEqual(self.calendar_refresh_count, 1)
 
     async def test_task_complete_proposal_requires_confirmation_before_write(self) -> None:
         response = await self.client.post(
@@ -1039,6 +1051,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["task"]["action"], "complete")
         self.assertEqual(self.calendar.updated[0][1]["uid"], "TASK-1")
         self.assertEqual(self.calendar.updated[0][1]["status"], "COMPLETED")
+        self.assertEqual(self.calendar_refresh_count, 1)
 
     async def test_task_action_filters_by_collection_id(self) -> None:
         self.calendar.tasks.append(
@@ -1099,6 +1112,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         payload = await response.json()
         self.assertEqual(payload["task"]["action"], "delete")
         self.assertEqual(self.calendar.deleted, [("main", "TASK-1", "zin:tasks")])
+        self.assertEqual(self.calendar_refresh_count, 1)
 
     async def test_task_reopen_proposal_matches_completed_tasks_only(self) -> None:
         response = await self.client.post(
