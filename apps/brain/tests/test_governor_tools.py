@@ -13,9 +13,12 @@ from kaos_brain.governor_tools import (
     render_memo_opened,
     render_task_action_completed,
     render_task_create_completed,
+    render_task_edit_completed,
+    render_task_edit_proposal,
     render_task_due_update_completed,
     render_task_due_update_proposal,
     render_tool_context,
+    TaskEditRequest,
 )
 from kaos_brain.event_intent import EventCreateRequest
 from kaos_brain.task_update_intent import TaskActionRequest, TaskCreateRequest, TaskDueUpdateRequest
@@ -197,6 +200,28 @@ class GovernorToolRenderingTests(unittest.TestCase):
             {"task": {"title": "Call mom", "newDue": "2026-08-17", "newDueTime": "10:00"}}
         )
         self.assertEqual(content, "할 일 수정했어요.")
+
+    def test_render_task_edit_proposal(self) -> None:
+        content = render_task_edit_proposal(
+            {
+                "task": {
+                    "oldTitle": "Call mom",
+                    "title": "Call dad",
+                    "oldDue": "2026-08-17",
+                    "oldDueTime": "10:00",
+                    "due": "2026-08-20",
+                    "dueTime": "14:30",
+                }
+            }
+        )
+
+        self.assertIn("## Confirm task edit", content)
+        self.assertIn("- from: Call mom", content)
+        self.assertIn("- to: Call dad", content)
+        self.assertIn("- due: 2026-08-17 10:00 -> 2026-08-20 14:30", content)
+
+    def test_render_task_edit_completed(self) -> None:
+        self.assertEqual(render_task_edit_completed({"task": {"title": "Call dad"}}), "할 일 수정했어요.")
 
     def test_render_task_create_completed(self) -> None:
         content = render_task_create_completed(
@@ -533,12 +558,21 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
             actor_id=994,
             idempotency_key="discord:2",
         )
+        await client.propose_task_edit(
+            TaskEditRequest("Soap", "Hand soap", profile="supplies", uid="SUPPLY-1"),
+            actor_id=994,
+            idempotency_key="discord:3",
+        )
         self.assertEqual(client.calls[0][1]["profile"], "supplies")
         self.assertEqual(client.calls[0][1]["collectionId"], "supplies:abc")
         self.assertNotIn("dueDate", client.calls[0][1])
         self.assertNotIn("dueTime", client.calls[0][1])
         self.assertEqual(client.calls[1][1]["profile"], "supplies")
         self.assertEqual(client.calls[1][1]["collectionId"], "supplies:abc")
+        self.assertEqual(client.calls[2][0], "/tools/tasks/edit/proposals")
+        self.assertEqual(client.calls[2][1]["profile"], "supplies")
+        self.assertEqual(client.calls[2][1]["collectionId"], "supplies:abc")
+        self.assertEqual(client.calls[2][1]["uid"], "SUPPLY-1")
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ from kaos_brain.bot import (
     BrainActiveTaskActionsView,
     BrainActiveTasksSelect,
     BrainActiveTasksView,
+    BrainTaskEditModal,
     BrainCompletedTasksSelect,
     BrainCompletedTasksView,
     BrainDocumentSearchSelect,
@@ -23,6 +24,7 @@ from kaos_brain.tool_intent import ToolKind, ToolRequest
 class FakeGovernorTools:
     def __init__(self) -> None:
         self.task_action_calls = []
+        self.task_edit_calls = []
 
     async def get_memo(self, name: str):
         return {"memo": {"name": name, "content": "# Rustdesk\nUse Tailscale."}}
@@ -46,6 +48,20 @@ class FakeGovernorTools:
                 "action": request.action,
                 "due": "",
                 "dueTime": "",
+            },
+        }
+
+    async def propose_task_edit(self, request, *, actor_id: int, idempotency_key: str):
+        self.task_edit_calls.append((request, actor_id, idempotency_key))
+        return {
+            "confirmationId": "confirm-edit-1",
+            "task": {
+                "oldTitle": request.task_title,
+                "title": request.title,
+                "oldDue": "",
+                "oldDueTime": "",
+                "due": request.due_date,
+                "dueTime": request.due_time,
             },
         }
 
@@ -155,7 +171,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(interaction.followup.send.await_args.args[0], "## Soap")
         action_view = interaction.followup.send.await_args.kwargs["view"]
         self.assertIsInstance(action_view, BrainActiveTaskActionsView)
-        self.assertEqual([item.label for item in action_view.children], ["Complete", "Delete", "Close"])
+        self.assertEqual([item.label for item in action_view.children], ["Complete", "Edit", "Delete", "Close"])
 
     async def test_active_task_complete_button_sends_confirmation(self) -> None:
         tools = FakeGovernorTools()
@@ -163,7 +179,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             tools,  # type: ignore[arg-type]
             200,
             ToolRequest(ToolKind.ACTIVE_TASKS, profile="family"),
-            "Call mom",
+            {"uid": "TASK-1", "title": "Call mom"},
         )
         interaction = SimpleNamespace(
             id=999,
@@ -189,7 +205,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             tools,  # type: ignore[arg-type]
             200,
             ToolRequest(ToolKind.ACTIVE_TASKS, profile="supplies"),
-            "Soap",
+            {"uid": "SUPPLY-1", "title": "Soap"},
         )
         interaction = SimpleNamespace(
             id=1000,
@@ -197,13 +213,79 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             response=SimpleNamespace(edit_message=AsyncMock(), send_message=AsyncMock()),
         )
 
-        await view.children[1].callback(interaction)  # type: ignore[arg-type,union-attr]
+        await view.children[2].callback(interaction)  # type: ignore[arg-type,union-attr]
 
         request, _, idempotency_key = tools.task_action_calls[0]
         self.assertEqual(request.task_title, "Soap")
         self.assertEqual(request.action, "delete")
         self.assertEqual(request.profile, "supplies")
         self.assertEqual(idempotency_key, "brain-task-delete-1000")
+
+    async def test_active_task_edit_button_opens_prefilled_modal(self) -> None:
+        tools = FakeGovernorTools()
+        view = BrainActiveTaskActionsView(
+            tools,  # type: ignore[arg-type]
+            200,
+            ToolRequest(ToolKind.ACTIVE_TASKS, profile="family"),
+            {"uid": "TASK-1", "title": "Call mom", "memo": "weekly", "due": "2026-08-17", "dueTime": "10:00"},
+        )
+        interaction = SimpleNamespace(
+            id=1001,
+            user=SimpleNamespace(id=200),
+            response=SimpleNamespace(send_modal=AsyncMock(), send_message=AsyncMock()),
+        )
+
+        await view.children[1].callback(interaction)  # type: ignore[arg-type,union-attr]
+
+        modal = interaction.response.send_modal.await_args.args[0]
+        self.assertIsInstance(modal, BrainTaskEditModal)
+        self.assertEqual(len(modal.children), 5)
+        self.assertEqual(str(modal.title_input.default), "Call mom")
+        self.assertEqual(str(modal.memo_input.default), "weekly")
+
+    async def test_supplies_edit_modal_has_no_due_fields(self) -> None:
+        modal = BrainTaskEditModal(
+            FakeGovernorTools(),  # type: ignore[arg-type]
+            200,
+            ToolRequest(ToolKind.ACTIVE_TASKS, profile="supplies"),
+            {"uid": "SUPPLY-1", "title": "Soap", "memo": "bath"},
+        )
+
+        self.assertEqual(len(modal.children), 2)
+
+    async def test_task_edit_modal_sends_confirmation(self) -> None:
+        tools = FakeGovernorTools()
+        modal = BrainTaskEditModal(
+            tools,  # type: ignore[arg-type]
+            200,
+            ToolRequest(ToolKind.ACTIVE_TASKS, profile="family"),
+            {"uid": "TASK-1", "title": "Call mom", "memo": "weekly", "due": "2026-08-17", "dueTime": "10:00"},
+        )
+        modal.title_input._value = "Call dad"
+        modal.memo_input._value = "monthly"
+        modal.due_date_input._value = "2026-08-20"
+        modal.due_time_input._value = "14:30"
+        modal.priority_input._value = "1"
+        interaction = SimpleNamespace(
+            id=1002,
+            user=SimpleNamespace(id=200),
+            response=SimpleNamespace(send_message=AsyncMock()),
+        )
+
+        await modal.on_submit(interaction)  # type: ignore[arg-type]
+
+        request, actor_id, idempotency_key = tools.task_edit_calls[0]
+        self.assertEqual(request.uid, "TASK-1")
+        self.assertEqual(request.task_title, "Call mom")
+        self.assertEqual(request.title, "Call dad")
+        self.assertEqual(request.memo, "monthly")
+        self.assertEqual(request.due_date, "2026-08-20")
+        self.assertEqual(request.due_time, "14:30")
+        self.assertEqual(request.priority, "1")
+        self.assertEqual(actor_id, 200)
+        self.assertEqual(idempotency_key, "brain-task-edit-1002")
+        content = interaction.response.send_message.await_args.args[0]
+        self.assertIn("## Confirm task edit", content)
 
 
 if __name__ == "__main__":

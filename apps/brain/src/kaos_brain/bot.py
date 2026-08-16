@@ -13,6 +13,7 @@ from .governor_tools import (
     GovernorToolClient,
     GovernorToolConfig,
     GovernorToolError,
+    TaskEditRequest,
     document_option_description,
     document_option_label,
     memo_option_description,
@@ -32,6 +33,8 @@ from .governor_tools import (
     render_task_action_proposal,
     render_task_create_completed,
     render_task_create_proposal,
+    render_task_edit_completed,
+    render_task_edit_proposal,
     render_task_due_update_completed,
     render_task_due_update_proposal,
     render_tool_context,
@@ -849,19 +852,20 @@ class BrainActiveTasksSelect(discord.ui.Select):
                 self.parent_view.governor_tools,
                 self.parent_view.actor_id,
                 self.parent_view.request,
-                title,
+                task,
             ),
             allowed_mentions=NO_MENTIONS,
         )
 
 
 class BrainActiveTaskActionsView(discord.ui.View):
-    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, request: ToolRequest, title: str) -> None:
+    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, request: ToolRequest, task: dict[str, Any]) -> None:
         super().__init__(timeout=600)
         self.governor_tools = governor_tools
         self.actor_id = actor_id
         self.request = request
-        self.title = title
+        self.task = task
+        self.title = str(task.get("title") or task.get("summary") or "").strip()
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if int(interaction.user.id) == self.actor_id:
@@ -872,6 +876,10 @@ class BrainActiveTaskActionsView(discord.ui.View):
     @discord.ui.button(label="Complete", style=discord.ButtonStyle.success)
     async def complete(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self._propose(interaction, "complete")
+
+    @discord.ui.button(label="Edit", style=discord.ButtonStyle.primary)
+    async def edit(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(BrainTaskEditModal(self.governor_tools, self.actor_id, self.request, self.task))
 
     @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger)
     async def delete(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -904,6 +912,126 @@ class BrainActiveTaskActionsView(discord.ui.View):
             view=TaskActionConfirmationView(self.governor_tools, self.actor_id, str(payload.get("confirmationId") or "")),
             allowed_mentions=NO_MENTIONS,
         )
+        self.stop()
+
+
+class BrainTaskEditModal(discord.ui.Modal):
+    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, request: ToolRequest, task: dict[str, Any]) -> None:
+        super().__init__(title="Edit Supply" if _uses_supplies_request(request) else "Edit Task", timeout=600)
+        self.governor_tools = governor_tools
+        self.actor_id = actor_id
+        self.request = request
+        self.task = task
+        self.title_input = discord.ui.TextInput(
+            label="Title",
+            style=discord.TextStyle.short,
+            required=True,
+            default=str(task.get("title") or task.get("summary") or "")[:100],
+            max_length=100,
+        )
+        self.memo_input = discord.ui.TextInput(
+            label="Memo",
+            style=discord.TextStyle.paragraph,
+            required=False,
+            default=str(task.get("memo") or task.get("description") or "")[:1000],
+            max_length=1000,
+        )
+        self.add_item(self.title_input)
+        self.add_item(self.memo_input)
+        if not _uses_supplies_request(request):
+            self.due_date_input = discord.ui.TextInput(
+                label="Due date",
+                style=discord.TextStyle.short,
+                required=False,
+                default=str(task.get("due") or "")[:10],
+                placeholder="yyyy-mm-dd",
+                max_length=10,
+            )
+            self.due_time_input = discord.ui.TextInput(
+                label="Due time",
+                style=discord.TextStyle.short,
+                required=False,
+                default=str(task.get("dueTime") or "")[:5],
+                placeholder="HH:MM",
+                max_length=5,
+            )
+            self.priority_input = discord.ui.TextInput(
+                label="Priority",
+                style=discord.TextStyle.short,
+                required=False,
+                default=str(task.get("priority") or "")[:1],
+                placeholder="blank, 1, 5, or 9",
+                max_length=1,
+            )
+            self.add_item(self.due_date_input)
+            self.add_item(self.due_time_input)
+            self.add_item(self.priority_input)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        old_title = str(self.task.get("title") or self.task.get("summary") or "").strip()
+        due_date = str(getattr(self, "due_date_input", _EmptyInput()).value or "")
+        due_time = str(getattr(self, "due_time_input", _EmptyInput()).value or "")
+        priority = str(getattr(self, "priority_input", _EmptyInput()).value or "")
+        try:
+            payload = await self.governor_tools.propose_task_edit(
+                TaskEditRequest(
+                    old_title,
+                    str(self.title_input.value or ""),
+                    str(self.memo_input.value or ""),
+                    due_date=due_date,
+                    due_time=due_time,
+                    priority=priority,
+                    profile=self.request.profile,
+                    collection_id=self.request.collection_id,
+                    uid=str(self.task.get("uid") or ""),
+                ),
+                actor_id=self.actor_id,
+                idempotency_key=f"brain-task-edit-{interaction.id}",
+            )
+        except GovernorToolError as exc:
+            await interaction.response.send_message(f"Task edit failed: {exc}", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.response.send_message(
+            render_task_edit_proposal(payload),
+            view=TaskEditConfirmationView(self.governor_tools, self.actor_id, str(payload.get("confirmationId") or "")),
+            allowed_mentions=NO_MENTIONS,
+        )
+
+
+class _EmptyInput:
+    value = ""
+
+
+class TaskEditConfirmationView(discord.ui.View):
+    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, confirmation_id: str) -> None:
+        super().__init__(timeout=600)
+        self.governor_tools = governor_tools
+        self.actor_id = actor_id
+        self.confirmation_id = confirmation_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if int(interaction.user.id) == self.actor_id:
+            return True
+        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        try:
+            payload = await self.governor_tools.approve_confirmation(self.confirmation_id, actor_id=self.actor_id)
+            content = render_task_edit_completed(payload)
+        except GovernorToolError as exc:
+            content = f"Task edit failed: {exc}"
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(content=content, view=self, allowed_mentions=NO_MENTIONS)
+        self.stop()
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(content="Task edit cancelled.", view=self, allowed_mentions=NO_MENTIONS)
         self.stop()
 
 
@@ -1141,6 +1269,10 @@ class MemoEditConfirmationView(discord.ui.View):
 def _task_results(payload: dict[str, Any]) -> list[dict[str, Any]]:
     value = payload.get("tasks")
     return [dict(item) for item in value if isinstance(item, dict)] if isinstance(value, list) else []
+
+
+def _uses_supplies_request(request: ToolRequest) -> bool:
+    return request.profile == "supplies" or "supplies" in request.collection_id.lower()
 
 
 def _task_option_label(task: dict[str, Any]) -> str:

@@ -84,8 +84,10 @@ class FakeCalendarAdapter:
                 self.tasks[index] = {
                     **task,
                     "summary": payload.get("title", task.get("summary")),
+                    "description": payload.get("memo", task.get("description", "")),
                     "due": payload.get("dueDate", task.get("due", "")),
                     "dueTime": payload.get("dueTime", task.get("dueTime", "")),
+                    "priority": payload.get("priority", task.get("priority", "")),
                     "status": payload.get("status", task.get("status", "")),
                 }
                 return {"uid": task["uid"]}
@@ -666,6 +668,112 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response.status, 409)
         self.assertEqual((await response.json())["error"], "task_match_ambiguous")
+
+    async def test_task_edit_proposal_requires_confirmation_before_write(self) -> None:
+        response = await self.client.post(
+            "/tools/tasks/edit/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-edit-1",
+                "profile": "main",
+                "uid": "TASK-1",
+                "taskTitle": "Call mom",
+                "title": "Call dad",
+                "memo": "monthly",
+                "dueDate": "2026-08-20",
+                "dueTime": "14:30",
+                "priority": "1",
+            },
+        )
+
+        self.assertEqual(response.status, 201)
+        payload = await response.json()
+        self.assertTrue(payload["confirmationId"].startswith("conf_"))
+        self.assertEqual(payload["task"]["oldTitle"], "Call mom")
+        self.assertEqual(payload["task"]["title"], "Call dad")
+        self.assertEqual(self.calendar.updated, [])
+
+    async def test_task_edit_approval_updates_calendar_task(self) -> None:
+        proposal = await self.client.post(
+            "/tools/tasks/edit/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-edit-2",
+                "profile": "main",
+                "uid": "TASK-1",
+                "taskTitle": "Call mom",
+                "title": "Call dad",
+                "memo": "monthly",
+                "dueDate": "2026-08-20",
+                "dueTime": "14:30",
+                "priority": "1",
+            },
+        )
+        confirmation_id = (await proposal.json())["confirmationId"]
+
+        response = await self.client.post(
+            f"/tools/confirmations/{confirmation_id}/approve",
+            headers=self.headers(),
+            json={"actorId": "994579996960104529"},
+        )
+
+        self.assertEqual(response.status, 200)
+        payload = await response.json()
+        self.assertEqual(payload["task"]["action"], "edit")
+        self.assertEqual(self.calendar.updated[0][0], "main")
+        self.assertEqual(self.calendar.updated[0][1]["uid"], "TASK-1")
+        self.assertEqual(self.calendar.updated[0][1]["title"], "Call dad")
+        self.assertEqual(self.calendar.updated[0][1]["memo"], "monthly")
+        self.assertEqual(self.calendar.updated[0][1]["dueDate"], "2026-08-20")
+        self.assertEqual(self.calendar.updated[0][1]["dueTime"], "14:30")
+        self.assertEqual(self.calendar.updated[0][1]["priority"], "1")
+
+    async def test_task_edit_strips_supplies_due_dates(self) -> None:
+        self.calendar.tasks.append(
+            {
+                "uid": "SUPPLY-1",
+                "summary": "Soap",
+                "due": "2026-08-17",
+                "dueTime": "10:00",
+                "status": "NEEDS-ACTION",
+                "collection": "supplies:abc",
+            }
+        )
+        proposal = await self.client.post(
+            "/tools/tasks/edit/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-edit-supply-1",
+                "profile": "supplies",
+                "collectionId": "supplies:abc",
+                "uid": "SUPPLY-1",
+                "taskTitle": "Soap",
+                "title": "Hand soap",
+                "memo": "bath",
+                "dueDate": "2026-08-20",
+                "dueTime": "14:30",
+                "priority": "1",
+            },
+        )
+        self.assertEqual(proposal.status, 201)
+        proposal_payload = await proposal.json()
+        self.assertEqual(proposal_payload["task"]["due"], "")
+        confirmation_id = proposal_payload["confirmationId"]
+
+        response = await self.client.post(
+            f"/tools/confirmations/{confirmation_id}/approve",
+            headers=self.headers(),
+            json={"actorId": "994579996960104529"},
+        )
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(self.calendar.updated[0][1]["title"], "Hand soap")
+        self.assertEqual(self.calendar.updated[0][1]["dueDate"], "")
+        self.assertEqual(self.calendar.updated[0][1]["dueTime"], "")
+        self.assertEqual(self.calendar.updated[0][1]["priority"], "")
 
     async def test_task_create_proposal_requires_confirmation_before_write(self) -> None:
         response = await self.client.post(

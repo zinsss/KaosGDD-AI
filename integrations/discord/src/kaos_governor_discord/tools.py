@@ -15,7 +15,7 @@ from kaos_governor.documents import DocumentIntakeError, PaperlessDocumentServic
 from kaos_governor.memos import MemosError, MemosService
 
 from .calendar import weather_agenda_summary, weather_items_by_date
-from .tasks import is_supplies_collection, normalize_supplies_due
+from .tasks import TASK_PRIORITIES, is_supplies_collection, normalize_supplies_due, validate_edit_due
 
 
 LOGGER = logging.getLogger(__name__)
@@ -53,6 +53,24 @@ class PendingTaskAction:
     title: str
     due: str
     due_time: str
+    payload: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class PendingTaskEdit:
+    profile: str
+    uid: str
+    collection_id: str
+    old_title: str
+    new_title: str
+    old_memo: str
+    new_memo: str
+    old_due: str
+    old_due_time: str
+    new_due: str
+    new_due_time: str
+    old_priority: str
+    new_priority: str
     payload: dict[str, Any]
 
 
@@ -112,6 +130,7 @@ class BrainToolServer:
         self._pending_task_due_updates: dict[str, PendingTaskDueUpdate] = {}
         self._pending_task_creates: dict[str, PendingTaskCreate] = {}
         self._pending_task_actions: dict[str, PendingTaskAction] = {}
+        self._pending_task_edits: dict[str, PendingTaskEdit] = {}
         self._pending_event_creates: dict[str, PendingEventCreate] = {}
         self._pending_memo_creates: dict[str, PendingMemoCreate] = {}
         self._pending_memo_deletes: dict[str, PendingMemoDelete] = {}
@@ -132,6 +151,7 @@ class BrainToolServer:
         app.router.add_get("/tools/documents/search", self._search_documents)
         app.router.add_get("/tools/documents/{document_id}", self._get_document)
         app.router.add_post("/tools/tasks/action/proposals", self._propose_task_action)
+        app.router.add_post("/tools/tasks/edit/proposals", self._propose_task_edit)
         app.router.add_post("/tools/tasks/create/proposals", self._propose_task_create)
         app.router.add_post("/tools/tasks/update-due/proposals", self._propose_task_due_update)
         app.router.add_post("/tools/events/create/proposals", self._propose_event_create)
@@ -708,6 +728,137 @@ class BrainToolServer:
             status=201,
         )
 
+    async def _propose_task_edit(self, request: web.Request) -> web.Response:
+        try:
+            body = await request.json()
+        except ValueError:
+            return web.json_response({"error": "invalid_json"}, status=400)
+        if not isinstance(body, Mapping):
+            return web.json_response({"error": "invalid_json"}, status=400)
+        profile = str(body.get("profile") or "main").strip().lower() or "main"
+        try:
+            profile_host(profile)
+        except CalendarAdapterError:
+            return web.json_response({"error": "invalid_profile"}, status=400)
+        actor_id = str(body.get("actorId") or "").strip()
+        idempotency_key = str(body.get("idempotencyKey") or "").strip()
+        uid = str(body.get("uid") or "").strip()
+        task_title = " ".join(str(body.get("taskTitle") or "").split())
+        collection_id = str(body.get("collectionId") or "").strip()
+        new_title = " ".join(str(body.get("title") or "").split())
+        new_memo = str(body.get("memo") or "").strip()
+        due_date = str(body.get("dueDate") or "").strip()
+        due_time = str(body.get("dueTime") or "").strip()
+        priority = str(body.get("priority") or "").strip()
+        if not actor_id or not idempotency_key or not new_title or (not uid and not task_title):
+            return web.json_response({"error": "task_edit_missing_required_field"}, status=400)
+        try:
+            tasks = await asyncio.to_thread(self._calendar_adapter.list_tasks, profile)
+        except CalendarAdapterError as exc:
+            return web.json_response({"error": str(exc)}, status=502)
+        if uid:
+            matches = [task for task in tasks if is_active_task(task) and str(task.get("uid") or "") == uid]
+        else:
+            matches = _match_active_tasks(tasks, task_title)
+        if collection_id:
+            matches = [task for task in matches if str(task.get("collection") or "") == collection_id]
+        if not matches:
+            return web.json_response({"error": "task_not_found"}, status=404)
+        if len(matches) > 1:
+            return web.json_response(
+                {
+                    "error": "task_match_ambiguous",
+                    "matches": [task_payload(item, {}) for item in matches[:5]],
+                },
+                status=409,
+            )
+        task = matches[0]
+        uid = str(task.get("uid") or "")
+        collection_id = str(task.get("collection") or "")
+        supplies = profile == "supplies" or is_supplies_collection(collection_id)
+        if supplies:
+            due_date = ""
+            due_time = ""
+            priority = ""
+        else:
+            normalized_due = validate_edit_due(due_date, due_time)
+            if normalized_due is None:
+                return web.json_response({"error": "task_edit_invalid_due"}, status=400)
+            due_date, due_time = normalized_due
+            if priority not in TASK_PRIORITIES:
+                return web.json_response({"error": "task_edit_invalid_priority"}, status=400)
+        old_title = str(task.get("summary") or "Untitled task")
+        old_memo = str(task.get("description") or "")
+        old_due = str(task.get("due") or "")
+        old_due_time = str(task.get("dueTime") or "")
+        old_priority = str(task.get("priority") or "")
+        payload = {
+            "uid": uid,
+            "collectionId": collection_id,
+            "title": new_title,
+            "memo": new_memo,
+            "dueDate": due_date,
+            "dueTime": due_time,
+            "priority": priority,
+            "status": str(task.get("status") or "NEEDS-ACTION"),
+        }
+        payload = normalize_supplies_due(payload, collection_id=collection_id or profile)
+        due_date = str(payload.get("dueDate") or "")
+        due_time = str(payload.get("dueTime") or "")
+        priority = str(payload.get("priority") or "")
+        try:
+            actor = Actor("user", actor_id, "family" if profile == "family" else "personal")
+            operation, _created = self._durable.start_operation(
+                OperationRequest(
+                    actor=actor,
+                    idempotency_key=idempotency_key,
+                    tool_name="calendar.tasks",
+                    operation_type="edit",
+                    parameters={
+                        "profile": profile,
+                        "uid": uid,
+                        "collectionId": collection_id,
+                        "oldTitle": old_title,
+                        "newTitle": new_title,
+                        "oldDue": old_due,
+                        "oldDueTime": old_due_time,
+                        "newDue": due_date,
+                        "newDueTime": due_time,
+                    },
+                    requires_confirmation=True,
+                )
+            )
+            confirmation = self._durable.create_confirmation(operation.operation_id, ttl=timedelta(minutes=10))
+        except DurableGovernorError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+        pending = PendingTaskEdit(
+            profile=profile,
+            uid=uid,
+            collection_id=collection_id,
+            old_title=old_title,
+            new_title=new_title,
+            old_memo=old_memo,
+            new_memo=new_memo,
+            old_due=old_due,
+            old_due_time=old_due_time,
+            new_due=due_date,
+            new_due_time=due_time,
+            old_priority=old_priority,
+            new_priority=priority,
+            payload=payload,
+        )
+        self._pending_task_edits[operation.operation_id] = pending
+        return web.json_response(
+            {
+                "operationId": operation.operation_id,
+                "confirmationId": confirmation.confirmation_id,
+                "expiresAt": confirmation.expires_at.isoformat(),
+                "task": _pending_task_edit_payload(pending),
+                "source": "calendar-adapter-live",
+            },
+            status=201,
+        )
+
     async def _propose_event_create(self, request: web.Request) -> web.Response:
         try:
             body = await request.json()
@@ -808,6 +959,7 @@ class BrainToolServer:
         pending_update = self._pending_task_due_updates.get(operation.operation_id)
         pending_create = self._pending_task_creates.get(operation.operation_id)
         pending_action = self._pending_task_actions.get(operation.operation_id)
+        pending_task_edit = self._pending_task_edits.get(operation.operation_id)
         pending_event_create = self._pending_event_creates.get(operation.operation_id)
         pending_memo_create = self._pending_memo_creates.get(operation.operation_id)
         pending_memo_delete = self._pending_memo_deletes.get(operation.operation_id)
@@ -816,6 +968,7 @@ class BrainToolServer:
             pending_update is None
             and pending_create is None
             and pending_action is None
+            and pending_task_edit is None
             and pending_event_create is None
             and pending_memo_create is None
             and pending_memo_delete is None
@@ -837,6 +990,14 @@ class BrainToolServer:
                 )
                 task = _pending_task_payload(pending_update)
                 result_uid = str(result.get("uid") or pending_update.uid)
+            elif pending_task_edit is not None:
+                result = await asyncio.to_thread(
+                    self._calendar_adapter.update_task,
+                    pending_task_edit.profile,
+                    pending_task_edit.payload,
+                )
+                task = _pending_task_edit_payload(pending_task_edit)
+                result_uid = str(result.get("uid") or pending_task_edit.uid)
             elif pending_create is not None or pending_action is not None:
                 if pending_create is not None:
                     result = await asyncio.to_thread(
@@ -900,6 +1061,7 @@ class BrainToolServer:
         self._pending_task_due_updates.pop(operation.operation_id, None)
         self._pending_task_creates.pop(operation.operation_id, None)
         self._pending_task_actions.pop(operation.operation_id, None)
+        self._pending_task_edits.pop(operation.operation_id, None)
         self._pending_event_creates.pop(operation.operation_id, None)
         self._pending_memo_creates.pop(operation.operation_id, None)
         self._pending_memo_deletes.pop(operation.operation_id, None)
@@ -1034,6 +1196,7 @@ def task_payload(item: Mapping[str, Any], collections: Mapping[str, Mapping[str,
     return {
         "uid": str(item.get("uid") or ""),
         "title": str(item.get("summary") or "Untitled task"),
+        "memo": str(item.get("description") or ""),
         "due": str(item.get("due") or ""),
         "dueTime": str(item.get("dueTime") or ""),
         "status": str(item.get("status") or ""),
@@ -1218,6 +1381,24 @@ def _pending_task_action_payload(pending: PendingTaskAction) -> dict[str, object
         "due": pending.due,
         "dueTime": pending.due_time,
         "action": pending.action,
+    }
+
+
+def _pending_task_edit_payload(pending: PendingTaskEdit) -> dict[str, object]:
+    return {
+        "uid": pending.uid,
+        "collectionId": pending.collection_id,
+        "oldTitle": pending.old_title,
+        "title": pending.new_title,
+        "oldMemo": pending.old_memo,
+        "memo": pending.new_memo,
+        "oldDue": pending.old_due,
+        "oldDueTime": pending.old_due_time,
+        "due": pending.new_due,
+        "dueTime": pending.new_due_time,
+        "oldPriority": pending.old_priority,
+        "priority": pending.new_priority,
+        "action": "edit",
     }
 
 

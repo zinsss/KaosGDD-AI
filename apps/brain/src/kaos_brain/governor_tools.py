@@ -23,6 +23,19 @@ class GovernorToolConfig:
     supplies_collection_id: str = ""
 
 
+@dataclass(frozen=True)
+class TaskEditRequest:
+    task_title: str
+    title: str
+    memo: str = ""
+    due_date: str = ""
+    due_time: str = ""
+    priority: str = ""
+    profile: str = ""
+    collection_id: str = ""
+    uid: str = ""
+
+
 class GovernorToolClient:
     def __init__(self, config: GovernorToolConfig) -> None:
         self.config = config
@@ -155,6 +168,30 @@ class GovernorToolClient:
                 **self._collection_payload(request.profile, request.collection_id),
                 "taskTitle": request.task_title,
                 "action": request.action,
+            },
+        )
+
+    async def propose_task_edit(
+        self,
+        request: TaskEditRequest,
+        *,
+        actor_id: int,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        return await self._post(
+            "/tools/tasks/edit/proposals",
+            {
+                "actorId": str(actor_id),
+                "idempotencyKey": idempotency_key,
+                "profile": self._profile(request.profile),
+                **self._collection_payload(request.profile, request.collection_id),
+                "uid": request.uid,
+                "taskTitle": request.task_title,
+                "title": request.title,
+                "memo": request.memo,
+                "dueDate": request.due_date,
+                "dueTime": request.due_time,
+                "priority": request.priority,
             },
         )
 
@@ -345,6 +382,24 @@ def render_task_due_update_proposal(payload: dict[str, Any]) -> str:
 
 
 def render_task_due_update_completed(payload: dict[str, Any]) -> str:
+    return "할 일 수정했어요."
+
+
+def render_task_edit_proposal(payload: dict[str, Any]) -> str:
+    task = payload.get("task")
+    if not isinstance(task, dict):
+        return "Task edit requires confirmation."
+    old_title = str(task.get("oldTitle") or "Untitled task")
+    title = str(task.get("title") or old_title)
+    old_due = _due_text(str(task.get("oldDue") or ""), str(task.get("oldDueTime") or ""))
+    due = _due_text(str(task.get("due") or ""), str(task.get("dueTime") or ""))
+    lines = ["## Confirm task edit", f"- from: {old_title}", f"- to: {title}"]
+    if old_due or due:
+        lines.append(f"- due: {old_due or 'none'} -> {due or 'none'}")
+    return "\n".join(lines)
+
+
+def render_task_edit_completed(payload: dict[str, Any]) -> str:
     return "할 일 수정했어요."
 
 
