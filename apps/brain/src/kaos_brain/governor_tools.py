@@ -618,16 +618,21 @@ def document_option_description(item: dict[str, Any]) -> str:
 
 
 def _render_today(payload: dict[str, Any]) -> str:
-    lines = [f"Today: {payload.get('date') or ''}".strip()]
+    date_text = str(payload.get("date") or "").strip()
+    lines = [f"## {date_text}" if date_text else "## 오늘"]
     weather = payload.get("weather")
     if isinstance(weather, dict) and weather.get("summary"):
-        lines.append(f"Weather: {weather['summary']}")
+        lines[0] = f"{lines[0]} · {weather['summary']}"
     events = _items(payload.get("events"))
     tasks = _items(payload.get("tasks"))
-    lines.append("Events:")
-    lines.extend(_event_line(item) for item in events) if events else lines.append("- none")
-    lines.append("Due tasks:")
-    lines.extend(_task_line(item) for item in tasks) if tasks else lines.append("- none")
+    if events:
+        lines.append("### 일정")
+        lines.extend(_event_line(item) for item in events)
+    if tasks:
+        lines.append("### 할 일")
+        lines.extend(_task_line(item) for item in tasks)
+    if not events and not tasks:
+        lines.append("- 없음")
     return "\n".join(lines)
 
 

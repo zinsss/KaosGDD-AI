@@ -37,10 +37,15 @@ class GovernorToolRenderingTests(unittest.TestCase):
                 "tasks": [{"title": "Call mom", "due": "2026-08-14", "dueTime": "10:00"}],
             },
         )
-        self.assertIn("Today: 2026-08-14", context)
-        self.assertIn("Weather: ⛅️ 23-28℃", context)
+        self.assertIn("## 2026-08-14 · ⛅️ 23-28℃", context)
+        self.assertIn("### 일정", context)
         self.assertIn("- 10:00 Clinic (GDD_ZiN)", context)
+        self.assertIn("### 할 일", context)
         self.assertIn("- Call mom - 2026-08-14 10:00", context)
+
+    def test_render_empty_today_context(self) -> None:
+        context = render_tool_context(ToolRequest(ToolKind.TODAY), {"date": "2026-08-14", "events": [], "tasks": []})
+        self.assertEqual(context, "## 2026-08-14\n- 없음")
 
     def test_render_empty_tasks_context(self) -> None:
         context = render_tool_context(ToolRequest(ToolKind.ACTIVE_TASKS), {"tasks": []})
