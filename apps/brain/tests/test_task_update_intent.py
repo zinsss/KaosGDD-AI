@@ -121,6 +121,12 @@ class TaskUpdateIntentTests(unittest.TestCase):
         self.assertEqual(request.task_title, "엄마 전화")
         self.assertEqual(request.action, "complete")
 
+    def test_korean_complete_status_action_keeps_title_clean(self) -> None:
+        request = parse_task_action("엄마 전화 완료했어요")
+        assert request is not None
+        self.assertEqual(request.task_title, "엄마 전화")
+        self.assertEqual(request.action, "complete")
+
     def test_korean_finished_action(self) -> None:
         request = parse_task_action("영이 큐시미아 끝냈어")
         assert request is not None
@@ -129,6 +135,12 @@ class TaskUpdateIntentTests(unittest.TestCase):
 
     def test_korean_delete_action(self) -> None:
         request = parse_task_action("보험 서류 삭제해줘")
+        assert request is not None
+        self.assertEqual(request.task_title, "보험 서류")
+        self.assertEqual(request.action, "delete")
+
+    def test_korean_delete_status_action_keeps_title_clean(self) -> None:
+        request = parse_task_action("보험 서류 삭제했어요")
         assert request is not None
         self.assertEqual(request.task_title, "보험 서류")
         self.assertEqual(request.action, "delete")
@@ -154,6 +166,23 @@ class TaskUpdateIntentTests(unittest.TestCase):
 
     def test_plain_message_does_not_action(self) -> None:
         self.assertIsNone(parse_task_action("오늘 뭐 있어?"))
+
+    def test_status_announcements_do_not_become_task_commands(self) -> None:
+        for content in (
+            "할 일 저장했어요",
+            "할 일을 새로 저장했어요",
+            "할 일 삭제했어요",
+            "할 일 수정했어요",
+            "할 일 완료했어요",
+            "비품 저장했어요",
+            "비품 삭제했어요",
+            "비품 수정했어요",
+        ):
+            with self.subTest(content=content):
+                self.assertIsNone(parse_task_create(content, today=date(2026, 8, 14)))
+                self.assertIsNone(parse_task_edit(content))
+                self.assertIsNone(parse_task_due_update(content, today=date(2026, 8, 14)))
+                self.assertIsNone(parse_task_action(content))
 
     def test_korean_family_all_day_event_create(self) -> None:
         request = parse_event_create("08-15 엔소쿠료칸 종일일정으로 가족에 추가. 메모: 포항 조사리", today=date(2026, 8, 15))

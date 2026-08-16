@@ -63,6 +63,8 @@ class TaskTextEditRequest:
 
 def parse_task_due_update(content: str, *, today: date) -> TaskDueUpdateRequest | None:
     text = " ".join(content.strip().split())
+    if _is_status_announcement(text):
+        return None
     if not text or not any(marker in text for marker in ("편집", "변경", "바꿔", "수정")):
         return None
     profile, collection_id = _scope(text)
@@ -80,6 +82,8 @@ def parse_task_due_update(content: str, *, today: date) -> TaskDueUpdateRequest 
 
 def parse_task_edit(content: str) -> TaskTextEditRequest | None:
     text = " ".join(content.strip().split())
+    if _is_status_announcement(text):
+        return None
     if not text or not any(marker in text for marker in ("편집", "변경", "바꿔", "수정")):
         return None
     profile, collection_id = _scope(text)
@@ -100,6 +104,8 @@ def parse_task_edit(content: str) -> TaskTextEditRequest | None:
 
 def parse_task_create(content: str, *, today: date) -> TaskCreateRequest | None:
     text = " ".join(content.strip().split())
+    if _is_status_announcement(text):
+        return None
     if not text or any(marker in text for marker in ("편집", "변경", "바꿔", "수정")):
         return None
     supplies_request = _is_supplies(text)
@@ -129,10 +135,12 @@ def parse_task_create(content: str, *, today: date) -> TaskCreateRequest | None:
 
 def parse_task_action(content: str) -> TaskActionRequest | None:
     text = " ".join(content.strip().split())
+    if _is_status_announcement(text):
+        return None
     if not text:
         return None
     profile, collection_id = _scope(text)
-    delete_marker = _first_marker(text, ("삭제해줘", "삭제", "지워줘", "지워", "없애줘", "없애"))
+    delete_marker = _first_marker(text, ("삭제했어요", "삭제했어", "삭제해줘", "삭제", "지워줘", "지워", "없애줘", "없애"))
     if delete_marker is not None:
         title = _clean_action_title(_strip_scope_words(text.replace(delete_marker, " ", 1)))
         return TaskActionRequest(task_title=title, action="delete", profile=profile, collection_id=collection_id) if title else None
@@ -140,7 +148,7 @@ def parse_task_action(content: str) -> TaskActionRequest | None:
     if reopen_marker is not None:
         title = _clean_action_title(_strip_scope_words(text.replace(reopen_marker, " ", 1)))
         return TaskActionRequest(task_title=title, action="reopen", profile=profile, collection_id=collection_id) if title else None
-    complete_marker = _first_marker(text, ("완료", "끝냈어", "끝냈다", "끝냄", "끝내줘", "끝내", "처리했어", "처리"))
+    complete_marker = _first_marker(text, ("완료했어요", "완료했어", "완료", "끝냈어", "끝냈다", "끝냄", "끝내줘", "끝내", "처리했어", "처리"))
     if complete_marker is not None:
         title = _clean_action_title(_strip_scope_words(text.replace(complete_marker, " ", 1)))
         return TaskActionRequest(task_title=title, action="complete", profile=profile, collection_id=collection_id) if title else None
@@ -240,6 +248,30 @@ def _first_marker(text: str, markers: tuple[str, ...]) -> str | None:
     if not matches:
         return None
     return min(matches, key=lambda item: item[0])[1]
+
+
+def _is_status_announcement(text: str) -> bool:
+    compact = " ".join(text.strip().split())
+    if not compact:
+        return False
+    domains = ("할 일", "할일", "태스크", "task", "비품", "준비물", "용품", "supplies", "supply")
+    actions = ("저장", "삭제", "수정", "변경", "완료", "다시 열", "복구")
+    endings = ("했어요", "했어", "됐어요", "됐어", "되었습니다", "됨")
+    lowered = compact.lower()
+    if not any(domain in lowered for domain in domains):
+        return False
+    if not any(action in compact for action in actions):
+        return False
+    remainder = compact
+    for domain in domains:
+        remainder = re.sub(rf"\b{re.escape(domain)}\b", " ", remainder, flags=re.IGNORECASE)
+        remainder = remainder.replace(domain, " ")
+    for action in actions:
+        remainder = remainder.replace(action, " ")
+    for ending in endings:
+        remainder = remainder.replace(ending, " ")
+    remainder = remainder.replace("새로", " ").replace("를", " ").replace("을", " ").replace("가", " ")
+    return not " ".join(remainder.split())
 
 
 def _clean_action_title(value: str) -> str:

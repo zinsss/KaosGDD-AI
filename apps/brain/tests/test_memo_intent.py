@@ -27,6 +27,11 @@ class MemoIntentTests(unittest.TestCase):
         assert request is not None
         self.assertEqual(request.query, "러스트데스크")
 
+    def test_delete_memo_status_suffix(self) -> None:
+        request = parse_memo_delete("러스트데스크 메모 삭제했어요")
+        assert request is not None
+        self.assertEqual(request.query, "러스트데스크")
+
     def test_delete_memo_prefix(self) -> None:
         request = parse_memo_delete("메모 rustdesk 지워줘")
         assert request is not None
@@ -49,6 +54,18 @@ class MemoIntentTests(unittest.TestCase):
 
     def test_edit_memo_requires_memo_word(self) -> None:
         self.assertIsNone(parse_memo_edit("rustdesk 수정: 새 설정"))
+
+    def test_status_announcements_do_not_become_memo_commands(self) -> None:
+        for content in (
+            "메모 저장했어요",
+            "메모를 새로 저장했어요",
+            "메모 삭제했어요",
+            "메모 수정했어요",
+        ):
+            with self.subTest(content=content):
+                self.assertIsNone(parse_memo_create(content))
+                self.assertIsNone(parse_memo_delete(content))
+                self.assertIsNone(parse_memo_edit(content))
 
 
 if __name__ == "__main__":
