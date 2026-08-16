@@ -288,12 +288,12 @@ def _parse_explicit_task_create(text: str) -> TaskCreateRequest | None:
 
 def _is_supplies(text: str) -> bool:
     lowered = text.lower()
-    return any(marker in lowered for marker in ("준비물", "용품", "supplies", "supply"))
+    return any(marker in lowered for marker in ("비품", "준비물", "용품", "supplies", "supply"))
 
 
 def _strip_scope_words(value: str) -> str:
     result = value
-    for marker in ("가족", "family", "준비물", "용품", "supplies", "supply"):
+    for marker in ("가족", "family", "비품", "준비물", "용품", "supplies", "supply"):
         result = re.sub(rf"\b{re.escape(marker)}\b", " ", result, flags=re.IGNORECASE)
         result = result.replace(marker, " ")
     return result

@@ -50,7 +50,7 @@ class GovernorToolRenderingTests(unittest.TestCase):
             ToolRequest(ToolKind.ACTIVE_TASKS, profile="supplies"),
             {"profile": "supplies", "tasks": [{"title": "Soap"}]},
         )
-        self.assertEqual(context, "## 준비물\n- Soap")
+        self.assertEqual(context, "## 비품\n- Soap")
 
     def test_render_completed_tasks_context(self) -> None:
         context = render_tool_context(

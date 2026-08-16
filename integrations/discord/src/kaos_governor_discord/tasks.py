@@ -442,7 +442,7 @@ class TaskView(discord.ui.View):
 
 class TaskEditModal(discord.ui.Modal):
     def __init__(self, surface: DiscordTasksSurface, key: str, task: Mapping[str, Any]) -> None:
-        super().__init__(title="Edit Supply" if surface._uses_supplies_rules() else "Edit Task", timeout=600)
+        super().__init__(title="Edit 비품" if surface._uses_supplies_rules() else "Edit Task", timeout=600)
         self.surface = surface
         self.key = key
         self.title_input = discord.ui.TextInput(
@@ -522,7 +522,7 @@ class RecentSuppliesView(discord.ui.View):
         self.surface = surface
         self.items = items[:MAX_RECENT_SUPPLIES]
         select = discord.ui.Select(
-            placeholder="다시 추가할 준비물 선택",
+            placeholder="다시 추가할 비품 선택",
             min_values=1,
             max_values=1,
             custom_id=f"{surface.button_prefix}:recent:add",
@@ -651,7 +651,7 @@ def render_completed_archive_message(
 
 
 def render_recent_supplies_message(items: list[str]) -> str:
-    lines = ["## 최근 준비물"]
+    lines = ["## 최근 비품"]
     if not items:
         lines.append("- none")
     else:

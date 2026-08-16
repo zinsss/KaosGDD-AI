@@ -87,11 +87,16 @@ class TaskUpdateIntentTests(unittest.TestCase):
         self.assertEqual(request.due_time, "")
 
     def test_supplies_create_without_due_date(self) -> None:
-        request = parse_task_create("준비물 비누 추가해줘", today=date(2026, 8, 14))
+        request = parse_task_create("비품 비누 추가해줘", today=date(2026, 8, 14))
         assert request is not None
         self.assertEqual(request.title, "비누")
         self.assertEqual(request.due_date, "")
         self.assertEqual(request.due_time, "")
+        self.assertEqual(request.profile, "supplies")
+
+    def test_old_supplies_word_still_maps_to_supplies(self) -> None:
+        request = parse_task_create("준비물 비누 추가해줘", today=date(2026, 8, 14))
+        assert request is not None
         self.assertEqual(request.profile, "supplies")
 
     def test_iso_date_create(self) -> None:
@@ -141,7 +146,7 @@ class TaskUpdateIntentTests(unittest.TestCase):
         self.assertEqual(request.action, "reopen")
 
     def test_supplies_reopen_action_sets_profile(self) -> None:
-        request = parse_task_action("준비물 비누 다시 살려줘")
+        request = parse_task_action("비품 비누 다시 살려줘")
         assert request is not None
         self.assertEqual(request.task_title, "비누")
         self.assertEqual(request.action, "reopen")

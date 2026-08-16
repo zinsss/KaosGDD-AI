@@ -960,7 +960,7 @@ class BrainActiveTaskActionsView(discord.ui.View):
 
 class BrainTaskEditModal(discord.ui.Modal):
     def __init__(self, governor_tools: GovernorToolClient, actor_id: int, request: ToolRequest, task: dict[str, Any]) -> None:
-        super().__init__(title="Edit Supply" if _uses_supplies_request(request) else "Edit Task", timeout=600)
+        super().__init__(title="Edit 비품" if _uses_supplies_request(request) else "Edit Task", timeout=600)
         self.governor_tools = governor_tools
         self.actor_id = actor_id
         self.request = request

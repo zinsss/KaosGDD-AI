@@ -79,7 +79,7 @@ def _completed_task_request(
 ) -> ToolRequest | None:
     if "완료" not in lowered:
         return None
-    if not any(marker in lowered for marker in ("할 일", "할일", "task", "todo", "준비물", "용품", "supplies", "supply")):
+    if not any(marker in lowered for marker in ("할 일", "할일", "task", "todo", "비품", "준비물", "용품", "supplies", "supply")):
         return None
     days = 14 if any(marker in lowered for marker in ("최근 2주", "지난 2주", "2주")) else 30
     query = _strip_scope_words(text)
@@ -124,12 +124,12 @@ def _scope(text: str, lowered: str) -> tuple[str, str]:
 
 
 def _asks_supplies(lowered: str) -> bool:
-    return any(marker in lowered for marker in ("준비물", "용품", "supplies", "supply"))
+    return any(marker in lowered for marker in ("비품", "준비물", "용품", "supplies", "supply"))
 
 
 def _strip_scope_words(value: str) -> str:
     query = value
-    for marker in ("가족", "family", "준비물", "용품", "supplies", "supply"):
+    for marker in ("가족", "family", "비품", "준비물", "용품", "supplies", "supply"):
         query = re.sub(rf"\b{re.escape(marker)}\b", " ", query, flags=re.IGNORECASE)
         query = query.replace(marker, " ")
     return query

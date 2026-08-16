@@ -316,7 +316,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("## Completed", channel.sent[0]["content"])
             self.assertIsNone(channel.sent[0]["view"])
             self.assertIn("## Paper towels", channel.sent[1]["content"])
-            self.assertIn("## 최근 준비물", channel.sent[2]["content"])
+            self.assertIn("## 최근 비품", channel.sent[2]["content"])
             self.assertNotIn("- due:", channel.sent[1]["content"])
             buttons = channel.sent[1]["view"].children
             self.assertEqual([button.custom_id for button in buttons], ["supplies:done", "supplies:edit", "supplies:delete"])
@@ -436,7 +436,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(adapter.created[0][1]["dueDate"], "")
             self.assertEqual(adapter.created[0][1]["dueTime"], "")
             self.assertEqual(channel.sent[1]["content"], "## Paper towels")
-            self.assertEqual(channel.sent[2]["content"], "## 최근 준비물\n- + Paper towels")
+            self.assertEqual(channel.sent[2]["content"], "## 최근 비품\n- + Paper towels")
             self.assertIsInstance(channel.sent[2]["view"], RecentSuppliesView)
             select = channel.sent[2]["view"].children[0]
             self.assertEqual(select.custom_id, "supplies:recent:add")
@@ -467,7 +467,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(surface.state.recent_supplies), 25)
             self.assertNotIn("Item 00", surface.state.recent_supplies)
             latest_content = channel.sent[-1]["content"]
-            self.assertIn("## 최근 준비물", latest_content)
+            self.assertIn("## 최근 비품", latest_content)
             self.assertIn("- + Item 05", latest_content.splitlines()[1])
             self.assertIsInstance(channel.sent[-1]["view"], RecentSuppliesView)
             select = channel.sent[-1]["view"].children[0]

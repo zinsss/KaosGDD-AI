@@ -32,15 +32,20 @@ class ToolIntentTests(unittest.TestCase):
         self.assertEqual(request.profile, "family")
 
     def test_supplies_active_request_sets_profile(self) -> None:
-        request = parse_tool_request("준비물 보여줘")
+        request = parse_tool_request("비품 보여줘")
         assert request is not None
         self.assertEqual(request.kind, ToolKind.ACTIVE_TASKS)
         self.assertEqual(request.profile, "supplies")
 
     def test_remaining_supplies_request_sets_profile(self) -> None:
-        request = parse_tool_request("남은 준비물 뭐야")
+        request = parse_tool_request("남은 비품 뭐야")
         assert request is not None
         self.assertEqual(request.kind, ToolKind.ACTIVE_TASKS)
+        self.assertEqual(request.profile, "supplies")
+
+    def test_old_supplies_word_still_sets_profile(self) -> None:
+        request = parse_tool_request("준비물 보여줘")
+        assert request is not None
         self.assertEqual(request.profile, "supplies")
 
     def test_completed_task_korean_request_uses_recent_two_weeks(self) -> None:
@@ -65,7 +70,7 @@ class ToolIntentTests(unittest.TestCase):
         self.assertEqual(request.query, "")
 
     def test_supplies_completed_task_request_sets_profile(self) -> None:
-        request = parse_tool_request("준비물 완료목록 보여줘", today=date(2026, 8, 15))
+        request = parse_tool_request("비품 완료목록 보여줘", today=date(2026, 8, 15))
         assert request is not None
         self.assertEqual(request.kind, ToolKind.COMPLETED_TASKS)
         self.assertEqual(request.profile, "supplies")

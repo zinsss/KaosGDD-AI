@@ -635,7 +635,7 @@ def _task_list_title(payload: dict[str, Any], *, completed: bool) -> str:
     profile = str(payload.get("profile") or "").strip().lower()
     collection_id = str(payload.get("collectionId") or "").strip().lower()
     if profile == "supplies" or "supplies" in collection_id:
-        return "완료한 준비물" if completed else "준비물"
+        return "완료한 비품" if completed else "비품"
     if profile == "family":
         return "완료한 가족 할 일" if completed else "가족 할 일"
     return "완료한 할 일" if completed else "할 일"
