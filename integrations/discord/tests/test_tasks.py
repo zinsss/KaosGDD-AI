@@ -18,6 +18,7 @@ from kaos_governor_discord.tasks import (
     parse_add_task_message,
     parse_due_line,
     render_completed_archive_message,
+    render_recent_supplies_message,
     render_task_message,
     task_payload,
 )
@@ -279,9 +280,10 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
 
             await surface.ensure_message()
 
-            self.assertEqual(len(channel.sent), 2)
+            self.assertEqual(len(channel.sent), 3)
             self.assertIn("## Completed", channel.sent[0]["content"])
             self.assertIn("## Paper towels", channel.sent[1]["content"])
+            self.assertIn("## 최근 준비물", channel.sent[2]["content"])
             self.assertNotIn("- due:", channel.sent[1]["content"])
             buttons = channel.sent[1]["view"].children
             self.assertEqual([button.custom_id for button in buttons], ["supplies:done", "supplies:edit", "supplies:delete"])
@@ -400,6 +402,37 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(adapter.created[0][1]["dueDate"], "")
             self.assertEqual(adapter.created[0][1]["dueTime"], "")
             self.assertEqual(channel.sent[1]["content"], "## Paper towels")
+            self.assertEqual(channel.sent[2]["content"], "## 최근 준비물\n- + Paper towels")
+
+    async def test_supplies_recent_message_keeps_latest_25_inputs_at_bottom(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            adapter = FakeAdapter(tasks=[])
+            surface = DiscordTasksSurface(
+                FakeBot(channel),  # type: ignore[arg-type]
+                AccessPolicy(100, frozenset({200}), frozenset({300})),
+                channel_id=300,
+                profile="main",
+                state_path=Path(temporary) / "supplies.json",
+                adapter=adapter,  # type: ignore[arg-type]
+                surface_name="supplies",
+                button_prefix="supplies",
+                collection_id="zin:supplies",
+                show_due=False,
+            )
+
+            for index in range(27):
+                self.assertTrue(await surface.create_task(f"Item {index:02d}"))
+            self.assertTrue(await surface.create_task("Item 05"))
+
+            self.assertEqual(surface.state.recent_supplies[0], "Item 05")
+            self.assertEqual(len(surface.state.recent_supplies), 25)
+            self.assertNotIn("Item 00", surface.state.recent_supplies)
+            latest_content = channel.sent[-1]["content"]
+            self.assertIn("## 최근 준비물", latest_content)
+            self.assertIn("- + Item 05", latest_content.splitlines()[1])
+            self.assertEqual(channel.sent[-1]["view"], None)
+            self.assertEqual(surface.status()["recentSuppliesCount"], 25)
 
     async def test_supplies_surface_strips_due_dates_as_rule(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -430,6 +463,13 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(adapter.created[0][1]["collectionId"], "zin:supplies")
             self.assertEqual(adapter.created[0][1]["dueDate"], "")
             self.assertEqual(adapter.created[0][1]["dueTime"], "")
+
+    def test_render_recent_supplies_message_escapes_and_limits_items(self) -> None:
+        content = render_recent_supplies_message(["@everyone", *[f"Item {index}" for index in range(30)]])
+
+        self.assertIn("- + @\u200beveryone", content)
+        self.assertIn("- + Item 23", content)
+        self.assertNotIn("- + Item 24", content)
 
     async def test_ensure_message_deletes_legacy_combined_message(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -18,6 +18,7 @@ from .markdown import NO_MENTIONS, escape_text
 
 LOGGER = logging.getLogger(__name__)
 MAX_VISIBLE_TASKS = 25
+MAX_RECENT_SUPPLIES = 25
 DUE_LINE_PATTERN = re.compile(r"^:(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}))?$")
 
 
@@ -25,6 +26,8 @@ DUE_LINE_PATTERN = re.compile(r"^:(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}))?$")
 class DiscordTasksState:
     message_ids: dict[str, int] = field(default_factory=dict)
     completed_archive_message_id: int = 0
+    recent_supplies_message_id: int = 0
+    recent_supplies: list[str] = field(default_factory=list)
     legacy_message_id: int = 0
 
 
@@ -87,6 +90,9 @@ class DiscordTasksSurface:
             if key not in next_message_ids:
                 await self._delete_message_id(channel, message_id)
         self.state.message_ids = next_message_ids
+        if self._uses_supplies_rules():
+            recent_message = await self._recreate_recent_supplies_message(channel)
+            self.state.recent_supplies_message_id = int(recent_message.id)
         self._save_state()
 
     async def repost_active_messages(self) -> None:
@@ -133,6 +139,8 @@ class DiscordTasksSurface:
         uid = str(result.get("uid") or "")
         if not uid:
             return False
+        if self._uses_supplies_rules():
+            self._record_recent_supply(clean_title)
         await self.ensure_message()
         return True
 
@@ -173,6 +181,8 @@ class DiscordTasksSurface:
             "messageCount": len(self.state.message_ids),
             "messageIds": [str(value) for value in self.state.message_ids.values()],
             "completedArchiveMessageId": str(self.state.completed_archive_message_id),
+            "recentSuppliesMessageId": str(self.state.recent_supplies_message_id),
+            "recentSuppliesCount": len(self.state.recent_supplies),
         }
 
     async def channel(self) -> discord.abc.Messageable:
@@ -232,6 +242,12 @@ class DiscordTasksSurface:
             return DiscordTasksState(
                 message_ids=message_ids,
                 completed_archive_message_id=int(raw.get("completedArchiveMessageId") or 0),
+                recent_supplies_message_id=int(raw.get("recentSuppliesMessageId") or 0),
+                recent_supplies=[
+                    str(item).strip()
+                    for item in list(raw.get("recentSupplies") or [])
+                    if str(item).strip()
+                ][:MAX_RECENT_SUPPLIES],
                 legacy_message_id=int(raw.get("messageId") or 0),
             )
         except (TypeError, ValueError):
@@ -242,6 +258,8 @@ class DiscordTasksSurface:
         payload = {
             "messageIds": self.state.message_ids,
             "completedArchiveMessageId": self.state.completed_archive_message_id,
+            "recentSuppliesMessageId": self.state.recent_supplies_message_id,
+            "recentSupplies": self.state.recent_supplies[:MAX_RECENT_SUPPLIES],
         }
         temporary = self.state_path.with_suffix(f"{self.state_path.suffix}.tmp")
         temporary.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
@@ -280,6 +298,26 @@ class DiscordTasksSurface:
     def _is_own_message(self, message: discord.Message) -> bool:
         user = getattr(self.bot, "user", None)
         return user is not None and int(getattr(message.author, "id", 0)) == int(getattr(user, "id", 0))
+
+    def _uses_supplies_rules(self) -> bool:
+        return self.surface_name == "supplies" or self.profile == "supplies" or is_supplies_collection(self.collection_id)
+
+    def _record_recent_supply(self, title: str) -> None:
+        clean_title = title.strip()
+        if not clean_title:
+            return
+        previous = [item for item in self.state.recent_supplies if item.casefold() != clean_title.casefold()]
+        self.state.recent_supplies = [clean_title, *previous][:MAX_RECENT_SUPPLIES]
+
+    async def _recreate_recent_supplies_message(self, channel: discord.abc.Messageable) -> discord.Message:
+        if self.state.recent_supplies_message_id:
+            await self._delete_message_id(channel, self.state.recent_supplies_message_id)
+            self.state.recent_supplies_message_id = 0
+        return await channel.send(
+            content=render_recent_supplies_message(self.state.recent_supplies),
+            view=None,
+            allowed_mentions=NO_MENTIONS,
+        )
 
 
 class TaskView(discord.ui.View):
@@ -383,6 +421,15 @@ def render_completed_archive_message(
         lines.append("- none")
     else:
         lines.extend(_completed_archive_line(item) for item in completed)
+    return "\n".join(lines)[:1990]
+
+
+def render_recent_supplies_message(items: list[str]) -> str:
+    lines = ["## 최근 준비물"]
+    if not items:
+        lines.append("- none")
+    else:
+        lines.extend(f"- + {escape_text(item)}" for item in items[:MAX_RECENT_SUPPLIES])
     return "\n".join(lines)[:1990]
 
 
