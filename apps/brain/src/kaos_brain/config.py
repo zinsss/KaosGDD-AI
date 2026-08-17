@@ -121,6 +121,8 @@ class Settings:
         if kaosai_enabled and not kaosai_base_url:
             raise ConfigurationError("KAOSAI_BASE_URL is required when KAOSAI_ENABLED=true")
         kaosai_api_token = _secret(source, "KAOSAI_API_TOKEN") if kaosai_enabled else ""
+        if kaosai_enabled and not kaosai_api_token:
+            raise ConfigurationError("KAOSAI_API_TOKEN or KAOSAI_API_TOKEN_FILE is required when KAOSAI_ENABLED=true")
         max_reply_chars = _positive_int(source.get("KAOSBRAIN_MAX_REPLY_CHARS", "1800"), "KAOSBRAIN_MAX_REPLY_CHARS")
         if max_reply_chars > 1900:
             raise ConfigurationError("KAOSBRAIN_MAX_REPLY_CHARS must be at most 1900")

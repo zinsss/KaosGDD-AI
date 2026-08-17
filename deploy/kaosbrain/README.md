@@ -7,6 +7,14 @@ remain behind KaosGovernor APIs.
 OpenClaw/KaosAI planning is optional and disabled by default. Enable it only
 after the local gateway and auth token are verified.
 
+The normal production shape is:
+
+- KaosBrain Discord adapter and guard are always on.
+- Local Ollama handles normal chat and deterministic intent help.
+- KaosGovernor tool access is enabled after the H3 Governor tool API is
+  reachable over Tailscale.
+- KaosAI/OpenClaw remains disabled unless deliberately testing planner mode.
+
 ## Host prerequisites
 
 - Debian 13 or Ubuntu 24.04 LTS
@@ -43,12 +51,37 @@ unset TOKEN
 chmod 0640 /srv/kaosgdd/secrets/kaosbrain_discord_bot_token
 ```
 
+If Governor tools are enabled, also install the shared Governor API token as a
+file-backed secret. Do not print the token in shell history or logs:
+
+```bash
+install -m 0640 /path/to/governor_api_token /srv/kaosgdd/secrets/governor_api_token
+```
+
 Edit `/srv/kaosgdd/kaosbrain/kaosbrain.env`, then test and start:
 
 ```bash
 ./deploy/kaosbrain/kaosbrain test
 ./deploy/kaosbrain/kaosbrain up
 ```
+
+For the current H4-to-H3 layout, the important environment values are:
+
+```text
+KAOSAI_ENABLED=false
+KAOSAI_PROVIDER=disabled
+KAOSAI_BASE_URL=
+KAOSAI_CHAT_ENABLED=false
+KAOSBRAIN_GOVERNOR_TOOLS_ENABLED=true
+KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL=http://<kaosgovernor-tailscale-ip>:8098
+KAOSBRAIN_GOVERNOR_HEALTH_URL=http://<kaosgovernor-tailscale-ip>:8097/health
+KAOSBRAIN_GOVERNOR_TOOLS_PROFILE=main
+GOVERNOR_API_TOKEN_FILE=/run/secrets/governor_api_token
+```
+
+Leave `KAOSAI_API_TOKEN_FILE` unset or pointed at a missing placeholder while
+`KAOSAI_ENABLED=false`; the deploy preflight only requires it when KaosAI is
+enabled.
 
 After the first install, update from the host checkout with:
 

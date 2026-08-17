@@ -115,6 +115,9 @@ preflight() {
   if [[ "${KAOSAI_ENABLED:-false}" == "true" ]]; then
     [[ "${KAOSAI_PROVIDER:-}" == "openclaw" ]] || die "KAOSAI_PROVIDER must be openclaw when KAOSAI_ENABLED=true"
     [[ -n "${KAOSAI_BASE_URL:-}" ]] || die "KAOSAI_BASE_URL is required when KAOSAI_ENABLED=true"
+    if [[ -z "${KAOSAI_API_TOKEN:-}" && -z "${KAOSAI_API_TOKEN_FILE:-}" ]]; then
+      die "KAOSAI_API_TOKEN or KAOSAI_API_TOKEN_FILE is required when KAOSAI_ENABLED=true"
+    fi
     if [[ -z "${KAOSAI_API_TOKEN:-}" && -n "${KAOSAI_API_TOKEN_FILE:-}" ]]; then
       local kaosai_token_path
       kaosai_token_path=$(host_secret_path "${KAOSAI_API_TOKEN_FILE}")

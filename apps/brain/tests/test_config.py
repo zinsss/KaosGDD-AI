@@ -71,6 +71,15 @@ class SettingsTests(unittest.TestCase):
             Settings.from_env({**BASE_ENV, "KAOSAI_ENABLED": "true", "KAOSAI_PROVIDER": "disabled"})
         with self.assertRaisesRegex(ConfigurationError, "KAOSAI_BASE_URL"):
             Settings.from_env({**BASE_ENV, "KAOSAI_ENABLED": "true", "KAOSAI_PROVIDER": "openclaw"})
+        with self.assertRaisesRegex(ConfigurationError, "KAOSAI_API_TOKEN"):
+            Settings.from_env(
+                {
+                    **BASE_ENV,
+                    "KAOSAI_ENABLED": "true",
+                    "KAOSAI_PROVIDER": "openclaw",
+                    "KAOSAI_BASE_URL": "http://127.0.0.1:18789",
+                }
+            )
 
         settings = Settings.from_env(
             {

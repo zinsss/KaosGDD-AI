@@ -16,6 +16,7 @@ BASE_ENV = {
     "KAOSAI_ENABLED": "true",
     "KAOSAI_PROVIDER": "openclaw",
     "KAOSAI_BASE_URL": "http://127.0.0.1:18789",
+    "KAOSAI_API_TOKEN": "gateway-token",
     "KAOSBRAIN_GOVERNOR_TOOLS_ENABLED": "true",
     "KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL": "http://100.78.124.43:8098",
     "KAOSBRAIN_SUPPLIES_COLLECTION_ID": "supplies:abc",
