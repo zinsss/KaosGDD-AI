@@ -303,6 +303,12 @@ edge_preflight() {
   require_dir "${root}/data/caddy/data"
   require_dir "${root}/data/caddy/config"
   require_nonempty_file "${root}/secrets/cloudflared.env"
+  if grep -q 'kaosgdd-gov' "${root}/config/Caddyfile"; then
+    die "edge config still references retired kaosgdd-gov upstream"
+  fi
+  if grep -Eq 'reverse_proxy[[:space:]]+[^[:space:]]*8008|KAOSSUPPLIES|supplies\.kaosgdd\.net.*reverse_proxy' "${root}/config/Caddyfile"; then
+    die "edge config must not proxy retired supplies web routes"
+  fi
   "${EDGE_COMPOSE[@]}" config --quiet
   info "Edge preflight passed."
 }
