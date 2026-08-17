@@ -59,7 +59,7 @@ KAOSAI_ENABLED=false
 KAOSAI_PROVIDER=disabled
 KAOSAI_BASE_URL=
 KAOSAI_MODEL=default
-KAOSAI_API_TOKEN_FILE=/run/secrets/openclaw_gateway_token
+KAOSAI_API_TOKEN_FILE=
 KAOSAI_CHAT_ENABLED=false
 KAOSBRAIN_GOVERNOR_TOOLS_ENABLED=true
 KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL=http://<kaosgovernor-tailscale-ip>:8098
@@ -90,6 +90,8 @@ OpenClaw planner client uses the local OpenClaw WebSocket gateway and expects
 strict JSON plans only; KaosBrain Guard adapts and validates those plans before
 Governor sees them. `KAOSAI_CHAT_ENABLED=false` keeps normal Brain chat on the
 local deterministic path while still allowing explicit `ai:` diagnostics.
+When `KAOSAI_ENABLED=true`, set `KAOSAI_API_TOKEN_FILE` to a mounted gateway
+token file or provide `KAOSAI_API_TOKEN` through a host-managed secret source.
 
 KaosAI diagnostics are available in the configured Brain channel and never
 execute or propose writes:
