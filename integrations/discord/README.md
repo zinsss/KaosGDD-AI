@@ -7,8 +7,7 @@ The preparation build exposes `/status`, `/confirmation-test`, `/fax-send`,
 `/mail-organizer-now`, `/mail-organizer-schedule`, `/health`, and `/ready`.
 Every interaction must match configured server, channel, and user
 allowlists. It requests Message Content intent only when the optional
-Telegram-compatible fax upload/reply flow is enabled. It has no public HTTP
-route.
+Discord fax upload/reply flow is enabled. It has no public HTTP route.
 
 Version `0.6.0` also exposes the first narrow Governor tool API on the same
 loopback-bound listener:
