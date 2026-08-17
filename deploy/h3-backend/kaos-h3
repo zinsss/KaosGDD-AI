@@ -274,7 +274,7 @@ family_transition_preflight() {
   load_env
   local root=${KAOS_ROOT:-/srv/kaos}
   require_nonempty_file "${root}/secrets/kaosgovernor-legacy-database.env"
-  require_nonempty_file "${root}/secrets/kaosgdd-gov.env"
+  require_nonempty_file "${root}/secrets/kaosgovernor-legacy-api.env"
   require_nonempty_file "${root}/secrets/kaosgdd-adapters.env"
   require_dir "${root}/data/kaosgdd-gov/postgres"
   require_file "${root}/data/kaosgdd-gov/postgres/PG_VERSION"

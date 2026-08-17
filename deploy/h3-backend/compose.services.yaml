@@ -133,7 +133,7 @@ services:
       kaosgovernor-legacy-database:
         condition: service_healthy
     env_file:
-      - path: ${KAOS_ROOT:-/srv/kaos}/secrets/kaosgdd-gov.env
+      - path: ${KAOS_ROOT:-/srv/kaos}/secrets/kaosgovernor-legacy-api.env
         format: raw
     environment:
       BRAIN_PORT: "8092"
@@ -142,16 +142,6 @@ services:
       BRAIN_DB_PORT: "5432"
       CALENDAR_ADAPTER_INTERNAL_URL: "http://calendar-adapter:8091"
       MEMOS_INTERNAL_URL: "http://memos:5230"
-      FAX_NOTIFY_ENABLED: "false"
-      FAX_OUTGOING_ENABLED: "false"
-      FAX_TELEGRAM_ARCHIVE_ENABLED: "false"
-      MAIL_NOTIFY_NAVER_ENABLED: "false"
-      MAIL_ORGANIZER_ENABLED: "false"
-      MAIL_TELEGRAM_ARCHIVE_ENABLED: "false"
-      TELEGRAM_FAX_INTAKE_ENABLED: "false"
-      TELEGRAM_DOCUMENT_INTAKE_ENABLED: "false"
-      TELEGRAM_MEMOS_TOPIC_READ_ONLY: "false"
-      MEMOS_TELEGRAM_ARCHIVE_ENABLED: "false"
     ports:
       - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:8092:8092"
     volumes:
