@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 import discord
 
+from .brain_guard import BrainGuardContext, BrainGuardError, BrainGuardResult, BrainGuardResultKind, adapt_kaosai_plan
 from .config import Settings
 from .event_intent import EventCreateRequest, parse_event_create
 from .governor_tools import (
@@ -41,6 +42,7 @@ from .governor_tools import (
     search_results,
 )
 from .intent import Route, parse_request
+from .kaos_ai import DisabledKaosAIPlanner, KaosAIError, KaosAIPlanner
 from .memo_intent import MemoCreateRequest, MemoDeleteRequest, MemoEditRequest, parse_memo_create, parse_memo_delete, parse_memo_edit
 from .ollama import OllamaClient, OllamaConfig, OllamaError
 from .task_update_intent import (
@@ -73,7 +75,12 @@ def _tool_cancelled(action: str) -> str:
 
 
 class BrainBot(discord.Client):
-    def __init__(self, settings: Settings, ollama: OllamaClient | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        ollama: OllamaClient | None = None,
+        kaosai: KaosAIPlanner | None = None,
+    ) -> None:
         intents = discord.Intents.none()
         intents.guilds = True
         intents.guild_messages = True
@@ -88,6 +95,7 @@ class BrainBot(discord.Client):
                 timeout_seconds=settings.request_timeout_seconds,
             )
         )
+        self.kaosai = kaosai or DisabledKaosAIPlanner()
         self.governor_tools = (
             GovernorToolClient(
                 GovernorToolConfig(
@@ -180,6 +188,17 @@ class BrainBot(discord.Client):
         view: discord.ui.View | None = None
         async with message.channel.typing():
             try:
+                if request.route is Route.CHAT and self.settings.kaosai_enabled:
+                    kaosai_reply = await self._answer_with_kaosai_plan(request.text, message=message)
+                    if kaosai_reply is not None:
+                        reply, view = kaosai_reply
+                        await message.reply(
+                            reply[: self.settings.max_reply_chars],
+                            view=view,
+                            mention_author=False,
+                            allowed_mentions=NO_MENTIONS,
+                        )
+                        return
                 tool_request = (
                     parse_tool_request(request.text, today=message.created_at.astimezone(KST).date())
                     if request.route is Route.CHAT
@@ -201,6 +220,142 @@ class BrainBot(discord.Client):
             mention_author=False,
             allowed_mentions=NO_MENTIONS,
         )
+
+    async def _answer_with_kaosai_plan(
+        self,
+        user_text: str,
+        *,
+        message: discord.Message,
+    ) -> tuple[str, discord.ui.View | None] | None:
+        try:
+            plan = await self.kaosai.plan(
+                user_text,
+                context={
+                    "actorId": str(message.author.id),
+                    "channelId": str(message.channel.id),
+                    "today": message.created_at.astimezone(KST).date().isoformat(),
+                },
+            )
+        except KaosAIError as exc:
+            LOGGER.warning("KaosAI planner failed: %s", exc)
+            return None
+        if plan is None:
+            return None
+        if str(plan.get("intent") or "").strip() == "clarify":
+            parameters = plan.get("parameters")
+            question = str(parameters.get("question") or "").strip() if isinstance(parameters, dict) else ""
+            return (question or "조금 더 자세히 말해줘요.", None)
+        try:
+            guarded = adapt_kaosai_plan(
+                plan,
+                BrainGuardContext(
+                    actor_id=int(message.author.id),
+                    idempotency_key=f"discord:{message.id}",
+                    today=message.created_at.astimezone(KST).date(),
+                    default_profile=self.settings.governor_tools_profile,
+                    supplies_collection_id=self.settings.governor_tools_supplies_collection_id,
+                ),
+            )
+        except BrainGuardError as exc:
+            LOGGER.warning("KaosAI plan rejected by Brain Guard: %s", exc)
+            return None
+        return await self._answer_with_guarded_plan(user_text, guarded)
+
+    async def _answer_with_guarded_plan(
+        self,
+        user_text: str,
+        guarded: BrainGuardResult,
+    ) -> tuple[str, discord.ui.View | None]:
+        if guarded.kind is BrainGuardResultKind.READONLY_TOOL:
+            return await self._answer_with_governor_tool(user_text, guarded.request, actor_id=guarded.actor_id)  # type: ignore[arg-type]
+        if self.governor_tools is None:
+            return _tool_unavailable(), None
+        request = guarded.request
+        try:
+            if isinstance(request, TaskDueUpdateRequest):
+                payload = await self.governor_tools.propose_task_due_update(
+                    request,
+                    actor_id=guarded.actor_id,
+                    idempotency_key=guarded.idempotency_key,
+                )
+                return (
+                    render_task_due_update_proposal(payload),
+                    TaskUpdateConfirmationView(self.governor_tools, guarded.actor_id, str(payload.get("confirmationId") or "")),
+                )
+            if isinstance(request, TaskCreateRequest):
+                payload = await self.governor_tools.propose_task_create(
+                    request,
+                    actor_id=guarded.actor_id,
+                    idempotency_key=guarded.idempotency_key,
+                )
+                return (
+                    render_task_create_proposal(payload),
+                    TaskCreateConfirmationView(self.governor_tools, guarded.actor_id, str(payload.get("confirmationId") or "")),
+                )
+            if isinstance(request, TaskActionRequest):
+                payload = await self.governor_tools.propose_task_action(
+                    request,
+                    actor_id=guarded.actor_id,
+                    idempotency_key=guarded.idempotency_key,
+                )
+                return (
+                    render_task_action_proposal(payload),
+                    TaskActionConfirmationView(self.governor_tools, guarded.actor_id, str(payload.get("confirmationId") or "")),
+                )
+            if isinstance(request, GovernorTaskEditRequest):
+                payload = await self.governor_tools.propose_task_edit(
+                    request,
+                    actor_id=guarded.actor_id,
+                    idempotency_key=guarded.idempotency_key,
+                )
+                return (
+                    render_task_edit_proposal(payload),
+                    TaskEditConfirmationView(self.governor_tools, guarded.actor_id, str(payload.get("confirmationId") or "")),
+                )
+            if isinstance(request, EventCreateRequest):
+                payload = await self.governor_tools.propose_event_create(
+                    request,
+                    actor_id=guarded.actor_id,
+                    idempotency_key=guarded.idempotency_key,
+                )
+                return (
+                    render_event_create_proposal(payload),
+                    EventCreateConfirmationView(self.governor_tools, guarded.actor_id, str(payload.get("confirmationId") or "")),
+                )
+            if isinstance(request, MemoCreateRequest):
+                payload = await self.governor_tools.propose_memo_create(
+                    request,
+                    actor_id=guarded.actor_id,
+                    idempotency_key=guarded.idempotency_key,
+                )
+                return (
+                    render_memo_create_proposal(payload),
+                    MemoCreateConfirmationView(self.governor_tools, guarded.actor_id, str(payload.get("confirmationId") or "")),
+                )
+            if isinstance(request, MemoDeleteRequest):
+                payload = await self.governor_tools.propose_memo_delete(
+                    request,
+                    actor_id=guarded.actor_id,
+                    idempotency_key=guarded.idempotency_key,
+                )
+                return (
+                    render_memo_delete_proposal(payload),
+                    MemoDeleteConfirmationView(self.governor_tools, guarded.actor_id, str(payload.get("confirmationId") or "")),
+                )
+            if isinstance(request, MemoEditRequest):
+                payload = await self.governor_tools.propose_memo_edit(
+                    request,
+                    actor_id=guarded.actor_id,
+                    idempotency_key=guarded.idempotency_key,
+                )
+                return (
+                    render_memo_edit_proposal(payload),
+                    MemoEditConfirmationView(self.governor_tools, guarded.actor_id, str(payload.get("confirmationId") or "")),
+                )
+        except GovernorToolError as exc:
+            LOGGER.warning("Guarded Governor proposal failed intent=%s: %s", guarded.intent, exc)
+            return _tool_failed("요청 처리"), None
+        return _tool_failed("요청 처리"), None
 
     async def _answer_with_governor_tool(
         self,
