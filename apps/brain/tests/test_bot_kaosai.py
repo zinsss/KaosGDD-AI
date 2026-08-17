@@ -132,10 +132,14 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
             message=fake_message(),
         )
 
-        self.assertIn("## KaosAI diagnostic", reply)
-        self.assertIn('"intent": "task.create"', reply)
-        self.assertIn("- guard: accepted `governor_proposal`", reply)
+        self.assertIn("## KaosAI plan", reply)
+        self.assertIn("intent: task.create", reply)
+        self.assertIn("kind: governor_proposal", reply)
+        self.assertIn("confirmation: required", reply)
+        self.assertIn("- title: 엄마한테 전화", reply)
+        self.assertIn("- due: 2026-08-18 10:00", reply)
         self.assertIn("- execution: skipped", reply)
+        self.assertNotIn("```json", reply)
         self.assertEqual(tools.fetch_calls, [])
         self.assertEqual(tools.task_create_calls, [])
 
@@ -154,7 +158,11 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
             "run id",
             message=fake_message(),
         )
-        self.assertIn("- guard: rejected `intent_not_allowed`", reply)
+        self.assertIn("## KaosAI rejected", reply)
+        self.assertIn("reason: `intent_not_allowed`", reply)
+        self.assertIn("intent: shell.run", reply)
+        self.assertIn("- execution: skipped", reply)
+        self.assertNotIn("command", reply)
 
     async def test_kaosai_readonly_plan_uses_governor_tool_path(self) -> None:
         tools = FakeGovernorTools()

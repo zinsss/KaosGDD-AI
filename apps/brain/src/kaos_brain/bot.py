@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-import json
 import logging
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -90,6 +89,114 @@ def _tool_failed(action: str) -> str:
 
 def _tool_cancelled(action: str) -> str:
     return f"{action} 취소했어요."
+
+
+def _render_kaosai_clarify_preview(plan: dict[str, Any]) -> str:
+    parameters = plan.get("parameters")
+    question = _preview_value(parameters.get("question")) if isinstance(parameters, dict) else ""
+    lines = ["## KaosAI plan", "intent: clarify", "confirmation: not required"]
+    if question:
+        lines.append(f"- question: {question}")
+    lines.append("- execution: skipped")
+    return "\n".join(lines)
+
+
+def _render_kaosai_rejected_preview(plan: dict[str, Any], reason: str) -> str:
+    intent = _preview_value(plan.get("intent")) or "unknown"
+    scope = _preview_value(plan.get("scope"))
+    lines = ["## KaosAI rejected", f"reason: `{reason}`", f"intent: {intent}"]
+    if scope:
+        lines.append(f"scope: {scope}")
+    lines.append("- execution: skipped")
+    return "\n".join(lines)
+
+
+def _render_kaosai_guard_preview(guarded: BrainGuardResult) -> str:
+    confirmation = "required" if guarded.confirmation_required else "not required"
+    lines = [
+        "## KaosAI plan",
+        f"intent: {guarded.intent}",
+        f"kind: {guarded.kind.value}",
+        f"confirmation: {confirmation}",
+    ]
+    lines.extend(_guarded_request_lines(guarded.request))
+    lines.append("- execution: skipped")
+    return "\n".join(lines)
+
+
+def _guarded_request_lines(request: object) -> list[str]:
+    if isinstance(request, ToolRequest):
+        lines = [f"- tool: {request.kind.value}"]
+        if request.query:
+            lines.append(f"- query: {_preview_value(request.query)}")
+        if request.start or request.end:
+            lines.append(f"- window: {request.start or '..'} ~ {request.end or '..'}")
+        if request.profile:
+            lines.append(f"- profile: {request.profile}")
+        return lines
+    if isinstance(request, TaskCreateRequest):
+        lines = [f"- title: {_preview_value(request.title)}"]
+        if due := _preview_due(request.due_date, request.due_time):
+            lines.append(f"- due: {due}")
+        lines.append(f"- profile: {request.profile}")
+        return lines
+    if isinstance(request, TaskDueUpdateRequest):
+        lines = [
+            f"- task: {_preview_value(request.task_title)}",
+            f"- due: {_preview_due(request.due_date, request.due_time)}",
+            f"- profile: {request.profile}",
+        ]
+        return lines
+    if isinstance(request, TaskActionRequest):
+        return [
+            f"- action: {request.action}",
+            f"- task: {_preview_value(request.task_title)}",
+            f"- profile: {request.profile}",
+        ]
+    if isinstance(request, GovernorTaskEditRequest):
+        lines = [
+            f"- task: {_preview_value(request.task_title)}",
+            f"- title: {_preview_value(request.title)}",
+        ]
+        if request.memo:
+            lines.append(f"- memo: {_preview_value(request.memo, limit=120)}")
+        if due := _preview_due(request.due_date, request.due_time):
+            lines.append(f"- due: {due}")
+        if request.priority:
+            lines.append(f"- priority: {_preview_value(request.priority)}")
+        lines.append(f"- profile: {request.profile}")
+        return lines
+    if isinstance(request, EventCreateRequest):
+        lines = [
+            f"- title: {_preview_value(request.title)}",
+            f"- date: {request.start_date}" if request.start_date == request.end_date else f"- date: {request.start_date} ~ {request.end_date}",
+            f"- allDay: {str(request.all_day).lower()}",
+            f"- profile: {request.profile}",
+        ]
+        if request.memo:
+            lines.append(f"- memo: {_preview_value(request.memo, limit=120)}")
+        return lines
+    if isinstance(request, MemoCreateRequest):
+        return [f"- content: {_preview_value(request.content, limit=160)}"]
+    if isinstance(request, MemoEditRequest):
+        return [
+            f"- query: {_preview_value(request.query)}",
+            f"- content: {_preview_value(request.content, limit=160)}",
+        ]
+    if isinstance(request, MemoDeleteRequest):
+        return [f"- query: {_preview_value(request.query)}"]
+    return ["- request: unknown"]
+
+
+def _preview_due(due_date: str, due_time: str) -> str:
+    return " ".join(part for part in (due_date, due_time) if part).strip()
+
+
+def _preview_value(value: object, *, limit: int = 80) -> str:
+    text = discord.utils.escape_mentions(" ".join(str(value or "").split()))
+    if len(text) <= limit:
+        return text
+    return f"{text[: max(0, limit - 3)].rstrip()}..."
 
 
 class BrainBot(discord.Client):
@@ -325,16 +432,8 @@ class BrainBot(discord.Client):
             return f"## KaosAI diagnostic\n- planner: failed `{exc}`"
         if plan is None:
             return "## KaosAI diagnostic\n- planner: unavailable"
-        lines = [
-            "## KaosAI diagnostic",
-            "- planner: returned plan",
-            "```json",
-            json.dumps(plan, ensure_ascii=False, indent=2, sort_keys=True),
-            "```",
-        ]
         if str(plan.get("intent") or "").strip() == "clarify":
-            lines.append("- guard: skipped clarify")
-            return "\n".join(lines)
+            return _render_kaosai_clarify_preview(plan)
         try:
             guarded = adapt_kaosai_plan(
                 plan,
@@ -347,17 +446,8 @@ class BrainBot(discord.Client):
                 ),
             )
         except BrainGuardError as exc:
-            lines.append(f"- guard: rejected `{exc}`")
-            return "\n".join(lines)
-        lines.extend(
-            [
-                f"- guard: accepted `{guarded.kind.value}`",
-                f"- intent: `{guarded.intent}`",
-                f"- confirmationRequired: `{str(guarded.confirmation_required).lower()}`",
-                "- execution: skipped",
-            ]
-        )
-        return "\n".join(lines)
+            return _render_kaosai_rejected_preview(plan, str(exc))
+        return _render_kaosai_guard_preview(guarded)
 
     async def _answer_with_guarded_plan(
         self,
