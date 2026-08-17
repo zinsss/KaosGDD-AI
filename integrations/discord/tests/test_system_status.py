@@ -252,6 +252,10 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
             render_service_embed(SERVICES[1], ServiceProbeResult("kaosgovernor", "unknown", "", "")).color.value,
             EMBED_COLOR_UNKNOWN,
         )
+        self.assertEqual(
+            render_service_embed(SERVICES[3], ServiceProbeResult("kaosinj", "planned", "", "")).color.value,
+            EMBED_COLOR_UNKNOWN,
+        )
 
     def test_service_view_only_contains_restart_button(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -274,6 +278,18 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.state, "unknown")
         self.assertIn("No health probe", result.detail)
+
+    def test_planned_service_renders_as_planned_without_probe(self) -> None:
+        result = check_service(
+            SERVICES[3],
+            {"SERVICE_STATUS_DEFAULT_PROBES_ENABLED": "false"},
+            0.5,
+        )
+        embed = render_service_embed(SERVICES[3], result)
+
+        self.assertEqual(result.state, "planned")
+        self.assertIn("No service is deployed yet", result.detail)
+        self.assertIn("Planned", embed.description)
 
     def test_default_probes_cover_local_backend_services(self) -> None:
         self.assertEqual(DEFAULT_HTTP_PROBES["radicale"], "http://radicale:5232/")

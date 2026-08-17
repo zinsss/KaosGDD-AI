@@ -92,6 +92,10 @@ DEFAULT_HTTP_PROBES = {
     "vaultwarden": "http://vaultwarden/alive",
 }
 
+PLANNED_SERVICE_DETAILS = {
+    "kaosinj": "Planned. No service is deployed yet.",
+}
+
 OK_HTTP_STATUSES = {200, 204, 301, 302, 307, 308, 401, 403}
 RESTART_TIMEOUT_SECONDS = 30.0
 
@@ -342,6 +346,8 @@ def status_label(result: ServiceProbeResult) -> str:
         return "Healthy"
     if result.state == "down":
         return "Down"
+    if result.state == "planned":
+        return "Planned"
     return "Unknown"
 
 
@@ -361,6 +367,8 @@ def check_service(
     if tcp:
         state, detail = check_tcp(tcp, timeout_seconds)
         return ServiceProbeResult(item.key, state, checked_at, detail)
+    if item.key in PLANNED_SERVICE_DETAILS:
+        return ServiceProbeResult(item.key, "planned", checked_at, PLANNED_SERVICE_DETAILS[item.key])
     return ServiceProbeResult(item.key, "unknown", checked_at, "No health probe configured.")
 
 
