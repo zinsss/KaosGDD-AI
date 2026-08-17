@@ -2,10 +2,10 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 import unittest
 
-from kaos_brain.bot import BrainBot
+from kaos_brain.bot import BrainBot, _kaosai_planner_from_settings
 from kaos_brain.config import Settings
 from kaos_brain.governor_tools import GovernorToolError
-from kaos_brain.kaos_ai import KaosAIError
+from kaos_brain.kaos_ai import DisabledKaosAIPlanner, KaosAIError, OpenClawKaosAIPlanner
 
 
 BASE_ENV = {
@@ -93,6 +93,13 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
         bot.kaosai = FakeKaosAI(plan, error)
         bot.governor_tools = governor_tools or FakeGovernorTools()
         return bot
+
+    def test_kaosai_planner_factory_uses_openclaw_only_when_enabled(self) -> None:
+        disabled = _kaosai_planner_from_settings(Settings.from_env({**BASE_ENV, "KAOSAI_ENABLED": "false"}))
+        enabled = _kaosai_planner_from_settings(Settings.from_env(BASE_ENV))
+
+        self.assertIsInstance(disabled, DisabledKaosAIPlanner)
+        self.assertIsInstance(enabled, OpenClawKaosAIPlanner)
 
     async def test_kaosai_clarify_plan_returns_question_without_governor(self) -> None:
         brain = self.brain({"intent": "clarify", "scope": "personal", "parameters": {"question": "어떤 메모인가요?"}})

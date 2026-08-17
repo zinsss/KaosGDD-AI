@@ -76,6 +76,9 @@ class Settings:
     kaosai_enabled: bool
     kaosai_provider: str
     kaosai_base_url: str
+    kaosai_model: str
+    kaosai_api_token: str
+    kaosai_chat_completions_path: str
     kaosai_timeout_seconds: int
     governor_tools_enabled: bool
     governor_tools_base_url: str
@@ -117,6 +120,7 @@ class Settings:
         kaosai_base_url = source.get("KAOSAI_BASE_URL", "").strip()
         if kaosai_enabled and not kaosai_base_url:
             raise ConfigurationError("KAOSAI_BASE_URL is required when KAOSAI_ENABLED=true")
+        kaosai_api_token = _secret(source, "KAOSAI_API_TOKEN") if kaosai_enabled else ""
         max_reply_chars = _positive_int(source.get("KAOSBRAIN_MAX_REPLY_CHARS", "1800"), "KAOSBRAIN_MAX_REPLY_CHARS")
         if max_reply_chars > 1900:
             raise ConfigurationError("KAOSBRAIN_MAX_REPLY_CHARS must be at most 1900")
@@ -136,6 +140,10 @@ class Settings:
             kaosai_enabled=kaosai_enabled,
             kaosai_provider=kaosai_provider,
             kaosai_base_url=kaosai_base_url,
+            kaosai_model=source.get("KAOSAI_MODEL", "default").strip() or "default",
+            kaosai_api_token=kaosai_api_token,
+            kaosai_chat_completions_path=source.get("KAOSAI_CHAT_COMPLETIONS_PATH", "/v1/chat/completions").strip()
+            or "/v1/chat/completions",
             kaosai_timeout_seconds=_positive_int(source.get("KAOSAI_TIMEOUT_SECONDS", "30"), "KAOSAI_TIMEOUT_SECONDS"),
             governor_tools_enabled=governor_tools_enabled,
             governor_tools_base_url=governor_tools_base_url,

@@ -42,7 +42,7 @@ from .governor_tools import (
     search_results,
 )
 from .intent import Route, parse_request
-from .kaos_ai import DisabledKaosAIPlanner, KaosAIError, KaosAIPlanner
+from .kaos_ai import DisabledKaosAIPlanner, KaosAIConfig, KaosAIError, KaosAIPlanner, OpenClawKaosAIPlanner
 from .memo_intent import MemoCreateRequest, MemoDeleteRequest, MemoEditRequest, parse_memo_create, parse_memo_delete, parse_memo_edit
 from .ollama import OllamaClient, OllamaConfig, OllamaError
 from .task_update_intent import (
@@ -60,6 +60,24 @@ from .tool_intent import ToolKind, ToolRequest, parse_tool_request
 LOGGER = logging.getLogger(__name__)
 NO_MENTIONS = discord.AllowedMentions.none()
 KST = ZoneInfo("Asia/Seoul")
+
+
+def _kaosai_planner_from_settings(settings: Settings) -> KaosAIPlanner:
+    if not settings.kaosai_enabled:
+        return DisabledKaosAIPlanner()
+    if settings.kaosai_provider == "openclaw":
+        return OpenClawKaosAIPlanner(
+            KaosAIConfig(
+                enabled=True,
+                provider=settings.kaosai_provider,
+                base_url=settings.kaosai_base_url,
+                model=settings.kaosai_model,
+                api_token=settings.kaosai_api_token,
+                chat_completions_path=settings.kaosai_chat_completions_path,
+                timeout_seconds=settings.kaosai_timeout_seconds,
+            )
+        )
+    return DisabledKaosAIPlanner()
 
 
 def _tool_unavailable() -> str:
@@ -95,7 +113,7 @@ class BrainBot(discord.Client):
                 timeout_seconds=settings.request_timeout_seconds,
             )
         )
-        self.kaosai = kaosai or DisabledKaosAIPlanner()
+        self.kaosai = kaosai or _kaosai_planner_from_settings(settings)
         self.governor_tools = (
             GovernorToolClient(
                 GovernorToolConfig(

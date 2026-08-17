@@ -55,6 +55,9 @@ KAOSBRAIN_AUTO_ROUTE_ENABLED=true
 KAOSAI_ENABLED=false
 KAOSAI_PROVIDER=disabled
 KAOSAI_BASE_URL=
+KAOSAI_MODEL=default
+KAOSAI_API_TOKEN_FILE=/run/secrets/openclaw_gateway_token
+KAOSAI_CHAT_COMPLETIONS_PATH=/v1/chat/completions
 KAOSBRAIN_GOVERNOR_TOOLS_ENABLED=true
 KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL=http://<kaosgovernor-tailscale-ip>:8098
 KAOSBRAIN_GOVERNOR_TOOLS_PROFILE=main
@@ -79,10 +82,11 @@ Supported write grammar in this slice:
 
 The default due time is `10:00`.
 
-KaosAI is currently a guarded planner slot, not a production dependency. Keep
+KaosAI is a guarded planner dependency only when explicitly enabled. Keep
 `KAOSAI_ENABLED=false` until OpenClaw/ChatGPT Pro auth is verified separately.
-When enabled later, KaosAI must return strict JSON plans only; KaosBrain Guard
-adapts and validates those plans before Governor sees them.
+The OpenClaw planner client uses an OpenAI-compatible chat completions endpoint
+and expects strict JSON plans only; KaosBrain Guard adapts and validates those
+plans before Governor sees them.
 
 Use the same Discord bot token exclusivity rule as every Discord service: never
 run two processes with the same token at the same time.

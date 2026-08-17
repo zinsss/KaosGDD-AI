@@ -4,7 +4,8 @@ KaosBrain runs on the H4 Ultra as the personal language interface for KaosGDD.
 It talks directly to Discord and local Ollama. Authoritative state changes
 remain behind KaosGovernor APIs.
 
-OpenClaw is intentionally not part of this deployment.
+OpenClaw/KaosAI planning is optional and disabled by default. Enable it only
+after the local gateway and auth token are verified.
 
 ## Host prerequisites
 

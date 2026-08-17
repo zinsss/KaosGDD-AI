@@ -85,6 +85,15 @@ preflight() {
       [[ -s "${governor_token_path}" ]] || die "missing or empty Governor token file: ${governor_token_path}"
     fi
   fi
+  if [[ "${KAOSAI_ENABLED:-false}" == "true" ]]; then
+    [[ "${KAOSAI_PROVIDER:-}" == "openclaw" ]] || die "KAOSAI_PROVIDER must be openclaw when KAOSAI_ENABLED=true"
+    [[ -n "${KAOSAI_BASE_URL:-}" ]] || die "KAOSAI_BASE_URL is required when KAOSAI_ENABLED=true"
+    if [[ -z "${KAOSAI_API_TOKEN:-}" && -n "${KAOSAI_API_TOKEN_FILE:-}" ]]; then
+      local kaosai_token_path
+      kaosai_token_path=$(host_secret_path "${KAOSAI_API_TOKEN_FILE}")
+      [[ -s "${kaosai_token_path}" ]] || die "missing or empty KaosAI token file: ${kaosai_token_path}"
+    fi
+  fi
   curl --fail --silent --show-error "${OLLAMA_BASE_URL:-http://127.0.0.1:11434}/api/tags" >/dev/null \
     || die "Ollama is not reachable"
   info "Preflight passed."
