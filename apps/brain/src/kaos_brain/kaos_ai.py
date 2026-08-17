@@ -6,6 +6,8 @@ import json
 from uuid import uuid4
 from typing import Any, Mapping, Protocol
 
+from .brain_guard import INTENT_PARAMETER_KEYS, MUTATION_INTENTS, READONLY_INTENTS
+
 
 class KaosAIError(RuntimeError):
     """Raised when KaosAI cannot return a usable plan."""
@@ -68,36 +70,38 @@ class OpenClawKaosAIPlanner:
         return content
 
 
-KAOSAI_PLAN_SYSTEM_PROMPT = """You are KaosAI, the planner for KaosGDD.
+def _format_intent_lines(intents: set[str]) -> str:
+    return "\n".join(f"- {intent}" for intent in sorted(intents))
+
+
+def _format_parameter_lines() -> str:
+    lines = []
+    for intent in sorted(INTENT_PARAMETER_KEYS):
+        keys = ", ".join(sorted(INTENT_PARAMETER_KEYS[intent])) or "none"
+        lines.append(f"- {intent}: {keys}")
+    return "\n".join(lines)
+
+
+KAOSAI_PLAN_SYSTEM_PROMPT = f"""You are KaosAI, the planner for KaosGDD.
 Return exactly one JSON object and no markdown.
 You may understand language and draft plans, but you cannot call tools.
 KaosBrain will validate your plan before KaosGovernor can write anything.
 
 Allowed schema:
-{
+{{
   "intent": "<allowed intent>",
   "scope": "personal|family|supplies",
-  "parameters": {}
-}
+  "parameters": {{}}
+}}
 
 Allowed read-only intents:
-- today.get
-- task.list_active
-- task.list_completed
-- memo.search
-- document.search
+{_format_intent_lines(READONLY_INTENTS)}
 
 Allowed mutation intents:
-- task.create
-- task.update_due
-- task.edit
-- task.complete
-- task.delete
-- task.reopen
-- event.create
-- memo.create
-- memo.edit
-- memo.delete
+{_format_intent_lines(MUTATION_INTENTS)}
+
+Allowed parameters by intent:
+{_format_parameter_lines()}
 
 Rules:
 - Use YYYY-MM-DD dates.
@@ -106,7 +110,7 @@ Rules:
 - Do not produce shell, Docker, database, restart, filesystem, SSH, or admin intents.
 - For supplies, do not include dueDate or dueTime.
 - If the user asks for a state change, set the matching mutation intent. KaosGovernor will ask for confirmation.
-- If the request is ambiguous, return {"intent":"clarify","scope":"personal","parameters":{"question":"..."}}."""
+- If the request is ambiguous, return {{"intent":"clarify","scope":"personal","parameters":{{"question":"..."}}}}."""
 
 
 def parse_kaosai_plan_response(raw: str) -> dict[str, Any]:

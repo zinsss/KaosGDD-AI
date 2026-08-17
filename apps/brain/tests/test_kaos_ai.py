@@ -28,6 +28,9 @@ class KaosAITests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Do not produce shell", KAOSAI_PLAN_SYSTEM_PROMPT)
         self.assertIn("task.update_due", KAOSAI_PLAN_SYSTEM_PROMPT)
         self.assertIn("memo.search", KAOSAI_PLAN_SYSTEM_PROMPT)
+        self.assertIn("memo.search: query", KAOSAI_PLAN_SYSTEM_PROMPT)
+        self.assertIn("task.edit: dueDate, dueTime, memo, priority, taskTitle, title", KAOSAI_PLAN_SYSTEM_PROMPT)
+        self.assertNotIn("collectionId", KAOSAI_PLAN_SYSTEM_PROMPT)
 
     def test_parse_strict_plan_json(self) -> None:
         plan = parse_kaosai_plan_response(

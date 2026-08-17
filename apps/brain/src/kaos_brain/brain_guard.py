@@ -64,6 +64,24 @@ MUTATION_INTENTS = {
 
 ALLOWED_INTENTS = READONLY_INTENTS | MUTATION_INTENTS
 ALLOWED_SCOPES = {"personal", "family", "supplies"}
+PLAN_TOP_LEVEL_KEYS = frozenset({"intent", "scope", "parameters"})
+INTENT_PARAMETER_KEYS: dict[str, frozenset[str]] = {
+    "today.get": frozenset(),
+    "task.list_active": frozenset(),
+    "task.list_completed": frozenset({"query", "start", "end"}),
+    "memo.search": frozenset({"query"}),
+    "document.search": frozenset({"query"}),
+    "task.create": frozenset({"title", "dueDate", "dueTime"}),
+    "task.update_due": frozenset({"taskTitle", "dueDate", "dueTime"}),
+    "task.edit": frozenset({"taskTitle", "title", "memo", "dueDate", "dueTime", "priority"}),
+    "task.complete": frozenset({"taskTitle"}),
+    "task.delete": frozenset({"taskTitle"}),
+    "task.reopen": frozenset({"taskTitle"}),
+    "event.create": frozenset({"title", "startDate", "endDate", "allDay", "memo"}),
+    "memo.create": frozenset({"content"}),
+    "memo.edit": frozenset({"query", "content"}),
+    "memo.delete": frozenset({"query"}),
+}
 ACTION_BY_INTENT = {
     "task.complete": "complete",
     "task.delete": "delete",
@@ -74,10 +92,12 @@ TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 
 def adapt_kaosai_plan(plan: Mapping[str, Any], context: BrainGuardContext) -> BrainGuardResult:
+    _reject_unknown_keys(plan, PLAN_TOP_LEVEL_KEYS, "plan")
     intent = _clean_text(plan.get("intent"))
     if intent not in ALLOWED_INTENTS:
         raise BrainGuardError("intent_not_allowed")
     parameters = _mapping(plan.get("parameters"))
+    _reject_unknown_keys(parameters, INTENT_PARAMETER_KEYS[intent], f"{intent}.parameters")
     scope = _scope(plan.get("scope"), parameters)
     if intent in READONLY_INTENTS:
         request = _readonly_request(intent, parameters, scope, context)
@@ -202,6 +222,12 @@ def _mapping(value: object) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise BrainGuardError("parameters_required")
     return value
+
+
+def _reject_unknown_keys(values: Mapping[str, Any], allowed: frozenset[str], label: str) -> None:
+    unknown = sorted(str(key) for key in values.keys() if str(key) not in allowed)
+    if unknown:
+        raise BrainGuardError(f"{label}_unknown_field")
 
 
 def _required_text(parameters: Mapping[str, Any], key: str) -> str:

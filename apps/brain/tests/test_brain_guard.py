@@ -2,9 +2,12 @@ import unittest
 from datetime import date
 
 from kaos_brain.brain_guard import (
+    ALLOWED_INTENTS,
     BrainGuardContext,
     BrainGuardError,
     BrainGuardResultKind,
+    INTENT_PARAMETER_KEYS,
+    PLAN_TOP_LEVEL_KEYS,
     adapt_kaosai_plan,
 )
 from kaos_brain.event_intent import EventCreateRequest
@@ -22,6 +25,16 @@ class BrainGuardTests(unittest.TestCase):
             today=date(2026, 8, 17),
             supplies_collection_id="supplies:abc",
         )
+
+    def test_plan_contract_matches_allowed_intents(self) -> None:
+        self.assertEqual(PLAN_TOP_LEVEL_KEYS, frozenset({"intent", "scope", "parameters"}))
+        self.assertEqual(set(INTENT_PARAMETER_KEYS), ALLOWED_INTENTS)
+        self.assertEqual(
+            INTENT_PARAMETER_KEYS["task.edit"],
+            frozenset({"taskTitle", "title", "memo", "dueDate", "dueTime", "priority"}),
+        )
+        self.assertEqual(INTENT_PARAMETER_KEYS["memo.search"], frozenset({"query"}))
+        self.assertEqual(INTENT_PARAMETER_KEYS["document.search"], frozenset({"query"}))
 
     def test_memo_search_plan_becomes_readonly_governor_tool(self) -> None:
         result = adapt_kaosai_plan(
@@ -175,6 +188,20 @@ class BrainGuardTests(unittest.TestCase):
             with self.subTest(intent=intent):
                 with self.assertRaisesRegex(BrainGuardError, "intent_not_allowed"):
                     adapt_kaosai_plan({"intent": intent, "parameters": {}}, self.context())
+
+    def test_unknown_top_level_or_parameter_fields_are_rejected(self) -> None:
+        with self.assertRaisesRegex(BrainGuardError, "plan_unknown_field"):
+            adapt_kaosai_plan(
+                {"intent": "memo.search", "parameters": {"query": "rustdesk"}, "tool": "governor"},
+                self.context(),
+            )
+        for extra in ("collectionId", "url", "token", "shellCommand"):
+            with self.subTest(extra=extra):
+                with self.assertRaisesRegex(BrainGuardError, "memo.search.parameters_unknown_field"):
+                    adapt_kaosai_plan(
+                        {"intent": "memo.search", "parameters": {"query": "rustdesk", extra: "x"}},
+                        self.context(),
+                    )
 
     def test_invalid_date_and_scope_are_rejected(self) -> None:
         with self.assertRaisesRegex(BrainGuardError, "dueDate_invalid"):

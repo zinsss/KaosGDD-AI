@@ -79,6 +79,30 @@ Allowed scopes:
 - `family`
 - `supplies`
 
+Allowed parameters:
+
+| Intent | Parameters |
+| --- | --- |
+| `today.get` | none |
+| `task.list_active` | none |
+| `task.list_completed` | `query`, `start`, `end` |
+| `memo.search` | `query` |
+| `document.search` | `query` |
+| `task.create` | `title`, `dueDate`, `dueTime` |
+| `task.update_due` | `taskTitle`, `dueDate`, `dueTime` |
+| `task.edit` | `taskTitle`, `title`, `memo`, `dueDate`, `dueTime`, `priority` |
+| `task.complete` | `taskTitle` |
+| `task.delete` | `taskTitle` |
+| `task.reopen` | `taskTitle` |
+| `event.create` | `title`, `startDate`, `endDate`, `allDay`, `memo` |
+| `memo.create` | `content` |
+| `memo.edit` | `query`, `content` |
+| `memo.delete` | `query` |
+
+KaosAI plans must not include backend object identifiers such as
+`collectionId`, service URLs, tokens, shell commands, or restart commands.
+KaosBrain derives internal IDs from its own configuration when needed.
+
 The guard rejects system, shell, Docker, database, service restart, and any
 unknown intents.
 
@@ -88,6 +112,7 @@ KaosBrain Guard is deterministic code. It:
 
 - checks intent allowlists
 - checks scope allowlists
+- rejects unknown top-level fields and unknown intent parameters
 - validates dates as `YYYY-MM-DD`
 - validates times as `HH:MM`
 - maps read-only plans to `ToolRequest`
