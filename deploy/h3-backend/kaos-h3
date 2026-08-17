@@ -266,6 +266,9 @@ services_preflight() {
   require_file "${root}/config/family-portal/nginx.conf"
   require_dir "${root}/data/family-portal"
   require_file "${root}/data/family-portal/index.html"
+  if grep -q 'kaosgdd-gov' "${root}/config/family-portal/nginx.conf"; then
+    die "family portal still references retired kaosgdd-gov upstream"
+  fi
   "${SERVICES_COMPOSE[@]}" config --quiet
   info "Migrated service preflight passed."
 }
