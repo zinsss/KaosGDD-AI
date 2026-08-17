@@ -16,6 +16,7 @@ from kaos_governor_discord.system_status import (
     DiscordServiceStatusSurface,
     SERVICES,
     ServiceProbeResult,
+    ServiceRestartConfirmView,
     ServiceStatusView,
     check_service,
     default_http_probe,
@@ -206,10 +207,23 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
             {
                 "SERVICE_STATUS_RESTART_ALLOWED_KEYS": "memos",
                 "SERVICE_STATUS_MEMOS_RESTART_COMMAND": "/bin/true",
+                "SERVICE_STATUS_RESTART_MODE": "execute",
             },
         )
 
         self.assertEqual(result.state, "executed")
+
+    def test_restart_service_defaults_to_dry_run(self) -> None:
+        result = restart_service_sync(
+            "memos",
+            {
+                "SERVICE_STATUS_RESTART_ALLOWED_KEYS": "memos",
+                "SERVICE_STATUS_MEMOS_RESTART_COMMAND": "/bin/true",
+            },
+        )
+
+        self.assertEqual(result.state, "dry_run")
+        self.assertEqual(result.detail, "/bin/true")
 
     def test_restart_service_records_command_failure(self) -> None:
         result = restart_service_sync(
@@ -217,6 +231,7 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
             {
                 "SERVICE_STATUS_RESTART_ALLOWED_KEYS": "memos",
                 "SERVICE_STATUS_MEMOS_RESTART_COMMAND": "/bin/false",
+                "SERVICE_STATUS_RESTART_MODE": "execute",
             },
         )
 
@@ -268,6 +283,13 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(len(view.children), 1)
             self.assertEqual(view.children[0].label, "Restart")
+
+    def test_restart_confirm_view_requires_explicit_confirmation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            surface = self.make_surface(Path(temporary) / "status.json")
+            view = ServiceRestartConfirmView(surface, SERVICES[1], 200)
+
+            self.assertEqual([child.label for child in view.children], ["Confirm Restart", "Cancel"])
 
     def test_unconfigured_service_is_unknown(self) -> None:
         result = check_service(

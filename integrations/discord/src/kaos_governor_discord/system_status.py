@@ -55,6 +55,8 @@ class RestartResult:
     detail: str = ""
 
     def user_message(self, label: str) -> str:
+        if self.state == "dry_run":
+            return f"Restart dry-run for {label}: {self.detail}".strip()
         if self.state == "executed":
             return f"Restart executed for {label}."
         if self.state == "not_allowed":
@@ -70,6 +72,7 @@ class DiscordServiceStatusState:
     legacy_message_id: int = 0
     restart_requests: dict[str, int] | None = None
     restart_results: dict[str, str] | None = None
+    restart_audit: list[dict[str, object]] | None = None
 
 
 SERVICES: tuple[ServiceStatusItem, ...] = (
@@ -168,15 +171,14 @@ class DiscordServiceStatusSurface:
                 allowed_mentions=NO_MENTIONS,
             )
             return
-        restart_result = await self.request_restart(item.key)
         await interaction.response.send_message(
-            restart_result.user_message(item.label),
+            f"Restart {item.label}?",
             ephemeral=True,
-            delete_after=5,
+            view=ServiceRestartConfirmView(self, item, int(interaction.user.id)),
             allowed_mentions=NO_MENTIONS,
         )
 
-    async def request_restart(self, key: str) -> "RestartResult":
+    async def request_restart(self, key: str, *, actor_id: int | None = None) -> "RestartResult":
         requests = dict(self.state.restart_requests or {})
         requests[key] = int(requests.get(key, 0)) + 1
         self.state.restart_requests = requests
@@ -184,6 +186,16 @@ class DiscordServiceStatusSurface:
         results = dict(self.state.restart_results or {})
         results[key] = result.state
         self.state.restart_results = results
+        audit = list(self.state.restart_audit or [])
+        audit.append(
+            {
+                "key": result.key,
+                "state": result.state,
+                "actorId": str(actor_id or ""),
+                "at": time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime()),
+            }
+        )
+        self.state.restart_audit = audit[-50:]
         self._save_state()
         return result
 
@@ -199,6 +211,7 @@ class DiscordServiceStatusSurface:
             "checks": {key: result.__dict__ for key, result in self.last_results.items()},
             "restartRequests": dict(self.state.restart_requests or {}),
             "restartResults": dict(self.state.restart_results or {}),
+            "restartAudit": list(self.state.restart_audit or []),
         }
 
     async def check_services(self) -> dict[str, ServiceProbeResult]:
@@ -267,6 +280,11 @@ class DiscordServiceStatusSurface:
                     for key, value in dict(raw.get("restartResults") or {}).items()
                     if str(key)
                 },
+                restart_audit=[
+                    dict(item)
+                    for item in list(raw.get("restartAudit") or [])
+                    if isinstance(item, dict)
+                ][-50:],
             )
         except (TypeError, ValueError):
             return DiscordServiceStatusState()
@@ -277,6 +295,7 @@ class DiscordServiceStatusSurface:
             "messageIds": dict(self.state.message_ids or {}),
             "restartRequests": dict(self.state.restart_requests or {}),
             "restartResults": dict(self.state.restart_results or {}),
+            "restartAudit": list(self.state.restart_audit or []),
         }
         temporary = self.state_path.with_suffix(f"{self.state_path.suffix}.tmp")
         temporary.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
@@ -315,6 +334,56 @@ class ServiceStatusView(discord.ui.View):
             await self.surface.handle_service_press(interaction, item)
 
         return callback
+
+
+class ServiceRestartConfirmView(discord.ui.View):
+    def __init__(self, surface: DiscordServiceStatusSurface, item: ServiceStatusItem, owner_id: int) -> None:
+        super().__init__(timeout=60)
+        self.surface = surface
+        self.item = item
+        self.owner_id = owner_id
+        confirm = discord.ui.Button(
+            label="Confirm Restart",
+            style=discord.ButtonStyle.danger,
+            custom_id=f"system-status:restart-confirm:{item.key}",
+        )
+        cancel = discord.ui.Button(
+            label="Cancel",
+            style=discord.ButtonStyle.secondary,
+            custom_id=f"system-status:restart-cancel:{item.key}",
+        )
+        confirm.callback = self._confirm
+        cancel.callback = self._cancel
+        self.add_item(confirm)
+        self.add_item(cancel)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if int(interaction.user.id) == self.owner_id and self.surface.policy.allows(
+            interaction.guild_id,
+            interaction.channel_id,
+            interaction.user.id,
+        ):
+            return True
+        if interaction.response.is_done():
+            await interaction.followup.send("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        else:
+            await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+    async def _confirm(self, interaction: discord.Interaction) -> None:
+        result = await self.surface.request_restart(self.item.key, actor_id=int(interaction.user.id))
+        await interaction.response.edit_message(
+            content=result.user_message(self.item.label),
+            view=None,
+            allowed_mentions=NO_MENTIONS,
+        )
+
+    async def _cancel(self, interaction: discord.Interaction) -> None:
+        await interaction.response.edit_message(
+            content=f"Restart canceled for {self.item.label}.",
+            view=None,
+            allowed_mentions=NO_MENTIONS,
+        )
 
 
 def render_service_message(item: ServiceStatusItem, result: ServiceProbeResult | None = None) -> str:
@@ -419,6 +488,9 @@ def restart_service_sync(key: str, env: Mapping[str, str]) -> RestartResult:
         return RestartResult(normalized, "failed", f"Invalid command: {stable_error(exc)}")
     if not argv:
         return RestartResult(normalized, "not_configured")
+    mode = restart_mode(env)
+    if mode == "dry_run":
+        return RestartResult(normalized, "dry_run", shlex.join(argv))
     try:
         completed = subprocess.run(
             argv,
@@ -451,6 +523,13 @@ def restart_timeout_seconds(env: Mapping[str, str]) -> float:
     except ValueError:
         return RESTART_TIMEOUT_SECONDS
     return min(max(value, 1.0), 120.0)
+
+
+def restart_mode(env: Mapping[str, str]) -> str:
+    raw = env.get("SERVICE_STATUS_RESTART_MODE", "dry_run").strip().lower().replace("-", "_")
+    if raw in {"execute", "enabled", "real"}:
+        return "execute"
+    return "dry_run"
 
 
 def probe_value(env: Mapping[str, str], key: str, suffix: str) -> str:
