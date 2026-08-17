@@ -74,6 +74,19 @@ require_sqlite_ok() {
     || die "SQLite integrity check failed: ${path}"
 }
 
+redact_config() {
+  awk '
+    BEGIN { IGNORECASE = 1 }
+    /^[[:space:]]+[A-Z0-9_]*(TOKEN|PASSWORD|SECRET|KEY|AUD|CREDENTIAL|COOKIE|SALT|ENCRYPTION)[A-Z0-9_]*:/ {
+      sub(/:.*/, ": [redacted]")
+    }
+    /^[[:space:]]+- [A-Z0-9_]*(TOKEN|PASSWORD|SECRET|KEY|AUD|CREDENTIAL|COOKIE|SALT|ENCRYPTION)[A-Z0-9_]*=/ {
+      sub(/=.*/, "=[redacted]")
+    }
+    { print }
+  '
+}
+
 install_state_directories() {
   local root=$1
   local uid gid
@@ -326,19 +339,19 @@ case "${command}" in
   status) load_env; "${COMPOSE[@]}" ps; smoke ;;
   logs) load_env; "${COMPOSE[@]}" logs --follow --tail=100 governor-discord ;;
   smoke) smoke ;;
-  config) load_env; "${COMPOSE[@]}" config ;;
+  config) load_env; "${COMPOSE[@]}" config | redact_config ;;
   backends-preflight) backends_preflight ;;
   backends-up) backends_preflight; "${BACKENDS_COMPOSE[@]}" up --detach memos radicale ;;
   backends-down) load_env; "${BACKENDS_COMPOSE[@]}" stop memos radicale ;;
   services-preflight) services_preflight ;;
-  services-config) load_env; "${SERVICES_COMPOSE[@]}" config ;;
+  services-config) load_env; "${SERVICES_COMPOSE[@]}" config | redact_config ;;
   services-up) services_preflight; "${SERVICES_COMPOSE[@]}" up --detach memos radicale vaultwarden sftpgo family-portal ;;
   services-down) load_env; "${SERVICES_COMPOSE[@]}" stop memos radicale vaultwarden sftpgo family-portal ;;
   family-preflight) family_transition_preflight ;;
   family-up) family_transition_preflight; COMPOSE_PROFILES=family-transition "${SERVICES_COMPOSE[@]}" up --detach kaosgovernor-legacy-database calendar-adapter kaosgovernor-legacy-api family-memos-web ;;
   family-down) load_env; COMPOSE_PROFILES=family-transition "${SERVICES_COMPOSE[@]}" stop kaosgovernor-legacy-api family-memos-web calendar-adapter kaosgovernor-legacy-database ;;
   edge-preflight) edge_preflight ;;
-  edge-config) load_env; "${EDGE_COMPOSE[@]}" config ;;
+  edge-config) load_env; "${EDGE_COMPOSE[@]}" config | redact_config ;;
   edge-up) edge_preflight; "${EDGE_COMPOSE[@]}" up --detach caddy cloudflared ;;
   edge-down) load_env; "${EDGE_COMPOSE[@]}" stop cloudflared caddy ;;
   help|-h|--help) usage ;;
