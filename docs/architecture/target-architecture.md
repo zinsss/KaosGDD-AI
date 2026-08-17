@@ -11,7 +11,7 @@ Discord                         Family KaosGDD PWA
    |                                    |
    v                                    v
 KaosBrain on H4                 Family AI session on H4
-OpenClaw + main LLM             separately scoped tools
+guarded KaosAI slot             separately scoped tools
    |                                    |
    +----------------+-------------------+
                     |
@@ -44,10 +44,11 @@ Nextcloud is not part of the target backend. Radicale remains the CalDAV
 authority, Memos remains the memo authority, and SFTPGo remains the planned
 purpose-built file transfer service where needed.
 
-KaosGDD is the umbrella project. Under it, KaosBrain owns the AI plane and
-KaosGovernor owns deterministic orchestration. Ready-made backend services keep
-their native operational identities, such as Radicale, Memos, Vaultwarden,
-SFTPGo, Caddy, and cloudflared, rather than being renamed to `kaosgdd-*`.
+KaosGDD is the umbrella project. Under it, KaosAI is the optional smart planner
+slot, KaosBrain is the guarded adapter layer, and KaosGovernor owns
+deterministic orchestration. Ready-made backend services keep their native
+operational identities, such as Radicale, Memos, Vaultwarden, SFTPGo, Caddy,
+and cloudflared, rather than being renamed to `kaosgdd-*`.
 
 No main personal KaosGDD web application is planned. Its repository may remain
 as reference, and a new personal UI may be considered later only when native

@@ -8,7 +8,8 @@ Architecture, deterministic orchestration, AI integrations, and deployment plans
 
 ## System Roles
 
-- **KaosBrain**: OpenClaw and the main local model on the H4 Ultra. It interprets language, reasons, and selects tools.
+- **KaosAI**: optional smart planner layer, currently an OpenClaw/hosted-or-local model slot when explicitly enabled.
+- **KaosBrain**: lightweight Discord adapter and deterministic guard on the H4 Ultra. It handles language intake, validates planner output, and calls narrow Governor tools.
 - **KaosGovernor**: deterministic authority on the H3+ backend. It validates operations, owns domain workflows, records audit history, and calls backend services.
 - **Family AI**: a separately scoped assistant served by H4 or a future optional worker.
 - **Authoritative backends**: Radicale, Memos, Paperless, HylaFAX, and other service-owned data stores.
@@ -23,7 +24,7 @@ KaosBrain and Family AI never become sources of truth. They call narrow KaosGove
 | --- | --- |
 | Office H3+ | KaosPACS, KaosPACS-AIO, Paperless, Stirling-PDF, RustDesk, HylaFAX, Tailscale |
 | H3+ 32 GB backend | KaosGovernor, Governor PostgreSQL, Radicale, Memos, Family KaosGDD, and service edge |
-| H4 Ultra | KaosBrain/OpenClaw and separately scoped personal/family AI sessions |
+| H4 Ultra | KaosBrain, optional KaosAI runtime, and separately scoped personal/family AI sessions |
 | Turing Pi 2 / RK1 | Optional future worker pool; never required for normal operation |
 
 ## H3+ Quick Start
@@ -50,7 +51,7 @@ normal `up` command.
 This repository will contain Kaos-owned orchestration code and deployment definitions:
 
 - KaosGovernor and its domain modules
-- OpenClaw Kaos integration and MCP registration
+- KaosAI/OpenClaw integration and guarded planner contracts
 - Family AI gateway
 - Discord adapters
 - office Fax Connector
