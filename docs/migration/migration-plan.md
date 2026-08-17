@@ -164,10 +164,12 @@ Failure must affect only AI chat, not Family KaosGDD or native services.
 
 ### Phase 7: KaosBrain on H4
 
-- Deploy OpenClaw and the local model.
+- Deploy KaosBrain, the local model, and optional KaosAI/OpenClaw planner
+  runtime.
 - Use a new Discord bot during migration.
-- Register only the KaosGovernor MCP server.
-- Deny shell, SSH, Docker, database, filesystem, and elevated tools.
+- Give KaosBrain only narrow KaosGovernor tool API access.
+- Deny shell, SSH, Docker, database, filesystem, and elevated tools to both
+  KaosBrain and KaosAI/OpenClaw.
 - Start with Memos read/search, then use the same domain order as Governor.
 - Benchmark 7-9B and 14B candidates using real Korean Kaos commands.
 
@@ -247,7 +249,8 @@ The migration is complete only when:
 - all authoritative data has a tested backup and restore procedure
 - Governor owns deterministic orchestration
 - KaosBrain has only scoped Governor tools
-- Family AI has only family-scoped tools
+- KaosAI/OpenClaw has no direct Governor or backend credentials
+- Family AI has only family-scoped Governor tools
 - office critical services operate during home/H4 outages
 - Discord, Governor, native-app, or manual replacements are verified before KaosTelegram retirement
 - the old Brain and bridge containers are stopped, archived, and removable without losing rollback documentation

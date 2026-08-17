@@ -4,7 +4,8 @@
 
 Build the next Kaos platform around two new permanent roles:
 
-- **H4 Ultra, 32 GB**: KaosBrain, OpenClaw, and local model inference.
+- **H4 Ultra, 32 GB**: KaosBrain, optional KaosAI/OpenClaw planner runtime,
+  and local model inference.
 - **H3+, 32 GB**: KaosGovernor, authoritative personal/family backends,
   Family KaosGDD, and the public/private application edge.
 
@@ -30,13 +31,14 @@ flowchart TD
     FamilyWeb["family.kaosgdd.net"] --> FamilyGateway["Family chat gateway"]
 
     subgraph H4["H4 Ultra 32 GB: AI plane"]
-        BrainBot --> OpenClaw["OpenClaw / KaosBrain"]
+        BrainBot --> BrainGuard["KaosBrain Guard"]
+        BrainGuard --> KaosAI["KaosAI planner slot"]
         FamilyGateway --> FamilySession["Family-scoped AI session"]
-        OpenClaw --> Model["Local LLM server"]
+        KaosAI --> Model["Hosted or local LLM"]
         FamilySession --> Model
     end
 
-    OpenClaw -->|"personal Governor token"| Governor
+    BrainGuard -->|"personal Governor token"| Governor
     FamilySession -->|"family Governor token"| Governor
 
     subgraph H3["H3+ 32 GB: deterministic application plane"]
@@ -87,9 +89,9 @@ are optional future workers and are not required for normal operation.
 
 H4 runs only AI-facing components:
 
-- OpenClaw as the KaosBrain orchestration framework.
+- KaosBrain as the Discord adapter and deterministic guard.
+- Optional KaosAI/OpenClaw planner runtime behind KaosBrain Guard.
 - One local model server, initially serving a 7-9B quantized instruct model.
-- The KaosBrain Discord integration.
 - A separately scoped family AI session/gateway.
 - Disposable model caches, conversation working context, and evaluation data.
 
@@ -100,7 +102,8 @@ H4 does not receive:
 - unrestricted SSH, shell, sudo, or filesystem tools.
 - direct access to service databases or production storage.
 
-OpenClaw sees only narrow Governor tools. H4 can be rebuilt without restoring
+KaosBrain sees only narrow Governor tools. KaosAI/OpenClaw must not receive
+Governor credentials directly. H4 can be rebuilt without restoring
 authoritative Kaos application data.
 
 #### Initial model policy
@@ -118,7 +121,7 @@ authoritative Kaos application data.
 | Component | Working allowance |
 | --- | ---: |
 | OS, Docker, monitoring | 2-3 GB |
-| OpenClaw and gateways | 1-2 GB |
+| KaosAI/OpenClaw and gateways | 1-2 GB |
 | 7-9B quantized model | 6-9 GB |
 | KV cache/context | 4-8 GB |
 | Temporary conversion/embedding work | 2-4 GB |
@@ -694,14 +697,14 @@ Actions:
 
 1. Install H4 OS, Docker, Tailscale, and model runtime.
 2. Benchmark 7-9B Korean command interpretation.
-3. Deploy OpenClaw with only Governor tools.
+3. Deploy KaosBrain with only narrow Governor tool access.
 4. Connect the KaosBrain Discord bot to `#brain`.
 5. Start with Memos read/search, then Calendar read tools.
 6. Add writes only after evaluation fixtures pass.
 
 Exit gate:
 
-- no shell/SSH/Docker/database tools visible to OpenClaw
+- no shell/SSH/Docker/database tools visible to KaosBrain or KaosAI/OpenClaw
 - actor scopes and confirmations cannot be bypassed
 - H4 rebuild test demonstrates no authoritative data loss
 
@@ -774,7 +777,7 @@ Work that can start before H4 is ready:
 After H4 arrives:
 
 1. Install one model runtime and benchmark 7-9B first.
-2. Connect OpenClaw only to read-only Governor tools.
+2. Connect KaosBrain only to read-only Governor tools.
 3. Run Korean interpretation evaluations.
 4. Add confirmed writes domain by domain.
 
