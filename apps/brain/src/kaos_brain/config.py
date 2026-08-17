@@ -74,11 +74,11 @@ class Settings:
     respond_without_mention: bool
     auto_route_enabled: bool
     kaosai_enabled: bool
+    kaosai_chat_enabled: bool
     kaosai_provider: str
     kaosai_base_url: str
     kaosai_model: str
     kaosai_api_token: str
-    kaosai_chat_completions_path: str
     kaosai_timeout_seconds: int
     governor_tools_enabled: bool
     governor_tools_base_url: str
@@ -138,12 +138,11 @@ class Settings:
             respond_without_mention=_boolean(source, "KAOSBRAIN_RESPOND_WITHOUT_MENTION", default=True),
             auto_route_enabled=_boolean(source, "KAOSBRAIN_AUTO_ROUTE_ENABLED", default=True),
             kaosai_enabled=kaosai_enabled,
+            kaosai_chat_enabled=_boolean(source, "KAOSAI_CHAT_ENABLED"),
             kaosai_provider=kaosai_provider,
             kaosai_base_url=kaosai_base_url,
             kaosai_model=source.get("KAOSAI_MODEL", "default").strip() or "default",
             kaosai_api_token=kaosai_api_token,
-            kaosai_chat_completions_path=source.get("KAOSAI_CHAT_COMPLETIONS_PATH", "/v1/chat/completions").strip()
-            or "/v1/chat/completions",
             kaosai_timeout_seconds=_positive_int(source.get("KAOSAI_TIMEOUT_SECONDS", "30"), "KAOSAI_TIMEOUT_SECONDS"),
             governor_tools_enabled=governor_tools_enabled,
             governor_tools_base_url=governor_tools_base_url,

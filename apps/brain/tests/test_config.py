@@ -64,7 +64,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.kaosai_base_url, "")
         self.assertEqual(settings.kaosai_model, "default")
         self.assertEqual(settings.kaosai_api_token, "")
-        self.assertEqual(settings.kaosai_chat_completions_path, "/v1/chat/completions")
+        self.assertFalse(settings.kaosai_chat_enabled)
 
     def test_kaosai_requires_openclaw_provider_and_base_url_when_enabled(self) -> None:
         with self.assertRaisesRegex(ConfigurationError, "KAOSAI_PROVIDER"):
@@ -80,7 +80,7 @@ class SettingsTests(unittest.TestCase):
                 "KAOSAI_BASE_URL": "http://127.0.0.1:18789",
                 "KAOSAI_MODEL": "gpt-5-thinking",
                 "KAOSAI_API_TOKEN": "gateway-token",
-                "KAOSAI_CHAT_COMPLETIONS_PATH": "v1/chat/completions",
+                "KAOSAI_CHAT_ENABLED": "true",
                 "KAOSAI_TIMEOUT_SECONDS": "45",
             }
         )
@@ -90,7 +90,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.kaosai_base_url, "http://127.0.0.1:18789")
         self.assertEqual(settings.kaosai_model, "gpt-5-thinking")
         self.assertEqual(settings.kaosai_api_token, "gateway-token")
-        self.assertEqual(settings.kaosai_chat_completions_path, "v1/chat/completions")
+        self.assertTrue(settings.kaosai_chat_enabled)
         self.assertEqual(settings.kaosai_timeout_seconds, 45)
 
     def test_governor_tools_require_token_and_base_url(self) -> None:

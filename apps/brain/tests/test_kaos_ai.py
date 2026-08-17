@@ -1,4 +1,5 @@
 import unittest
+from typing import Any
 from importlib.util import find_spec
 
 from kaos_brain.kaos_ai import (
@@ -61,22 +62,38 @@ class KaosAITests(unittest.IsolatedAsyncioTestCase):
             parse_kaosai_plan_response('{"intent":"memo.search","parameters":[]}')
 
     @unittest.skipUnless(AIOHTTP_AVAILABLE, "aiohttp is required for OpenClawKaosAIPlanner tests")
-    async def test_openclaw_planner_uses_chat_completions_contract(self) -> None:
-        requests = []
+    async def test_openclaw_planner_uses_gateway_contract(self) -> None:
+        requests: list[dict[str, Any]] = []
 
         async def handler(request):
-            requests.append({"headers": request.headers, "json": await request.json()})
-            return web.json_response(
-                {
-                    "choices": [
+            websocket = web.WebSocketResponse()
+            await websocket.prepare(request)
+            await websocket.send_json({"type": "event", "event": "connect.challenge", "payload": {"nonce": "nonce"}})
+            async for message in websocket:
+                frame = message.json()
+                requests.append(frame)
+                if frame["method"] == "connect":
+                    await websocket.send_json({"type": "res", "id": frame["id"], "ok": True, "payload": {"features": {"methods": ["agent"]}}})
+                elif frame["method"] == "agent":
+                    await websocket.send_json({"type": "res", "id": frame["id"], "ok": True, "payload": {"status": "accepted"}})
+                    await websocket.send_json(
                         {
-                            "message": {
-                                "content": '{"intent":"memo.search","scope":"personal","parameters":{"query":"rustdesk"}}'
-                            }
+                            "type": "res",
+                            "id": frame["id"],
+                            "ok": True,
+                            "payload": {
+                                "status": "ok",
+                                "result": {
+                                    "payloads": [
+                                        {
+                                            "text": '{"intent":"memo.search","scope":"personal","parameters":{"query":"rustdesk"}}'
+                                        }
+                                    ]
+                                },
+                            },
                         }
-                    ]
-                }
-            )
+                    )
+            return websocket
 
         runner, base_url = await self._start_server(handler)
         try:
@@ -85,7 +102,7 @@ class KaosAITests(unittest.IsolatedAsyncioTestCase):
                     enabled=True,
                     provider="openclaw",
                     base_url=base_url,
-                    model="gpt-5-thinking",
+                    model="ollama/gemma4",
                     api_token="gateway-token",
                     timeout_seconds=1,
                 )
@@ -95,34 +112,71 @@ class KaosAITests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(plan["intent"], "memo.search")
             self.assertEqual(plan["parameters"]["query"], "rustdesk")
-            self.assertEqual(requests[0]["headers"]["Authorization"], "Bearer gateway-token")
-            self.assertEqual(requests[0]["json"]["model"], "gpt-5-thinking")
-            self.assertEqual(requests[0]["json"]["stream"], False)
-            self.assertEqual(requests[0]["json"]["temperature"], 0)
-            self.assertIn("cannot call tools", requests[0]["json"]["messages"][0]["content"])
-            self.assertIn("rustdesk 메모 찾아줘", requests[0]["json"]["messages"][1]["content"])
+            self.assertEqual(requests[0]["method"], "connect")
+            self.assertEqual(requests[0]["params"]["auth"]["token"], "gateway-token")
+            self.assertEqual(requests[0]["params"]["client"]["id"], "gateway-client")
+            self.assertEqual(requests[1]["method"], "agent")
+            self.assertEqual(requests[1]["params"]["provider"], "ollama")
+            self.assertEqual(requests[1]["params"]["model"], "gemma4")
+            self.assertTrue(requests[1]["params"]["modelRun"])
+            self.assertEqual(requests[1]["params"]["promptMode"], "none")
+            self.assertIn("cannot call tools", requests[1]["params"]["message"])
+            self.assertIn("rustdesk 메모 찾아줘", requests[1]["params"]["message"])
         finally:
             await runner.cleanup()
 
     @unittest.skipUnless(AIOHTTP_AVAILABLE, "aiohttp is required for OpenClawKaosAIPlanner tests")
-    async def test_openclaw_planner_rejects_bad_http_or_bad_json(self) -> None:
-        async def http_error(_request):
-            return web.Response(status=503, text="down")
+    async def test_openclaw_planner_rejects_gateway_error_or_bad_json(self) -> None:
+        async def gateway_error(request):
+            websocket = web.WebSocketResponse()
+            await websocket.prepare(request)
+            await websocket.send_json({"type": "event", "event": "connect.challenge", "payload": {"nonce": "nonce"}})
+            async for message in websocket:
+                frame = message.json()
+                await websocket.send_json(
+                    {
+                        "type": "res",
+                        "id": frame["id"],
+                        "ok": False,
+                        "error": {"code": "UNAVAILABLE", "message": "down"},
+                    }
+                )
+            return websocket
 
-        runner, base_url = await self._start_server(http_error)
+        runner, base_url = await self._start_server(gateway_error)
         try:
-            planner = OpenClawKaosAIPlanner(KaosAIConfig(enabled=True, provider="openclaw", base_url=base_url, timeout_seconds=1))
-            with self.assertRaisesRegex(KaosAIError, "kaosai_http_503"):
+            planner = OpenClawKaosAIPlanner(
+                KaosAIConfig(enabled=True, provider="openclaw", base_url=base_url, api_token="gateway-token", timeout_seconds=1)
+            )
+            with self.assertRaisesRegex(KaosAIError, "kaosai_gateway_connect_failed"):
                 await planner.plan("hello", context={})
         finally:
             await runner.cleanup()
 
-        async def invalid_plan(_request):
-            return web.json_response({"choices": [{"message": {"content": "not json"}}]})
+        async def invalid_plan(request):
+            websocket = web.WebSocketResponse()
+            await websocket.prepare(request)
+            await websocket.send_json({"type": "event", "event": "connect.challenge", "payload": {"nonce": "nonce"}})
+            async for message in websocket:
+                frame = message.json()
+                if frame["method"] == "connect":
+                    await websocket.send_json({"type": "res", "id": frame["id"], "ok": True, "payload": {}})
+                elif frame["method"] == "agent":
+                    await websocket.send_json(
+                        {
+                            "type": "res",
+                            "id": frame["id"],
+                            "ok": True,
+                            "payload": {"status": "ok", "result": {"payloads": [{"text": "not json"}]}},
+                        }
+                    )
+            return websocket
 
         runner, base_url = await self._start_server(invalid_plan)
         try:
-            planner = OpenClawKaosAIPlanner(KaosAIConfig(enabled=True, provider="openclaw", base_url=base_url, timeout_seconds=1))
+            planner = OpenClawKaosAIPlanner(
+                KaosAIConfig(enabled=True, provider="openclaw", base_url=base_url, api_token="gateway-token", timeout_seconds=1)
+            )
             with self.assertRaisesRegex(KaosAIError, "invalid_kaosai_json"):
                 await planner.plan("hello", context={})
         finally:
@@ -131,7 +185,7 @@ class KaosAITests(unittest.IsolatedAsyncioTestCase):
     @staticmethod
     async def _start_server(handler):
         app = web.Application()
-        app.router.add_post("/v1/chat/completions", handler)
+        app.router.add_get("/", handler)
         runner = web.AppRunner(app)
         await runner.setup()
         site = web.TCPSite(runner, "127.0.0.1", 0)

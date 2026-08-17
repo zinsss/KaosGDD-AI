@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 import json
+from uuid import uuid4
 from typing import Any, Mapping, Protocol
 
 
@@ -21,7 +23,6 @@ class KaosAIConfig:
     base_url: str = ""
     model: str = "default"
     api_token: str = ""
-    chat_completions_path: str = "/v1/chat/completions"
     timeout_seconds: int = 30
 
 
@@ -43,33 +44,25 @@ class OpenClawKaosAIPlanner:
     async def _complete(self, user_text: str, *, context: Mapping[str, Any]) -> str:
         import aiohttp
 
-        payload: dict[str, Any] = {
-            "model": self.config.model,
-            "stream": False,
-            "temperature": 0,
-            "messages": [
-                {"role": "system", "content": KAOSAI_PLAN_SYSTEM_PROMPT},
-                {"role": "user", "content": _render_plan_request(user_text, context)},
-            ],
-        }
-        headers = {"Content-Type": "application/json"}
-        if self.config.api_token:
-            headers["Authorization"] = f"Bearer {self.config.api_token}"
+        if not self.config.api_token:
+            raise KaosAIError("kaosai_gateway_token_required")
         timeout = aiohttp.ClientTimeout(total=self.config.timeout_seconds)
-        async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+        async with aiohttp.ClientSession(timeout=timeout) as session:
             try:
-                async with session.post(_join_url(self.config.base_url, self.config.chat_completions_path), json=payload) as response:
-                    if response.status >= 400:
-                        body = await response.text()
-                        raise KaosAIError(f"kaosai_http_{response.status}:{body[:160]}")
-                    data = await response.json()
-            except TimeoutError as exc:
+                async with session.ws_connect(_openclaw_gateway_url(self.config.base_url)) as websocket:
+                    await _openclaw_connect(websocket, token=self.config.api_token)
+                    data = await _openclaw_agent_request(
+                        websocket,
+                        model=self.config.model,
+                        message=f"{KAOSAI_PLAN_SYSTEM_PROMPT}\n\n{_render_plan_request(user_text, context)}",
+                    )
+            except (TimeoutError, asyncio.TimeoutError) as exc:
                 raise KaosAIError("kaosai_request_timed_out") from exc
             except aiohttp.ClientError as exc:
-                raise KaosAIError("kaosai_request_failed") from exc
+                raise KaosAIError("kaosai_gateway_request_failed") from exc
             except ValueError as exc:
-                raise KaosAIError("kaosai_response_not_json") from exc
-        content = _extract_chat_content(data)
+                raise KaosAIError("kaosai_gateway_response_not_json") from exc
+        content = _extract_openclaw_text(data)
         if not content:
             raise KaosAIError("kaosai_response_empty")
         return content
@@ -167,28 +160,136 @@ def _render_plan_request(user_text: str, context: Mapping[str, Any]) -> str:
     )
 
 
-def _extract_chat_content(data: Any) -> str:
+async def _openclaw_connect(websocket: Any, *, token: str) -> None:
+    while True:
+        frame = await _receive_openclaw_json(websocket)
+        if frame.get("type") == "event" and frame.get("event") == "connect.challenge":
+            break
+    request_id = str(uuid4())
+    await websocket.send_json(
+        {
+            "type": "req",
+            "id": request_id,
+            "method": "connect",
+            "params": {
+                "minProtocol": 4,
+                "maxProtocol": 4,
+                "client": {
+                    "id": "gateway-client",
+                    "displayName": "KaosBrain",
+                    "version": "0.0.0",
+                    "platform": "linux",
+                    "deviceFamily": "server",
+                    "mode": "backend",
+                    "instanceId": str(uuid4()),
+                },
+                "caps": [],
+                "auth": {"token": token},
+                "role": "operator",
+                "scopes": ["operator.admin"],
+            },
+        }
+    )
+    frame = await _receive_openclaw_response(websocket, request_id, expect_final=False)
+    if not frame.get("ok"):
+        raise KaosAIError(_openclaw_error_code(frame, "kaosai_gateway_connect_failed"))
+
+
+async def _openclaw_agent_request(websocket: Any, *, model: str, message: str) -> Mapping[str, Any]:
+    request_id = str(uuid4())
+    session_id = f"kaosbrain-plan-{uuid4()}"
+    model_name = model.strip()
+    params: dict[str, Any] = {
+        "message": message,
+        "agentId": "main",
+        "sessionId": session_id,
+        "sessionKey": session_id,
+        "modelRun": True,
+        "promptMode": "none",
+        "cleanupBundleMcpOnRunEnd": True,
+        "idempotencyKey": str(uuid4()),
+        "sessionEffects": "internal",
+        "suppressPromptPersistence": True,
+    }
+    if model_name and model_name != "default":
+        if "/" in model_name:
+            provider, selected_model = model_name.split("/", 1)
+            params["provider"] = provider
+            params["model"] = selected_model
+        else:
+            params["model"] = model_name
+    await websocket.send_json({"type": "req", "id": request_id, "method": "agent", "params": params})
+    frame = await _receive_openclaw_response(websocket, request_id, expect_final=True)
+    if not frame.get("ok"):
+        raise KaosAIError(_openclaw_error_code(frame, "kaosai_gateway_agent_failed"))
+    payload = frame.get("payload")
+    if not isinstance(payload, Mapping):
+        raise KaosAIError("kaosai_gateway_payload_invalid")
+    return payload
+
+
+async def _receive_openclaw_response(websocket: Any, request_id: str, *, expect_final: bool) -> Mapping[str, Any]:
+    while True:
+        frame = await _receive_openclaw_json(websocket)
+        if frame.get("type") != "res" or frame.get("id") != request_id:
+            continue
+        if expect_final and isinstance(frame.get("payload"), Mapping) and frame["payload"].get("status") == "accepted":
+            continue
+        return frame
+
+
+async def _receive_openclaw_json(websocket: Any) -> Mapping[str, Any]:
+    import aiohttp
+
+    message = await websocket.receive()
+    if message.type == aiohttp.WSMsgType.TEXT:
+        data = json.loads(message.data)
+        if not isinstance(data, Mapping):
+            raise KaosAIError("kaosai_gateway_frame_invalid")
+        return data
+    if message.type in {aiohttp.WSMsgType.CLOSE, aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.CLOSING}:
+        raise KaosAIError("kaosai_gateway_closed")
+    if message.type == aiohttp.WSMsgType.ERROR:
+        raise KaosAIError("kaosai_gateway_error")
+    raise KaosAIError("kaosai_gateway_frame_invalid")
+
+
+def _extract_openclaw_text(data: Any) -> str:
     if not isinstance(data, Mapping):
         return ""
-    choices = data.get("choices")
-    if isinstance(choices, list) and choices:
-        first = choices[0]
-        if isinstance(first, Mapping):
-            message = first.get("message")
-            if isinstance(message, Mapping) and isinstance(message.get("content"), str):
-                return message["content"].strip()
-            if isinstance(first.get("text"), str):
-                return first["text"].strip()
-    message = data.get("message")
-    if isinstance(message, Mapping) and isinstance(message.get("content"), str):
-        return message["content"].strip()
-    for key in ("content", "response", "text"):
+    result = data.get("result")
+    if isinstance(result, Mapping):
+        payloads = result.get("payloads")
+        if isinstance(payloads, list):
+            for payload in payloads:
+                if isinstance(payload, Mapping) and isinstance(payload.get("text"), str):
+                    return payload["text"].strip()
+    for key in ("content", "response", "text", "summary"):
         value = data.get(key)
         if isinstance(value, str):
             return value.strip()
     return ""
 
 
-def _join_url(base_url: str, path: str) -> str:
-    normalized_path = path if path.startswith("/") else f"/{path}"
-    return f"{base_url.rstrip('/')}{normalized_path}"
+def _openclaw_gateway_url(base_url: str) -> str:
+    value = base_url.strip().rstrip("/")
+    if value.startswith("ws://") or value.startswith("wss://"):
+        return value
+    if value.startswith("http://"):
+        return f"ws://{value.removeprefix('http://')}"
+    if value.startswith("https://"):
+        return f"wss://{value.removeprefix('https://')}"
+    return value
+
+
+def _openclaw_error_code(frame: Mapping[str, Any], fallback: str) -> str:
+    error = frame.get("error")
+    if not isinstance(error, Mapping):
+        return fallback
+    code = str(error.get("code") or "").strip().lower()
+    message = str(error.get("message") or "").strip()
+    if code:
+        return f"{fallback}:{code}"
+    if message:
+        return f"{fallback}:{message[:80]}"
+    return fallback

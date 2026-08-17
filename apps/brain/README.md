@@ -57,7 +57,7 @@ KAOSAI_PROVIDER=disabled
 KAOSAI_BASE_URL=
 KAOSAI_MODEL=default
 KAOSAI_API_TOKEN_FILE=/run/secrets/openclaw_gateway_token
-KAOSAI_CHAT_COMPLETIONS_PATH=/v1/chat/completions
+KAOSAI_CHAT_ENABLED=false
 KAOSBRAIN_GOVERNOR_TOOLS_ENABLED=true
 KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL=http://<kaosgovernor-tailscale-ip>:8098
 KAOSBRAIN_GOVERNOR_TOOLS_PROFILE=main
@@ -82,11 +82,11 @@ Supported write grammar in this slice:
 
 The default due time is `10:00`.
 
-KaosAI is a guarded planner dependency only when explicitly enabled. Keep
-`KAOSAI_ENABLED=false` until OpenClaw/ChatGPT Pro auth is verified separately.
-The OpenClaw planner client uses an OpenAI-compatible chat completions endpoint
-and expects strict JSON plans only; KaosBrain Guard adapts and validates those
-plans before Governor sees them.
+KaosAI is a guarded planner dependency only when explicitly enabled. The
+OpenClaw planner client uses the local OpenClaw WebSocket gateway and expects
+strict JSON plans only; KaosBrain Guard adapts and validates those plans before
+Governor sees them. `KAOSAI_CHAT_ENABLED=false` keeps normal Brain chat on the
+local deterministic path while still allowing explicit `ai:` diagnostics.
 
 KaosAI diagnostics are available in the configured Brain channel and never
 execute or propose writes:

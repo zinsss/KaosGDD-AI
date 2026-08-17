@@ -74,7 +74,6 @@ def _kaosai_planner_from_settings(settings: Settings) -> KaosAIPlanner:
                 base_url=settings.kaosai_base_url,
                 model=settings.kaosai_model,
                 api_token=settings.kaosai_api_token,
-                chat_completions_path=settings.kaosai_chat_completions_path,
                 timeout_seconds=settings.kaosai_timeout_seconds,
             )
         )
@@ -210,7 +209,7 @@ class BrainBot(discord.Client):
         view: discord.ui.View | None = None
         async with message.channel.typing():
             try:
-                if request.route is Route.CHAT and self.settings.kaosai_enabled:
+                if request.route is Route.CHAT and self.settings.kaosai_chat_enabled:
                     kaosai_reply = await self._answer_with_kaosai_plan(request.text, message=message)
                     if kaosai_reply is not None:
                         reply, view = kaosai_reply
