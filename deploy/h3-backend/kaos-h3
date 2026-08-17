@@ -40,24 +40,30 @@ require_secret() {
   [[ -s "$(secret_path "${name}")" ]] || die "missing secret: ${SECRETS_DIR}/${name}"
 }
 
+sudo_test_path() {
+  local predicate=$1
+  local path=$2
+  command -v sudo >/dev/null 2>&1 && sudo -n test "${predicate}" "${path}" 2>/dev/null
+}
+
 require_path() {
   local path=$1
-  [[ -e "${path}" ]] || die "missing required path: ${path}"
+  [[ -e "${path}" ]] || sudo_test_path -e "${path}" || die "missing required path: ${path}"
 }
 
 require_file() {
   local path=$1
-  [[ -f "${path}" ]] || die "missing required file: ${path}"
+  [[ -f "${path}" ]] || sudo_test_path -f "${path}" || die "missing required file: ${path}"
 }
 
 require_nonempty_file() {
   local path=$1
-  [[ -s "${path}" ]] || die "missing or empty required file: ${path}"
+  [[ -s "${path}" ]] || sudo_test_path -s "${path}" || die "missing or empty required file: ${path}"
 }
 
 require_dir() {
   local path=$1
-  [[ -d "${path}" ]] || die "missing required directory: ${path}"
+  [[ -d "${path}" ]] || sudo_test_path -d "${path}" || die "missing required directory: ${path}"
 }
 
 require_sqlite_ok() {
