@@ -279,7 +279,7 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(DEFAULT_HTTP_PROBES["radicale"], "http://radicale:5232/")
         self.assertEqual(DEFAULT_HTTP_PROBES["memos"], "http://memos:5230/")
         self.assertEqual(DEFAULT_HTTP_PROBES["vaultwarden"], "http://vaultwarden/alive")
-        self.assertEqual(DEFAULT_HTTP_PROBES["stirlingpdf"], "http://stirlingpdf:8080/")
+        self.assertNotIn("stirlingpdf", DEFAULT_HTTP_PROBES)
         self.assertEqual(
             default_http_probe({"PAPERLESS_BASE_URL": "http://paperless:8000"}, "paperless"),
             "http://paperless:8000",

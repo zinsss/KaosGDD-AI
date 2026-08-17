@@ -90,7 +90,6 @@ DEFAULT_HTTP_PROBES = {
     "radicale": "http://radicale:5232/",
     "memos": "http://memos:5230/",
     "vaultwarden": "http://vaultwarden/alive",
-    "stirlingpdf": "http://stirlingpdf:8080/",
 }
 
 OK_HTTP_STATUSES = {200, 204, 301, 302, 307, 308, 401, 403}
