@@ -24,16 +24,26 @@ cd /srv/projects/KaosGDD-AI
 ./deploy/kaosbrain/kaosbrain setup
 ```
 
+Fresh installs use the canonical KaosGDD layout:
+
+```text
+/srv/kaosgdd/kaosbrain/kaosbrain.env
+/srv/kaosgdd/secrets/kaosbrain_discord_bot_token
+```
+
+Existing hosts with `/srv/kaos/brain/kaosbrain.env` keep using that legacy path
+until a deliberate host path migration is performed.
+
 Create the secret file without printing it:
 
 ```bash
 read -rsp "KaosBrain Discord bot token: " TOKEN; echo
-printf '%s' "$TOKEN" > /srv/kaos/secrets/kaosbrain_discord_bot_token
+printf '%s' "$TOKEN" > /srv/kaosgdd/secrets/kaosbrain_discord_bot_token
 unset TOKEN
-chmod 0640 /srv/kaos/secrets/kaosbrain_discord_bot_token
+chmod 0640 /srv/kaosgdd/secrets/kaosbrain_discord_bot_token
 ```
 
-Edit `/srv/kaos/brain/kaosbrain.env`, then test and start:
+Edit `/srv/kaosgdd/kaosbrain/kaosbrain.env`, then test and start:
 
 ```bash
 ./deploy/kaosbrain/kaosbrain test

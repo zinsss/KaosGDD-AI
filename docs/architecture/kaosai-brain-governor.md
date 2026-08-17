@@ -3,6 +3,11 @@
 KaosGDD separates language intelligence, request guarding, and authoritative
 state changes.
 
+Runtime paths are defined in
+[Runtime Layout](./runtime-layout.md). In short, project-owned services live
+under `/srv/kaosgdd/{kaosai,kaosbrain,kaosgovernor}`, while ready-made backends
+such as Radicale, Memos, and Vaultwarden keep their own service names.
+
 ## Roles
 
 ```text

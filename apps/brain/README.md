@@ -14,6 +14,9 @@ KaosGovernor = authoritative tools, confirmations, and audit
 ```
 
 See [KaosAI, KaosBrain, and KaosGovernor](../../docs/architecture/kaosai-brain-governor.md).
+Runtime paths follow [Runtime Layout](../../docs/architecture/runtime-layout.md):
+KaosBrain belongs under `/srv/kaosgdd/kaosbrain`; KaosAI/OpenClaw belongs under
+`/srv/kaosgdd/kaosai`.
 
 ## Authority Boundary
 

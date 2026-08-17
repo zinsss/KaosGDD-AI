@@ -3,9 +3,21 @@ set -euo pipefail
 
 DEPLOY_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd -- "${DEPLOY_DIR}/../.." && pwd)
-ENV_DIR=${KAOSBRAIN_ENV_DIR:-/srv/kaos/brain}
+KAOSGDD_ROOT=${KAOSGDD_ROOT:-/srv/kaosgdd}
+LEGACY_ROOT=${KAOSBRAIN_LEGACY_ROOT:-/srv/kaos}
+CANONICAL_ENV_DIR=${KAOSGDD_ROOT}/kaosbrain
+CANONICAL_SECRETS_DIR=${KAOSGDD_ROOT}/secrets
+if [[ -z "${KAOSBRAIN_ENV_DIR:-}" && -f "${LEGACY_ROOT}/brain/kaosbrain.env" && ! -f "${CANONICAL_ENV_DIR}/kaosbrain.env" ]]; then
+  ENV_DIR=${LEGACY_ROOT}/brain
+else
+  ENV_DIR=${KAOSBRAIN_ENV_DIR:-${CANONICAL_ENV_DIR}}
+fi
 ENV_FILE=${KAOSBRAIN_ENV_FILE:-${ENV_DIR}/kaosbrain.env}
-SECRETS_DIR=${KAOSBRAIN_SECRETS_DIR:-/srv/kaos/secrets}
+if [[ -z "${KAOSBRAIN_SECRETS_DIR:-}" && -f "${LEGACY_ROOT}/secrets/kaosbrain_discord_bot_token" && ! -f "${CANONICAL_SECRETS_DIR}/kaosbrain_discord_bot_token" ]]; then
+  SECRETS_DIR=${LEGACY_ROOT}/secrets
+else
+  SECRETS_DIR=${KAOSBRAIN_SECRETS_DIR:-${CANONICAL_SECRETS_DIR}}
+fi
 TOKEN_FILE=${KAOSBRAIN_TOKEN_FILE:-${SECRETS_DIR}/kaosbrain_discord_bot_token}
 GOVERNOR_TOKEN_FILE=${KAOSBRAIN_GOVERNOR_TOKEN_FILE:-${SECRETS_DIR}/governor_api_token}
 SERVICE_NAME=${KAOSBRAIN_SERVICE_NAME:-kaosbrain.service}
@@ -42,6 +54,21 @@ host_secret_path() {
   printf '%s' "${path}"
 }
 
+sed_escape() {
+  printf '%s' "$1" | sed -e 's/[\/&]/\\&/g'
+}
+
+install_service_unit() {
+  local unit_path="/etc/systemd/system/${SERVICE_NAME}"
+  sudo sed \
+    -e "s/__KAOSBRAIN_TOKEN_FILE__/$(sed_escape "${TOKEN_FILE}")/g" \
+    -e "s/__KAOSBRAIN_ENV_FILE__/$(sed_escape "${ENV_FILE}")/g" \
+    -e "s/__KAOSBRAIN_SECRETS_DIR__/$(sed_escape "${SECRETS_DIR}")/g" \
+    -e "s/__KAOSBRAIN_IMAGE_NAME__/$(sed_escape "${IMAGE_NAME}")/g" \
+    -e "s/__KAOSBRAIN_CONTAINER_NAME__/$(sed_escape "${CONTAINER_NAME}")/g" \
+    "${DEPLOY_DIR}/kaosbrain.service" | sudo tee "${unit_path}" >/dev/null
+}
+
 setup() {
   require_command docker
   require_command sudo
@@ -60,7 +87,7 @@ setup() {
   fi
   chmod 0640 "${TOKEN_FILE}"
   chmod 0640 "${GOVERNOR_TOKEN_FILE}"
-  sudo cp "${DEPLOY_DIR}/kaosbrain.service" "/etc/systemd/system/${SERVICE_NAME}"
+  install_service_unit
   sudo systemctl daemon-reload
   sudo systemctl enable "${SERVICE_NAME}" >/dev/null
   info "Setup complete. Fill ${ENV_FILE} and ${TOKEN_FILE}, then run:"

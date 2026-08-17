@@ -3,16 +3,16 @@ Description=KaosBrain Discord service
 Requires=docker.service
 After=docker.service network-online.target ollama.service
 Wants=network-online.target
-ConditionPathExists=/srv/kaos/secrets/kaosbrain_discord_bot_token
+ConditionPathExists=__KAOSBRAIN_TOKEN_FILE__
 
 [Service]
 Type=simple
-EnvironmentFile=/srv/kaos/brain/kaosbrain.env
+EnvironmentFile=__KAOSBRAIN_ENV_FILE__
 Restart=always
 RestartSec=10
-ExecStartPre=-/usr/bin/docker rm -f kaos-brain
-ExecStart=/usr/bin/docker run --rm --name kaos-brain --network host --user ${KAOS_HOST_UID}:${KAOS_HOST_GID} --env-file /srv/kaos/brain/kaosbrain.env --mount type=bind,src=/srv/kaos/secrets,dst=/run/secrets,ro kaos-brain:current
-ExecStop=/usr/bin/docker stop kaos-brain
+ExecStartPre=-/usr/bin/docker rm -f __KAOSBRAIN_CONTAINER_NAME__
+ExecStart=/usr/bin/docker run --rm --name __KAOSBRAIN_CONTAINER_NAME__ --network host --user ${KAOS_HOST_UID}:${KAOS_HOST_GID} --env-file __KAOSBRAIN_ENV_FILE__ --mount type=bind,src=__KAOSBRAIN_SECRETS_DIR__,dst=/run/secrets,ro __KAOSBRAIN_IMAGE_NAME__
+ExecStop=/usr/bin/docker stop __KAOSBRAIN_CONTAINER_NAME__
 
 [Install]
 WantedBy=multi-user.target
