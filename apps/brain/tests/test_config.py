@@ -23,6 +23,9 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.deep_model, "qwen3:8b")
         self.assertTrue(settings.respond_without_mention)
         self.assertTrue(settings.auto_route_enabled)
+        self.assertFalse(settings.health_enabled)
+        self.assertEqual(settings.health_host, "127.0.0.1")
+        self.assertEqual(settings.health_port, 8099)
 
     def test_token_can_be_loaded_from_secret_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -82,6 +85,20 @@ class SettingsTests(unittest.TestCase):
     def test_memos_public_url_is_optional(self) -> None:
         settings = Settings.from_env({**BASE_ENV, "KAOSBRAIN_MEMOS_PUBLIC_URL": "https://memos.example/"})
         self.assertEqual(settings.memos_public_url, "https://memos.example")
+
+    def test_health_configuration_is_optional(self) -> None:
+        settings = Settings.from_env(
+            {
+                **BASE_ENV,
+                "KAOSBRAIN_HEALTH_ENABLED": "true",
+                "KAOSBRAIN_HEALTH_HOST": "100.113.169.46",
+                "KAOSBRAIN_HEALTH_PORT": "8099",
+            }
+        )
+
+        self.assertTrue(settings.health_enabled)
+        self.assertEqual(settings.health_host, "100.113.169.46")
+        self.assertEqual(settings.health_port, 8099)
 
 
 if __name__ == "__main__":

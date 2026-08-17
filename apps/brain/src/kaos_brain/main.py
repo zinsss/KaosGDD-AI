@@ -5,6 +5,7 @@ import logging
 
 from .bot import BrainBot
 from .config import ConfigurationError, Settings
+from .health import BrainHealthServer
 
 
 def main() -> None:
@@ -19,7 +20,14 @@ def main() -> None:
     bot = BrainBot(settings)
 
     async def run() -> None:
+        health_server = BrainHealthServer(settings, bot) if settings.health_enabled else None
         async with bot:
-            await bot.start(settings.token)
+            if health_server is not None:
+                await health_server.start()
+            try:
+                await bot.start(settings.token)
+            finally:
+                if health_server is not None:
+                    await health_server.stop()
 
     asyncio.run(run())

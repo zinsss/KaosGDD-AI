@@ -45,8 +45,14 @@ KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL=http://<kaosgovernor-tailscale-ip>:8098
 KAOSBRAIN_GOVERNOR_TOOLS_PROFILE=main
 KAOSBRAIN_SUPPLIES_COLLECTION_ID=supplies:<radicale-vtodo-collection-id>
 KAOSBRAIN_MEMOS_PUBLIC_URL=
+KAOSBRAIN_HEALTH_ENABLED=true
+KAOSBRAIN_HEALTH_HOST=<kaosbrain-tailscale-ip>
+KAOSBRAIN_HEALTH_PORT=8099
 GOVERNOR_API_TOKEN_FILE=/run/secrets/governor_api_token
 ```
+
+Bind the health endpoint only to loopback or the KaosBrain Tailscale IP. It is
+for KaosGovernor system status probes, not public access.
 
 Supported write grammar in this slice:
 
