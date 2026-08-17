@@ -319,7 +319,8 @@ for check in checks:
     status_value = check.get("status", "unknown")
     states[status_value] = states.get(status_value, 0) + 1
 state_text = ", ".join(f"{key}={value}" for key, value in sorted(states.items())) or "no services"
-print(f"{'Governor health':<34} {status} ({payload.get('hostname', 'unknown host')})")
+host_text = payload.get("hostname") or payload.get("host") or "reachable"
+print(f"{'Governor health':<34} {status} ({host_text})")
 print(f"{'Governor Discord':<34} ok (ready={discord_ready})")
 if isinstance(brain_tools, dict):
     print(f"{'Governor brain tools':<34} ok (enabled={brain_tools.get('enabled', 'unknown')})")
