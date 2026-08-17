@@ -6,7 +6,9 @@ import json
 import logging
 import os
 from pathlib import Path
+import shlex
 import socket
+import subprocess
 import time
 from typing import Mapping
 import urllib.error
@@ -46,11 +48,28 @@ class ServiceProbeResult:
         return self.state == "healthy"
 
 
+@dataclass(frozen=True)
+class RestartResult:
+    key: str
+    state: str
+    detail: str = ""
+
+    def user_message(self, label: str) -> str:
+        if self.state == "executed":
+            return f"Restart executed for {label}."
+        if self.state == "not_allowed":
+            return f"Restart recorded for {label}. Execution is not allowed."
+        if self.state == "not_configured":
+            return f"Restart recorded for {label}. No restart command is configured."
+        return f"Restart failed for {label}. {self.detail}".strip()
+
+
 @dataclass
 class DiscordServiceStatusState:
     message_ids: dict[str, int] | None = None
     legacy_message_id: int = 0
     restart_requests: dict[str, int] | None = None
+    restart_results: dict[str, str] | None = None
 
 
 SERVICES: tuple[ServiceStatusItem, ...] = (
@@ -74,6 +93,7 @@ DEFAULT_HTTP_PROBES = {
 }
 
 OK_HTTP_STATUSES = {200, 204, 301, 302, 307, 308, 401, 403}
+RESTART_TIMEOUT_SECONDS = 30.0
 
 
 class DiscordServiceStatusSurface:
@@ -144,19 +164,24 @@ class DiscordServiceStatusSurface:
                 allowed_mentions=NO_MENTIONS,
             )
             return
-        await self.request_restart(item.key)
+        restart_result = await self.request_restart(item.key)
         await interaction.response.send_message(
-            f"Restart requested for {item.label}.",
+            restart_result.user_message(item.label),
             ephemeral=True,
             delete_after=5,
             allowed_mentions=NO_MENTIONS,
         )
 
-    async def request_restart(self, key: str) -> None:
+    async def request_restart(self, key: str) -> "RestartResult":
         requests = dict(self.state.restart_requests or {})
         requests[key] = int(requests.get(key, 0)) + 1
         self.state.restart_requests = requests
+        result = await restart_service(key, self.environment)
+        results = dict(self.state.restart_results or {})
+        results[key] = result.state
+        self.state.restart_results = results
         self._save_state()
+        return result
 
     def status(self) -> dict[str, object]:
         message_ids = dict(self.state.message_ids or {})
@@ -169,6 +194,7 @@ class DiscordServiceStatusSurface:
             "dummyHealth": False,
             "checks": {key: result.__dict__ for key, result in self.last_results.items()},
             "restartRequests": dict(self.state.restart_requests or {}),
+            "restartResults": dict(self.state.restart_results or {}),
         }
 
     async def check_services(self) -> dict[str, ServiceProbeResult]:
@@ -232,6 +258,11 @@ class DiscordServiceStatusSurface:
                     for key, value in dict(raw.get("restartRequests") or {}).items()
                     if str(key)
                 },
+                restart_results={
+                    str(key): str(value)
+                    for key, value in dict(raw.get("restartResults") or {}).items()
+                    if str(key)
+                },
             )
         except (TypeError, ValueError):
             return DiscordServiceStatusState()
@@ -241,6 +272,7 @@ class DiscordServiceStatusSurface:
         payload = {
             "messageIds": dict(self.state.message_ids or {}),
             "restartRequests": dict(self.state.restart_requests or {}),
+            "restartResults": dict(self.state.restart_results or {}),
         }
         temporary = self.state_path.with_suffix(f"{self.state_path.suffix}.tmp")
         temporary.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
@@ -359,6 +391,58 @@ def check_tcp(target: str, timeout_seconds: float) -> tuple[str, str]:
             return "healthy", f"TCP {host}:{port}"
     except OSError as exc:
         return "down", stable_error(exc)
+
+
+async def restart_service(key: str, env: Mapping[str, str]) -> RestartResult:
+    return await asyncio.to_thread(restart_service_sync, key, env)
+
+
+def restart_service_sync(key: str, env: Mapping[str, str]) -> RestartResult:
+    normalized = key.strip().lower()
+    allowed = restart_allowed_keys(env)
+    if normalized not in allowed:
+        return RestartResult(normalized, "not_allowed")
+    command = restart_command(env, normalized)
+    if not command:
+        return RestartResult(normalized, "not_configured")
+    try:
+        argv = shlex.split(command)
+    except ValueError as exc:
+        return RestartResult(normalized, "failed", f"Invalid command: {stable_error(exc)}")
+    if not argv:
+        return RestartResult(normalized, "not_configured")
+    try:
+        completed = subprocess.run(
+            argv,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=restart_timeout_seconds(env),
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return RestartResult(normalized, "failed", stable_error(exc))
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or f"exit {completed.returncode}").strip()
+        return RestartResult(normalized, "failed", detail[:160])
+    return RestartResult(normalized, "executed", (completed.stdout or "").strip()[:160])
+
+
+def restart_allowed_keys(env: Mapping[str, str]) -> frozenset[str]:
+    raw = env.get("SERVICE_STATUS_RESTART_ALLOWED_KEYS", "").strip()
+    return frozenset(part.strip().lower() for part in raw.split(",") if part.strip())
+
+
+def restart_command(env: Mapping[str, str], key: str) -> str:
+    return env.get(f"SERVICE_STATUS_{key.upper()}_RESTART_COMMAND", "").strip()
+
+
+def restart_timeout_seconds(env: Mapping[str, str]) -> float:
+    raw = env.get("SERVICE_STATUS_RESTART_TIMEOUT_SECONDS", str(RESTART_TIMEOUT_SECONDS)).strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        return RESTART_TIMEOUT_SECONDS
+    return min(max(value, 1.0), 120.0)
 
 
 def probe_value(env: Mapping[str, str], key: str, suffix: str) -> str:

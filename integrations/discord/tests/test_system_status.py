@@ -20,6 +20,7 @@ from kaos_governor_discord.system_status import (
     check_tcp,
     render_service_embed,
     render_service_message,
+    restart_service_sync,
 )
 
 
@@ -179,6 +180,45 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
             await surface.request_restart("memos")
 
             self.assertEqual(surface.status()["restartRequests"], {"memos": 2})
+            self.assertEqual(surface.status()["restartResults"], {"memos": "not_allowed"})
+
+    def test_restart_service_requires_allowlist(self) -> None:
+        result = restart_service_sync(
+            "memos",
+            {"SERVICE_STATUS_MEMOS_RESTART_COMMAND": "/bin/true"},
+        )
+
+        self.assertEqual(result.state, "not_allowed")
+
+    def test_restart_service_requires_configured_command(self) -> None:
+        result = restart_service_sync(
+            "memos",
+            {"SERVICE_STATUS_RESTART_ALLOWED_KEYS": "memos"},
+        )
+
+        self.assertEqual(result.state, "not_configured")
+
+    def test_restart_service_executes_allowlisted_command(self) -> None:
+        result = restart_service_sync(
+            "memos",
+            {
+                "SERVICE_STATUS_RESTART_ALLOWED_KEYS": "memos",
+                "SERVICE_STATUS_MEMOS_RESTART_COMMAND": "/bin/true",
+            },
+        )
+
+        self.assertEqual(result.state, "executed")
+
+    def test_restart_service_records_command_failure(self) -> None:
+        result = restart_service_sync(
+            "memos",
+            {
+                "SERVICE_STATUS_RESTART_ALLOWED_KEYS": "memos",
+                "SERVICE_STATUS_MEMOS_RESTART_COMMAND": "/bin/false",
+            },
+        )
+
+        self.assertEqual(result.state, "failed")
 
     def test_render_service_message_includes_health_state(self) -> None:
         content = render_service_message(
