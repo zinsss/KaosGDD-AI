@@ -52,6 +52,9 @@ OLLAMA_BASE_URL=http://127.0.0.1:11434
 KAOSBRAIN_CHAT_MODEL=gemma3:4b
 KAOSBRAIN_DEEP_MODEL=qwen3:8b
 KAOSBRAIN_AUTO_ROUTE_ENABLED=true
+KAOSAI_ENABLED=false
+KAOSAI_PROVIDER=disabled
+KAOSAI_BASE_URL=
 KAOSBRAIN_GOVERNOR_TOOLS_ENABLED=true
 KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL=http://<kaosgovernor-tailscale-ip>:8098
 KAOSBRAIN_GOVERNOR_TOOLS_PROFILE=main
@@ -75,6 +78,11 @@ Supported write grammar in this slice:
 ```
 
 The default due time is `10:00`.
+
+KaosAI is currently a guarded planner slot, not a production dependency. Keep
+`KAOSAI_ENABLED=false` until OpenClaw/ChatGPT Pro auth is verified separately.
+When enabled later, KaosAI must return strict JSON plans only; KaosBrain Guard
+adapts and validates those plans before Governor sees them.
 
 Use the same Discord bot token exclusivity rule as every Discord service: never
 run two processes with the same token at the same time.

@@ -23,6 +23,8 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.deep_model, "qwen3:8b")
         self.assertTrue(settings.respond_without_mention)
         self.assertTrue(settings.auto_route_enabled)
+        self.assertFalse(settings.kaosai_enabled)
+        self.assertEqual(settings.kaosai_provider, "disabled")
         self.assertFalse(settings.health_enabled)
         self.assertEqual(settings.health_host, "127.0.0.1")
         self.assertEqual(settings.health_port, 8099)
@@ -53,6 +55,34 @@ class SettingsTests(unittest.TestCase):
     def test_auto_route_can_be_disabled(self) -> None:
         settings = Settings.from_env({**BASE_ENV, "KAOSBRAIN_AUTO_ROUTE_ENABLED": "false"})
         self.assertFalse(settings.auto_route_enabled)
+
+    def test_kaosai_configuration_is_disabled_by_default(self) -> None:
+        settings = Settings.from_env(BASE_ENV)
+
+        self.assertFalse(settings.kaosai_enabled)
+        self.assertEqual(settings.kaosai_provider, "disabled")
+        self.assertEqual(settings.kaosai_base_url, "")
+
+    def test_kaosai_requires_openclaw_provider_and_base_url_when_enabled(self) -> None:
+        with self.assertRaisesRegex(ConfigurationError, "KAOSAI_PROVIDER"):
+            Settings.from_env({**BASE_ENV, "KAOSAI_ENABLED": "true", "KAOSAI_PROVIDER": "disabled"})
+        with self.assertRaisesRegex(ConfigurationError, "KAOSAI_BASE_URL"):
+            Settings.from_env({**BASE_ENV, "KAOSAI_ENABLED": "true", "KAOSAI_PROVIDER": "openclaw"})
+
+        settings = Settings.from_env(
+            {
+                **BASE_ENV,
+                "KAOSAI_ENABLED": "true",
+                "KAOSAI_PROVIDER": "openclaw",
+                "KAOSAI_BASE_URL": "http://127.0.0.1:18789",
+                "KAOSAI_TIMEOUT_SECONDS": "45",
+            }
+        )
+
+        self.assertTrue(settings.kaosai_enabled)
+        self.assertEqual(settings.kaosai_provider, "openclaw")
+        self.assertEqual(settings.kaosai_base_url, "http://127.0.0.1:18789")
+        self.assertEqual(settings.kaosai_timeout_seconds, 45)
 
     def test_governor_tools_require_token_and_base_url(self) -> None:
         with self.assertRaises(ConfigurationError):

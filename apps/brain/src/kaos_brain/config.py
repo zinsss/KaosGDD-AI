@@ -73,6 +73,10 @@ class Settings:
     max_reply_chars: int
     respond_without_mention: bool
     auto_route_enabled: bool
+    kaosai_enabled: bool
+    kaosai_provider: str
+    kaosai_base_url: str
+    kaosai_timeout_seconds: int
     governor_tools_enabled: bool
     governor_tools_base_url: str
     governor_tools_api_token: str
@@ -104,6 +108,15 @@ class Settings:
         governor_tools_base_url = source.get("KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL", "").strip()
         if governor_tools_enabled and not governor_tools_base_url:
             raise ConfigurationError("KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL is required when Governor tools are enabled")
+        kaosai_enabled = _boolean(source, "KAOSAI_ENABLED")
+        kaosai_provider = source.get("KAOSAI_PROVIDER", "disabled").strip().lower() or "disabled"
+        if not kaosai_enabled:
+            kaosai_provider = "disabled"
+        if kaosai_enabled and kaosai_provider not in {"openclaw"}:
+            raise ConfigurationError("KAOSAI_PROVIDER must be openclaw when KAOSAI_ENABLED=true")
+        kaosai_base_url = source.get("KAOSAI_BASE_URL", "").strip()
+        if kaosai_enabled and not kaosai_base_url:
+            raise ConfigurationError("KAOSAI_BASE_URL is required when KAOSAI_ENABLED=true")
         max_reply_chars = _positive_int(source.get("KAOSBRAIN_MAX_REPLY_CHARS", "1800"), "KAOSBRAIN_MAX_REPLY_CHARS")
         if max_reply_chars > 1900:
             raise ConfigurationError("KAOSBRAIN_MAX_REPLY_CHARS must be at most 1900")
@@ -120,6 +133,10 @@ class Settings:
             max_reply_chars=max_reply_chars,
             respond_without_mention=_boolean(source, "KAOSBRAIN_RESPOND_WITHOUT_MENTION", default=True),
             auto_route_enabled=_boolean(source, "KAOSBRAIN_AUTO_ROUTE_ENABLED", default=True),
+            kaosai_enabled=kaosai_enabled,
+            kaosai_provider=kaosai_provider,
+            kaosai_base_url=kaosai_base_url,
+            kaosai_timeout_seconds=_positive_int(source.get("KAOSAI_TIMEOUT_SECONDS", "30"), "KAOSAI_TIMEOUT_SECONDS"),
             governor_tools_enabled=governor_tools_enabled,
             governor_tools_base_url=governor_tools_base_url,
             governor_tools_api_token=governor_tools_api_token,
