@@ -12,11 +12,13 @@ from kaos_governor_discord.system_status import (
     EMBED_COLOR_DOWN,
     EMBED_COLOR_HEALTHY,
     EMBED_COLOR_UNKNOWN,
+    DEFAULT_HTTP_PROBES,
     DiscordServiceStatusSurface,
     SERVICES,
     ServiceProbeResult,
     ServiceStatusView,
     check_service,
+    default_http_probe,
     check_tcp,
     render_service_embed,
     render_service_message,
@@ -272,6 +274,16 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.state, "unknown")
         self.assertIn("No health probe", result.detail)
+
+    def test_default_probes_cover_local_backend_services(self) -> None:
+        self.assertEqual(DEFAULT_HTTP_PROBES["radicale"], "http://radicale:5232/")
+        self.assertEqual(DEFAULT_HTTP_PROBES["memos"], "http://memos:5230/")
+        self.assertEqual(DEFAULT_HTTP_PROBES["vaultwarden"], "http://vaultwarden/alive")
+        self.assertEqual(DEFAULT_HTTP_PROBES["stirlingpdf"], "http://stirlingpdf:8080/")
+        self.assertEqual(
+            default_http_probe({"PAPERLESS_BASE_URL": "http://paperless:8000"}, "paperless"),
+            "http://paperless:8000",
+        )
 
     def test_tcp_probe_reports_healthy_port(self) -> None:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
