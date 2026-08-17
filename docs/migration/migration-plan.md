@@ -206,8 +206,8 @@ Target services that remain:
 - Tailscale
 - internal reverse proxy only if still required
 
-Rename old `kaosgdd-brain` to transitional `kaosgdd-gov` during the H3 move if
-it still has unported deterministic API duties. Remove `kaosgdd-gov`, any
+Rename old `kaosgdd-brain` to transitional `kaosgovernor-legacy-api` during the H3 move if
+it still has unported deterministic API duties. Remove `kaosgovernor-legacy-api`, any
 remaining main personal web, adapter, edge, or notification containers only
 after their KaosGovernor replacements have passed the observation period.
 Family KaosGDD is retained.

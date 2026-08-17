@@ -106,9 +106,9 @@ services:
     networks:
       - backend
 
-  kaosgdd-gov-database:
+  kaosgovernor-legacy-database:
     image: postgres:16-alpine@sha256:e013e867e712fec275706a6c51c966f0bb0c93cfa8f51000f85a15f9865a28cb
-    container_name: kaosgdd-gov-database
+    container_name: kaosgovernor-legacy-database
     restart: unless-stopped
     profiles: ["family-transition"]
     env_file:
@@ -124,13 +124,13 @@ services:
     networks:
       - backend
 
-  kaosgdd-gov:
+  kaosgovernor-legacy-api:
     image: kaosgdd-brain:0.12.11-mail-date1
-    container_name: kaosgdd-gov
+    container_name: kaosgovernor-legacy-api
     restart: unless-stopped
     profiles: ["family-transition"]
     depends_on:
-      kaosgdd-gov-database:
+      kaosgovernor-legacy-database:
         condition: service_healthy
     env_file:
       - path: ${KAOS_ROOT:-/srv/kaos}/secrets/kaosgdd-gov.env
@@ -138,7 +138,7 @@ services:
     environment:
       BRAIN_PORT: "8092"
       BRAIN_VERSION: "0.12.11-mail-date1"
-      BRAIN_DB_HOST: "kaosgdd-gov-database"
+      BRAIN_DB_HOST: "kaosgovernor-legacy-database"
       BRAIN_DB_PORT: "5432"
       CALENDAR_ADAPTER_INTERNAL_URL: "http://calendar-adapter:8091"
       MEMOS_INTERNAL_URL: "http://memos:5230"

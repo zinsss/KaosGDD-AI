@@ -24,8 +24,8 @@ Transitional family components, only if still required:
 
 | Service | Source image ID | Source data/config |
 | --- | --- | --- |
-| `kaosgdd-gov` from legacy brain | `sha256:fbfc2ed5b6ef35b9b26cb8dc6f9fed05d38f7f2209c7c078746dfeeba975f269` | `/srv/kaos/data/kaosgdd/brain`, `/srv/kaos/secrets/kaosgdd-brain.env` |
-| `kaosgdd-gov-database` | `sha256:e013e867e712fec275706a6c51c966f0bb0c93cfa8f51000f85a15f9865a28cb` | `/srv/kaos/data/kaosgdd/brain/postgres` |
+| `kaosgovernor-legacy-api` from legacy brain | `sha256:fbfc2ed5b6ef35b9b26cb8dc6f9fed05d38f7f2209c7c078746dfeeba975f269` | `/srv/kaos/data/kaosgdd/brain`, `/srv/kaos/secrets/kaosgdd-brain.env` |
+| `kaosgovernor-legacy-database` | `sha256:e013e867e712fec275706a6c51c966f0bb0c93cfa8f51000f85a15f9865a28cb` | `/srv/kaos/data/kaosgdd/brain/postgres` |
 | `calendar-adapter` | `sha256:6d43704baacd1bfbe7c295d7f13079d5d8104ed33568873133f8fc69980419df` | `/srv/kaos/data/kaosgdd/calendar-adapter`, `/srv/kaos/secrets/kaosgdd-adapters.env` |
 | Family Memos web | `sha256:421e98ec721040392bb0561b75f424a5ffbdd828607acfab6b8b667136df3062` | image must be exported/imported if retained during transition |
 
@@ -64,7 +64,8 @@ Ready-made services keep native operational names. Stage data under:
 /srv/kaos/data/family-portal
 ```
 
-If transitional family APIs are still required, stage them under renamed paths:
+If transitional family APIs are still required, keep their legacy data and
+secret paths until the old service is fully retired:
 
 ```text
 /srv/kaos/data/kaosgdd-gov

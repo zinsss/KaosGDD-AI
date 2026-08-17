@@ -78,7 +78,7 @@ specific unmet workflow justifies it.
 The old `kaosgdd-portal` personal/main route is deprecated during migration.
 `family.kaosgdd.net` is the only retained custom KaosGDD portal. If the old
 `kaosgdd-brain` service still has deterministic API duties during host
-migration, rename it to transitional `kaosgdd-gov` and continue absorbing its
+migration, rename it to transitional `kaosgovernor-legacy-api` and continue absorbing its
 modules into KaosGovernor.
 
 The target architecture does not require a custom personal Memos frontend.

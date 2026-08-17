@@ -2,7 +2,7 @@
 
 The existing `zinsss/KaosGDD` `apps/brain` implementation remains production
 code until replacements are verified. During the H3 migration it may be renamed
-from `kaosgdd-brain` to transitional `kaosgdd-gov` so operators do not confuse
+from `kaosgdd-brain` to transitional `kaosgovernor-legacy-api` so operators do not confuse
 it with the future H4 KaosBrain AI plane. That rename is not the replacement;
 its deterministic modules still need to be ported into KaosGovernor before the
 legacy service and database can be retired.
@@ -42,7 +42,7 @@ legacy service and database can be retired.
 
 ## Retire Only After Verified Replacement
 
-- transitional `kaosgdd-gov` containers after their deterministic modules are absorbed into KaosGovernor
+- transitional `kaosgovernor-legacy-api` containers after their deterministic modules are absorbed into KaosGovernor
 - current Brain PostgreSQL
 - KaosTelegram containers, bot tokens, bot state, and workflow presentation
 - obsolete notification providers

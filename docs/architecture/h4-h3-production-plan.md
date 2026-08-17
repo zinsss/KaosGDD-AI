@@ -216,7 +216,7 @@ interrupt PACS, DICOM receipt, fax transport, Paperless, or RustDesk.
 | RustDesk | Office Kaos | Stay |
 | Radicale | H3+ | Migrate data/config in controlled write freeze |
 | Memos | H3+ | Migrate SQLite/resources in controlled write freeze |
-| current KaosGDD Brain / transitional `kaosgdd-gov` | H3+ KaosGovernor | Rename during migration to reflect deterministic-governor duties, then port modules into KaosGovernor one domain at a time |
+| current KaosGDD Brain / transitional `kaosgovernor-legacy-api` | H3+ KaosGovernor | Rename during migration to reflect deterministic-governor duties, then port modules into KaosGovernor one domain at a time |
 | Brain PostgreSQL | H3+ Governor PostgreSQL | Explicit schema/data migration only |
 | calendar adapter | H3+ KaosCalendar | Absorb and retire after parity tests |
 | Governor Discord bot | H3+ | Move state and credentials after live comparison |
@@ -351,7 +351,7 @@ a separately justified project if native apps and Discord expose a concrete
 workflow gap. This decision does not affect Family KaosGDD.
 
 During the H3 migration, the legacy `kaosgdd-brain` service may be renamed to
-`kaosgdd-gov` to make its deterministic backend role explicit. That name is
+`kaosgovernor-legacy-api` to make its deterministic backend role explicit. That name is
 transitional: its remaining domain logic must still move into KaosGovernor
 modules before the legacy service and database are retired. The old
 `kaosgdd-portal` main/personal route is deprecated; `family.kaosgdd.net` is the
@@ -748,7 +748,7 @@ Actions:
 1. Migrate Vaultwarden with export, backup, and client tests.
 2. Migrate SFTPGo after classifying clinic versus personal storage.
 3. Retire RHWP only after confirming Polaris/manual workflows cover all needs.
-4. Stop transitional `kaosgdd-gov`, calendar adapter, any remaining main
+4. Stop transitional `kaosgovernor-legacy-api`, calendar adapter, any remaining main
    personal portal, and bridge containers after their KaosGovernor
    replacements pass observation. KaosTelegram is retired rather than migrated.
    Do not stop Family KaosGDD.
