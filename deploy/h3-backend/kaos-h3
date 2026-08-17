@@ -276,7 +276,7 @@ services_preflight() {
     die "family portal must explicitly close /api/supplies"
   fi
   if ! grep -q 'location \^~ /embed/agenda-supplies' "${root}/config/family-portal/nginx.conf"; then
-    die "family portal must explicitly close /embed/agenda-supplies"
+    die "family portal must explicitly close retired /embed/agenda-supplies"
   fi
   "${SERVICES_COMPOSE[@]}" config --quiet
   info "Migrated service preflight passed."
