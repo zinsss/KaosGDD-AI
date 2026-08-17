@@ -113,6 +113,22 @@ class SettingsTests(unittest.TestCase):
                     "GOVERNOR_API_TOKEN": "token",
                 }
             )
+        for url in (
+            "https://100.64.0.1:8098",
+            "http://kaosgdd.net:8098",
+            "http://governor.kaosgdd.net:8098",
+            "http://100.64.0.1:8098/tools/today",
+            "http://user:pass@100.64.0.1:8098",
+        ):
+            with self.subTest(url=url), self.assertRaisesRegex(ConfigurationError, "KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL"):
+                Settings.from_env(
+                    {
+                        **BASE_ENV,
+                        "KAOSBRAIN_GOVERNOR_TOOLS_ENABLED": "true",
+                        "KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL": url,
+                        "GOVERNOR_API_TOKEN": "token",
+                    }
+                )
 
     def test_governor_tools_parse_configuration(self) -> None:
         settings = Settings.from_env(
@@ -129,6 +145,16 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.governor_tools_base_url, "http://100.64.0.1:8098")
         self.assertEqual(settings.governor_tools_profile, "family")
         self.assertEqual(settings.governor_tools_supplies_collection_id, "supplies:abc")
+
+        magic_dns = Settings.from_env(
+            {
+                **BASE_ENV,
+                "KAOSBRAIN_GOVERNOR_TOOLS_ENABLED": "true",
+                "KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL": "http://kaosgovernor:8098/",
+                "GOVERNOR_API_TOKEN": "token",
+            }
+        )
+        self.assertEqual(magic_dns.governor_tools_base_url, "http://kaosgovernor:8098")
 
     def test_memos_public_url_is_optional(self) -> None:
         settings = Settings.from_env({**BASE_ENV, "KAOSBRAIN_MEMOS_PUBLIC_URL": "https://memos.example/"})

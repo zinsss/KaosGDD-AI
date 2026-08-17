@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import os
 from pathlib import Path
 from typing import Mapping
+from urllib.parse import urlsplit
 
 
 class ConfigurationError(ValueError):
@@ -60,6 +61,20 @@ def _boolean(env: Mapping[str, str], name: str, *, default: bool = False) -> boo
     raise ConfigurationError(f"{name} must be true or false")
 
 
+def _internal_http_base_url(value: str, name: str) -> str:
+    parsed = urlsplit(value)
+    if parsed.scheme != "http" or not parsed.hostname:
+        raise ConfigurationError(f"{name} must be an internal http URL")
+    if parsed.username or parsed.password:
+        raise ConfigurationError(f"{name} must not include credentials")
+    if parsed.query or parsed.fragment or parsed.path not in {"", "/"}:
+        raise ConfigurationError(f"{name} must be a base URL without path, query, or fragment")
+    hostname = parsed.hostname.lower().rstrip(".")
+    if hostname == "kaosgdd.net" or hostname.endswith(".kaosgdd.net"):
+        raise ConfigurationError(f"{name} must not point at a public KaosGDD route")
+    return value.rstrip("/")
+
+
 @dataclass(frozen=True)
 class Settings:
     token: str
@@ -111,6 +126,11 @@ class Settings:
         governor_tools_base_url = source.get("KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL", "").strip()
         if governor_tools_enabled and not governor_tools_base_url:
             raise ConfigurationError("KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL is required when Governor tools are enabled")
+        if governor_tools_enabled:
+            governor_tools_base_url = _internal_http_base_url(
+                governor_tools_base_url,
+                "KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL",
+            )
         kaosai_enabled = _boolean(source, "KAOSAI_ENABLED")
         kaosai_provider = source.get("KAOSAI_PROVIDER", "disabled").strip().lower() or "disabled"
         if not kaosai_enabled:

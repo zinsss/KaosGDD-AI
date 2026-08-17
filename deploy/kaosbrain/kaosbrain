@@ -58,6 +58,39 @@ sed_escape() {
   printf '%s' "$1" | sed -e 's/[\/&]/\\&/g'
 }
 
+validate_internal_http_url() {
+  local name=$1
+  local url=$2
+  local allow_path=${3:-false}
+  [[ "${url}" == http://* ]] || die "${name} must be an internal http URL"
+  local rest=${url#http://}
+  [[ "${rest}" != *"@"* ]] || die "${name} must not include credentials"
+  local hostport=${rest%%/*}
+  [[ -n "${hostport}" ]] || die "${name} must include a host"
+  local path=""
+  if [[ "${rest}" == */* ]]; then
+    path="/${rest#*/}"
+  fi
+  if [[ "${allow_path}" != "true" && -n "${path}" && "${path}" != "/" ]]; then
+    die "${name} must be a base URL without path"
+  fi
+  [[ "${url}" != *"?"* && "${url}" != *"#"* ]] || die "${name} must not include query or fragment"
+
+  local host=${hostport}
+  if [[ "${host}" == \[*\]* ]]; then
+    host=${host#\[}
+    host=${host%%\]*}
+  else
+    host=${host%%:*}
+  fi
+  host=${host%.}
+  case "${host}" in
+    kaosgdd.net|*.kaosgdd.net)
+      die "${name} must not point at a public KaosGDD route"
+      ;;
+  esac
+}
+
 install_service_unit() {
   local unit_path="/etc/systemd/system/${SERVICE_NAME}"
   sudo sed \
@@ -106,11 +139,15 @@ preflight() {
   [[ "${DISCORD_ALLOWED_USER_IDS:-}" != *"123456789012345678"* ]] || die "replace the example Discord user ID"
   if [[ "${KAOSBRAIN_GOVERNOR_TOOLS_ENABLED:-false}" == "true" ]]; then
     [[ -n "${KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL:-}" ]] || die "KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL is required"
+    validate_internal_http_url "KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL" "${KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL}"
     if [[ -z "${GOVERNOR_API_TOKEN:-}" ]]; then
       local governor_token_path
       governor_token_path=$(host_secret_path "${GOVERNOR_API_TOKEN_FILE:-/run/secrets/governor_api_token}")
       [[ -s "${governor_token_path}" ]] || die "missing or empty Governor token file: ${governor_token_path}"
     fi
+  fi
+  if [[ -n "${KAOSBRAIN_GOVERNOR_HEALTH_URL:-}" ]]; then
+    validate_internal_http_url "KAOSBRAIN_GOVERNOR_HEALTH_URL" "${KAOSBRAIN_GOVERNOR_HEALTH_URL}" true
   fi
   if [[ "${KAOSAI_ENABLED:-false}" == "true" ]]; then
     [[ "${KAOSAI_PROVIDER:-}" == "openclaw" ]] || die "KAOSAI_PROVIDER must be openclaw when KAOSAI_ENABLED=true"
