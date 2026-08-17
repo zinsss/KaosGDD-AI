@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 import logging
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -159,6 +160,9 @@ class BrainBot(discord.Client):
         request = parse_request(self._strip_mention(message))
         if request is None:
             return
+        if request.route is Route.CHAT and request.text.strip().lower().startswith("ai:"):
+            await self._answer_with_kaosai_diagnostic(message, request.text)
+            return
         task_update = (
             parse_task_due_update(request.text, today=message.created_at.astimezone(KST).date())
             if request.route is Route.CHAT
@@ -278,6 +282,83 @@ class BrainBot(discord.Client):
             LOGGER.warning("KaosAI plan rejected by Brain Guard: %s", exc)
             return None
         return await self._answer_with_guarded_plan(user_text, guarded)
+
+    async def _answer_with_kaosai_diagnostic(self, message: discord.Message, text: str) -> None:
+        command = text.strip()
+        lower_command = command.lower()
+        if lower_command == "ai:ping":
+            user_text = "ping"
+        elif lower_command.startswith("ai:plan "):
+            user_text = command[len("ai:plan ") :].strip()
+            if not user_text:
+                await message.reply(
+                    "사용법: `ai:plan 할 말`",
+                    mention_author=False,
+                    allowed_mentions=NO_MENTIONS,
+                )
+                return
+        else:
+            await message.reply(
+                "사용법: `ai:ping` 또는 `ai:plan 할 말`",
+                mention_author=False,
+                allowed_mentions=NO_MENTIONS,
+            )
+            return
+        async with message.channel.typing():
+            reply = await self._render_kaosai_diagnostic(user_text, message=message)
+        await message.reply(
+            reply[: self.settings.max_reply_chars],
+            mention_author=False,
+            allowed_mentions=NO_MENTIONS,
+        )
+
+    async def _render_kaosai_diagnostic(self, user_text: str, *, message: discord.Message) -> str:
+        try:
+            plan = await self.kaosai.plan(
+                user_text,
+                context={
+                    "actorId": str(message.author.id),
+                    "channelId": str(message.channel.id),
+                    "today": message.created_at.astimezone(KST).date().isoformat(),
+                },
+            )
+        except KaosAIError as exc:
+            return f"## KaosAI diagnostic\n- planner: failed `{exc}`"
+        if plan is None:
+            return "## KaosAI diagnostic\n- planner: unavailable"
+        lines = [
+            "## KaosAI diagnostic",
+            "- planner: returned plan",
+            "```json",
+            json.dumps(plan, ensure_ascii=False, indent=2, sort_keys=True),
+            "```",
+        ]
+        if str(plan.get("intent") or "").strip() == "clarify":
+            lines.append("- guard: skipped clarify")
+            return "\n".join(lines)
+        try:
+            guarded = adapt_kaosai_plan(
+                plan,
+                BrainGuardContext(
+                    actor_id=int(message.author.id),
+                    idempotency_key=f"discord-diagnostic:{message.id}",
+                    today=message.created_at.astimezone(KST).date(),
+                    default_profile=self.settings.governor_tools_profile,
+                    supplies_collection_id=self.settings.governor_tools_supplies_collection_id,
+                ),
+            )
+        except BrainGuardError as exc:
+            lines.append(f"- guard: rejected `{exc}`")
+            return "\n".join(lines)
+        lines.extend(
+            [
+                f"- guard: accepted `{guarded.kind.value}`",
+                f"- intent: `{guarded.intent}`",
+                f"- confirmationRequired: `{str(guarded.confirmation_required).lower()}`",
+                "- execution: skipped",
+            ]
+        )
+        return "\n".join(lines)
 
     async def _answer_with_guarded_plan(
         self,

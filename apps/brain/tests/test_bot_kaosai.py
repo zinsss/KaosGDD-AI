@@ -114,6 +114,47 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(view)
         self.assertEqual(brain.governor_tools.fetch_calls, [])
 
+    async def test_kaosai_diagnostic_shows_plan_and_guard_without_governor_call(self) -> None:
+        tools = FakeGovernorTools()
+        brain = self.brain(
+            {
+                "intent": "task.create",
+                "scope": "personal",
+                "parameters": {"title": "엄마한테 전화", "dueDate": "2026-08-18"},
+            },
+            governor_tools=tools,
+        )
+
+        reply = await BrainBot._render_kaosai_diagnostic(  # type: ignore[arg-type]
+            brain,
+            "내일까지 엄마한테 전화해야돼",
+            message=fake_message(),
+        )
+
+        self.assertIn("## KaosAI diagnostic", reply)
+        self.assertIn('"intent": "task.create"', reply)
+        self.assertIn("- guard: accepted `governor_proposal`", reply)
+        self.assertIn("- execution: skipped", reply)
+        self.assertEqual(tools.fetch_calls, [])
+        self.assertEqual(tools.task_create_calls, [])
+
+    async def test_kaosai_diagnostic_reports_planner_and_guard_failures(self) -> None:
+        planner_failed = self.brain(None, error=KaosAIError("nope"))
+        reply = await BrainBot._render_kaosai_diagnostic(  # type: ignore[arg-type]
+            planner_failed,
+            "hello",
+            message=fake_message(),
+        )
+        self.assertEqual(reply, "## KaosAI diagnostic\n- planner: failed `nope`")
+
+        guard_rejected = self.brain({"intent": "shell.run", "scope": "personal", "parameters": {"command": "id"}})
+        reply = await BrainBot._render_kaosai_diagnostic(  # type: ignore[arg-type]
+            guard_rejected,
+            "run id",
+            message=fake_message(),
+        )
+        self.assertIn("- guard: rejected `intent_not_allowed`", reply)
+
     async def test_kaosai_readonly_plan_uses_governor_tool_path(self) -> None:
         tools = FakeGovernorTools()
         brain = self.brain({"intent": "today.get", "scope": "personal", "parameters": {}}, governor_tools=tools)

@@ -88,6 +88,14 @@ The OpenClaw planner client uses an OpenAI-compatible chat completions endpoint
 and expects strict JSON plans only; KaosBrain Guard adapts and validates those
 plans before Governor sees them.
 
+KaosAI diagnostics are available in the configured Brain channel and never
+execute or propose writes:
+
+```text
+ai:ping
+ai:plan 내일까지 엄마한테 전화해야돼
+```
+
 Use the same Discord bot token exclusivity rule as every Discord service: never
 run two processes with the same token at the same time.
 
