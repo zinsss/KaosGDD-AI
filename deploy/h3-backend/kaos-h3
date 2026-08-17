@@ -74,32 +74,40 @@ install_state_directories() {
   uid=$(id -u)
   gid=$(id -g)
   if mkdir -p \
-    "${root}/data/kaosgdd-ai/governor/mail" \
-    "${root}/data/kaosgdd-ai/governor/fax" \
-    "${root}/data/kaosgdd-ai/governor/discord-calendar" \
-    "${root}/data/kaosgdd-ai/governor/discord-tasks" \
-    "${root}/data/kaosgdd-ai/governor/discord-supplies" \
-    "${root}/data/kaosgdd-ai/governor/discord-inbox" \
-    "${root}/data/kaosgdd-ai/governor/discord-system" 2>/dev/null; then
+    "${root}/mail" \
+    "${root}/fax" \
+    "${root}/discord-calendar" \
+    "${root}/discord-tasks" \
+    "${root}/discord-supplies" \
+    "${root}/discord-inbox" \
+    "${root}/discord-system" 2>/dev/null; then
     chmod 0770 \
-      "${root}/data/kaosgdd-ai/governor/mail" \
-      "${root}/data/kaosgdd-ai/governor/fax" \
-      "${root}/data/kaosgdd-ai/governor/discord-calendar" \
-      "${root}/data/kaosgdd-ai/governor/discord-tasks" \
-      "${root}/data/kaosgdd-ai/governor/discord-supplies" \
-      "${root}/data/kaosgdd-ai/governor/discord-inbox" \
-      "${root}/data/kaosgdd-ai/governor/discord-system"
+      "${root}/mail" \
+      "${root}/fax" \
+      "${root}/discord-calendar" \
+      "${root}/discord-tasks" \
+      "${root}/discord-supplies" \
+      "${root}/discord-inbox" \
+      "${root}/discord-system"
     return
   fi
   require_command sudo
   sudo install -d -m 0770 -o "${uid}" -g "${gid}" \
-    "${root}/data/kaosgdd-ai/governor/mail" \
-    "${root}/data/kaosgdd-ai/governor/fax" \
-    "${root}/data/kaosgdd-ai/governor/discord-calendar" \
-    "${root}/data/kaosgdd-ai/governor/discord-tasks" \
-    "${root}/data/kaosgdd-ai/governor/discord-supplies" \
-    "${root}/data/kaosgdd-ai/governor/discord-inbox" \
-    "${root}/data/kaosgdd-ai/governor/discord-system"
+    "${root}/mail" \
+    "${root}/fax" \
+    "${root}/discord-calendar" \
+    "${root}/discord-tasks" \
+    "${root}/discord-supplies" \
+    "${root}/discord-inbox" \
+    "${root}/discord-system"
+}
+
+governor_state_root() {
+  if [[ -n "${GOVERNOR_STATE_ROOT:-}" ]]; then
+    printf '%s' "${GOVERNOR_STATE_ROOT}"
+    return
+  fi
+  printf '%s/data/kaosgdd-ai/governor' "${KAOS_ROOT:-/srv/kaos}"
 }
 
 setup() {
@@ -113,7 +121,7 @@ setup() {
     info "Created ${ENV_FILE}"
   fi
   load_env
-  install_state_directories "${KAOS_ROOT:-/srv/kaos}"
+  install_state_directories "$(governor_state_root)"
   for secret in discord_bot_token memos_access_token naver_mail_password paperless_api_token fax_connector_token; do
     [[ -e "$(secret_path "${secret}")" ]] || : > "$(secret_path "${secret}")"
   done

@@ -48,6 +48,13 @@ KaosBrain, KaosAI, or KaosGovernor:
 These services are part of the KaosGDD deployment, but they are not KaosBrain
 or KaosGovernor internals.
 
+The H3 backend deploy therefore uses two roots:
+
+- `GOVERNOR_STATE_ROOT=/srv/kaosgdd/kaosgovernor` for Governor-owned mail,
+  fax, Discord channel, scheduler, audit, and durable operation state.
+- `KAOS_ROOT=/srv/kaos` for ready-made backend service data and config such as
+  Radicale, Memos, Vaultwarden, SFTPGo, Caddy, and cloudflared.
+
 ## Compatibility
 
 Older live installs may still use:
@@ -55,6 +62,7 @@ Older live installs may still use:
 ```text
 /srv/kaos/brain
 /srv/kaos/secrets
+/srv/kaos/data/kaosgdd-ai/governor
 ```
 
 Deployment scripts may keep these paths working while the host is migrated.
@@ -66,4 +74,3 @@ change. A host path migration should be a separate operation with:
 - systemd unit reinstall
 - health check
 - rollback path back to the previous files
-

@@ -530,9 +530,12 @@ service.
 ### H3+
 
 - Use reliable SSD/NVMe for PostgreSQL, Memos, and Radicale.
-- Keep service data under `/srv/kaos/data`, configuration under
-  `/srv/kaos/config`, and deployment definitions under `/srv/kaos/stacks` or the
-  checked-out repository.
+- Keep project-owned KaosGDD runtime state under `/srv/kaosgdd`, especially
+  `/srv/kaosgdd/kaosgovernor`, `/srv/kaosgdd/kaosbrain`, and
+  `/srv/kaosgdd/kaosai`.
+- Keep ready-made service data under `/srv/kaos/data`, configuration under
+  `/srv/kaos/config`, and deployment definitions under `/srv/kaos/stacks` or
+  the checked-out repository.
 - Back up Governor PostgreSQL, Memos SQLite/resources, Radicale collections and
   config, Vaultwarden, SFTPGo metadata/files, edge configuration, and encrypted
   secrets.

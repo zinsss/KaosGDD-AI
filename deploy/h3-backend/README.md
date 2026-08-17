@@ -32,6 +32,16 @@ deploy/h3-backend/.env
 deploy/h3-backend/secrets/discord_bot_token
 ```
 
+Fresh installs keep project-owned Governor state under:
+
+```text
+/srv/kaosgdd/kaosgovernor
+```
+
+Ready-made backend services keep their service-native paths under `/srv/kaos`,
+for example `/srv/kaos/data/radicale`, `/srv/kaos/data/memos`, and
+`/srv/kaos/data/vaultwarden`.
+
 The setup command generates `governor_api_token`. Add
 `memos_access_token` only when Memos search is enabled, and
 `naver_mail_password` only when Naver mail is enabled.
