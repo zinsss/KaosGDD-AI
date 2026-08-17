@@ -1,17 +1,28 @@
 # KaosBrain
 
-KaosBrain is the lightweight personal language interface for KaosGDD.
+KaosBrain is the lightweight personal language interface and guard for
+KaosGDD.
 
-It intentionally bypasses OpenClaw. The service talks to Discord directly, calls
-Ollama directly, and leaves authoritative state changes to KaosGovernor.
+The current production service talks to Discord directly, calls Ollama directly
+for conversational fallback, and leaves authoritative state changes to
+KaosGovernor. The next architecture introduces KaosAI as a planner slot:
+
+```text
+KaosAI      = OpenClaw/ChatGPT Pro planner
+KaosBrain   = adapter and deterministic guard
+KaosGovernor = authoritative tools, confirmations, and audit
+```
+
+See [KaosAI, KaosBrain, and KaosGovernor](../../docs/architecture/kaosai-brain-governor.md).
 
 ## Authority Boundary
 
 - KaosBrain may answer conversationally.
-- KaosBrain may classify intent and draft text.
+- KaosBrain may classify intent, adapt KaosAI plans, and draft text.
 - KaosBrain must not directly own calendars, tasks, memos, documents, mail, fax,
   infrastructure, or databases.
 - Durable reads and writes should go through narrow KaosGovernor APIs.
+- KaosAI must not receive Governor credentials or call Governor tools directly.
 
 ## Current Slice
 
@@ -20,6 +31,7 @@ Ollama directly, and leaves authoritative state changes to KaosGovernor.
 - Direct Ollama `/api/chat` calls.
 - Fast chat model and automatic deep model routing.
 - `deep:`, `think:`, `깊게:`, and `생각:` prefixes route to the deep model.
+- KaosAI plan contract and deterministic Brain Guard skeleton.
 - Read-only KaosGovernor tool calls for today, active tasks, Memos search, and
   Paperless document search.
 - Confirmed KaosGovernor task due-date updates from narrow natural-language
