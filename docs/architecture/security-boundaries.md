@@ -18,20 +18,22 @@ The model may propose an operation. It may not authorize itself or bypass Govern
 Allowed:
 
 - local model inference
-- Discord channel handling through OpenClaw
-- approved KaosGovernor MCP tools
+- Discord channel handling through the KaosBrain adapter
+- approved narrow KaosGovernor tool APIs
 - short-lived conversational context
 
 Denied:
 
 - production SSH credentials
 - Docker socket
-- unrestricted shell or elevated OpenClaw tools
+- unrestricted shell or elevated agent tools
 - direct PostgreSQL access
 - direct Radicale, Memos, Paperless, or HylaFAX credentials
 - production filesystem mounts
 
-OpenClaw group/guild and user access must be allowlisted. Only the KaosGovernor MCP server and explicitly required messaging tools should be visible to the agent.
+Discord guild, channel, and user access must be allowlisted. If KaosAI/OpenClaw
+is enabled, it remains behind KaosBrain Guard and must not receive Governor
+credentials or direct backend credentials.
 
 ## Family AI session on H4
 

@@ -1,7 +1,7 @@
 # KaosGovernor Discord transport
 
-This deterministic bot is separate from the KaosBrain/OpenClaw Discord
-integration. It contains no AI or domain decisions.
+This deterministic bot is separate from the KaosBrain Discord adapter. It
+contains no AI or model-driven domain decisions.
 
 The preparation build exposes `/status`, `/confirmation-test`, `/fax-send`,
 `/mail-organizer-now`, `/mail-organizer-schedule`, `/health`, and `/ready`.
