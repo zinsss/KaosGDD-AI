@@ -111,6 +111,7 @@ class MemosServiceTests(unittest.TestCase):
 
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].memo.name, "memos/42")
+        self.assertEqual(results[0].memo.title, "Thermal printer setup and receipt width notes")
         self.assertIn("Thermal printer", results[0].snippet)
         request, timeout = requests[0]
         parsed = urllib.parse.urlsplit(request.full_url)
@@ -125,6 +126,17 @@ class MemosServiceTests(unittest.TestCase):
         self.assertIn('tag in ["server"]', query["filter"][0])
         self.assertEqual(request.get_header("Authorization"), "Bearer secret-personal-access-token")
         self.assertEqual(service.status()["lastResultCount"], 1)
+
+    def test_search_result_dict_includes_title_but_not_content(self) -> None:
+        memo = MemosService(
+            config(),
+            lambda *_args, **_kwargs: FakeResponse({"memos": [{"name": "memos/42", "content": "# Rustdesk\nUse Tailscale.", "tags": ["server"]}]}),
+        ).search("rustdesk", limit=5)[0]
+
+        payload = memo.as_dict()
+        self.assertEqual(payload["title"], "Rustdesk")
+        self.assertEqual(payload["tags"], ["server"])
+        self.assertNotIn("content", payload)
 
     def test_search_splits_multi_word_query_into_individual_terms(self) -> None:
         requests = []

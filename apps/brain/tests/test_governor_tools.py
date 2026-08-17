@@ -129,6 +129,17 @@ class GovernorToolRenderingTests(unittest.TestCase):
         self.assertEqual(memo_option_label(item), "Training note")
         self.assertEqual(memo_option_description(item), "#education, #work")
 
+    def test_memo_dropdown_prefers_search_payload_title(self) -> None:
+        item = {
+            "name": "memos/abc",
+            "title": "Online training ID/PW",
+            "snippet": "matched body text without the heading",
+            "tags": ["education", "work"],
+        }
+
+        self.assertEqual(memo_option_label(item), "Online training ID/PW")
+        self.assertEqual(memo_option_description(item), "#education, #work")
+
     def test_render_opened_memo_uses_original_markdown(self) -> None:
         content = render_memo_opened(
             "training",

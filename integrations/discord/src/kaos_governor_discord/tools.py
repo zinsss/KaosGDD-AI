@@ -250,21 +250,13 @@ class BrainToolServer:
         tags = request.query.getall("tag", [])
         limit = _limit(request, default=5)
         try:
-            results = await asyncio.to_thread(self._memos.search, query, tags or None, limit)
+            page = await asyncio.to_thread(self._memos.search_page, query, tags or None, limit)
         except (ValueError, MemosError) as exc:
             return _memos_error(exc)
         except Exception:
             LOGGER.exception("Unexpected Brain Memos search failure")
             return web.json_response({"error": "internal_error"}, status=500)
-        return web.json_response(
-            {
-                "query": query,
-                "tags": tags,
-                "count": len(results),
-                "results": [result.as_dict() for result in results],
-                "source": "memos-live",
-            }
-        )
+        return web.json_response({**page.as_dict(), "source": "memos-live"})
 
     async def _get_memo(self, request: web.Request) -> web.Response:
         if not self._memos.config.enabled:

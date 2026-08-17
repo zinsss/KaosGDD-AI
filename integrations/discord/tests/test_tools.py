@@ -6,7 +6,7 @@ import unittest
 
 from aiohttp.test_utils import TestClient, TestServer
 from kaos_governor.documents import PaperlessSearchPage, PaperlessSearchResult
-from kaos_governor.memos import Memo, MemoSearchResult
+from kaos_governor.memos import Memo, MemoSearchPage, MemoSearchResult
 from kaos_governor_discord.tools import BrainToolServer
 
 
@@ -135,6 +135,10 @@ class FakeMemos:
             return [MemoSearchResult(memo, "Search snippet"), MemoSearchResult(other, "Other snippet")]
         return [MemoSearchResult(memo, "Search snippet")]
 
+    def search_page(self, query, tags, limit):
+        results = tuple(self.search(query, tags, limit))
+        return MemoSearchPage(query, tuple(tags or ()), results, 13, 213)
+
     def get(self, name):
         self.get_calls.append(name)
         return Memo(name, "Full memo body", ("server",), "created", "updated", "PRIVATE", False)
@@ -255,7 +259,10 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 200)
         payload = await response.json()
         self.assertEqual(payload["results"][0]["name"], "memos/42")
+        self.assertEqual(payload["results"][0]["title"], "Secret body")
         self.assertNotIn("content", payload["results"][0])
+        self.assertEqual(payload["resultCount"], 13)
+        self.assertEqual(payload["totalCount"], 213)
         self.assertEqual(self.memos.search_calls, [("rust desk", ["server"], 3)])
 
     async def test_memo_get_returns_full_content(self) -> None:

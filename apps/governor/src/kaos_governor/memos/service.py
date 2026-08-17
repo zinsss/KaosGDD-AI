@@ -112,6 +112,14 @@ class Memo:
     visibility: str
     pinned: bool
 
+    @property
+    def title(self) -> str:
+        for raw in self.content.splitlines():
+            title = raw.strip().lstrip("#").strip()
+            if title:
+                return title
+        return self.name
+
     @classmethod
     def from_payload(cls, payload: Mapping[str, object]) -> "Memo":
         name = str(payload.get("name") or "")
@@ -132,6 +140,7 @@ class Memo:
     def as_dict(self, *, include_content: bool = True) -> dict[str, object]:
         value: dict[str, object] = {
             "name": self.name,
+            "title": self.title,
             "tags": list(self.tags),
             "createTime": self.create_time,
             "updateTime": self.update_time,
