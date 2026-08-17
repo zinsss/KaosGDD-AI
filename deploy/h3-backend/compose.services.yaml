@@ -112,7 +112,7 @@ services:
     restart: unless-stopped
     profiles: ["family-transition"]
     env_file:
-      - path: ${KAOS_ROOT:-/srv/kaos}/secrets/kaosgdd-gov.env
+      - path: ${KAOS_ROOT:-/srv/kaos}/secrets/kaosgovernor-legacy-database.env
         format: raw
     volumes:
       - ${KAOS_ROOT:-/srv/kaos}/data/kaosgdd-gov/postgres:/var/lib/postgresql/data
