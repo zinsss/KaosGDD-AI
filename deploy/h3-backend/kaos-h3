@@ -272,6 +272,12 @@ services_preflight() {
   if grep -Eq 'proxy_pass[[:space:]]+http://[^;]*/?api/supplies|proxy_pass[[:space:]]+http://kaosgovernor-legacy-api' "${root}/config/family-portal/nginx.conf"; then
     die "family portal must not proxy supplies API routes"
   fi
+  if ! grep -q 'location \^~ /api/supplies' "${root}/config/family-portal/nginx.conf"; then
+    die "family portal must explicitly close /api/supplies"
+  fi
+  if ! grep -q 'location \^~ /embed/agenda-supplies' "${root}/config/family-portal/nginx.conf"; then
+    die "family portal must explicitly close /embed/agenda-supplies"
+  fi
   "${SERVICES_COMPOSE[@]}" config --quiet
   info "Migrated service preflight passed."
 }
