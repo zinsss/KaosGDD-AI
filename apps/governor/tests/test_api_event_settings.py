@@ -71,7 +71,7 @@ class EventPresetApiTests(unittest.TestCase):
                 return {"sync": {"ok": True}}
 
             def sync_custom_events(self) -> dict[str, object]:
-                return {"ok": True, "sync": {"lastError": "", "lastResult": {"total": 2}}}
+                return {"ok": True, "total": 2, "unchanged": 2}
 
         with (
             patch.object(api, "_read_setting", return_value=({"marketDaysEnabled": True, "claimDayEnabled": False}, 1)),
@@ -79,7 +79,7 @@ class EventPresetApiTests(unittest.TestCase):
         ):
             payload = api.sync_custom_events()
 
-        self.assertEqual(payload["sync"], {"lastError": "", "lastResult": {"total": 2}})
+        self.assertEqual(payload["sync"], {"ok": True, "total": 2, "unchanged": 2})
         self.assertEqual(mirrored, [{"marketDaysEnabled": True, "claimDayEnabled": False}])
 
 
