@@ -3,6 +3,7 @@
 from .paperless import (
     DocumentIntakeError,
     PaperlessConfig,
+    PaperlessDocument,
     PaperlessDocumentService,
     PaperlessResult,
     PaperlessSearchPage,
@@ -12,6 +13,7 @@ from .paperless import (
 __all__ = (
     "DocumentIntakeError",
     "PaperlessConfig",
+    "PaperlessDocument",
     "PaperlessDocumentService",
     "PaperlessResult",
     "PaperlessSearchPage",

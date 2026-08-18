@@ -104,6 +104,15 @@ class PendingMemoEdit:
     new_content: str
 
 
+@dataclass(frozen=True)
+class PendingDocumentMetadata:
+    document_id: int
+    old_title: str
+    title: str
+    tags: tuple[str, ...]
+    payload: dict[str, Any]
+
+
 class BrainToolServer:
     def __init__(
         self,
@@ -136,6 +145,7 @@ class BrainToolServer:
         self._pending_memo_creates: dict[str, PendingMemoCreate] = {}
         self._pending_memo_deletes: dict[str, PendingMemoDelete] = {}
         self._pending_memo_edits: dict[str, PendingMemoEdit] = {}
+        self._pending_document_metadata: dict[str, PendingDocumentMetadata] = {}
         self._runner: web.AppRunner | None = None
 
     def application(self) -> web.Application:
@@ -151,6 +161,7 @@ class BrainToolServer:
         app.router.add_post("/tools/memos/delete/proposals", self._propose_memo_delete)
         app.router.add_get("/tools/documents/search", self._search_documents)
         app.router.add_get("/tools/documents/{document_id}", self._get_document)
+        app.router.add_post("/tools/documents/{document_id}/metadata/proposals", self._propose_document_metadata)
         app.router.add_post("/tools/tasks/action/proposals", self._propose_task_action)
         app.router.add_post("/tools/tasks/edit/proposals", self._propose_task_edit)
         app.router.add_post("/tools/tasks/create/proposals", self._propose_task_create)
@@ -291,6 +302,71 @@ class BrainToolServer:
             LOGGER.exception("Unexpected Brain document fetch failure")
             return web.json_response({"error": "internal_error"}, status=500)
         return web.json_response({"document": document.as_dict(), "source": "paperless-live"})
+
+    async def _propose_document_metadata(self, request: web.Request) -> web.Response:
+        try:
+            body = await request.json()
+        except ValueError:
+            return web.json_response({"error": "invalid_json"}, status=400)
+        if not isinstance(body, Mapping):
+            return web.json_response({"error": "invalid_json"}, status=400)
+        actor_id = str(body.get("actorId") or "").strip()
+        idempotency_key = str(body.get("idempotencyKey") or "").strip()
+        title = " ".join(str(body.get("title") or "").split())
+        tags = _normalized_tags(body.get("tags") or [])
+        if not actor_id or not idempotency_key or not title:
+            return web.json_response({"error": "document_metadata_missing_required_field"}, status=400)
+        try:
+            proposal_payload = await asyncio.to_thread(
+                self._paperless.metadata_proposal,
+                request.match_info["document_id"],
+                title=title,
+                tags=tags,
+            )
+            proposal = proposal_payload["proposal"]
+            actor = Actor("user", actor_id, "personal")
+            operation, _created = self._durable.start_operation(
+                OperationRequest(
+                    actor=actor,
+                    idempotency_key=idempotency_key,
+                    tool_name="documents",
+                    operation_type="update_metadata",
+                    parameters={
+                        "documentId": int(proposal["id"]),
+                        "oldTitle": str(proposal["oldTitle"]),
+                        "title": str(proposal["title"]),
+                        "tags": list(proposal["tags"]),
+                    },
+                    requires_confirmation=True,
+                )
+            )
+            confirmation = self._durable.create_confirmation(operation.operation_id, ttl=timedelta(minutes=10))
+        except DurableGovernorError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+        except DocumentIntakeError as exc:
+            return _document_error(exc)
+        pending = PendingDocumentMetadata(
+            document_id=int(proposal["id"]),
+            old_title=str(proposal["oldTitle"]),
+            title=str(proposal["title"]),
+            tags=tuple(str(tag) for tag in proposal["tags"]),
+            payload={
+                "documentId": int(proposal["id"]),
+                "title": str(proposal["title"]),
+                "tags": tuple(str(tag) for tag in proposal["tags"]),
+            },
+        )
+        self._pending_document_metadata[operation.operation_id] = pending
+        return web.json_response(
+            {
+                "operationId": operation.operation_id,
+                "confirmationId": confirmation.confirmation_id,
+                "expiresAt": confirmation.expires_at.isoformat(),
+                "document": _pending_document_metadata_payload(pending),
+                "source": "paperless-live",
+            },
+            status=201,
+        )
 
     async def _propose_memo_create(self, request: web.Request) -> web.Response:
         if not self._memos.config.enabled:
@@ -957,6 +1033,7 @@ class BrainToolServer:
         pending_memo_create = self._pending_memo_creates.get(operation.operation_id)
         pending_memo_delete = self._pending_memo_deletes.get(operation.operation_id)
         pending_memo_edit = self._pending_memo_edits.get(operation.operation_id)
+        pending_document_metadata = self._pending_document_metadata.get(operation.operation_id)
         if (
             pending_update is None
             and pending_create is None
@@ -966,6 +1043,7 @@ class BrainToolServer:
             and pending_memo_create is None
             and pending_memo_delete is None
             and pending_memo_edit is None
+            and pending_document_metadata is None
         ):
             return web.json_response({"error": "operation_payload_not_found"}, status=410)
         try:
@@ -1026,6 +1104,15 @@ class BrainToolServer:
                 )
                 result_uid = str(result.get("uid") or "")
                 event = {**_pending_event_create_payload(pending_event_create), "uid": result_uid}
+            elif pending_document_metadata is not None:
+                document = await asyncio.to_thread(
+                    self._paperless.update_metadata,
+                    pending_document_metadata.document_id,
+                    title=pending_document_metadata.title,
+                    tags=pending_document_metadata.tags,
+                )
+                result_uid = str(document.document_id)
+                document_payload = _completed_document_metadata_payload(pending_document_metadata, document.as_dict())
             else:
                 if pending_memo_create is not None:
                     memo = await asyncio.to_thread(self._memos.create, pending_memo_create.content)
@@ -1041,7 +1128,12 @@ class BrainToolServer:
                     result_uid = pending_memo_delete.name
                     memo_payload = _pending_memo_delete_payload(pending_memo_delete)
             self._durable.complete_operation(operation.operation_id, result={"uid": result_uid})
-            if pending_memo_create is None and pending_memo_delete is None and pending_memo_edit is None:
+            if (
+                pending_memo_create is None
+                and pending_memo_delete is None
+                and pending_memo_edit is None
+                and pending_document_metadata is None
+            ):
                 await self._refresh_calendar_surfaces()
         except DurableGovernorError as exc:
             return web.json_response({"error": str(exc)}, status=400)
@@ -1051,6 +1143,9 @@ class BrainToolServer:
         except (ValueError, MemosError) as exc:
             self._durable.fail_operation(operation.operation_id, error_code=str(exc))
             return _memos_error(exc)
+        except DocumentIntakeError as exc:
+            self._durable.fail_operation(operation.operation_id, error_code=exc.code)
+            return _document_error(exc)
         self._pending_task_due_updates.pop(operation.operation_id, None)
         self._pending_task_creates.pop(operation.operation_id, None)
         self._pending_task_actions.pop(operation.operation_id, None)
@@ -1059,16 +1154,20 @@ class BrainToolServer:
         self._pending_memo_creates.pop(operation.operation_id, None)
         self._pending_memo_deletes.pop(operation.operation_id, None)
         self._pending_memo_edits.pop(operation.operation_id, None)
+        self._pending_document_metadata.pop(operation.operation_id, None)
         response_payload = {
             "operationId": operation.operation_id,
             "confirmationId": confirmation_id,
             "status": "completed",
-            "source": "memos-live"
-            if pending_memo_create is not None or pending_memo_delete is not None or pending_memo_edit is not None
-            else "calendar-adapter-live",
+            "source": _completed_operation_source(
+                memo=pending_memo_create is not None or pending_memo_delete is not None or pending_memo_edit is not None,
+                document=pending_document_metadata is not None,
+            ),
         }
         if pending_memo_create is not None or pending_memo_delete is not None or pending_memo_edit is not None:
             response_payload["memo"] = memo_payload
+        elif pending_document_metadata is not None:
+            response_payload["document"] = document_payload
         elif pending_event_create is not None:
             response_payload["event"] = event
         else:
@@ -1429,6 +1528,34 @@ def _completed_memo_edit_payload(pending: PendingMemoEdit, content: str) -> dict
     return {**_pending_memo_edit_payload(pending), "content": content}
 
 
+def _pending_document_metadata_payload(pending: PendingDocumentMetadata) -> dict[str, object]:
+    return {
+        "id": pending.document_id,
+        "oldTitle": pending.old_title,
+        "title": pending.title,
+        "tags": list(pending.tags),
+        "action": "update_metadata",
+    }
+
+
+def _completed_document_metadata_payload(
+    pending: PendingDocumentMetadata,
+    document: Mapping[str, object],
+) -> dict[str, object]:
+    return {
+        **_pending_document_metadata_payload(pending),
+        "document": dict(document),
+    }
+
+
+def _completed_operation_source(*, memo: bool, document: bool) -> str:
+    if memo:
+        return "memos-live"
+    if document:
+        return "paperless-live"
+    return "calendar-adapter-live"
+
+
 def _profile(request: web.Request) -> str:
     profile = request.query.get("profile", "main").strip().lower() or "main"
     try:
@@ -1465,6 +1592,17 @@ def _limit(request: web.Request, *, default: int) -> int:
     except ValueError as exc:
         raise web.HTTPBadRequest(text='{"error": "invalid_limit"}', content_type="application/json") from exc
     return value
+
+
+def _normalized_tags(values: object) -> tuple[str, ...]:
+    if not isinstance(values, list | tuple):
+        return ()
+    tags: list[str] = []
+    for value in values:
+        tag = " ".join(str(value or "").strip().lstrip("#").split())
+        if tag and tag not in tags:
+            tags.append(tag)
+    return tuple(tags[:25])
 
 
 def _memos_error(error: ValueError | MemosError) -> web.Response:

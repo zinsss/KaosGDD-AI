@@ -123,7 +123,8 @@ class PaperlessDocumentServiceTests(unittest.TestCase):
             return_value=FakeResponse(
                 body=(
                     b'{"id":42,"title":"Clinic bill","created":"2026-08-13",'
-                    b'"original_file_name":"bill.pdf","correspondent":{"name":"Clinic"}}'
+                    b'"original_file_name":"bill.pdf","correspondent":{"name":"Clinic"},'
+                    b'"content":"OCR body","tags":[7,8]}'
                 )
             )
         )
@@ -139,6 +140,52 @@ class PaperlessDocumentServiceTests(unittest.TestCase):
         self.assertEqual(document.title, "Clinic bill")
         self.assertEqual(document.filename, "bill.pdf")
         self.assertEqual(document.correspondent, "Clinic")
+        self.assertEqual(document.content, "OCR body")
+        self.assertEqual(document.tag_ids, (7, 8))
+
+    def test_update_metadata_resolves_tags_and_patches_document(self) -> None:
+        responses = [
+            FakeResponse(body=b'{"results":[{"id":7,"name":"medical"}]}'),
+            FakeResponse(body=b'{"results":[]}'),
+            FakeResponse(body=b'{"id":8,"name":"tax"}'),
+            FakeResponse(
+                body=(
+                    b'{"id":42,"title":"Updated title","created":"2026-08-13",'
+                    b'"original_file_name":"bill.pdf","tags":[7,8],"content":"OCR body"}'
+                )
+            ),
+        ]
+        urlopen = mock.Mock(side_effect=responses)
+        service = PaperlessDocumentService(self.config(), urlopen=urlopen)
+
+        document = service.update_metadata(42, title=" Updated   title ", tags=("medical", "tax", "medical"))
+
+        self.assertEqual(document.title, "Updated title")
+        self.assertEqual(document.tag_ids, (7, 8))
+        methods = [call.args[0].get_method() for call in urlopen.call_args_list]
+        self.assertEqual(methods, ["GET", "GET", "POST", "PATCH"])
+        request = urlopen.call_args_list[-1].args[0]
+        self.assertEqual(request.full_url, "http://paperless:8000/api/documents/42/")
+        self.assertIn(b'"title": "Updated title"', request.data)
+        self.assertIn(b'"tags": [7, 8]', request.data)
+
+    def test_metadata_proposal_reads_document_without_writing(self) -> None:
+        urlopen = mock.Mock(
+            return_value=FakeResponse(
+                body=(
+                    b'{"id":42,"title":"Clinic bill","created":"2026-08-13",'
+                    b'"original_file_name":"bill.pdf","content":"OCR body","tags":[7]}'
+                )
+            )
+        )
+        service = PaperlessDocumentService(self.config(), urlopen=urlopen)
+
+        proposal = service.metadata_proposal(42, title="Updated", tags=("#medical", "tax"))
+
+        self.assertEqual(proposal["proposal"]["oldTitle"], "Clinic bill")
+        self.assertEqual(proposal["proposal"]["title"], "Updated")
+        self.assertEqual(proposal["proposal"]["tags"], ["medical", "tax"])
+        self.assertEqual(urlopen.call_count, 1)
 
     def test_get_document_rejects_invalid_id_before_network(self) -> None:
         urlopen = mock.Mock()

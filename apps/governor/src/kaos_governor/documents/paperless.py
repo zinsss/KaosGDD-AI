@@ -88,6 +88,28 @@ class PaperlessSearchResult:
 
 
 @dataclass(frozen=True)
+class PaperlessDocument:
+    document_id: int
+    title: str
+    created: str
+    filename: str
+    correspondent: str = ""
+    content: str = ""
+    tag_ids: tuple[int, ...] = ()
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "id": self.document_id,
+            "title": self.title,
+            "created": self.created,
+            "filename": self.filename,
+            "correspondent": self.correspondent,
+            "content": self.content,
+            "tagIds": list(self.tag_ids),
+        }
+
+
+@dataclass(frozen=True)
 class PaperlessSearchPage:
     query: str
     results: tuple[PaperlessSearchResult, ...]
@@ -121,7 +143,7 @@ class PaperlessDocumentService:
     def search(self, query: object, *, limit: int = 5) -> list[PaperlessSearchResult]:
         return list(self.search_page(query, limit=limit).results)
 
-    def get(self, document_id: object) -> PaperlessSearchResult:
+    def get(self, document_id: object) -> PaperlessDocument:
         if not self.config.enabled:
             raise DocumentIntakeError("paperless_not_configured")
         normalized_id = normalize_document_id(document_id)
@@ -134,7 +156,67 @@ class PaperlessDocumentService:
             self.last_error = "paperless_request_failed"
             raise DocumentIntakeError(self.last_error) from exc
         self.last_error = ""
-        return paperless_search_result(payload)
+        return paperless_document(payload)
+
+    def update_metadata(
+        self,
+        document_id: object,
+        *,
+        title: str,
+        tags: Sequence[str] = (),
+    ) -> PaperlessDocument:
+        if not self.config.enabled:
+            raise DocumentIntakeError("paperless_not_configured")
+        normalized_id = normalize_document_id(document_id)
+        normalized_title = " ".join(str(title or "").split())
+        if not normalized_title:
+            raise DocumentIntakeError("paperless_title_required")
+        tag_ids = self.ensure_tags(tags) if tags else []
+        payload = {"title": normalized_title, "tags": tag_ids}
+        request = urllib.request.Request(
+            f"{self.config.base_url.rstrip('/')}/api/documents/{normalized_id}/",
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            method="PATCH",
+            headers={
+                "Authorization": f"Token {self.config.api_token}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "User-Agent": self.config.user_agent,
+            },
+        )
+        try:
+            with self._urlopen(request, timeout=self.config.timeout_seconds) as response:
+                body = response.read()
+            if response.status < 200 or response.status >= 300:
+                raise DocumentIntakeError(f"paperless_http_{response.status}")
+        except urllib.error.HTTPError as exc:
+            self.last_error = f"paperless_http_{exc.code}"
+            raise DocumentIntakeError(self.last_error) from exc
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            self.last_error = "paperless_request_failed"
+            raise DocumentIntakeError(self.last_error) from exc
+        self.last_error = ""
+        return paperless_document(decode_payload(body))
+
+    def metadata_proposal(
+        self,
+        document_id: object,
+        *,
+        title: str = "",
+        tags: Sequence[str] = (),
+    ) -> dict[str, object]:
+        document = self.get(document_id)
+        proposed_title = " ".join(str(title or document.title).split())
+        proposed_tags = tuple(clean_tag_name(tag) for tag in tags if clean_tag_name(tag))
+        return {
+            "document": document.as_dict(),
+            "proposal": {
+                "id": document.document_id,
+                "oldTitle": document.title,
+                "title": proposed_title,
+                "tags": list(dict.fromkeys(proposed_tags)),
+            },
+        }
 
     def search_page(self, query: object, *, limit: int = 5) -> PaperlessSearchPage:
         if not self.config.enabled:
@@ -400,6 +482,29 @@ def paperless_search_result(payload: Mapping[str, object]) -> PaperlessSearchRes
         created=str(payload.get("created") or payload.get("created_date") or ""),
         filename=filename,
         correspondent=correspondent_value,
+    )
+
+
+def paperless_document(payload: Mapping[str, object]) -> PaperlessDocument:
+    result = paperless_search_result(payload)
+    raw_tags = payload.get("tags")
+    tag_ids: list[int] = []
+    if isinstance(raw_tags, list):
+        for value in raw_tags:
+            try:
+                tag_id = int(value)
+            except (TypeError, ValueError):
+                continue
+            if tag_id > 0 and tag_id not in tag_ids:
+                tag_ids.append(tag_id)
+    return PaperlessDocument(
+        document_id=result.document_id,
+        title=result.title,
+        created=result.created,
+        filename=result.filename,
+        correspondent=result.correspondent,
+        content=str(payload.get("content") or ""),
+        tag_ids=tuple(tag_ids),
     )
 
 

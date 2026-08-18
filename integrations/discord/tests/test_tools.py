@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import unittest
 
 from aiohttp.test_utils import TestClient, TestServer
-from kaos_governor.documents import PaperlessSearchPage, PaperlessSearchResult
+from kaos_governor.documents import PaperlessDocument, PaperlessSearchPage, PaperlessSearchResult
 from kaos_governor.memos import Memo, MemoSearchPage, MemoSearchResult
 from kaos_governor_discord.tools import BrainToolServer
 
@@ -159,6 +159,7 @@ class FakePaperless:
     def __init__(self) -> None:
         self.search_calls = []
         self.get_calls = []
+        self.update_calls = []
 
     def search_page(self, query, *, limit):
         self.search_calls.append((query, limit))
@@ -171,7 +172,39 @@ class FakePaperless:
 
     def get(self, document_id):
         self.get_calls.append(document_id)
-        return PaperlessSearchResult(42, "Rustdesk setup detail", "2026-08-14", "rustdesk.pdf", "Clinic")
+        return PaperlessDocument(
+            42,
+            "Rustdesk setup detail",
+            "2026-08-14",
+            "rustdesk.pdf",
+            "Clinic",
+            "Full OCR body",
+            (7,),
+        )
+
+    def metadata_proposal(self, document_id, *, title="", tags=()):
+        document = self.get(document_id)
+        return {
+            "document": document.as_dict(),
+            "proposal": {
+                "id": document.document_id,
+                "oldTitle": document.title,
+                "title": title or document.title,
+                "tags": list(tags),
+            },
+        }
+
+    def update_metadata(self, document_id, *, title, tags=()):
+        self.update_calls.append((document_id, title, tuple(tags)))
+        return PaperlessDocument(
+            int(document_id),
+            title,
+            "2026-08-14",
+            "rustdesk.pdf",
+            "Clinic",
+            "Full OCR body",
+            (8, 9),
+        )
 
 
 class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
@@ -565,7 +598,80 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["source"], "paperless-live")
         self.assertEqual(payload["document"]["id"], 42)
         self.assertEqual(payload["document"]["title"], "Rustdesk setup detail")
+        self.assertEqual(payload["document"]["content"], "Full OCR body")
+        self.assertEqual(payload["document"]["tagIds"], [7])
         self.assertEqual(self.paperless.get_calls, ["42"])
+
+    async def test_document_metadata_proposal_requires_confirmation_before_write(self) -> None:
+        response = await self.client.post(
+            "/tools/documents/42/metadata/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "document-metadata-1",
+                "title": "Rustdesk Settings",
+                "tags": ["server", "#rustdesk", "server"],
+            },
+        )
+
+        self.assertEqual(response.status, 201)
+        payload = await response.json()
+        self.assertTrue(payload["confirmationId"].startswith("conf_"))
+        self.assertEqual(payload["source"], "paperless-live")
+        self.assertEqual(payload["document"]["oldTitle"], "Rustdesk setup detail")
+        self.assertEqual(payload["document"]["title"], "Rustdesk Settings")
+        self.assertEqual(payload["document"]["tags"], ["server", "rustdesk"])
+        self.assertEqual(self.paperless.update_calls, [])
+
+    async def test_document_metadata_approval_updates_paperless(self) -> None:
+        proposal = await self.client.post(
+            "/tools/documents/42/metadata/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "document-metadata-2",
+                "title": "Rustdesk Settings",
+                "tags": ["server", "rustdesk"],
+            },
+        )
+        confirmation_id = (await proposal.json())["confirmationId"]
+
+        response = await self.client.post(
+            f"/tools/confirmations/{confirmation_id}/approve",
+            headers=self.headers(),
+            json={"actorId": "994579996960104529"},
+        )
+
+        self.assertEqual(response.status, 200)
+        payload = await response.json()
+        self.assertEqual(payload["status"], "completed")
+        self.assertEqual(payload["source"], "paperless-live")
+        self.assertEqual(payload["document"]["title"], "Rustdesk Settings")
+        self.assertEqual(self.paperless.update_calls, [(42, "Rustdesk Settings", ("server", "rustdesk"))])
+        self.assertEqual(self.calendar_refresh_count, 0)
+
+    async def test_document_metadata_approval_rejects_wrong_actor(self) -> None:
+        proposal = await self.client.post(
+            "/tools/documents/42/metadata/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "document-metadata-3",
+                "title": "Rustdesk Settings",
+                "tags": ["server"],
+            },
+        )
+        confirmation_id = (await proposal.json())["confirmationId"]
+
+        response = await self.client.post(
+            f"/tools/confirmations/{confirmation_id}/approve",
+            headers=self.headers(),
+            json={"actorId": "111"},
+        )
+
+        self.assertEqual(response.status, 400)
+        self.assertEqual((await response.json())["error"], "confirmation_actor_mismatch")
+        self.assertEqual(self.paperless.update_calls, [])
 
     async def test_task_due_update_proposal_requires_confirmation_before_write(self) -> None:
         response = await self.client.post(
