@@ -153,6 +153,44 @@ services:
     networks:
       - backend
 
+  governor-api:
+    build:
+      context: ../..
+      dockerfile: integrations/discord/Dockerfile
+      target: runtime
+    image: kaosgdd-ai-governor-api:0.1.0
+    pull_policy: never
+    container_name: governor-api
+    restart: unless-stopped
+    profiles: ["family-transition"]
+    depends_on:
+      kaosgovernor-legacy-database:
+        condition: service_healthy
+    env_file:
+      - path: ${KAOS_ROOT:-/srv/kaos}/secrets/kaosgovernor-legacy-database.env
+        format: raw
+    environment:
+      GOVERNOR_API_PORT: "8096"
+      GOVERNOR_DB_HOST: "kaosgovernor-legacy-database"
+      GOVERNOR_DB_PORT: "5432"
+      GOVERNOR_DB_STARTUP_ATTEMPTS: "20"
+      GOVERNOR_DB_STARTUP_DELAY_SECONDS: "1.5"
+    ports:
+      - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:8096:8096"
+    volumes:
+      - ${KAOS_ROOT:-/srv/kaos}/backups/kaosgdd/ledger:/data/ledger/backups
+    entrypoint: ["kaos-governor-api"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8096/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
   calendar-adapter:
     image: python:3.12-alpine@sha256:6d43704baacd1bfbe7c295d7f13079d5d8104ed33568873133f8fc69980419df
     container_name: calendar-adapter

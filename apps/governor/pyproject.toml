@@ -7,7 +7,10 @@ name = "kaos-governor"
 version = "0.3.0"
 description = "Deterministic KaosGovernor domain services"
 requires-python = ">=3.12"
-dependencies = ["Pillow>=10,<13"]
+dependencies = ["openpyxl>=3.1,<4", "Pillow>=10,<13", "psycopg[binary]>=3.2,<4"]
+
+[project.scripts]
+kaos-governor-api = "kaos_governor.api:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

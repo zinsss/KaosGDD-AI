@@ -380,8 +380,8 @@ case "${command}" in
   services-up) services_preflight; "${SERVICES_COMPOSE[@]}" up --detach memos radicale vaultwarden sftpgo family-portal ;;
   services-down) load_env; "${SERVICES_COMPOSE[@]}" stop memos radicale vaultwarden sftpgo family-portal ;;
   family-preflight) family_transition_preflight ;;
-  family-up) family_transition_preflight; COMPOSE_PROFILES=family-transition "${SERVICES_COMPOSE[@]}" up --detach kaosgovernor-legacy-database calendar-adapter kaosgovernor-legacy-api family-memos-web ;;
-  family-down) load_env; COMPOSE_PROFILES=family-transition "${SERVICES_COMPOSE[@]}" stop kaosgovernor-legacy-api family-memos-web calendar-adapter kaosgovernor-legacy-database ;;
+  family-up) family_transition_preflight; COMPOSE_PROFILES=family-transition "${SERVICES_COMPOSE[@]}" up --detach --build kaosgovernor-legacy-database governor-api calendar-adapter kaosgovernor-legacy-api family-memos-web ;;
+  family-down) load_env; COMPOSE_PROFILES=family-transition "${SERVICES_COMPOSE[@]}" stop governor-api kaosgovernor-legacy-api family-memos-web calendar-adapter kaosgovernor-legacy-database ;;
   edge-preflight) edge_preflight ;;
   edge-config) load_env; "${EDGE_COMPOSE[@]}" config | redact_config ;;
   edge-up) edge_preflight; "${EDGE_COMPOSE[@]}" up --detach caddy cloudflared ;;

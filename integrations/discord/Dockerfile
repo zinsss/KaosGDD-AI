@@ -13,6 +13,8 @@ RUN apt-get update \
     && groupadd --gid 10001 kaos \
     && useradd --uid 10001 --gid kaos --no-create-home --shell /usr/sbin/nologin kaos
 COPY --from=build /install /usr/local
+COPY apps/governor/migrations /usr/local/share/kaos-governor/migrations
+RUN chmod -R a=rX /usr/local/share/kaos-governor/migrations
 USER 10001:10001
 EXPOSE 8097
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8097/health', timeout=3)"]
