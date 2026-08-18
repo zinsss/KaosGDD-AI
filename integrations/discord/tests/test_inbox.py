@@ -14,7 +14,13 @@ from kaos_governor.documents import (
     PaperlessSearchResult,
 )
 from kaos_governor_discord.access import AccessPolicy
-from kaos_governor_discord.inbox import DiscordDocumentInbox, parse_metadata_reply, rejection_message, render_paperless_opened
+from kaos_governor_discord.inbox import (
+    DiscordDocumentInbox,
+    PaperlessSearchView,
+    parse_metadata_reply,
+    rejection_message,
+    render_paperless_opened,
+)
 
 
 class FakePaperless(PaperlessDocumentService):
@@ -205,7 +211,19 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("## clinic", self.channel.sent[0][0])
             self.assertIn("13 results in 213 documents", self.channel.sent[0][0])
             self.assertIn("view", self.channel.sent[0][1])
+            self.assertEqual(self.channel.sent[0][1]["view"]._message.id, 998)
             self.assertEqual(message.replies, [])
+
+    async def test_paperless_search_view_clears_dropdown_on_timeout(self) -> None:
+        page = FakePaperless().search_page("clinic", limit=25)
+        view = PaperlessSearchView(page, AccessPolicy(100, frozenset({200}), frozenset({300})))
+        message = SimpleNamespace(id=123, edit=AsyncMock())
+        view.bind_message(message)
+
+        await view.on_timeout()
+
+        message.edit.assert_awaited_once()
+        self.assertIsNone(message.edit.await_args.kwargs["view"])
 
     async def test_dotdot_message_normalizes_multi_term_paperless_search(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

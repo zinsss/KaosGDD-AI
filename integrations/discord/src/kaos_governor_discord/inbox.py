@@ -317,11 +317,13 @@ class DiscordDocumentInbox:
         )
         if len(page.results) == 1:
             content = render_paperless_opened(page.query, page.results[0], public_url=self.paperless.config.public_url)
-        await message.channel.send(
+        sent = await message.channel.send(
             content,
             view=view,
             allowed_mentions=NO_MENTIONS,
         )
+        if view is not None:
+            view.bind_message(sent)
         self.last_error = ""
 
     async def _handle_metadata_reply(self, message: discord.Message) -> bool:
@@ -627,7 +629,19 @@ class PaperlessSearchView(discord.ui.View):
         self.page = page
         self.policy = policy
         self.public_url = public_url
+        self._message: discord.Message | None = None
         self.add_item(PaperlessSearchSelect(page, public_url=public_url))
+
+    def bind_message(self, message: discord.Message) -> None:
+        self._message = message
+
+    async def on_timeout(self) -> None:
+        if self._message is None:
+            return
+        try:
+            await self._message.edit(view=None, allowed_mentions=NO_MENTIONS)
+        except discord.HTTPException:
+            LOGGER.info("Could not clear expired Paperless search view %s", getattr(self._message, "id", ""))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if self.policy.allows(interaction.guild_id, interaction.channel_id, interaction.user.id):
