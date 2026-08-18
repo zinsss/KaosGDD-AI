@@ -221,18 +221,29 @@ smoke() {
   load_env
   local address=${GOVERNOR_BIND_ADDRESS:-127.0.0.1}
   [[ "${address}" != "0.0.0.0" ]] || address=127.0.0.1
-  local url="http://${address}:${HEALTH_PORT:-8097}/health"
+  local health_url="http://${address}:${HEALTH_PORT:-8097}/health"
+  local ready_url="http://${address}:${HEALTH_PORT:-8097}/ready"
   local attempt
   for attempt in $(seq 1 30); do
-    if curl --fail --silent --show-error "${url}" >/dev/null 2>&1; then
-      curl --fail --silent --show-error "${url}"
+    if curl --fail --silent --show-error "${health_url}" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 1
+  done
+  if ! curl --fail --silent --show-error "${health_url}" >/dev/null 2>&1; then
+    "${COMPOSE[@]}" logs --tail=80 governor-discord >&2 || true
+    die "Governor health endpoint did not become available: ${health_url}"
+  fi
+  for attempt in $(seq 1 60); do
+    if curl --fail --silent --show-error "${ready_url}" >/dev/null 2>&1; then
+      curl --fail --silent --show-error "${ready_url}"
       printf '\n'
       return
     fi
     sleep 1
   done
   "${COMPOSE[@]}" logs --tail=80 governor-discord >&2 || true
-  die "Governor health endpoint did not become available: ${url}"
+  die "Governor ready endpoint did not become ready: ${ready_url}"
 }
 
 backends_preflight() {
@@ -327,7 +338,7 @@ Commands:
   restart            Recreate Governor from current configuration
   status             Show Compose and health status
   logs               Follow Governor logs
-  smoke              Check the local/Tailscale health endpoint
+  smoke              Check local/Tailscale health and Discord readiness
   config             Render the effective Compose configuration
   backends-preflight Validate staged Memos and Radicale data for cutover
   backends-up         Start migrated Memos and Radicale after guarded preflight
