@@ -18,6 +18,7 @@ from kaos_governor_discord.system_status import (
     ServiceProbeResult,
     ServiceRestartConfirmView,
     ServiceStatusView,
+    brain_health_detail,
     check_service,
     default_http_probe,
     check_tcp,
@@ -333,6 +334,28 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(state, "healthy")
         self.assertIn(str(port), detail)
+
+    def test_brain_health_detail_includes_mode_and_models(self) -> None:
+        detail = brain_health_detail(
+            200,
+            json.dumps(
+                {
+                    "discordReady": True,
+                    "chatModel": "gemma3:4b",
+                    "deepModel": "qwen3:8b",
+                    "kaosAI": {"mode": "dry-run"},
+                }
+            ).encode("utf-8"),
+        )
+
+        self.assertIn("HTTP 200", detail)
+        self.assertIn("ready=True", detail)
+        self.assertIn("KaosAI dry-run", detail)
+        self.assertIn("gemma3:4b", detail)
+        self.assertIn("qwen3:8b", detail)
+
+    def test_brain_health_detail_tolerates_non_json(self) -> None:
+        self.assertEqual(brain_health_detail(200, b"ok"), "HTTP 200")
 
 
 if __name__ == "__main__":

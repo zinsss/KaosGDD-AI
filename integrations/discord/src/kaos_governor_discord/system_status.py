@@ -431,7 +431,10 @@ def check_service(
         url = default_http_probe(env, item.key)
     tcp = probe_value(env, item.key, "TCP")
     if url:
-        state, detail = check_http(url, timeout_seconds)
+        if item.key == "kaosbrain":
+            state, detail = check_brain_http(url, timeout_seconds)
+        else:
+            state, detail = check_http(url, timeout_seconds)
         return ServiceProbeResult(item.key, state, checked_at, detail)
     if tcp:
         state, detail = check_tcp(tcp, timeout_seconds)
@@ -453,6 +456,45 @@ def check_http(url: str, timeout_seconds: float) -> tuple[str, str]:
     if 200 <= status < 400 or status in OK_HTTP_STATUSES:
         return "healthy", f"HTTP {status}"
     return "down", f"HTTP {status}"
+
+
+def check_brain_http(url: str, timeout_seconds: float) -> tuple[str, str]:
+    request = urllib.request.Request(url, method="GET", headers={"User-Agent": "KaosGovernor/service-status"})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            status = int(response.status)
+            body = response.read(8192)
+    except urllib.error.HTTPError as exc:
+        status = int(exc.code)
+        body = exc.read(8192)
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        return "down", stable_error(exc)
+    if 200 <= status < 400 or status in OK_HTTP_STATUSES:
+        return "healthy", brain_health_detail(status, body)
+    return "down", f"HTTP {status}"
+
+
+def brain_health_detail(status: int, body: bytes) -> str:
+    detail = f"HTTP {status}"
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return detail
+    if not isinstance(payload, dict):
+        return detail
+    parts = [detail]
+    if "discordReady" in payload:
+        parts.append(f"ready={bool(payload.get('discordReady'))}")
+    kaosai = payload.get("kaosAI")
+    if isinstance(kaosai, dict):
+        mode = str(kaosai.get("mode") or "").strip()
+        if mode:
+            parts.append(f"KaosAI {mode}")
+    chat_model = str(payload.get("chatModel") or "").strip()
+    deep_model = str(payload.get("deepModel") or "").strip()
+    if chat_model or deep_model:
+        parts.append(f"models {chat_model or '?'} / {deep_model or '?'}")
+    return "; ".join(parts)
 
 
 def check_tcp(target: str, timeout_seconds: float) -> tuple[str, str]:
