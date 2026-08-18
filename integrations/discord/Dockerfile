@@ -22,5 +22,6 @@ FROM build AS test
 ENV PYTHONPATH=/install/lib/python3.12/site-packages
 COPY apps/governor/tests /tests/governor
 COPY apps/governor/migrations /tests/governor/migrations
+COPY apps/calendar-adapter /tests/calendar-adapter
 COPY integrations/discord/tests /tests/discord
 CMD ["sh", "-c", "python -m unittest discover -s /tests/governor -v && python -m unittest discover -s /tests/discord -v"]

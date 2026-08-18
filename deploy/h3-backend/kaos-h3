@@ -296,13 +296,14 @@ services_preflight() {
 family_transition_preflight() {
   load_env
   local root=${KAOS_ROOT:-/srv/kaos}
+  local calendar_adapter_root=${CALENDAR_ADAPTER_APP_ROOT:-${REPO_ROOT}/apps/calendar-adapter}
   require_nonempty_file "${root}/secrets/kaosgovernor-legacy-database.env"
   require_nonempty_file "${root}/secrets/kaosgovernor-legacy-api.env"
   require_nonempty_file "${root}/secrets/kaosgdd-adapters.env"
   require_dir "${root}/data/kaosgdd-gov/postgres"
   require_file "${root}/data/kaosgdd-gov/postgres/PG_VERSION"
-  require_dir "${root}/data/calendar-adapter"
-  require_file "${root}/data/calendar-adapter/server.py"
+  require_dir "${calendar_adapter_root}"
+  require_file "${calendar_adapter_root}/server.py"
   COMPOSE_PROFILES=family-transition "${SERVICES_COMPOSE[@]}" config --quiet
   info "Family transition preflight passed."
 }

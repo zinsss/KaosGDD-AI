@@ -166,7 +166,7 @@ services:
     ports:
       - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:8091:8091"
     volumes:
-      - ${KAOS_ROOT:-/srv/kaos}/data/calendar-adapter:/app:ro
+      - ${CALENDAR_ADAPTER_APP_ROOT:-../../apps/calendar-adapter}:/app:ro
     command: ["python", "/app/server.py"]
     security_opt:
       - no-new-privileges:true
