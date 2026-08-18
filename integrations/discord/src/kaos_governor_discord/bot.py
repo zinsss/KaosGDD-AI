@@ -136,6 +136,7 @@ class GovernorBot(discord.Client):
         self.tree = GovernorCommandTree(self, self.policy)
         self._started_at = time.monotonic()
         self._startup_announced = False
+        self._startup_complete = False
         self._mail_task: asyncio.Task | None = None
         self._organizer_task: asyncio.Task | None = None
         self._fax_task: asyncio.Task | None = None
@@ -462,6 +463,7 @@ class GovernorBot(discord.Client):
 
     async def on_ready(self) -> None:
         LOGGER.info("Discord ready as %s (%s)", self.user, self.user.id if self.user else None)
+        self._startup_complete = False
         if self.mail_poller.config.enabled and self._mail_task is None:
             self._mail_task = asyncio.create_task(self._mail_loop(), name="governor-naver-mail")
         if self.mail_organizer.config.enabled and self._organizer_task is None:
@@ -535,6 +537,8 @@ class GovernorBot(discord.Client):
                 )
             except (discord.HTTPException, TypeError):
                 LOGGER.exception("Failed to send startup notification")
+        self._startup_complete = True
+        LOGGER.info("Discord startup surfaces initialized")
 
     async def on_message(self, message: discord.Message) -> None:
         if self.discord_calendar is not None and await self.discord_calendar.handle_message(message):
@@ -589,6 +593,7 @@ class GovernorBot(discord.Client):
     def _health_status(self) -> dict[str, object]:
         return {
             "discordReady": self.is_ready(),
+            "startupComplete": self._startup_complete,
             "guildId": str(self.settings.guild_id),
             "version": __version__,
             "brainTools": {

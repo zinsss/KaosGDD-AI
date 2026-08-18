@@ -50,7 +50,7 @@ class HealthServer:
 
     async def _ready(self, request: web.Request) -> web.Response:
         status = self._status_provider()
-        ready = bool(status["discordReady"])
+        ready = bool(status["discordReady"]) and bool(status.get("startupComplete", True))
         return web.json_response({"status": "ready" if ready else "not-ready", **status}, status=200 if ready else 503)
 
     def _authorized(self, request: web.Request) -> bool:

@@ -44,6 +44,47 @@ class HealthServerToolTests(unittest.IsolatedAsyncioTestCase):
         response = await self.client.get("/health")
         self.assertEqual(response.status, 200)
 
+    async def test_ready_requires_startup_complete_when_reported(self) -> None:
+        server = HealthServer(
+            "127.0.0.1",
+            8097,
+            lambda: {"discordReady": True, "startupComplete": False},
+        )
+        client = TestClient(TestServer(server.application()))
+        await client.start_server()
+        try:
+            response = await client.get("/ready")
+            payload = await response.json()
+        finally:
+            await client.close()
+
+        self.assertEqual(response.status, 503)
+        self.assertEqual(payload["status"], "not-ready")
+
+    async def test_ready_accepts_completed_startup(self) -> None:
+        server = HealthServer(
+            "127.0.0.1",
+            8097,
+            lambda: {"discordReady": True, "startupComplete": True},
+        )
+        client = TestClient(TestServer(server.application()))
+        await client.start_server()
+        try:
+            response = await client.get("/ready")
+            payload = await response.json()
+        finally:
+            await client.close()
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(payload["status"], "ready")
+
+    async def test_ready_defaults_startup_complete_for_older_status_providers(self) -> None:
+        response = await self.client.get("/ready")
+        payload = await response.json()
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(payload["status"], "ready")
+
     async def test_search_requires_the_governor_bearer_token(self) -> None:
         response = await self.client.post("/api/v1/memos/search", json={"query": "printer"})
         self.assertEqual(response.status, 401)
