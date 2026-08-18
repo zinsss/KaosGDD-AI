@@ -147,6 +147,11 @@ class Settings:
         kaosai_dry_run_enabled = _boolean(source, "KAOSAI_DRY_RUN_ENABLED")
         if kaosai_dry_run_enabled and not kaosai_enabled:
             raise ConfigurationError("KAOSAI_ENABLED=true is required when KAOSAI_DRY_RUN_ENABLED=true")
+        kaosai_chat_enabled = _boolean(source, "KAOSAI_CHAT_ENABLED")
+        if kaosai_chat_enabled and not kaosai_enabled:
+            raise ConfigurationError("KAOSAI_ENABLED=true is required when KAOSAI_CHAT_ENABLED=true")
+        if kaosai_chat_enabled and kaosai_dry_run_enabled:
+            raise ConfigurationError("KAOSAI_CHAT_ENABLED and KAOSAI_DRY_RUN_ENABLED cannot both be true")
         max_reply_chars = _positive_int(source.get("KAOSBRAIN_MAX_REPLY_CHARS", "1800"), "KAOSBRAIN_MAX_REPLY_CHARS")
         if max_reply_chars > 1900:
             raise ConfigurationError("KAOSBRAIN_MAX_REPLY_CHARS must be at most 1900")
@@ -164,7 +169,7 @@ class Settings:
             respond_without_mention=_boolean(source, "KAOSBRAIN_RESPOND_WITHOUT_MENTION", default=True),
             auto_route_enabled=_boolean(source, "KAOSBRAIN_AUTO_ROUTE_ENABLED", default=True),
             kaosai_enabled=kaosai_enabled,
-            kaosai_chat_enabled=_boolean(source, "KAOSAI_CHAT_ENABLED"),
+            kaosai_chat_enabled=kaosai_chat_enabled,
             kaosai_dry_run_enabled=kaosai_dry_run_enabled,
             kaosai_provider=kaosai_provider,
             kaosai_base_url=kaosai_base_url,
