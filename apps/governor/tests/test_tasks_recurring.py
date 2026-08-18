@@ -87,6 +87,14 @@ class RecurringTaskSynchronizationTests(unittest.TestCase):
         self.assertEqual(plan.due_date, date(2026, 8, 3))
         self.assertEqual(plan.uid, "KAOSGDD-REPEAT-REPEAT1-20260803")
 
+    def test_future_definition_waits_for_scheduled_date(self) -> None:
+        item = self.definition(next_due_date=date(2026, 8, 10))
+
+        plan = recurring.plan_synchronization(item, [], today=date(2026, 8, 3))
+
+        self.assertEqual(plan.action, "none")
+        self.assertIsNone(plan.due_date)
+
 
 class FakeCalendarAdapter:
     def __init__(self, tasks=None, result=None):
@@ -165,7 +173,7 @@ class RecurringTaskStoreAndServiceTests(unittest.TestCase):
         self.assertEqual(adapter.created, [])
         self.assertEqual(updated.active_uid, uid)
 
-    def test_service_advances_after_completed_active_occurrence(self) -> None:
+    def test_service_waits_until_next_schedule_after_completed_active_occurrence(self) -> None:
         now = datetime(2026, 8, 13, 1, 0, tzinfo=UTC)
         store = recurring.MemoryRecurringTaskStore()
         definition = store.upsert_definition(
@@ -183,9 +191,18 @@ class RecurringTaskStoreAndServiceTests(unittest.TestCase):
         plan = service.synchronize_definition(definition, today=date(2026, 8, 3), now=now)
         updated = store.get_definition("repeat-1")
 
+        self.assertEqual(plan.action, "none")
+        self.assertEqual(adapter.created, [])
+        self.assertEqual(updated.last_completed_uid, "generated-1")
+        self.assertEqual(updated.next_due_date, date(2026, 8, 10))
+        self.assertEqual(updated.active_uid, "")
+        self.assertIsNone(updated.active_due_date)
+
+        plan = service.synchronize_definition(updated, today=date(2026, 8, 10), now=now)
+        updated = store.get_definition("repeat-1")
+
         self.assertEqual(plan.action, "create")
         self.assertEqual(adapter.created[0][1]["dueDate"], "2026-08-10")
-        self.assertEqual(updated.last_completed_uid, "generated-1")
         self.assertEqual(updated.active_due_date, date(2026, 8, 10))
 
     def test_run_once_skips_disabled_definitions(self) -> None:
@@ -218,7 +235,7 @@ class RecurringTaskStoreAndServiceTests(unittest.TestCase):
         ):
             self.assertIn(required, migration)
 
-    def test_completed_occurrence_advances_fixed_schedule(self) -> None:
+    def test_completed_occurrence_waits_for_next_scheduled_date(self) -> None:
         item = self.definition(
             active_uid="generated-1",
             active_collection_id="zin:tasks",
@@ -231,10 +248,11 @@ class RecurringTaskStoreAndServiceTests(unittest.TestCase):
 
         self.assertTrue(plan.clear_active)
         self.assertTrue(plan.active_completed)
-        self.assertEqual(plan.action, "create")
-        self.assertEqual(plan.due_date, date(2026, 8, 10))
+        self.assertEqual(plan.action, "none")
+        self.assertIsNone(plan.due_date)
+        self.assertEqual(plan.next_due_date, date(2026, 8, 10))
 
-    def test_deleted_occurrence_also_advances(self) -> None:
+    def test_deleted_occurrence_also_waits_for_next_scheduled_date(self) -> None:
         item = self.definition(
             active_uid="generated-1",
             active_collection_id="zin:tasks",
@@ -246,6 +264,15 @@ class RecurringTaskStoreAndServiceTests(unittest.TestCase):
 
         self.assertTrue(plan.clear_active)
         self.assertFalse(plan.active_completed)
+        self.assertEqual(plan.action, "none")
+        self.assertIsNone(plan.due_date)
+        self.assertEqual(plan.next_due_date, date(2026, 8, 10))
+
+    def test_cleared_occurrence_creates_when_next_scheduled_date_arrives(self) -> None:
+        item = self.definition(next_due_date=date(2026, 8, 10))
+
+        plan = recurring.plan_synchronization(item, [], today=date(2026, 8, 10))
+
         self.assertEqual(plan.action, "create")
         self.assertEqual(plan.due_date, date(2026, 8, 10))
 

@@ -207,12 +207,23 @@ def plan_synchronization(
         )
         clear_active = True
         active_completed = bool(active)
+        if next_due > today:
+            return RecurringTaskPlan(
+                action="none",
+                clear_active=True,
+                active_completed=active_completed,
+                next_due_date=next_due,
+            )
     else:
         clear_active = False
         active_completed = False
 
+    scheduled_date = item.get("next_due_date") or item["first_due_date"]
+    if scheduled_date > today:
+        return RecurringTaskPlan(action="none")
+
     due_date = date_on_or_after(
-        item.get("next_due_date") or item["first_due_date"],
+        scheduled_date,
         item["frequency"],
         today=today,
         anchor=item["first_due_date"],
@@ -360,8 +371,6 @@ class RecurringTaskService:
     ) -> RecurringTaskPlan:
         tasks = self.calendar_adapter.list_tasks(definition.adapter_profile)
         plan = plan_synchronization(definition.as_planner_mapping(), tasks, today=today)
-        if plan.action == "none":
-            return plan
         if plan.clear_active and plan.next_due_date:
             self.store.clear_active_occurrence(
                 definition.definition_id,
@@ -369,6 +378,8 @@ class RecurringTaskService:
                 next_due_date=plan.next_due_date,
                 now=now,
             )
+        if plan.action == "none":
+            return plan
         if plan.action == "adopt":
             self.store.assign_active_occurrence(
                 definition.definition_id,
