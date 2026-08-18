@@ -127,6 +127,64 @@ class CalendarAdapterServerTests(unittest.TestCase):
             self.assertTrue(deleted["deleted"])
             self.assertEqual(server.list_recurring_tasks("family")["items"], [])
 
+    def test_public_holidays_wrap_family_holidays_for_portal_contract(self) -> None:
+        server = load_server_module()
+        server.list_family_holidays = lambda: {
+            "ok": True,
+            "collection": {"id": "family:calendar"},
+            "items": [
+                {
+                    "uid": "KAOS-HOLIDAY-ABCDEFABCDEFABCDEFABCDEF",
+                    "summary": "광복절",
+                    "startDate": "2026-08-15",
+                    "endDate": "2026-08-15",
+                    "categories": [
+                        "KAOS-GOOGLE-HOLIDAY",
+                        "KAOS-PUBLIC-HOLIDAY",
+                        "KAOS-SYSTEM",
+                    ],
+                }
+            ],
+        }
+
+        payload = server.list_public_holidays()
+
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["collection"], {"id": "family:calendar"})
+        self.assertEqual(payload["items"][0]["title"], "광복절")
+        self.assertTrue(payload["items"][0]["publicHoliday"])
+        self.assertFalse(payload["sync"]["enabled"])
+
+    def test_set_public_holiday_rewrites_holiday_categories(self) -> None:
+        server = load_server_module()
+        calls = []
+        server.list_family_holidays = lambda: {
+            "ok": True,
+            "collection": {"id": "family:calendar"},
+            "items": [
+                {
+                    "uid": "KAOS-HOLIDAY-ABCDEFABCDEFABCDEFABCDEF",
+                    "summary": "어버이날",
+                    "description": "Google Korea Holidays",
+                    "startDate": "2026-05-08",
+                    "endDate": "2026-05-08",
+                    "categories": [
+                        "KAOS-GOOGLE-HOLIDAY",
+                        "KAOS-OBSERVANCE",
+                        "KAOS-SYSTEM",
+                    ],
+                }
+            ],
+        }
+        server.put_family_holiday = lambda payload: calls.append(payload) or {"ok": True}
+
+        result = server.set_public_holiday("KAOS-HOLIDAY-ABCDEFABCDEFABCDEFABCDEF", True)
+
+        self.assertTrue(result["item"]["publicHoliday"])
+        self.assertEqual(calls[0]["title"], "어버이날")
+        self.assertIn("KAOS-PUBLIC-HOLIDAY", calls[0]["categories"])
+        self.assertNotIn("KAOS-OBSERVANCE", calls[0]["categories"])
+
 
 if __name__ == "__main__":
     unittest.main()

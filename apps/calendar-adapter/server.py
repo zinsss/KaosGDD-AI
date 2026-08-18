@@ -1791,6 +1791,9 @@ def delete_task(payload, profile="main"):
 
 
 def item_categories(item):
+    categories = item.get("categories")
+    if isinstance(categories, list):
+        return {str(part or "").strip().upper() for part in categories if str(part or "").strip()}
     return {part.strip().upper() for part in item.get("CATEGORIES", "").split(",") if part.strip()}
 
 
@@ -1876,6 +1879,80 @@ def delete_family_holiday(payload):
         radicale_request(ACCOUNTS["family"], "DELETE", item["href"], "", headers)
         return {"ok": True, "uid": uid, "deleted": True}
     return {"ok": True, "uid": uid, "deleted": False}
+
+
+def public_holiday_item(item):
+    categories = item_categories(item)
+    return {
+        "uid": item.get("uid", ""),
+        "title": item.get("summary") or item.get("title") or "",
+        "startDate": item.get("startDate", ""),
+        "endDate": item.get("endDate") or item.get("startDate", ""),
+        "publicHoliday": PUBLIC_HOLIDAY_CATEGORY in categories,
+        "categories": sorted(categories),
+    }
+
+
+def holiday_sync_status():
+    return {
+        "configured": False,
+        "enabled": False,
+        "running": False,
+        "lastAttemptAt": "",
+        "lastSuccessAt": "",
+        "lastError": "",
+        "lastResult": {},
+    }
+
+
+def list_public_holidays():
+    result = list_family_holidays()
+    return {
+        "ok": True,
+        "collection": result.get("collection", {}),
+        "items": [public_holiday_item(item) for item in result.get("items", [])],
+        "sync": holiday_sync_status(),
+    }
+
+
+def sync_public_holidays():
+    result = list_public_holidays()
+    return {
+        "ok": True,
+        "configured": False,
+        "enabled": False,
+        "created": 0,
+        "updated": 0,
+        "deleted": 0,
+        "items": result.get("items", []),
+        "skipped": "holiday_source_not_configured_in_calendar_adapter",
+    }
+
+
+def set_public_holiday(uid, public_holiday):
+    normalized_uid = str(uid or "").strip().upper()
+    if not re.fullmatch(r"KAOS-HOLIDAY-[A-F0-9]{24}", normalized_uid):
+        raise ValueError("invalid_holiday_uid")
+    result = list_family_holidays()
+    current = next(
+        (item for item in result.get("items", []) if str(item.get("uid") or "").upper() == normalized_uid),
+        None,
+    )
+    if current is None:
+        raise ValueError("holiday_not_found")
+    categories = [SYSTEM_EVENT_CATEGORY, GOOGLE_HOLIDAY_CATEGORY]
+    categories.append(PUBLIC_HOLIDAY_CATEGORY if public_holiday else OBSERVANCE_CATEGORY)
+    put_family_holiday(
+        {
+            "uid": normalized_uid,
+            "title": current.get("summary") or current.get("title"),
+            "memo": current.get("description") or "Google Korea Holidays",
+            "startDate": current.get("startDate"),
+            "endDate": current.get("endDate") or current.get("startDate"),
+            "categories": categories,
+        }
+    )
+    return {"ok": True, "item": {**public_holiday_item(current), "publicHoliday": bool(public_holiday)}}
 
 
 def gdd_generated_collection():
@@ -2358,6 +2435,14 @@ class Handler(BaseHTTPRequestHandler):
             except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
                 json_response(self, 502, {"ok": False, "error": type(exc).__name__})
             return
+        if path == "/api/holidays":
+            try:
+                json_response(self, 200, list_public_holidays())
+            except ValueError as exc:
+                json_response(self, 400, {"ok": False, "error": str(exc)})
+            except (ET.ParseError, urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
+                json_response(self, 502, {"ok": False, "error": type(exc).__name__})
+            return
         if path == "/api/event-presets":
             try:
                 json_response(self, 200, list_event_presets(profile))
@@ -2436,6 +2521,19 @@ class Handler(BaseHTTPRequestHandler):
                 json_response(self, 200, upsert_recurring_task(read_json_request(self), profile, path.rsplit("/", 1)[-1]))
             except ValueError as exc:
                 json_response(self, 400, {"ok": False, "error": str(exc)})
+            except (ET.ParseError, urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
+                json_response(self, 502, {"ok": False, "error": type(exc).__name__})
+            return
+        holiday_match = re.fullmatch(r"/api/holidays/(KAOS-HOLIDAY-[A-Fa-f0-9]{24})", path)
+        if holiday_match:
+            try:
+                payload = read_json_request(self)
+                if not isinstance(payload.get("publicHoliday"), bool):
+                    raise ValueError("public_holiday_boolean_required")
+                json_response(self, 200, set_public_holiday(holiday_match.group(1), payload["publicHoliday"]))
+            except ValueError as exc:
+                status = 404 if str(exc) == "holiday_not_found" else 400
+                json_response(self, status, {"ok": False, "error": str(exc)})
             except (ET.ParseError, urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
                 json_response(self, 502, {"ok": False, "error": type(exc).__name__})
             return
@@ -2534,6 +2632,14 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/recurring-tasks":
             try:
                 json_response(self, 201, upsert_recurring_task(read_json_request(self), profile))
+            except ValueError as exc:
+                json_response(self, 400, {"ok": False, "error": str(exc)})
+            except (ET.ParseError, urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
+                json_response(self, 502, {"ok": False, "error": type(exc).__name__})
+            return
+        if path == "/api/holidays/sync":
+            try:
+                json_response(self, 200, sync_public_holidays())
             except ValueError as exc:
                 json_response(self, 400, {"ok": False, "error": str(exc)})
             except (ET.ParseError, urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
