@@ -238,11 +238,20 @@ class DiscordServiceStatusSurface:
             try:
                 message = await channel.fetch_message(message_id)
                 if _message_matches(message, content=content, embed=embed, view=view):
+                    self._register_view(view, int(message.id))
                     return message
                 return await message.edit(content=content, embed=embed, view=view, allowed_mentions=NO_MENTIONS)
             except (discord.NotFound, discord.HTTPException):
                 LOGGER.info("Service status message %s for %s missing; recreating", message_id, item.key)
         return await channel.send(content=content, embed=embed, view=view, allowed_mentions=NO_MENTIONS)
+
+    def _register_view(self, view: discord.ui.View | None, message_id: int) -> None:
+        if view is None or not hasattr(self.bot, "add_view"):
+            return
+        try:
+            self.bot.add_view(view, message_id=message_id)
+        except ValueError:
+            LOGGER.info("Could not register persistent service status view for message %s", message_id)
 
     async def _pace_message_refresh(self) -> None:
         if self.message_refresh_delay_seconds > 0:

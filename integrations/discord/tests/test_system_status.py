@@ -70,12 +70,16 @@ class FakeBot:
     def __init__(self, channel):
         self.channel = channel
         self.user = SimpleNamespace(id=900)
+        self.registered_views = []
 
     def get_channel(self, channel_id):
         return self.channel
 
     async def fetch_channel(self, channel_id):
         return self.channel
+
+    def add_view(self, view, *, message_id=None):
+        self.registered_views.append((view, message_id))
 
 
 class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
@@ -158,6 +162,42 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(channel.next_id, 710)
             self.assertTrue(all(not message.edits for message in messages))
+
+    async def test_ensure_message_registers_restart_view_for_unchanged_down_message(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            bot = FakeBot(channel)
+            path = Path(temporary) / "status.json"
+            surface = DiscordServiceStatusSurface(
+                bot,  # type: ignore[arg-type]
+                AccessPolicy(100, frozenset({200}), frozenset({300})),
+                channel_id=300,
+                state_path=path,
+                environment={"SERVICE_STATUS_DEFAULT_PROBES_ENABLED": "false"},
+            )
+            surface.message_refresh_delay_seconds = 0
+
+            async def fake_check_services():
+                return {
+                    item.key: ServiceProbeResult(
+                        item.key,
+                        "down" if item.key == "memos" else "unknown",
+                        "09:00",
+                        "connection refused" if item.key == "memos" else "",
+                    )
+                    for item in SERVICES
+                }
+
+            surface.check_services = fake_check_services  # type: ignore[method-assign]
+            await surface.ensure_message()
+            bot.registered_views = []
+
+            await surface.ensure_message()
+
+            memos_message_id = surface.state.message_ids["memos"]  # type: ignore[index]
+            registered_message_ids = {message_id for _view, message_id in bot.registered_views}
+            self.assertIn(memos_message_id, registered_message_ids)
+            self.assertTrue(all(not message.edits for message in channel.messages.values()))
 
     async def test_ensure_message_deletes_legacy_combined_message(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
