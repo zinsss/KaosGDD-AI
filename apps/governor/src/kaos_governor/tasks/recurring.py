@@ -238,6 +238,13 @@ def plan_synchronization(
         today=today,
         anchor=item["first_due_date"],
     )
+    if due_date > today and (creation_policy != "on_completion" or not clear_active or not active_completed):
+        return RecurringTaskPlan(
+            action="none",
+            clear_active=clear_active,
+            active_completed=active_completed,
+            next_due_date=due_date,
+        )
     uid = occurrence_uid(item, due_date)
     if _existing_occurrence(task_items, uid, item["collection_id"]):
         return RecurringTaskPlan(

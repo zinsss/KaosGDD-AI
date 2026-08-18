@@ -114,6 +114,15 @@ class RecurringTaskSynchronizationTests(unittest.TestCase):
         self.assertEqual(plan.action, "none")
         self.assertIsNone(plan.due_date)
 
+    def test_missed_schedule_waits_when_next_due_is_future(self) -> None:
+        item = self.definition(first_due_date=date(2026, 8, 3), next_due_date=date(2026, 8, 3))
+
+        plan = recurring.plan_synchronization(item, [], today=date(2026, 8, 18))
+
+        self.assertEqual(plan.action, "none")
+        self.assertIsNone(plan.due_date)
+        self.assertEqual(plan.next_due_date, date(2026, 8, 24))
+
 
 class FakeCalendarAdapter:
     def __init__(self, tasks=None, result=None):
