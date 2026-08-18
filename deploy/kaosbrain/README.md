@@ -72,6 +72,7 @@ KAOSAI_ENABLED=false
 KAOSAI_PROVIDER=disabled
 KAOSAI_BASE_URL=
 KAOSAI_CHAT_ENABLED=false
+KAOSAI_DRY_RUN_ENABLED=false
 KAOSBRAIN_GOVERNOR_TOOLS_ENABLED=true
 KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL=http://<kaosgovernor-tailscale-ip>:8098
 KAOSBRAIN_GOVERNOR_HEALTH_URL=http://<kaosgovernor-tailscale-ip>:8097/health
@@ -82,6 +83,10 @@ GOVERNOR_API_TOKEN_FILE=/run/secrets/governor_api_token
 Leave `KAOSAI_API_TOKEN_FILE` unset or pointed at a missing placeholder while
 `KAOSAI_ENABLED=false`; the deploy preflight only requires it when KaosAI is
 enabled.
+
+Use `KAOSAI_DRY_RUN_ENABLED=true` only with `KAOSAI_ENABLED=true`. In dry-run
+mode, ordinary Brain chat renders the guarded KaosAI plan preview and skips all
+Governor calls, confirmations, and writes.
 
 After the first install, update from the host checkout with:
 

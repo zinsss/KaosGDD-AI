@@ -65,12 +65,15 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.kaosai_model, "default")
         self.assertEqual(settings.kaosai_api_token, "")
         self.assertFalse(settings.kaosai_chat_enabled)
+        self.assertFalse(settings.kaosai_dry_run_enabled)
 
     def test_kaosai_requires_openclaw_provider_and_base_url_when_enabled(self) -> None:
         with self.assertRaisesRegex(ConfigurationError, "KAOSAI_PROVIDER"):
             Settings.from_env({**BASE_ENV, "KAOSAI_ENABLED": "true", "KAOSAI_PROVIDER": "disabled"})
         with self.assertRaisesRegex(ConfigurationError, "KAOSAI_BASE_URL"):
             Settings.from_env({**BASE_ENV, "KAOSAI_ENABLED": "true", "KAOSAI_PROVIDER": "openclaw"})
+        with self.assertRaisesRegex(ConfigurationError, "KAOSAI_ENABLED"):
+            Settings.from_env({**BASE_ENV, "KAOSAI_DRY_RUN_ENABLED": "true"})
         with self.assertRaisesRegex(ConfigurationError, "KAOSAI_API_TOKEN"):
             Settings.from_env(
                 {
@@ -90,6 +93,7 @@ class SettingsTests(unittest.TestCase):
                 "KAOSAI_MODEL": "gpt-5-thinking",
                 "KAOSAI_API_TOKEN": "gateway-token",
                 "KAOSAI_CHAT_ENABLED": "true",
+                "KAOSAI_DRY_RUN_ENABLED": "true",
                 "KAOSAI_TIMEOUT_SECONDS": "45",
             }
         )
@@ -100,6 +104,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.kaosai_model, "gpt-5-thinking")
         self.assertEqual(settings.kaosai_api_token, "gateway-token")
         self.assertTrue(settings.kaosai_chat_enabled)
+        self.assertTrue(settings.kaosai_dry_run_enabled)
         self.assertEqual(settings.kaosai_timeout_seconds, 45)
 
     def test_governor_tools_require_token_and_base_url(self) -> None:

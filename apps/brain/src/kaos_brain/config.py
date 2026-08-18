@@ -90,6 +90,7 @@ class Settings:
     auto_route_enabled: bool
     kaosai_enabled: bool
     kaosai_chat_enabled: bool
+    kaosai_dry_run_enabled: bool
     kaosai_provider: str
     kaosai_base_url: str
     kaosai_model: str
@@ -143,6 +144,9 @@ class Settings:
         kaosai_api_token = _secret(source, "KAOSAI_API_TOKEN") if kaosai_enabled else ""
         if kaosai_enabled and not kaosai_api_token:
             raise ConfigurationError("KAOSAI_API_TOKEN or KAOSAI_API_TOKEN_FILE is required when KAOSAI_ENABLED=true")
+        kaosai_dry_run_enabled = _boolean(source, "KAOSAI_DRY_RUN_ENABLED")
+        if kaosai_dry_run_enabled and not kaosai_enabled:
+            raise ConfigurationError("KAOSAI_ENABLED=true is required when KAOSAI_DRY_RUN_ENABLED=true")
         max_reply_chars = _positive_int(source.get("KAOSBRAIN_MAX_REPLY_CHARS", "1800"), "KAOSBRAIN_MAX_REPLY_CHARS")
         if max_reply_chars > 1900:
             raise ConfigurationError("KAOSBRAIN_MAX_REPLY_CHARS must be at most 1900")
@@ -161,6 +165,7 @@ class Settings:
             auto_route_enabled=_boolean(source, "KAOSBRAIN_AUTO_ROUTE_ENABLED", default=True),
             kaosai_enabled=kaosai_enabled,
             kaosai_chat_enabled=_boolean(source, "KAOSAI_CHAT_ENABLED"),
+            kaosai_dry_run_enabled=kaosai_dry_run_enabled,
             kaosai_provider=kaosai_provider,
             kaosai_base_url=kaosai_base_url,
             kaosai_model=source.get("KAOSAI_MODEL", "default").strip() or "default",

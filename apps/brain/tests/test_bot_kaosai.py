@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
 import unittest
+from unittest.mock import AsyncMock
 
 from kaos_brain.bot import BrainBot, _kaosai_planner_from_settings
 from kaos_brain.config import Settings
@@ -87,12 +88,32 @@ def fake_message() -> SimpleNamespace:
     )
 
 
+class FakeTyping:
+    async def __aenter__(self):
+        return None
+
+    async def __aexit__(self, exc_type, exc, traceback):
+        return None
+
+
+def fake_discord_message(content: str) -> SimpleNamespace:
+    message = fake_message()
+    message.content = content
+    message.guild = SimpleNamespace(id=100)
+    message.author.bot = False
+    message.mentions = []
+    message.channel.typing = lambda: FakeTyping()
+    message.reply = AsyncMock()
+    return message
+
+
 class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
-    def brain(self, plan, *, governor_tools=None, error: Exception | None = None) -> BrainBot:
+    def brain(self, plan, *, governor_tools=None, error: Exception | None = None, env=None) -> BrainBot:
         bot = object.__new__(BrainBot)
-        bot.settings = Settings.from_env(BASE_ENV)
+        bot.settings = Settings.from_env({**BASE_ENV, **(env or {})})
         bot.kaosai = FakeKaosAI(plan, error)
         bot.governor_tools = governor_tools or FakeGovernorTools()
+        bot._connection = SimpleNamespace(user=None)
         return bot
 
     def test_kaosai_planner_factory_uses_openclaw_only_when_enabled(self) -> None:
@@ -142,6 +163,29 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("```json", reply)
         self.assertEqual(tools.fetch_calls, [])
         self.assertEqual(tools.task_create_calls, [])
+
+    async def test_kaosai_dry_run_intercepts_chat_before_governor_proposal(self) -> None:
+        tools = FakeGovernorTools()
+        brain = self.brain(
+            {
+                "intent": "task.create",
+                "scope": "personal",
+                "parameters": {"title": "엄마한테 전화", "dueDate": "2026-08-18"},
+            },
+            governor_tools=tools,
+            env={"KAOSAI_DRY_RUN_ENABLED": "true"},
+        )
+        message = fake_discord_message("내일까지 엄마한테 전화해야돼")
+
+        await BrainBot.on_message(brain, message)  # type: ignore[arg-type]
+
+        message.reply.assert_awaited_once()
+        reply = message.reply.await_args.args[0]
+        self.assertIn("## KaosAI plan", reply)
+        self.assertIn("intent: task.create", reply)
+        self.assertIn("- execution: skipped", reply)
+        self.assertEqual(tools.task_create_calls, [])
+        self.assertEqual(tools.task_due_calls, [])
 
     async def test_kaosai_diagnostic_reports_planner_and_guard_failures(self) -> None:
         planner_failed = self.brain(None, error=KaosAIError("nope"))

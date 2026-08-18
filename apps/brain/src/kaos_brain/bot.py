@@ -269,6 +269,15 @@ class BrainBot(discord.Client):
         if request.route is Route.CHAT and request.text.strip().lower().startswith("ai:"):
             await self._answer_with_kaosai_diagnostic(message, request.text)
             return
+        if request.route is Route.CHAT and self.settings.kaosai_dry_run_enabled:
+            async with message.channel.typing():
+                reply = await self._render_kaosai_diagnostic(request.text, message=message)
+            await message.reply(
+                reply[: self.settings.max_reply_chars],
+                mention_author=False,
+                allowed_mentions=NO_MENTIONS,
+            )
+            return
         task_update = (
             parse_task_due_update(request.text, today=message.created_at.astimezone(KST).date())
             if request.route is Route.CHAT
