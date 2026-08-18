@@ -9,9 +9,12 @@ from typing import Any, Literal
 
 
 Frequency = Literal["daily", "weekly", "monthly", "yearly"]
+CreationPolicy = Literal["on_schedule", "on_completion"]
 FREQUENCIES = {"daily", "weekly", "monthly", "yearly"}
+CREATION_POLICIES = {"on_schedule", "on_completion"}
 PRIORITIES = {"", "1", "5", "9"}
 DEFAULT_TIME = "10:00"
+DEFAULT_CREATION_POLICY = "on_schedule"
 
 
 class RecurringTaskError(ValueError):
@@ -41,6 +44,7 @@ class RecurringTaskDefinition:
     due_time: time
     priority: str
     frequency: Frequency
+    creation_policy: CreationPolicy = DEFAULT_CREATION_POLICY
     enabled: bool = True
     active_uid: str = ""
     active_collection_id: str = ""
@@ -63,6 +67,7 @@ class RecurringTaskDefinition:
             "due_time": self.due_time,
             "priority": self.priority,
             "frequency": self.frequency,
+            "creation_policy": self.creation_policy,
             "active_uid": self.active_uid or None,
             "active_collection_id": self.active_collection_id or None,
             "active_due_date": self.active_due_date,
@@ -104,6 +109,9 @@ def validate_payload(payload: Mapping[str, Any], *, family_scope: bool = False) 
     priority = clean_text(payload.get("priority"))
     if priority not in PRIORITIES:
         raise RecurringTaskError("invalid_priority")
+    creation_policy = clean_text(payload.get("creationPolicy") or payload.get("creation_policy") or DEFAULT_CREATION_POLICY)
+    if creation_policy not in CREATION_POLICIES:
+        raise RecurringTaskError("invalid_creationPolicy")
     return {
         "owner": "family" if family_scope or payload.get("shareFamily") is True else "zin",
         "title": title,
@@ -112,6 +120,7 @@ def validate_payload(payload: Mapping[str, Any], *, family_scope: bool = False) 
         "due_time": validate_time(payload.get("dueTime")),
         "priority": priority,
         "frequency": frequency,
+        "creation_policy": creation_policy,
         "enabled": payload.get("enabled") is not False,
     }
 
@@ -186,6 +195,7 @@ def plan_synchronization(
 ) -> RecurringTaskPlan:
     task_items = list(tasks)
     item = definition.as_planner_mapping() if isinstance(definition, RecurringTaskDefinition) else dict(definition)
+    creation_policy = clean_text(item.get("creation_policy") or DEFAULT_CREATION_POLICY)
     active_uid = item.get("active_uid")
     if active_uid:
         active = next((task for task in task_items if _task_matches_active(item, task)), None)
@@ -207,7 +217,7 @@ def plan_synchronization(
         )
         clear_active = True
         active_completed = bool(active)
-        if next_due > today:
+        if next_due > today and (creation_policy != "on_completion" or not active_completed):
             return RecurringTaskPlan(
                 action="none",
                 clear_active=True,
@@ -219,7 +229,7 @@ def plan_synchronization(
         active_completed = False
 
     scheduled_date = item.get("next_due_date") or item["first_due_date"]
-    if scheduled_date > today:
+    if scheduled_date > today and (creation_policy != "on_completion" or not clear_active or not active_completed):
         return RecurringTaskPlan(action="none")
 
     due_date = date_on_or_after(

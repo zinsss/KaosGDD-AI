@@ -19,6 +19,24 @@ class RecurringTaskValidationTests(unittest.TestCase):
         self.assertEqual(recurring.validate_payload(payload, family_scope=True)["owner"], "family")
         self.assertEqual(recurring.validate_payload({**payload, "shareFamily": True})["owner"], "family")
         self.assertEqual(recurring.validate_payload(payload)["title"], "Medication review")
+        self.assertEqual(recurring.validate_payload(payload)["creation_policy"], "on_schedule")
+        self.assertEqual(
+            recurring.validate_payload({**payload, "creationPolicy": "on_completion"})["creation_policy"],
+            "on_completion",
+        )
+
+    def test_payload_rejects_unknown_creation_policy(self) -> None:
+        payload = {
+            "title": "Medication review",
+            "firstDueDate": "2026-08-03",
+            "dueTime": "10:00",
+            "priority": "5",
+            "frequency": "weekly",
+            "creationPolicy": "immediately",
+        }
+
+        with self.assertRaisesRegex(recurring.RecurringTaskError, "invalid_creationPolicy"):
+            recurring.validate_payload(payload)
 
     def test_due_time_requires_five_minute_step(self) -> None:
         with self.assertRaisesRegex(recurring.RecurringTaskError, "invalid_dueTime_step"):
@@ -70,6 +88,7 @@ class RecurringTaskSynchronizationTests(unittest.TestCase):
             "due_time": time(10, 0),
             "priority": "",
             "frequency": "weekly",
+            "creation_policy": "on_schedule",
             "active_uid": None,
             "active_collection_id": None,
             "active_due_date": None,
@@ -126,6 +145,7 @@ class RecurringTaskStoreAndServiceTests(unittest.TestCase):
             "due_time": time(10, 0),
             "priority": "",
             "frequency": "weekly",
+            "creation_policy": "on_schedule",
             "next_due_date": date(2026, 8, 3),
         }
         values.update(overrides)
@@ -231,6 +251,7 @@ class RecurringTaskStoreAndServiceTests(unittest.TestCase):
             "governor_recurring_task_definitions_enabled_idx",
             "governor_recurring_task_definitions_owner_idx",
             "governor_recurring_task_definitions_active_uid_idx",
+            "creation_policy text NOT NULL DEFAULT 'on_schedule'",
             "Actual task data remains authoritative in Radicale",
         ):
             self.assertIn(required, migration)
@@ -250,6 +271,39 @@ class RecurringTaskStoreAndServiceTests(unittest.TestCase):
         self.assertTrue(plan.active_completed)
         self.assertEqual(plan.action, "none")
         self.assertIsNone(plan.due_date)
+        self.assertEqual(plan.next_due_date, date(2026, 8, 10))
+
+    def test_completed_occurrence_can_create_next_task_when_policy_is_on_completion(self) -> None:
+        item = self.definition(
+            creation_policy="on_completion",
+            active_uid="generated-1",
+            active_collection_id="zin:tasks",
+            active_due_date=date(2026, 8, 3),
+            next_due_date=None,
+        )
+        tasks = [{"uid": "generated-1", "collection": "zin:tasks", "status": "COMPLETED"}]
+
+        plan = recurring.plan_synchronization(item, tasks, today=date(2026, 8, 3))
+
+        self.assertTrue(plan.clear_active)
+        self.assertTrue(plan.active_completed)
+        self.assertEqual(plan.action, "create")
+        self.assertEqual(plan.due_date, date(2026, 8, 10))
+
+    def test_deleted_occurrence_ignores_on_completion_policy(self) -> None:
+        item = self.definition(
+            creation_policy="on_completion",
+            active_uid="generated-1",
+            active_collection_id="zin:tasks",
+            active_due_date=date(2026, 8, 3),
+            next_due_date=None,
+        )
+
+        plan = recurring.plan_synchronization(item, [], today=date(2026, 8, 3))
+
+        self.assertTrue(plan.clear_active)
+        self.assertFalse(plan.active_completed)
+        self.assertEqual(plan.action, "none")
         self.assertEqual(plan.next_due_date, date(2026, 8, 10))
 
     def test_deleted_occurrence_also_waits_for_next_scheduled_date(self) -> None:
