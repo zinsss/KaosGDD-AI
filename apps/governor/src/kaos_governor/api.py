@@ -10,6 +10,7 @@ from pathlib import Path
 
 from kaos_governor import ledger
 from kaos_governor.database import database_status, wait_for_database_and_migrate
+from kaos_governor.memos import relay as memos_relay
 
 
 PORT = int(os.environ.get("GOVERNOR_API_PORT", "8096"))
@@ -33,6 +34,23 @@ def xlsx_response(handler: BaseHTTPRequestHandler, data: bytes, filename: str) -
     handler.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     handler.send_header("Content-Disposition", f"attachment; filename*=UTF-8''{encoded_name}")
     handler.send_header("Cache-Control", "private, no-store")
+    handler.send_header("X-Content-Type-Options", "nosniff")
+    handler.send_header("Content-Length", str(len(data)))
+    handler.end_headers()
+    handler.wfile.write(data)
+
+
+def bytes_response(
+    handler: BaseHTTPRequestHandler,
+    status: int,
+    content_type: str,
+    data: bytes,
+    *,
+    private: bool = False,
+) -> None:
+    handler.send_response(status)
+    handler.send_header("Content-Type", content_type)
+    handler.send_header("Cache-Control", "private, no-store" if private else "no-store")
     handler.send_header("X-Content-Type-Options", "nosniff")
     handler.send_header("Content-Length", str(len(data)))
     handler.end_headers()
@@ -93,6 +111,21 @@ def ledger_entry_id(path: str) -> str:
     return match.group(1) if match else ""
 
 
+def memos_relay_error(handler: BaseHTTPRequestHandler, exc: memos_relay.MemosRelayError) -> None:
+    json_response(handler, exc.status, {"ok": False, "error": exc.code, "message": exc.message})
+
+
+def proxy_memos(handler: BaseHTTPRequestHandler, method: str) -> None:
+    body = request_body(handler) if method in {"POST", "PATCH"} else None
+    status, content_type, response_body = memos_relay.relay(
+        method,
+        handler.path,
+        handler.headers,
+        body=body,
+    )
+    bytes_response(handler, status, content_type, response_body, private=True)
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args) -> None:
         print(f"{self.address_string()} - {format % args}", flush=True)
@@ -124,10 +157,32 @@ class Handler(BaseHTTPRequestHandler):
                 print(f"Ledger export failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "ledger_export_unavailable"})
             return
+        if parsed.path.startswith("/api/memos/"):
+            try:
+                proxy_memos(self, "GET")
+            except memos_relay.MemosRelayError as exc:
+                memos_relay_error(self, exc)
+            return
         json_response(self, 404, {"error": "not_found"})
 
     def do_POST(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == "/api/memos/bootstrap":
+            try:
+                json_response(self, 200, memos_relay.bootstrap(self.headers, json_request(self)))
+            except memos_relay.MemosRelayError as exc:
+                memos_relay_error(self, exc)
+            except ValueError as exc:
+                json_response(self, 400, {"ok": False, "error": str(exc)})
+            return
+        if parsed.path.startswith("/api/memos/"):
+            try:
+                proxy_memos(self, "POST")
+            except ValueError as exc:
+                json_response(self, 400, {"ok": False, "error": str(exc)})
+            except memos_relay.MemosRelayError as exc:
+                memos_relay_error(self, exc)
+            return
         if parsed.path == "/api/ledger/entries":
             try:
                 require_family_profile(self.headers)
@@ -150,6 +205,18 @@ class Handler(BaseHTTPRequestHandler):
             return
         json_response(self, 404, {"error": "not_found"})
 
+    def do_PATCH(self) -> None:
+        parsed = urllib.parse.urlparse(self.path)
+        if parsed.path.startswith("/api/memos/"):
+            try:
+                proxy_memos(self, "PATCH")
+            except ValueError as exc:
+                json_response(self, 400, {"ok": False, "error": str(exc)})
+            except memos_relay.MemosRelayError as exc:
+                memos_relay_error(self, exc)
+            return
+        json_response(self, 404, {"error": "not_found"})
+
     def do_PUT(self) -> None:
         target_id = ledger_entry_id(urllib.parse.urlparse(self.path).path)
         if target_id:
@@ -165,6 +232,13 @@ class Handler(BaseHTTPRequestHandler):
         json_response(self, 404, {"error": "not_found"})
 
     def do_DELETE(self) -> None:
+        parsed = urllib.parse.urlparse(self.path)
+        if parsed.path.startswith("/api/memos/"):
+            try:
+                proxy_memos(self, "DELETE")
+            except memos_relay.MemosRelayError as exc:
+                memos_relay_error(self, exc)
+            return
         target_id = ledger_entry_id(urllib.parse.urlparse(self.path).path)
         if target_id:
             try:

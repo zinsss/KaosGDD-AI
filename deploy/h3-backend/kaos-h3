@@ -299,6 +299,7 @@ family_transition_preflight() {
   local calendar_adapter_root=${CALENDAR_ADAPTER_APP_ROOT:-${REPO_ROOT}/apps/calendar-adapter}
   require_nonempty_file "${root}/secrets/kaosgovernor-legacy-database.env"
   require_nonempty_file "${root}/secrets/kaosgovernor-legacy-api.env"
+  require_nonempty_file "${root}/secrets/governor-api.env"
   require_nonempty_file "${root}/secrets/kaosgdd-adapters.env"
   require_dir "${root}/data/kaosgdd-gov/postgres"
   require_file "${root}/data/kaosgdd-gov/postgres/PG_VERSION"
