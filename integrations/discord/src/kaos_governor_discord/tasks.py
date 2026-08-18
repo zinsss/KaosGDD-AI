@@ -904,9 +904,24 @@ def task_key(task: Mapping[str, Any]) -> str:
 
 def _completed_archive_line(task: Mapping[str, Any]) -> str:
     completed = _task_month_date(task)
-    date_text = completed.strftime("%Y.%m.%d") if completed else "unknown"
+    date_text = _completed_archive_date_text(completed)
     title = escape_text(task.get("summary") or "Untitled task")
-    return f"- {date_text} {title}"
+    scope = _completed_archive_scope_suffix(task)
+    return f"- {date_text} {title}{scope}"
+
+
+def _completed_archive_date_text(value: date | None) -> str:
+    if value is None:
+        return "unknown"
+    weekdays = ("월", "화", "수", "목", "금", "토", "일")
+    return f"{value.day:02d}{weekdays[value.weekday()]}"
+
+
+def _completed_archive_scope_suffix(task: Mapping[str, Any]) -> str:
+    collection = str(task.get("collection") or "")
+    if collection.startswith("family:"):
+        return " **<family>**"
+    return ""
 
 
 def _task_month_date(task: Mapping[str, Any]) -> date | None:

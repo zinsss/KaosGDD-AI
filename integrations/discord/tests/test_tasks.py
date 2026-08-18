@@ -200,7 +200,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
         content = render_completed_archive_message(TASKS, month=date(2026, 8, 15))
 
         self.assertIn("## Completed · 2026.08", content)
-        self.assertIn("- 2026.08.15 Done already", content)
+        self.assertIn("- 15토 Done already **<family>**", content)
 
     def test_completed_archive_filters_collection(self) -> None:
         completed = completed_tasks_for_month(
