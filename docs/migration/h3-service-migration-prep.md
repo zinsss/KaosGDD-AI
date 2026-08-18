@@ -20,12 +20,12 @@ Move candidates:
 | cloudflared | `sha256:e39ee8da81ad5e05d77f38d2f51c60ca51bf2a8450ac3abab50c17fdb91d91bf` | `/srv/kaos/secrets/cloudflared.env` |
 | Family portal | `sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10` | `/srv/kaos/config/kaosgdd/portal`, `/srv/kaos/data/kaosgdd/portal` |
 
-Transitional family components, only if still required:
+Family transition components:
 
 | Service | Source image ID | Source data/config |
 | --- | --- | --- |
-| `kaosgovernor-legacy-api` from legacy brain | `sha256:fbfc2ed5b6ef35b9b26cb8dc6f9fed05d38f7f2209c7c078746dfeeba975f269` | `/srv/kaos/data/kaosgdd-gov`, `/srv/kaos/secrets/kaosgovernor-legacy-api.env` |
-| `kaosgovernor-legacy-database` | `sha256:e013e867e712fec275706a6c51c966f0bb0c93cfa8f51000f85a15f9865a28cb` | `/srv/kaos/data/kaosgdd/brain/postgres` |
+| `governor-api` | built from this repository | `/srv/kaos/secrets/governor-api.env`, `/srv/kaos/backups/governor-postgres` |
+| `governor-postgres` | `sha256:e013e867e712fec275706a6c51c966f0bb0c93cfa8f51000f85a15f9865a28cb` | `/srv/kaosgdd/kaosgovernor/postgres`, `/srv/kaos/secrets/governor-postgres.env` |
 | `calendar-adapter` | `sha256:6d43704baacd1bfbe7c295d7f13079d5d8104ed33568873133f8fc69980419df` | `/srv/kaos/data/kaosgdd/calendar-adapter`, `/srv/kaos/secrets/kaosgdd-adapters.env` |
 | Family Memos web | `sha256:421e98ec721040392bb0561b75f424a5ffbdd828607acfab6b8b667136df3062` | image must be exported/imported if retained during transition |
 
@@ -40,7 +40,7 @@ Approximate source data sizes at inventory time:
 | `/srv/kaos/data/sftpgo` | 396K |
 | `/srv/kaos/data/caddy` | 40K |
 | `/srv/kaos/data/kaosgdd/portal` | 37M |
-| `/srv/kaos/data/kaosgdd/brain` | 55M |
+| `/srv/kaosgdd/kaosgovernor/postgres` | 64M |
 | `/srv/kaos/data/kaosgdd/calendar-adapter` | 88K |
 
 Do not move PACS, Orthanc/DICOM, HylaFAX, Paperless, Stirling-PDF, RustDesk, or
@@ -64,15 +64,23 @@ Ready-made services keep native operational names. Stage data under:
 /srv/kaos/data/family-portal
 ```
 
-If transitional family APIs are still required, keep their legacy data and
-secret paths until the old service is fully retired:
+Family transition APIs use Governor-native service names. Keep the old legacy
+paths only as rollback references until the observation window is complete:
+
+```text
+/srv/kaosgdd/kaosgovernor/postgres
+/srv/kaos/secrets/governor-postgres.env
+/srv/kaos/secrets/governor-api.env
+/srv/kaos/secrets/kaosgdd-adapters.env
+/srv/kaos/data/calendar-adapter
+```
+
+Rollback references currently retained outside the active compose service names:
 
 ```text
 /srv/kaos/data/kaosgdd-gov
 /srv/kaos/secrets/kaosgovernor-legacy-api.env
 /srv/kaos/secrets/kaosgovernor-legacy-database.env
-/srv/kaos/secrets/kaosgdd-adapters.env
-/srv/kaos/data/calendar-adapter
 ```
 
 The broad legacy `/srv/kaos/secrets/kaosgdd-gov.env` is retained only as a

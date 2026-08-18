@@ -130,7 +130,9 @@ move for Radicale, Memos, Vaultwarden, SFTPGo, Family portal, Caddy, and
 cloudflared. Use their preflight commands only after data and secrets are
 staged. The `family-*` commands now start the remaining family transition
 services: Governor API, calendar adapter, Family Memos web, and the PostgreSQL
-database currently shared with migrated Governor modules.
+database currently shared with migrated Governor modules. The PostgreSQL
+service is named `governor-postgres` and stores data under
+`/srv/kaosgdd/kaosgovernor/postgres`.
 
 See [the H3 service migration prep note](../../docs/migration/h3-service-migration-prep.md).
 

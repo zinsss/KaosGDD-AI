@@ -296,12 +296,13 @@ services_preflight() {
 family_transition_preflight() {
   load_env
   local root=${KAOS_ROOT:-/srv/kaos}
+  local governor_state_root=${GOVERNOR_STATE_ROOT:-/srv/kaosgdd/kaosgovernor}
   local calendar_adapter_root=${CALENDAR_ADAPTER_APP_ROOT:-${REPO_ROOT}/apps/calendar-adapter}
-  require_nonempty_file "${root}/secrets/kaosgovernor-legacy-database.env"
+  require_nonempty_file "${root}/secrets/governor-postgres.env"
   require_nonempty_file "${root}/secrets/governor-api.env"
   require_nonempty_file "${root}/secrets/kaosgdd-adapters.env"
-  require_dir "${root}/data/kaosgdd-gov/postgres"
-  require_file "${root}/data/kaosgdd-gov/postgres/PG_VERSION"
+  require_dir "${governor_state_root}/postgres"
+  require_file "${governor_state_root}/postgres/PG_VERSION"
   require_dir "${calendar_adapter_root}"
   require_file "${calendar_adapter_root}/server.py"
   mkdir -p "${root}/data/calendar-adapter-state"
@@ -388,8 +389,8 @@ case "${command}" in
   services-up) services_preflight; "${SERVICES_COMPOSE[@]}" up --detach memos radicale vaultwarden sftpgo family-portal ;;
   services-down) load_env; "${SERVICES_COMPOSE[@]}" stop memos radicale vaultwarden sftpgo family-portal ;;
   family-preflight) family_transition_preflight ;;
-  family-up) family_transition_preflight; COMPOSE_PROFILES=family-transition "${SERVICES_COMPOSE[@]}" up --detach --build kaosgovernor-legacy-database governor-api calendar-adapter family-memos-web ;;
-  family-down) load_env; COMPOSE_PROFILES=family-transition "${SERVICES_COMPOSE[@]}" stop governor-api family-memos-web calendar-adapter kaosgovernor-legacy-database ;;
+  family-up) family_transition_preflight; COMPOSE_PROFILES=family-transition "${SERVICES_COMPOSE[@]}" up --detach --build governor-postgres governor-api calendar-adapter family-memos-web ;;
+  family-down) load_env; COMPOSE_PROFILES=family-transition "${SERVICES_COMPOSE[@]}" stop governor-api family-memos-web calendar-adapter governor-postgres ;;
   edge-preflight) edge_preflight ;;
   edge-config) load_env; "${EDGE_COMPOSE[@]}" config | redact_config ;;
   edge-up) edge_preflight; "${EDGE_COMPOSE[@]}" up --detach caddy cloudflared ;;

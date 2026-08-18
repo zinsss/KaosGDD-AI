@@ -106,16 +106,16 @@ services:
     networks:
       - backend
 
-  kaosgovernor-legacy-database:
+  governor-postgres:
     image: postgres:16-alpine@sha256:e013e867e712fec275706a6c51c966f0bb0c93cfa8f51000f85a15f9865a28cb
-    container_name: kaosgovernor-legacy-database
+    container_name: governor-postgres
     restart: unless-stopped
     profiles: ["family-transition"]
     env_file:
-      - path: ${KAOS_ROOT:-/srv/kaos}/secrets/kaosgovernor-legacy-database.env
+      - path: ${KAOS_ROOT:-/srv/kaos}/secrets/governor-postgres.env
         format: raw
     volumes:
-      - ${KAOS_ROOT:-/srv/kaos}/data/kaosgdd-gov/postgres:/var/lib/postgresql/data
+      - ${GOVERNOR_STATE_ROOT:-/srv/kaosgdd/kaosgovernor}/postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 10s
@@ -135,16 +135,16 @@ services:
     restart: unless-stopped
     profiles: ["family-transition"]
     depends_on:
-      kaosgovernor-legacy-database:
+      governor-postgres:
         condition: service_healthy
     env_file:
-      - path: ${KAOS_ROOT:-/srv/kaos}/secrets/kaosgovernor-legacy-database.env
+      - path: ${KAOS_ROOT:-/srv/kaos}/secrets/governor-postgres.env
         format: raw
       - path: ${KAOS_ROOT:-/srv/kaos}/secrets/governor-api.env
         format: raw
     environment:
       GOVERNOR_API_PORT: "8096"
-      GOVERNOR_DB_HOST: "kaosgovernor-legacy-database"
+      GOVERNOR_DB_HOST: "governor-postgres"
       GOVERNOR_DB_PORT: "5432"
       GOVERNOR_DB_STARTUP_ATTEMPTS: "20"
       GOVERNOR_DB_STARTUP_DELAY_SECONDS: "1.5"
