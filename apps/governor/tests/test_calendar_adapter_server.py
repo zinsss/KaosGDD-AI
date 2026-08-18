@@ -127,6 +127,95 @@ class CalendarAdapterServerTests(unittest.TestCase):
             self.assertTrue(deleted["deleted"])
             self.assertEqual(server.list_recurring_tasks("family")["items"], [])
 
+    def test_rouny_document_persists_revisioned_family_templates(self) -> None:
+        server = load_server_module()
+        with tempfile.TemporaryDirectory() as temporary:
+            server.ROUNY_TEMPLATES_FILE = str(Path(temporary) / "rouny-templates.json")
+            templates = [
+                {
+                    "id": "template-1",
+                    "name": "기본",
+                    "createdAt": "2026-08-18T00:00:00.000Z",
+                    "updatedAt": "2026-08-18T00:00:00.000Z",
+                    "items": [
+                        {
+                            "id": "item-1",
+                            "title": "세린샘",
+                            "memo": "",
+                            "color": "#A7C6FF",
+                            "slots": [
+                                {
+                                    "id": "slot-1",
+                                    "dayOfWeek": "2",
+                                    "startTime": "19:30",
+                                    "endTime": "21:00",
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ]
+
+            saved = server.put_rouny_document({"baseRevision": 0, "templates": templates})
+            current = server.rouny_document()
+
+            self.assertEqual(saved["revision"], 1)
+            self.assertEqual(current["templates"][0]["name"], "기본")
+            self.assertEqual(current["templates"][0]["items"][0]["color"], "#a7c6ff")
+
+    def test_rouny_document_rejects_stale_revision_with_current_copy(self) -> None:
+        server = load_server_module()
+        with tempfile.TemporaryDirectory() as temporary:
+            server.ROUNY_TEMPLATES_FILE = str(Path(temporary) / "rouny-templates.json")
+            template = {
+                "id": "template-1",
+                "name": "기본",
+                "items": [
+                    {
+                        "id": "item-1",
+                        "title": "수업",
+                        "memo": "",
+                        "color": "#f4c7df",
+                        "slots": [{"id": "slot-1", "dayOfWeek": "1", "startTime": "09:00", "endTime": "09:40"}],
+                    }
+                ],
+            }
+            server.put_rouny_document({"baseRevision": 0, "templates": [template]})
+
+            with self.assertRaises(server.RounyConflict) as caught:
+                server.put_rouny_document({"baseRevision": 0, "templates": [template]})
+
+            self.assertEqual(caught.exception.document["revision"], 1)
+
+    def test_rouny_validation_rejects_invalid_time_range(self) -> None:
+        server = load_server_module()
+
+        with self.assertRaisesRegex(ValueError, "invalid_rouny_time_range"):
+            server.validate_rouny_templates(
+                [
+                    {
+                        "id": "template-1",
+                        "name": "기본",
+                        "items": [
+                            {
+                                "id": "item-1",
+                                "title": "수업",
+                                "memo": "",
+                                "color": "#f4c7df",
+                                "slots": [
+                                    {
+                                        "id": "slot-1",
+                                        "dayOfWeek": "1",
+                                        "startTime": "09:00",
+                                        "endTime": "09:00",
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ]
+            )
+
     def test_public_holidays_wrap_family_holidays_for_portal_contract(self) -> None:
         server = load_server_module()
         server.list_family_holidays = lambda: {

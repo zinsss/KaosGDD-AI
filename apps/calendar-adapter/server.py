@@ -18,6 +18,7 @@ STATE_DIR = os.environ.get("CALENDAR_ADAPTER_STATE_DIR", "/data/calendar-adapter
 EVENT_PRESETS_FILE = os.path.join(STATE_DIR, "event-presets.json")
 RECURRING_TASKS_FILE = os.path.join(STATE_DIR, "recurring-tasks.json")
 GENERATED_CALENDAR_FILE = os.path.join(STATE_DIR, "generated-calendar.json")
+ROUNY_TEMPLATES_FILE = os.path.join(STATE_DIR, "rouny-templates.json")
 RADICALE_URL = os.environ.get("RADICALE_INTERNAL_URL", "http://100.94.208.16:5232").rstrip("/")
 RADICALE_USERNAME = os.environ.get("RADICALE_USERNAME", "")
 RADICALE_PASSWORD = os.environ.get("RADICALE_PASSWORD", "")
@@ -37,7 +38,15 @@ RADICALE_GDD_CALENDAR_NAME = os.environ.get("RADICALE_GDD_CALENDAR_NAME", "Kaos_
 TIMEOUT = float(os.environ.get("KAOSGDD_ADAPTER_TIMEOUT_SECONDS", "30"))
 LOCAL_TIMEZONE = timezone(timedelta(hours=int(os.environ.get("KAOSGDD_LOCAL_UTC_OFFSET_HOURS", "9"))))
 LOCAL_TZID = os.environ.get("KAOSGDD_LOCAL_TZID", "Asia/Seoul")
-MAX_POST_BYTES = 20000
+MAX_POST_BYTES = 512000
+MAX_ROUNY_TEMPLATES = 100
+MAX_ROUNY_ITEMS = 1000
+MAX_ROUNY_SLOTS = 2000
+MAX_ROUNY_ID_LENGTH = 128
+MAX_ROUNY_NAME_LENGTH = 200
+MAX_ROUNY_TITLE_LENGTH = 500
+MAX_ROUNY_MEMO_LENGTH = 10000
+ROUNY_COLOR_PATTERN = re.compile(r"^#[0-9a-fA-F]{6}$")
 WEATHER_CITIES = {
     "pohang": "포항",
     "daegu": "대구",
@@ -2283,6 +2292,12 @@ def write_state_file(path, payload):
     os.replace(temporary, path)
 
 
+class RounyConflict(Exception):
+    def __init__(self, document):
+        super().__init__("rouny_revision_conflict")
+        self.document = document
+
+
 def clean_id(value):
     raw = str(value or "").strip()
     if not raw:
@@ -2290,6 +2305,150 @@ def clean_id(value):
     if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", raw):
         raise ValueError("invalid_id")
     return raw
+
+
+def required_rouny_text(value, field, maximum):
+    normalized = str(value or "").strip()
+    if not normalized or len(normalized) > maximum:
+        raise ValueError(f"invalid_rouny_{field}")
+    return normalized
+
+
+def optional_rouny_text(value, field, maximum):
+    normalized = str(value or "")
+    if len(normalized) > maximum:
+        raise ValueError(f"invalid_rouny_{field}")
+    return normalized
+
+
+def validate_rouny_time(value):
+    normalized = str(value or "")
+    if not re.fullmatch(r"^(?:[01]\d|2[0-3]):[0-5]\d$", normalized):
+        raise ValueError("invalid_rouny_time")
+    return normalized
+
+
+def rouny_time_minutes(value):
+    hour, minute = value.split(":", 1)
+    return int(hour) * 60 + int(minute)
+
+
+def validate_rouny_slot(slot):
+    if not isinstance(slot, dict):
+        raise ValueError("invalid_rouny_slot")
+    day = str(slot.get("dayOfWeek") or "")
+    if day not in {"0", "1", "2", "3", "4", "5", "6"}:
+        raise ValueError("invalid_rouny_day")
+    start = validate_rouny_time(slot.get("startTime"))
+    end = validate_rouny_time(slot.get("endTime"))
+    if rouny_time_minutes(end) <= rouny_time_minutes(start):
+        raise ValueError("invalid_rouny_time_range")
+    return {
+        "id": required_rouny_text(slot.get("id"), "slot_id", MAX_ROUNY_ID_LENGTH),
+        "dayOfWeek": day,
+        "startTime": start,
+        "endTime": end,
+    }
+
+
+def validate_rouny_item(item):
+    if not isinstance(item, dict):
+        raise ValueError("invalid_rouny_item")
+    slots = item.get("slots")
+    if not isinstance(slots, list) or not slots:
+        raise ValueError("invalid_rouny_slots")
+    normalized_slots = [validate_rouny_slot(slot) for slot in slots]
+    first_slot = normalized_slots[0]
+    color = str(item.get("color") or "")
+    if not ROUNY_COLOR_PATTERN.fullmatch(color):
+        raise ValueError("invalid_rouny_color")
+    return {
+        "id": required_rouny_text(item.get("id"), "item_id", MAX_ROUNY_ID_LENGTH),
+        "title": optional_rouny_text(item.get("title"), "title", MAX_ROUNY_TITLE_LENGTH),
+        "dayOfWeek": first_slot["dayOfWeek"],
+        "startTime": first_slot["startTime"],
+        "endTime": first_slot["endTime"],
+        "slots": normalized_slots,
+        "memo": optional_rouny_text(item.get("memo"), "memo", MAX_ROUNY_MEMO_LENGTH),
+        "color": color.lower(),
+    }
+
+
+def validate_rouny_templates(templates):
+    if not isinstance(templates, list) or len(templates) > MAX_ROUNY_TEMPLATES:
+        raise ValueError("invalid_rouny_templates")
+
+    normalized = []
+    template_ids = set()
+    item_count = 0
+    slot_count = 0
+    for template in templates:
+        if not isinstance(template, dict):
+            raise ValueError("invalid_rouny_template")
+        template_id = required_rouny_text(template.get("id"), "template_id", MAX_ROUNY_ID_LENGTH)
+        if template_id in template_ids:
+            raise ValueError("duplicate_rouny_template_id")
+        template_ids.add(template_id)
+        items = template.get("items")
+        if not isinstance(items, list) or not items:
+            raise ValueError("invalid_rouny_items")
+        normalized_items = [validate_rouny_item(item) for item in items]
+        item_count += len(normalized_items)
+        slot_count += sum(len(item["slots"]) for item in normalized_items)
+        if item_count > MAX_ROUNY_ITEMS or slot_count > MAX_ROUNY_SLOTS:
+            raise ValueError("rouny_document_too_large")
+        normalized.append(
+            {
+                "id": template_id,
+                "name": required_rouny_text(template.get("name"), "template_name", MAX_ROUNY_NAME_LENGTH),
+                "items": normalized_items,
+                "createdAt": optional_rouny_text(template.get("createdAt"), "created_at", 64),
+                "updatedAt": optional_rouny_text(template.get("updatedAt"), "updated_at", 64),
+            }
+        )
+    return normalized
+
+
+def rouny_document():
+    payload = read_state_file(
+        ROUNY_TEMPLATES_FILE,
+        {"scope": "family", "revision": 0, "templates": [], "updatedAt": ""},
+    )
+    try:
+        revision = int(payload.get("revision") or 0)
+    except (TypeError, ValueError):
+        revision = 0
+    return {
+        "ok": True,
+        "scope": "family",
+        "revision": max(0, revision),
+        "templates": validate_rouny_templates(payload.get("templates") or []),
+        "updatedAt": str(payload.get("updatedAt") or ""),
+    }
+
+
+def put_rouny_document(payload):
+    base_revision = payload.get("baseRevision")
+    if isinstance(base_revision, bool) or not isinstance(base_revision, int) or base_revision < 0:
+        raise ValueError("invalid_rouny_revision")
+    normalized = validate_rouny_templates(payload.get("templates"))
+    current = rouny_document()
+    if current["revision"] != base_revision:
+        raise RounyConflict(current)
+
+    updated = {
+        "scope": "family",
+        "revision": base_revision + 1,
+        "templates": normalized,
+        "updatedAt": current_utc_iso(),
+    }
+    write_state_file(ROUNY_TEMPLATES_FILE, updated)
+    return {"ok": True, **updated}
+
+
+def require_family_profile(profile):
+    if profile != "family":
+        raise ValueError("family_profile_required")
 
 
 def short_time(value, default):
@@ -2673,6 +2832,14 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as exc:
                 json_response(self, 400, {"ok": False, "error": str(exc)})
             return
+        if path == "/api/rouny/templates":
+            try:
+                require_family_profile(profile)
+                json_response(self, 200, rouny_document())
+            except ValueError as exc:
+                status = 404 if str(exc) == "family_profile_required" else 400
+                json_response(self, status, {"ok": False, "error": str(exc)})
+            return
         if path == "/api/recurring-tasks":
             try:
                 json_response(self, 200, list_recurring_tasks(profile))
@@ -2760,6 +2927,24 @@ class Handler(BaseHTTPRequestHandler):
                 json_response(self, status, {"ok": False, "error": str(exc)})
             except (ET.ParseError, urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
                 json_response(self, 502, {"ok": False, "error": type(exc).__name__})
+            return
+        if path == "/api/rouny/templates":
+            try:
+                require_family_profile(profile)
+                json_response(self, 200, put_rouny_document(read_json_request(self)))
+            except RounyConflict as exc:
+                json_response(
+                    self,
+                    409,
+                    {
+                        "ok": False,
+                        "error": "rouny_revision_conflict",
+                        "document": exc.document,
+                    },
+                )
+            except ValueError as exc:
+                status = 404 if str(exc) == "family_profile_required" else 400
+                json_response(self, status, {"ok": False, "error": str(exc)})
             return
         holiday_match = re.fullmatch(r"/api/holidays/(KAOS-HOLIDAY-[A-Fa-f0-9]{24})", path)
         if holiday_match:
