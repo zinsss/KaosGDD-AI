@@ -367,8 +367,230 @@ class MemoryRecurringTaskStore:
             return updated
 
 
+class PostgresRecurringTaskStore:
+    def __init__(self, connect) -> None:
+        self.connect = connect
+
+    def upsert_definition(
+        self,
+        definition: RecurringTaskDefinition,
+        *,
+        now: datetime | None = None,
+    ) -> RecurringTaskDefinition:
+        timestamp = now or _now()
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                INSERT INTO governor_recurring_task_definitions (
+                    definition_id, owner, scope, adapter_profile, collection_id,
+                    title, memo, first_due_date, due_time, priority, frequency,
+                    creation_policy, enabled, active_uid, active_collection_id,
+                    active_due_date, next_due_date, last_completed_uid,
+                    last_completed_at, last_error, created_at, updated_at
+                ) VALUES (
+                    %(definition_id)s, %(owner)s, %(scope)s, %(adapter_profile)s,
+                    %(collection_id)s, %(title)s, %(memo)s, %(first_due_date)s,
+                    %(due_time)s, %(priority)s, %(frequency)s, %(creation_policy)s,
+                    %(enabled)s, %(active_uid)s, %(active_collection_id)s,
+                    %(active_due_date)s, %(next_due_date)s, %(last_completed_uid)s,
+                    %(last_completed_at)s, %(last_error)s, %(created_at)s, %(updated_at)s
+                )
+                ON CONFLICT (definition_id) DO UPDATE SET
+                    owner = EXCLUDED.owner,
+                    scope = EXCLUDED.scope,
+                    adapter_profile = EXCLUDED.adapter_profile,
+                    collection_id = EXCLUDED.collection_id,
+                    title = EXCLUDED.title,
+                    memo = EXCLUDED.memo,
+                    first_due_date = EXCLUDED.first_due_date,
+                    due_time = EXCLUDED.due_time,
+                    priority = EXCLUDED.priority,
+                    frequency = EXCLUDED.frequency,
+                    creation_policy = EXCLUDED.creation_policy,
+                    enabled = EXCLUDED.enabled,
+                    active_uid = EXCLUDED.active_uid,
+                    active_collection_id = EXCLUDED.active_collection_id,
+                    active_due_date = EXCLUDED.active_due_date,
+                    next_due_date = EXCLUDED.next_due_date,
+                    last_completed_uid = EXCLUDED.last_completed_uid,
+                    last_completed_at = EXCLUDED.last_completed_at,
+                    last_error = EXCLUDED.last_error,
+                    updated_at = EXCLUDED.updated_at
+                RETURNING definition_id, owner, scope, adapter_profile, collection_id,
+                          title, memo, first_due_date, due_time, priority, frequency,
+                          creation_policy, enabled, active_uid, active_collection_id,
+                          active_due_date, next_due_date, last_completed_uid,
+                          last_completed_at, last_error, created_at, updated_at
+                """,
+                _definition_parameters(definition, timestamp),
+            ).fetchone()
+        return _definition_from_row(row)
+
+    def get_definition(self, definition_id: str) -> RecurringTaskDefinition:
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT definition_id, owner, scope, adapter_profile, collection_id,
+                       title, memo, first_due_date, due_time, priority, frequency,
+                       creation_policy, enabled, active_uid, active_collection_id,
+                       active_due_date, next_due_date, last_completed_uid,
+                       last_completed_at, last_error, created_at, updated_at
+                FROM governor_recurring_task_definitions
+                WHERE definition_id = %s
+                """,
+                (definition_id,),
+            ).fetchone()
+        if not row:
+            raise RecurringTaskError("recurring_task_not_found")
+        return _definition_from_row(row)
+
+    def list_definitions(self, profile: str) -> list[RecurringTaskDefinition]:
+        owner = "family" if profile == "family" else "zin"
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT definition_id, owner, scope, adapter_profile, collection_id,
+                       title, memo, first_due_date, due_time, priority, frequency,
+                       creation_policy, enabled, active_uid, active_collection_id,
+                       active_due_date, next_due_date, last_completed_uid,
+                       last_completed_at, last_error, created_at, updated_at
+                FROM governor_recurring_task_definitions
+                WHERE owner IN (%s, 'family')
+                ORDER BY enabled DESC, title, definition_id
+                """,
+                (owner,),
+            ).fetchall()
+        return [_definition_from_row(row) for row in rows]
+
+    def enabled_definitions(self) -> list[RecurringTaskDefinition]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT definition_id, owner, scope, adapter_profile, collection_id,
+                       title, memo, first_due_date, due_time, priority, frequency,
+                       creation_policy, enabled, active_uid, active_collection_id,
+                       active_due_date, next_due_date, last_completed_uid,
+                       last_completed_at, last_error, created_at, updated_at
+                FROM governor_recurring_task_definitions
+                WHERE enabled
+                ORDER BY created_at, definition_id
+                """
+            ).fetchall()
+        return [_definition_from_row(row) for row in rows]
+
+    def delete_definition(self, definition_id: str) -> None:
+        with self.connect() as connection:
+            result = connection.execute("DELETE FROM governor_recurring_task_definitions WHERE definition_id = %s", (definition_id,))
+        if result.rowcount == 0:
+            raise RecurringTaskError("recurring_task_not_found")
+
+    def clear_active_occurrence(
+        self,
+        definition_id: str,
+        *,
+        completed: bool,
+        next_due_date: date,
+        now: datetime | None = None,
+    ) -> RecurringTaskDefinition:
+        timestamp = now or _now()
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                UPDATE governor_recurring_task_definitions
+                SET last_completed_uid = CASE WHEN %(completed)s THEN active_uid ELSE last_completed_uid END,
+                    last_completed_at = CASE WHEN %(completed)s THEN %(updated_at)s ELSE last_completed_at END,
+                    active_uid = NULL,
+                    active_collection_id = NULL,
+                    active_due_date = NULL,
+                    next_due_date = %(next_due_date)s,
+                    last_error = '',
+                    updated_at = %(updated_at)s
+                WHERE definition_id = %(definition_id)s
+                RETURNING definition_id, owner, scope, adapter_profile, collection_id,
+                          title, memo, first_due_date, due_time, priority, frequency,
+                          creation_policy, enabled, active_uid, active_collection_id,
+                          active_due_date, next_due_date, last_completed_uid,
+                          last_completed_at, last_error, created_at, updated_at
+                """,
+                {
+                    "definition_id": definition_id,
+                    "completed": completed,
+                    "next_due_date": next_due_date,
+                    "updated_at": timestamp,
+                },
+            ).fetchone()
+        if not row:
+            raise RecurringTaskError("recurring_task_not_found")
+        return _definition_from_row(row)
+
+    def assign_active_occurrence(
+        self,
+        definition_id: str,
+        *,
+        uid: str,
+        collection_id: str,
+        due_date: date,
+        now: datetime | None = None,
+    ) -> RecurringTaskDefinition:
+        timestamp = now or _now()
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                UPDATE governor_recurring_task_definitions
+                SET active_uid = COALESCE(active_uid, %(uid)s),
+                    active_collection_id = COALESCE(active_collection_id, %(collection_id)s),
+                    active_due_date = COALESCE(active_due_date, %(due_date)s),
+                    next_due_date = NULL,
+                    last_error = '',
+                    updated_at = %(updated_at)s
+                WHERE definition_id = %(definition_id)s
+                RETURNING definition_id, owner, scope, adapter_profile, collection_id,
+                          title, memo, first_due_date, due_time, priority, frequency,
+                          creation_policy, enabled, active_uid, active_collection_id,
+                          active_due_date, next_due_date, last_completed_uid,
+                          last_completed_at, last_error, created_at, updated_at
+                """,
+                {
+                    "definition_id": definition_id,
+                    "uid": uid,
+                    "collection_id": collection_id,
+                    "due_date": due_date,
+                    "updated_at": timestamp,
+                },
+            ).fetchone()
+        if not row:
+            raise RecurringTaskError("recurring_task_not_found")
+        return _definition_from_row(row)
+
+    def record_error(
+        self,
+        definition_id: str,
+        error: object,
+        *,
+        now: datetime | None = None,
+    ) -> RecurringTaskDefinition:
+        timestamp = now or _now()
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                UPDATE governor_recurring_task_definitions
+                SET last_error = %s, updated_at = %s
+                WHERE definition_id = %s
+                RETURNING definition_id, owner, scope, adapter_profile, collection_id,
+                          title, memo, first_due_date, due_time, priority, frequency,
+                          creation_policy, enabled, active_uid, active_collection_id,
+                          active_due_date, next_due_date, last_completed_uid,
+                          last_completed_at, last_error, created_at, updated_at
+                """,
+                (clean_text(error)[:500], timestamp, definition_id),
+            ).fetchone()
+        if not row:
+            raise RecurringTaskError("recurring_task_not_found")
+        return _definition_from_row(row)
+
+
 class RecurringTaskService:
-    def __init__(self, store: MemoryRecurringTaskStore, calendar_adapter: Any) -> None:
+    def __init__(self, store: MemoryRecurringTaskStore | PostgresRecurringTaskStore, calendar_adapter: Any) -> None:
         self.store = store
         self.calendar_adapter = calendar_adapter
 
@@ -442,3 +664,57 @@ def _require_due_date(plan: RecurringTaskPlan) -> date:
     if plan.due_date is None:
         raise RecurringTaskError("recurring_task_plan_missing_due_date")
     return plan.due_date
+
+
+def _definition_parameters(definition: RecurringTaskDefinition, timestamp: datetime) -> dict[str, object]:
+    return {
+        "definition_id": definition.definition_id,
+        "owner": definition.owner,
+        "scope": definition.scope,
+        "adapter_profile": definition.adapter_profile,
+        "collection_id": definition.collection_id,
+        "title": definition.title,
+        "memo": definition.memo,
+        "first_due_date": definition.first_due_date,
+        "due_time": definition.due_time,
+        "priority": definition.priority,
+        "frequency": definition.frequency,
+        "creation_policy": definition.creation_policy,
+        "enabled": definition.enabled,
+        "active_uid": definition.active_uid or None,
+        "active_collection_id": definition.active_collection_id or None,
+        "active_due_date": definition.active_due_date,
+        "next_due_date": definition.next_due_date,
+        "last_completed_uid": definition.last_completed_uid or None,
+        "last_completed_at": definition.last_completed_at,
+        "last_error": definition.last_error,
+        "created_at": definition.created_at or timestamp,
+        "updated_at": timestamp,
+    }
+
+
+def _definition_from_row(row) -> RecurringTaskDefinition:
+    return RecurringTaskDefinition(
+        definition_id=row[0],
+        owner=row[1],
+        scope=row[2],
+        adapter_profile=row[3],
+        collection_id=row[4],
+        title=row[5],
+        memo=row[6],
+        first_due_date=row[7],
+        due_time=row[8],
+        priority=row[9],
+        frequency=row[10],
+        creation_policy=row[11],
+        enabled=bool(row[12]),
+        active_uid=row[13] or "",
+        active_collection_id=row[14] or "",
+        active_due_date=row[15],
+        next_due_date=row[16],
+        last_completed_uid=row[17] or "",
+        last_completed_at=row[18],
+        last_error=row[19] or "",
+        created_at=row[20],
+        updated_at=row[21],
+    )

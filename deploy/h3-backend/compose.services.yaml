@@ -148,6 +148,7 @@ services:
       GOVERNOR_DB_PORT: "5432"
       GOVERNOR_DB_STARTUP_ATTEMPTS: "20"
       GOVERNOR_DB_STARTUP_DELAY_SECONDS: "1.5"
+      CALENDAR_ADAPTER_INTERNAL_URL: "http://calendar-adapter:8091"
       MEMOS_INTERNAL_URL: "http://memos:5230"
     ports:
       - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:8096:8096"
