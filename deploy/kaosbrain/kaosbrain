@@ -161,6 +161,9 @@ preflight() {
       [[ -s "${kaosai_token_path}" ]] || die "missing or empty KaosAI token file: ${kaosai_token_path}"
     fi
   fi
+  if [[ "${KAOSAI_DRY_RUN_ENABLED:-false}" == "true" && "${KAOSAI_ENABLED:-false}" != "true" ]]; then
+    die "KAOSAI_ENABLED=true is required when KAOSAI_DRY_RUN_ENABLED=true"
+  fi
   curl --fail --silent --show-error "${OLLAMA_BASE_URL:-http://127.0.0.1:11434}/api/tags" >/dev/null \
     || die "Ollama is not reachable"
   info "Preflight passed."
@@ -252,6 +255,18 @@ doctor() {
     check_line "Image" "fail" "${IMAGE_NAME} missing"
     failures=$((failures + 1))
   fi
+
+  local kaosai_mode="disabled"
+  if [[ "${KAOSAI_ENABLED:-false}" == "true" ]]; then
+    if [[ "${KAOSAI_DRY_RUN_ENABLED:-false}" == "true" ]]; then
+      kaosai_mode="dry-run"
+    elif [[ "${KAOSAI_CHAT_ENABLED:-false}" == "true" ]]; then
+      kaosai_mode="chat"
+    else
+      kaosai_mode="diagnostic"
+    fi
+  fi
+  check_line "KaosAI mode" "ok" "${kaosai_mode}"
 
   local ollama_tags
   if ollama_tags=$(curl --fail --silent --show-error "${OLLAMA_BASE_URL:-http://127.0.0.1:11434}/api/tags"); then
