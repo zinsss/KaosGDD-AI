@@ -238,7 +238,7 @@ class PaperlessDocumentService:
             return existing
         request = urllib.request.Request(
             f"{self.config.base_url.rstrip('/')}/api/tags/",
-            data=json.dumps({"name": name}).encode("utf-8"),
+            data=json.dumps({"name": name, "match": "", "matching_algorithm": 0}).encode("utf-8"),
             method="POST",
             headers={
                 "Authorization": f"Token {self.config.api_token}",

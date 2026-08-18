@@ -56,6 +56,10 @@ class PaperlessDocumentServiceTests(unittest.TestCase):
 
         methods = [call.args[0].get_method() for call in urlopen.call_args_list]
         self.assertEqual(methods, ["GET", "GET", "POST", "POST"])
+        tag_create = urlopen.call_args_list[2].args[0]
+        self.assertIn(b'"name": "tax"', tag_create.data)
+        self.assertIn(b'"matching_algorithm": 0', tag_create.data)
+        self.assertIn(b'"match": ""', tag_create.data)
         upload = urlopen.call_args_list[-1].args[0]
         self.assertIn(b'name="tags"\r\n\r\n7', upload.data)
         self.assertIn(b'name="tags"\r\n\r\n8', upload.data)
