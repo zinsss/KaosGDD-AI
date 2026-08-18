@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 import json
 import logging
 from pathlib import Path
@@ -22,6 +22,7 @@ MAX_RECENT_SUPPLIES = 25
 TASK_PRIORITIES = {"", "1", "5", "9"}
 DUE_LINE_PATTERN = re.compile(r"^:(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}))?$")
 MESSAGE_REFRESH_DELAY_SECONDS = 0.35
+KST = timezone(timedelta(hours=9))
 
 
 @dataclass
@@ -118,7 +119,7 @@ class DiscordTasksSurface:
     async def notify_due_tasks(self, *, now: datetime | None = None) -> int:
         if not self.show_due:
             return 0
-        current = now or datetime.now()
+        current = now or datetime.now(KST).replace(tzinfo=None)
         tasks = await asyncio.to_thread(self.adapter.list_tasks, self.profile)
         active = active_tasks(tasks, collection_id=self.collection_id)
         self._tasks_by_key.update({task_key(item): item for item in active})
