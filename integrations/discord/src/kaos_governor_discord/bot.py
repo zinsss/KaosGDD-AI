@@ -28,6 +28,7 @@ from .config import Settings
 from .health import HealthServer
 from .inbox import DiscordDocumentInbox
 from .fax import DiscordFaxTransport, rejection_message
+from .governor_api import GovernorApiClient, GovernorApiConfig
 from .mail import render_mail_summary, safe_attachment_filename
 from .markdown import MarkdownField, MarkdownMessage, NO_MENTIONS
 from .memos import DiscordMemosCapture
@@ -146,6 +147,11 @@ class GovernorBot(discord.Client):
         self._tasks_due_task: asyncio.Task | None = None
         self._tasks_refresh_task: asyncio.Task | None = None
         self.calendar_adapter = CalendarAdapterClient(CalendarAdapterConfig(settings.calendar_adapter_url))
+        self.governor_api = (
+            GovernorApiClient(GovernorApiConfig(settings.governor_api_url, settings.governor_api_token))
+            if settings.governor_api_token
+            else None
+        )
         self.discord_calendar = (
             DiscordCalendarSurface(
                 self,
@@ -722,7 +728,8 @@ class GovernorBot(discord.Client):
                     continue
                 try:
                     if surface.profile not in synced_profiles:
-                        await asyncio.to_thread(surface.adapter.sync_recurring_tasks, surface.profile)
+                        if self.governor_api is not None:
+                            await asyncio.to_thread(self.governor_api.sync_recurring_tasks, surface.profile)
                         synced_profiles.add(surface.profile)
                     await surface.repost_active_messages()
                 except Exception:

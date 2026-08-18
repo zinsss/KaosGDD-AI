@@ -13,7 +13,7 @@ from typing import Any
 ALLOWED_PORTAL_HOSTS = {"kaosgdd.net", "family.kaosgdd.net", "supplies.kaosgdd.net"}
 ALLOWED_ROUTES = {
     "GET": {"/api/calendar/bootstrap", "/api/weather/month"},
-    "POST": {"/api/calendar/events", "/api/calendar/tasks", "/api/recurring-tasks/sync"},
+    "POST": {"/api/calendar/events", "/api/calendar/tasks"},
     "PUT": {"/api/calendar/events", "/api/calendar/tasks"},
     "DELETE": {"/api/calendar/events", "/api/calendar/tasks"},
 }
@@ -111,9 +111,6 @@ class CalendarAdapterClient:
         if not uid:
             raise CalendarAdapterError("calendar_adapter_missing_uid")
         return result
-
-    def sync_recurring_tasks(self, profile: str) -> dict[str, Any]:
-        return self.request_json(profile, "POST", "/api/recurring-tasks/sync", payload={})
 
     def update_task(self, profile: str, payload: Mapping[str, Any]) -> dict[str, Any]:
         result = self.request_json(profile, "PUT", "/api/calendar/tasks", payload=payload)

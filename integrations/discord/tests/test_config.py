@@ -168,6 +168,7 @@ class SettingsTests(unittest.TestCase):
                 "DISCORD_TASKS_PROFILE": "family",
                 "DISCORD_TASKS_STATE_PATH": "/tmp/tasks-state.json",
                 "DISCORD_TASKS_REFRESH_SECONDS": "30",
+                "GOVERNOR_API_TOKEN": "not-a-real-secret",
             }
         )
         self.assertTrue(settings.tasks_enabled)
@@ -209,6 +210,7 @@ class SettingsTests(unittest.TestCase):
                 "DISCORD_SUPPLIES_PROFILE": "family",
                 "DISCORD_SUPPLIES_STATE_PATH": "/tmp/supplies-state.json",
                 "DISCORD_SUPPLIES_COLLECTION_ID": "family:supplies",
+                "GOVERNOR_API_TOKEN": "not-a-real-secret",
             }
         )
         self.assertTrue(settings.supplies_enabled)

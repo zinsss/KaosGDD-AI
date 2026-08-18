@@ -101,6 +101,7 @@ class Settings:
     brain_tools_enabled: bool
     brain_tools_host: str
     brain_tools_port: int
+    governor_api_url: str
     governor_api_token: str
     paperless_api_token: str
     paperless_base_url: str
@@ -264,10 +265,13 @@ class Settings:
         brain_tools_port = _positive_int(source.get("GOVERNOR_BRAIN_TOOLS_PORT", "8098"), "GOVERNOR_BRAIN_TOOLS_PORT")
         if brain_tools_port > 65535:
             raise ConfigurationError("GOVERNOR_BRAIN_TOOLS_PORT must be at most 65535")
+        governor_api_url = source.get("GOVERNOR_API_INTERNAL_URL", "http://governor-api:8096").strip()
+        if not governor_api_url:
+            raise ConfigurationError("GOVERNOR_API_INTERNAL_URL is required")
         governor_api_token = _secret(source, "GOVERNOR_API_TOKEN")
-        if (_boolean(source, "MEMOS_SEARCH_ENABLED") or brain_tools_enabled) and not governor_api_token:
+        if (_boolean(source, "MEMOS_SEARCH_ENABLED") or brain_tools_enabled or tasks_enabled or supplies_enabled) and not governor_api_token:
             raise ConfigurationError(
-                "GOVERNOR_API_TOKEN is required when Memos search or Brain tools are enabled"
+                "GOVERNOR_API_TOKEN is required when Memos search, Brain tools, tasks, or supplies are enabled"
             )
         paperless_api_token = _secret(source, "PAPERLESS_API_TOKEN")
         paperless_base_url = (
@@ -322,6 +326,7 @@ class Settings:
             brain_tools_enabled=brain_tools_enabled,
             brain_tools_host=source.get("GOVERNOR_BRAIN_TOOLS_HOST", "0.0.0.0").strip() or "0.0.0.0",
             brain_tools_port=brain_tools_port,
+            governor_api_url=governor_api_url,
             governor_api_token=governor_api_token,
             paperless_api_token=paperless_api_token,
             paperless_base_url=paperless_base_url,
