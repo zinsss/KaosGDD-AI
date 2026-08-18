@@ -93,6 +93,7 @@ A complete calendar and task domain capability, not a thin CalDAV client:
 - event/task validation and conflict detection
 - standard and custom recurrence behavior
 - claim day, market day, and holiday generation
+- settings-managed weather location and imported public holiday sources
 - Rouny scheduling
 - reminder defaults
 - VEVENT/VTODO serialization

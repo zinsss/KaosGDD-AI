@@ -5,6 +5,63 @@ from kaos_governor.calendar import generated
 
 
 class GeneratedCalendarDateTests(unittest.TestCase):
+    def test_settings_accept_family_style_weather_and_holiday_values(self) -> None:
+        settings = generated.GeneratedCalendarSettings.from_mapping(
+            {
+                "marketDaysEnabled": False,
+                "claimDayEnabled": True,
+                "weatherLocation": "Yeongdeok, KR",
+                "publicHolidayProvider": "manual",
+                "publicHolidayRegion": "kr",
+                "publicHolidayCalendarUrl": "https://example.test/holidays.ics",
+            }
+        )
+
+        self.assertFalse(settings.market_days_enabled)
+        self.assertTrue(settings.claim_day_enabled)
+        self.assertEqual(settings.weather_location, "Yeongdeok, KR")
+        self.assertEqual(settings.public_holiday_provider, "manual")
+        self.assertEqual(settings.public_holiday_region, "KR")
+        self.assertEqual(settings.public_holiday_calendar_url, "https://example.test/holidays.ics")
+        self.assertEqual(
+            settings.as_settings_payload(),
+            {
+                "marketDaysEnabled": False,
+                "claimDayEnabled": True,
+                "weatherLocation": "Yeongdeok, KR",
+                "publicHolidayProvider": "manual",
+                "publicHolidayRegion": "KR",
+                "publicHolidayCalendarUrl": "https://example.test/holidays.ics",
+            },
+        )
+
+    def test_settings_accept_backend_style_weather_and_holiday_values(self) -> None:
+        settings = generated.GeneratedCalendarSettings.from_mapping(
+            {
+                "weather_location": "Pohang, KR",
+                "public_holiday_provider": "disabled",
+                "public_holiday_region": "jp",
+                "public_holiday_calendar_url": "",
+            }
+        )
+
+        self.assertEqual(settings.weather_location, "Pohang, KR")
+        self.assertEqual(settings.public_holiday_provider, "disabled")
+        self.assertEqual(settings.public_holiday_region, "JP")
+
+    def test_settings_default_unknown_holiday_provider_to_imported(self) -> None:
+        settings = generated.GeneratedCalendarSettings.from_mapping(
+            {
+                "weatherLocation": "",
+                "publicHolidayProvider": "magic",
+                "publicHolidayRegion": "",
+            }
+        )
+
+        self.assertEqual(settings.weather_location, generated.DEFAULT_WEATHER_LOCATION)
+        self.assertEqual(settings.public_holiday_provider, "imported")
+        self.assertEqual(settings.public_holiday_region, generated.DEFAULT_PUBLIC_HOLIDAY_REGION)
+
     def test_market_days_are_fixed_dates_on_every_weekday(self) -> None:
         values = generated.market_dates(2026)
 

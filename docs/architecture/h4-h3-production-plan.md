@@ -353,7 +353,9 @@ The existing main KaosGDD repository may be retained as design and migration
 reference, but it is not deployed as a fallback. A future personal UI starts as
 a separately justified project if native apps and Discord expose a concrete
 workflow gap. A limited `kaosgdd.net` settings page remains in scope for system
-configuration. This decision does not affect Family KaosGDD.
+configuration. This includes Family-style settings for selected weather
+location and managed/imported public holiday sources used by KaosCalendar. This
+decision does not affect Family KaosGDD.
 
 During the H3 migration, the legacy `kaosgdd-brain` service may be renamed to
 `kaosgovernor-legacy-api` to make its deterministic backend role explicit. That name is
@@ -368,6 +370,7 @@ only.
 | Data | Authority | Derived/cached data |
 | --- | --- | --- |
 | Events, tasks, journals | Radicale | Calendar views and search indexes |
+| Calendar/weather settings | Governor PostgreSQL | Rendered agenda/month views |
 | Personal/family memos | Memos | Embeddings and snippets |
 | Clinic documents | Paperless | OCR summaries and temporary Discord copies |
 | Fax transport/queues | HylaFAX | Governor operation/status records |
