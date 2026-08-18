@@ -153,6 +153,7 @@ class SettingsTests(unittest.TestCase):
         self.assertFalse(settings.tasks_enabled)
         self.assertIsNone(settings.tasks_channel_id)
         self.assertEqual(settings.tasks_profile, "main")
+        self.assertEqual(settings.tasks_refresh_seconds, 60)
 
     def test_tasks_surface_requires_allowed_channel_when_enabled(self) -> None:
         with self.assertRaises(ConfigurationError):
@@ -166,12 +167,14 @@ class SettingsTests(unittest.TestCase):
                 "DISCORD_TASKS_CHANNEL_ID": "300",
                 "DISCORD_TASKS_PROFILE": "family",
                 "DISCORD_TASKS_STATE_PATH": "/tmp/tasks-state.json",
+                "DISCORD_TASKS_REFRESH_SECONDS": "30",
             }
         )
         self.assertTrue(settings.tasks_enabled)
         self.assertEqual(settings.tasks_channel_id, 300)
         self.assertEqual(settings.tasks_profile, "family")
         self.assertEqual(str(settings.tasks_state_path), "/tmp/tasks-state.json")
+        self.assertEqual(settings.tasks_refresh_seconds, 30)
 
     def test_tasks_surface_rejects_unknown_profile(self) -> None:
         with self.assertRaises(ConfigurationError):

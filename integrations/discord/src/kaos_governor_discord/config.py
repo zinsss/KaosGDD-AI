@@ -81,6 +81,7 @@ class Settings:
     tasks_channel_id: int | None
     tasks_profile: Literal["main", "family"]
     tasks_state_path: Path
+    tasks_refresh_seconds: int
     supplies_enabled: bool
     supplies_channel_id: int | None
     supplies_profile: Literal["main", "family", "supplies"]
@@ -199,6 +200,10 @@ class Settings:
             source.get("DISCORD_TASKS_STATE_PATH", "/data/discord-tasks/state.json").strip()
             or "/data/discord-tasks/state.json"
         )
+        tasks_refresh_seconds = _positive_int(
+            source.get("DISCORD_TASKS_REFRESH_SECONDS", "60"),
+            "DISCORD_TASKS_REFRESH_SECONDS",
+        )
         supplies_enabled = _boolean(source, "DISCORD_SUPPLIES_ENABLED")
         raw_supplies_channel = source.get("DISCORD_SUPPLIES_CHANNEL_ID", "").strip()
         supplies_channel_id = (
@@ -297,6 +302,7 @@ class Settings:
             tasks_channel_id=tasks_channel_id,
             tasks_profile=tasks_profile,  # type: ignore[arg-type]
             tasks_state_path=tasks_state_path,
+            tasks_refresh_seconds=tasks_refresh_seconds,
             supplies_enabled=supplies_enabled,
             supplies_channel_id=supplies_channel_id,
             supplies_profile=supplies_profile,  # type: ignore[arg-type]

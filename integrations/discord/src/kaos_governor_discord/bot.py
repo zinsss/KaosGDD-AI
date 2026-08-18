@@ -144,6 +144,7 @@ class GovernorBot(discord.Client):
         self._calendar_midnight_task: asyncio.Task | None = None
         self._tasks_midnight_task: asyncio.Task | None = None
         self._tasks_due_task: asyncio.Task | None = None
+        self._tasks_refresh_task: asyncio.Task | None = None
         self.calendar_adapter = CalendarAdapterClient(CalendarAdapterConfig(settings.calendar_adapter_url))
         self.discord_calendar = (
             DiscordCalendarSurface(
@@ -507,6 +508,11 @@ class GovernorBot(discord.Client):
                 self._tasks_midnight_loop(),
                 name="governor-tasks-midnight",
             )
+        if (self.discord_tasks is not None or self.discord_supplies is not None) and self._tasks_refresh_task is None:
+            self._tasks_refresh_task = asyncio.create_task(
+                self._tasks_refresh_loop(),
+                name="governor-tasks-refresh",
+            )
         if self.discord_tasks is not None and self._tasks_due_task is None:
             self._tasks_due_task = asyncio.create_task(
                 self._tasks_due_loop(),
@@ -592,6 +598,11 @@ class GovernorBot(discord.Client):
             with suppress(asyncio.CancelledError):
                 await self._tasks_midnight_task
             self._tasks_midnight_task = None
+        if self._tasks_refresh_task is not None:
+            self._tasks_refresh_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._tasks_refresh_task
+            self._tasks_refresh_task = None
         if self._tasks_due_task is not None:
             self._tasks_due_task.cancel()
             with suppress(asyncio.CancelledError):
@@ -712,6 +723,17 @@ class GovernorBot(discord.Client):
                     await surface.repost_active_messages()
                 except Exception:
                     LOGGER.exception("Failed to repost Discord %s messages", surface.surface_name)
+
+    async def _tasks_refresh_loop(self) -> None:
+        while not self.is_closed():
+            await asyncio.sleep(self.settings.tasks_refresh_seconds)
+            for surface in (self.discord_tasks, self.discord_supplies):
+                if surface is None:
+                    continue
+                try:
+                    await surface.ensure_message()
+                except Exception:
+                    LOGGER.exception("Failed to refresh Discord %s messages", surface.surface_name)
 
     async def _tasks_due_loop(self) -> None:
         if self.discord_tasks is None:
