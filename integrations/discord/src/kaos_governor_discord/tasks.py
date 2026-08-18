@@ -1100,14 +1100,14 @@ def _completed_archive_line(task: Mapping[str, Any]) -> str:
     date_text = _completed_archive_date_text(completed)
     title = escape_text(task.get("summary") or "Untitled task")
     scope = _completed_archive_scope_suffix(task)
-    return f"- {date_text} {title}{scope}"
+    return f"- {date_text} - {title}{scope}"
 
 
 def _completed_archive_date_text(value: date | None) -> str:
     if value is None:
         return "unknown"
     weekdays = ("월", "화", "수", "목", "금", "토", "일")
-    return f"{value.day:02d}{weekdays[value.weekday()]}"
+    return f"{value.day:02d}.{weekdays[value.weekday()]}"
 
 
 def _completed_archive_scope_suffix(task: Mapping[str, Any]) -> str:
