@@ -1503,6 +1503,7 @@ def build_vtodo(payload, existing=None):
 def create_task(payload, profile="main"):
     if not configured(profile):
         raise ValueError("adapter_not_configured")
+    reject_future_recurring_occurrence(payload)
     collections = collections_for_profile(profile)
     collection = select_collection(collections, str(payload.get("collectionId") or "").strip(), "VTODO")
     item_account = account_for_collection(collection)
@@ -1516,6 +1517,19 @@ def create_task(payload, profile="main"):
         {"Content-Type": "text/calendar; charset=utf-8", "If-None-Match": "*"},
     )
     return {"ok": True, "uid": uid, "collection": collection["id"]}
+
+
+def reject_future_recurring_occurrence(payload):
+    uid = str(payload.get("uid") or "")
+    match = re.fullmatch(r"KAOSGDD-REPEAT-[A-Z0-9]+-(\d{8})", uid)
+    if not match:
+        return
+    occurrence_date = date(int(match.group(1)[:4]), int(match.group(1)[4:6]), int(match.group(1)[6:8]))
+    due_date = date.fromisoformat(validate_date(payload.get("dueDate") or occurrence_date.isoformat()))
+    if occurrence_date != due_date:
+        raise ValueError("recurring_occurrence_uid_due_mismatch")
+    if due_date > date.today():
+        raise ValueError("recurring_occurrence_not_due")
 
 
 def validate_repeat(value):

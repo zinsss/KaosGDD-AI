@@ -145,6 +145,45 @@ class CalendarAdapterServerTests(unittest.TestCase):
             self.assertTrue(deleted["deleted"])
             self.assertEqual(server.list_recurring_tasks("family")["items"], [])
 
+    def test_create_task_rejects_future_recurring_occurrence_direct_writes(self) -> None:
+        server = load_server_module()
+        original_configured = server.configured
+        original_collections = server.collections_for_profile
+        original_select = server.select_collection
+        original_radicale = server.radicale_request
+        try:
+            server.configured = lambda profile: True
+            server.collections_for_profile = lambda profile: [{"id": "zin:tasks", "href": "http://radicale/tasks/", "components": ["VTODO"]}]
+            server.select_collection = lambda collections, collection_id, component: collections[0]
+            server.radicale_request = lambda *_args, **_kwargs: self.fail("future recurring write reached Radicale")
+
+            with self.assertRaisesRegex(ValueError, "recurring_occurrence_not_due"):
+                server.create_task(
+                    {
+                        "uid": "KAOSGDD-REPEAT-A50D23EBEBBE4E5AA9FDDEEFF54A528C-20990101",
+                        "collectionId": "zin:tasks",
+                        "title": "인플루엔자 표본감시 신고",
+                        "dueDate": "2099-01-01",
+                        "dueTime": "16:00",
+                    }
+                )
+        finally:
+            server.configured = original_configured
+            server.collections_for_profile = original_collections
+            server.select_collection = original_select
+            server.radicale_request = original_radicale
+
+    def test_create_task_rejects_recurring_occurrence_uid_due_mismatch(self) -> None:
+        server = load_server_module()
+
+        with self.assertRaisesRegex(ValueError, "recurring_occurrence_uid_due_mismatch"):
+            server.reject_future_recurring_occurrence(
+                {
+                    "uid": "KAOSGDD-REPEAT-A50D23EBEBBE4E5AA9FDDEEFF54A528C-20990101",
+                    "dueDate": "2099-01-08",
+                }
+            )
+
     def test_recurring_task_waits_for_future_scheduled_date(self) -> None:
         server = load_server_module()
         created = []
