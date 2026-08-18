@@ -58,6 +58,18 @@ sed_escape() {
   printf '%s' "$1" | sed -e 's/[\/&]/\\&/g'
 }
 
+set_env_value() {
+  local key=$1
+  local value=$2
+  local escaped_value
+  escaped_value=$(sed_escape "${value}")
+  if grep -q "^${key}=" "${ENV_FILE}"; then
+    sed -i "s/^${key}=.*/${key}=${escaped_value}/" "${ENV_FILE}"
+  else
+    printf '%s=%s\n' "${key}" "${value}" >>"${ENV_FILE}"
+  fi
+}
+
 validate_internal_http_url() {
   local name=$1
   local url=$2
@@ -373,6 +385,54 @@ status() {
   docker ps --filter "name=${CONTAINER_NAME}" --format '{{.Names}} {{.Image}} {{.Status}}'
 }
 
+kaosai_mode() {
+  local mode=${1:-}
+  case "${mode}" in
+    disabled|diagnostic|dry-run|chat) ;;
+    "") die "usage: ${0} kaosai-mode <disabled|diagnostic|dry-run|chat>" ;;
+    *) die "unknown KaosAI mode: ${mode}" ;;
+  esac
+
+  [[ -f "${ENV_FILE}" ]] || die "missing env file: ${ENV_FILE}; run ${0} setup"
+  local backup
+  backup=$(mktemp "${ENV_FILE}.backup.XXXXXX")
+  cp -p "${ENV_FILE}" "${backup}"
+
+  case "${mode}" in
+    disabled)
+      set_env_value KAOSAI_ENABLED false
+      set_env_value KAOSAI_CHAT_ENABLED false
+      set_env_value KAOSAI_DRY_RUN_ENABLED false
+      ;;
+    diagnostic)
+      set_env_value KAOSAI_ENABLED true
+      set_env_value KAOSAI_PROVIDER openclaw
+      set_env_value KAOSAI_CHAT_ENABLED false
+      set_env_value KAOSAI_DRY_RUN_ENABLED false
+      ;;
+    dry-run)
+      set_env_value KAOSAI_ENABLED true
+      set_env_value KAOSAI_PROVIDER openclaw
+      set_env_value KAOSAI_CHAT_ENABLED false
+      set_env_value KAOSAI_DRY_RUN_ENABLED true
+      ;;
+    chat)
+      set_env_value KAOSAI_ENABLED true
+      set_env_value KAOSAI_PROVIDER openclaw
+      set_env_value KAOSAI_CHAT_ENABLED true
+      set_env_value KAOSAI_DRY_RUN_ENABLED false
+      ;;
+  esac
+
+  if ! preflight; then
+    cp -p "${backup}" "${ENV_FILE}"
+    rm -f "${backup}"
+    die "KaosAI mode change failed preflight; restored ${ENV_FILE}"
+  fi
+  rm -f "${backup}"
+  info "KaosAI mode set to ${mode}. Run ${0} up to restart Brain with this mode."
+}
+
 logs() {
   docker logs --tail "${1:-120}" "${CONTAINER_NAME}"
 }
@@ -390,6 +450,8 @@ Commands:
   deploy     git pull --ff-only origin main, then up
   doctor     Check Brain service, Ollama, Governor tools, and system controller
   status     Show systemd and container status
+  kaosai-mode <disabled|diagnostic|dry-run|chat>
+             Update KaosAI mode in the Brain env, validate, and leave restart explicit
   logs [n]   Show recent container logs
 EOF
 }
@@ -403,6 +465,7 @@ case "${1:-}" in
   deploy) deploy ;;
   doctor) doctor ;;
   status) status ;;
+  kaosai-mode) shift; kaosai_mode "$@" ;;
   logs) shift; logs "$@" ;;
   ""|-h|--help|help) usage ;;
   *) die "unknown command: $1" ;;

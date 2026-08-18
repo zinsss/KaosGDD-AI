@@ -88,6 +88,17 @@ Use `KAOSAI_DRY_RUN_ENABLED=true` only with `KAOSAI_ENABLED=true`. In dry-run
 mode, ordinary Brain chat renders the guarded KaosAI plan preview and skips all
 Governor calls, confirmations, and writes.
 
+Use the deploy helper to switch KaosAI modes without hand-editing the env file:
+
+```bash
+./deploy/kaosbrain/kaosbrain kaosai-mode disabled
+./deploy/kaosbrain/kaosbrain kaosai-mode diagnostic
+./deploy/kaosbrain/kaosbrain kaosai-mode dry-run
+```
+
+The helper validates with `preflight` and restores the previous env file if the
+new mode is not deployable. Restart remains explicit with `kaosbrain up`.
+
 After the first install, update from the host checkout with:
 
 ```bash
