@@ -13,7 +13,8 @@ Discord becomes the primary personal orchestration surface. Personal events use
 iOS Calendar; personal/family tasks and supplies use iOS Reminders through
 Radicale. The family continues to use `family.kaosgdd.net`, including an
 embedded family-scoped AI chat. No main personal KaosGDD web application is
-deployed in the target architecture.
+deployed in the target architecture, but `kaosgdd.net` retains a narrow
+settings/admin page for KaosGDD configuration.
 
 Office Kaos remains a separate clinic-critical system. PACS, DICOM, fax
 hardware, Paperless, RustDesk, and other hardware- or clinic-bound services are
@@ -351,14 +352,16 @@ enables a summary or exceptional notification.
 The existing main KaosGDD repository may be retained as design and migration
 reference, but it is not deployed as a fallback. A future personal UI starts as
 a separately justified project if native apps and Discord expose a concrete
-workflow gap. This decision does not affect Family KaosGDD.
+workflow gap. A limited `kaosgdd.net` settings page remains in scope for system
+configuration. This decision does not affect Family KaosGDD.
 
 During the H3 migration, the legacy `kaosgdd-brain` service may be renamed to
 `kaosgovernor-legacy-api` to make its deterministic backend role explicit. That name is
 transitional: its remaining domain logic must still move into KaosGovernor
 modules before the legacy service and database are retired. The old
 `kaosgdd-portal` main/personal route is deprecated; `family.kaosgdd.net` is the
-only retained custom KaosGDD portal.
+only retained full custom KaosGDD portal. `kaosgdd.net` remains settings/admin
+only.
 
 ## 6. Data Ownership
 
@@ -512,7 +515,7 @@ version, and expiry. A conversational `yes` alone is insufficient.
 | Route | Policy |
 | --- | --- |
 | `family.kaosgdd.net` | Cloudflare Access with approved Google accounts |
-| `kaosgdd.net` | Reserved; no main portal route unless a future UI is approved |
+| `kaosgdd.net` | Settings/admin only; no full personal portal unless a future UI is approved |
 | service-native web UIs | Separate least-privilege Access policy or Tailscale-only access |
 | CalDAV endpoint | Native TLS + Radicale credentials; no interactive Access challenge |
 | Vaultwarden endpoint | Native client-compatible HTTPS and Vaultwarden authentication |

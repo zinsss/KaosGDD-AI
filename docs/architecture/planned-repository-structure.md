@@ -73,10 +73,12 @@ KaosGDD-AI/
 
 The main KaosGDD web repository is retained only as reference. It is not part
 of the target deployment. A future personal UI should begin only after a
-specific unmet workflow justifies it.
+specific unmet workflow justifies it. A narrow `kaosgdd.net` settings/admin
+page remains in scope for KaosGDD configuration.
 
 The old `kaosgdd-portal` personal/main route is deprecated during migration.
-`family.kaosgdd.net` is the only retained custom KaosGDD portal. If the old
+`family.kaosgdd.net` is the only retained full custom KaosGDD portal, while
+`kaosgdd.net` remains settings/admin only. If the old
 `kaosgdd-brain` service still has deterministic API duties during host
 migration, rename it to transitional `kaosgovernor-legacy-api` and continue absorbing its
 modules into KaosGovernor.
