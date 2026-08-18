@@ -5,12 +5,13 @@ import os
 import re
 import urllib.parse
 import urllib.request
-from datetime import datetime
+from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import uuid
 
 from kaos_governor import ledger
+from kaos_governor.calendar import GeneratedCalendarSettings
 from kaos_governor.database import connect, database_status, wait_for_database_and_migrate
 from kaos_governor.memos import relay as memos_relay
 from kaos_governor.tasks import PostgresRecurringTaskStore, RecurringTaskDefinition, RecurringTaskError, RecurringTaskService, validate_payload
@@ -145,6 +146,11 @@ def recurring_task_id(path: str) -> str:
     return match.group(1) if match else ""
 
 
+def event_preset_id(path: str) -> str:
+    match = re.fullmatch(r"/api/event-presets/([0-9a-z-]+)", path)
+    return match.group(1) if match else ""
+
+
 def _iso(value: object) -> str:
     return value.isoformat() if hasattr(value, "isoformat") else str(value or "")
 
@@ -204,6 +210,12 @@ class CalendarAdapterClient:
 
     def create_task(self, profile: str, payload: dict[str, object]) -> dict[str, object]:
         return self.request_json(profile, "POST", "/api/calendar/tasks", payload)
+
+    def mirror_custom_event_settings(self, payload: dict[str, object]) -> dict[str, object]:
+        return self.request_json("main", "PUT", "/api/custom-events", payload)
+
+    def sync_custom_events(self) -> dict[str, object]:
+        return self.request_json("main", "POST", "/api/custom-events/sync", {})
 
     def vtodo_collection_id(self, profile: str, preferred: str = "") -> str:
         collections = self.bootstrap(profile).get("collections") or []
@@ -291,6 +303,172 @@ def sync_recurring_tasks(profile: str) -> dict[str, object]:
     }
 
 
+def _setting_key(scope: str, name: str) -> str:
+    return f"{scope}:{name}"
+
+
+def _read_setting(scope: str, name: str, default: dict[str, object]) -> tuple[dict[str, object], int]:
+    key = _setting_key(scope, name)
+    with connect() as connection:
+        row = connection.execute(
+            "SELECT payload, version FROM governor_settings WHERE settings_key = %s",
+            (key,),
+        ).fetchone()
+    if not row:
+        return dict(default), 0
+    payload = row[0] if isinstance(row[0], dict) else {}
+    return dict(payload), int(row[1] or 0)
+
+
+def _write_setting(scope: str, name: str, payload: dict[str, object]) -> tuple[dict[str, object], int]:
+    key = _setting_key(scope, name)
+    with connect() as connection:
+        row = connection.execute(
+            """
+            INSERT INTO governor_settings (settings_key, settings_scope, payload)
+            VALUES (%s, %s, %s::jsonb)
+            ON CONFLICT (settings_key) DO UPDATE
+            SET payload = EXCLUDED.payload, updated_at = now(), version = governor_settings.version + 1
+            RETURNING payload, version
+            """,
+            (key, scope, json.dumps(payload, ensure_ascii=False)),
+        ).fetchone()
+    return dict(row[0]), int(row[1])
+
+
+def _event_owner(profile: str, payload: dict[str, object] | None = None, existing: dict[str, object] | None = None) -> str:
+    if existing and existing.get("owner"):
+        return str(existing["owner"])
+    if profile == "family" or (payload or {}).get("shareFamily") is True:
+        return "family"
+    return "zin"
+
+
+def _short_time(value: object, default: str) -> str:
+    raw = str(value or "").strip() or default
+    if re.fullmatch(r"\d{2}:\d{2}:\d{2}", raw):
+        raw = raw[:5]
+    if not re.fullmatch(r"^(?:[01]\d|2[0-3]):[0-5]\d$", raw):
+        raise ValueError("invalid_time")
+    return raw
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _normalize_event_preset(item: dict[str, object]) -> dict[str, object]:
+    item_id = str(item.get("id") or "").strip()
+    name = str(item.get("name") or item.get("title") or "").strip()
+    title = str(item.get("title") or "").strip()
+    if not item_id or not name or not title:
+        raise ValueError("invalid_event_preset")
+    owner = str(item.get("owner") or "zin")
+    if owner not in {"zin", "wife", "family"}:
+        owner = "family" if item.get("shareFamily") else "zin"
+    return {
+        "id": item_id,
+        "owner": owner,
+        "name": name,
+        "title": title,
+        "allDay": item.get("allDay") is not False,
+        "startTime": _short_time(item.get("startTime"), "09:00"),
+        "endTime": _short_time(item.get("endTime"), "10:00"),
+        "alarm": _short_time(item.get("alarm"), "") if str(item.get("alarm") or "").strip() else "",
+        "memo": str(item.get("memo") or "").strip(),
+        "shareFamily": owner == "family",
+        "createdAt": str(item.get("createdAt") or _utc_now_iso()),
+        "updatedAt": str(item.get("updatedAt") or _utc_now_iso()),
+    }
+
+
+def list_event_presets(profile: str) -> dict[str, object]:
+    payload, _version = _read_setting("system", "event-presets", {"items": []})
+    owner = "family" if profile == "family" else "zin"
+    items = []
+    for item in payload.get("items") or []:
+        if not isinstance(item, dict):
+            continue
+        try:
+            normalized = _normalize_event_preset(item)
+        except ValueError:
+            continue
+        if normalized["owner"] in {owner, "family"}:
+            items.append(normalized)
+    items.sort(key=lambda item: (str(item.get("name", "")), str(item.get("title", "")), str(item.get("id", ""))))
+    return {"ok": True, "items": items}
+
+
+def upsert_event_preset(payload: dict[str, object], profile: str, item_id: str = "") -> dict[str, object]:
+    store, _version = _read_setting("system", "event-presets", {"items": []})
+    items = [_normalize_event_preset(item) for item in store.get("items") or [] if isinstance(item, dict)]
+    target_id = item_id or str(payload.get("id") or "").strip()
+    existing = next((item for item in items if item["id"] == target_id), None) if target_id else None
+    if item_id and existing is None:
+        raise ValueError("event_preset_not_found")
+    now = _utc_now_iso()
+    saved = _normalize_event_preset(
+        {
+            **(existing or {}),
+            "id": target_id or str(uuid.uuid4()),
+            "owner": _event_owner(profile, payload, existing),
+            "name": payload.get("name") or payload.get("presetName") or payload.get("title") or (existing or {}).get("name") or "",
+            "title": payload.get("title") or (existing or {}).get("title") or "",
+            "allDay": payload.get("allDay", (existing or {}).get("allDay", True)),
+            "startTime": payload.get("startTime", (existing or {}).get("startTime", "09:00")),
+            "endTime": payload.get("endTime", (existing or {}).get("endTime", "10:00")),
+            "alarm": payload.get("alarm", (existing or {}).get("alarm", "")),
+            "memo": payload.get("memo", (existing or {}).get("memo", "")),
+            "createdAt": (existing or {}).get("createdAt") or now,
+            "updatedAt": now,
+        }
+    )
+    items = [item for item in items if item["id"] != saved["id"]]
+    items.append(saved)
+    _write_setting("system", "event-presets", {"items": items})
+    return saved
+
+
+def delete_event_preset(item_id: str) -> dict[str, object]:
+    store, _version = _read_setting("system", "event-presets", {"items": []})
+    items = [_normalize_event_preset(item) for item in store.get("items") or [] if isinstance(item, dict)]
+    kept = [item for item in items if item["id"] != item_id]
+    _write_setting("system", "event-presets", {"items": kept})
+    return {"ok": True, "id": item_id, "deleted": len(kept) != len(items)}
+
+
+def custom_event_payload() -> dict[str, object]:
+    payload, version = _read_setting("system", "generated-calendar", GeneratedCalendarSettings().as_settings_payload())
+    settings = GeneratedCalendarSettings.from_mapping(payload)
+    sync = CalendarAdapterClient().request_json("main", "GET", "/api/custom-events").get("sync", {})
+    return {"ok": True, "version": version, "settings": settings.as_settings_payload(), "sync": sync}
+
+
+def update_custom_event_settings(payload: dict[str, object]) -> dict[str, object]:
+    current, _version = _read_setting("system", "generated-calendar", GeneratedCalendarSettings().as_settings_payload())
+    settings = GeneratedCalendarSettings.from_mapping({**current, **payload})
+    saved, version = _write_setting("system", "generated-calendar", settings.as_settings_payload())
+    adapter_settings = {
+        "marketDaysEnabled": bool(saved.get("marketDaysEnabled", True)),
+        "claimDayEnabled": bool(saved.get("claimDayEnabled", True)),
+    }
+    sync = CalendarAdapterClient().mirror_custom_event_settings(adapter_settings).get("sync", {})
+    return {"ok": True, "version": version, "settings": settings.as_settings_payload(), "sync": sync}
+
+
+def sync_custom_events() -> dict[str, object]:
+    current, version = _read_setting("system", "generated-calendar", GeneratedCalendarSettings().as_settings_payload())
+    settings = GeneratedCalendarSettings.from_mapping(current)
+    CalendarAdapterClient().mirror_custom_event_settings(
+        {
+            "marketDaysEnabled": settings.market_days_enabled,
+            "claimDayEnabled": settings.claim_day_enabled,
+        }
+    )
+    sync = CalendarAdapterClient().sync_custom_events()
+    return {"ok": True, "version": version, "settings": settings.as_settings_payload(), "sync": sync}
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args) -> None:
         print(f"{self.address_string()} - {format % args}", flush=True)
@@ -337,6 +515,27 @@ class Handler(BaseHTTPRequestHandler):
                 print(f"Recurring task read failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "recurring_task_storage_unavailable"})
             return
+        if parsed.path == "/api/event-presets":
+            try:
+                json_response(self, 200, list_event_presets(profile_from_headers(self.headers)))
+            except ValueError as exc:
+                json_response(self, 400, {"ok": False, "error": str(exc)})
+            except Exception as exc:
+                print(f"Event preset read failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "event_preset_storage_unavailable"})
+            return
+        if parsed.path == "/api/custom-events":
+            try:
+                if profile_from_headers(self.headers) != "main":
+                    raise ValueError("main_profile_required")
+                json_response(self, 200, custom_event_payload())
+            except ValueError as exc:
+                status = 404 if str(exc) == "main_profile_required" else 400
+                json_response(self, status, {"ok": False, "error": str(exc)})
+            except Exception as exc:
+                print(f"Custom event read failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "custom_event_storage_unavailable"})
+            return
         json_response(self, 404, {"error": "not_found"})
 
     def do_POST(self) -> None:
@@ -374,6 +573,28 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 print(f"Recurring task sync failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "recurring_task_sync_unavailable"})
+            return
+        if parsed.path == "/api/event-presets":
+            try:
+                json_response(self, 201, upsert_event_preset(json_request(self), profile_from_headers(self.headers)))
+            except ValueError as exc:
+                status = 404 if str(exc) == "event_preset_not_found" else 400
+                json_response(self, status, {"ok": False, "error": str(exc)})
+            except Exception as exc:
+                print(f"Event preset create failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "event_preset_storage_unavailable"})
+            return
+        if parsed.path == "/api/custom-events/sync":
+            try:
+                if profile_from_headers(self.headers) != "main":
+                    raise ValueError("main_profile_required")
+                json_response(self, 200, sync_custom_events())
+            except ValueError as exc:
+                status = 404 if str(exc) == "main_profile_required" else 400
+                json_response(self, status, {"ok": False, "error": str(exc)})
+            except Exception as exc:
+                print(f"Custom event sync failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "custom_event_sync_unavailable"})
             return
         if parsed.path == "/api/ledger/entries":
             try:
@@ -421,6 +642,29 @@ class Handler(BaseHTTPRequestHandler):
                 print(f"Recurring task update failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "recurring_task_storage_unavailable"})
             return
+        preset_id = event_preset_id(path)
+        if preset_id:
+            try:
+                json_response(self, 200, upsert_event_preset(json_request(self), profile_from_headers(self.headers), preset_id))
+            except ValueError as exc:
+                status = 404 if str(exc) == "event_preset_not_found" else 400
+                json_response(self, status, {"ok": False, "error": str(exc)})
+            except Exception as exc:
+                print(f"Event preset update failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "event_preset_storage_unavailable"})
+            return
+        if path == "/api/custom-events":
+            try:
+                if profile_from_headers(self.headers) != "main":
+                    raise ValueError("main_profile_required")
+                json_response(self, 200, update_custom_event_settings(json_request(self)))
+            except ValueError as exc:
+                status = 404 if str(exc) == "main_profile_required" else 400
+                json_response(self, status, {"ok": False, "error": str(exc)})
+            except Exception as exc:
+                print(f"Custom event update failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "custom_event_storage_unavailable"})
+            return
         target_id = ledger_entry_id(path)
         if target_id:
             try:
@@ -451,6 +695,16 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 print(f"Recurring task delete failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "recurring_task_storage_unavailable"})
+            return
+        preset_id = event_preset_id(parsed.path)
+        if preset_id:
+            try:
+                json_response(self, 200, delete_event_preset(preset_id))
+            except ValueError as exc:
+                json_response(self, 400, {"ok": False, "error": str(exc)})
+            except Exception as exc:
+                print(f"Event preset delete failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "event_preset_storage_unavailable"})
             return
         target_id = ledger_entry_id(urllib.parse.urlparse(self.path).path)
         if target_id:
