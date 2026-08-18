@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import base64
+import hashlib
 import json
 import os
 import re
@@ -13,6 +14,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
 PORT = int(os.environ.get("PORT", "8091"))
+STATE_DIR = os.environ.get("CALENDAR_ADAPTER_STATE_DIR", "/data/calendar-adapter-state")
+EVENT_PRESETS_FILE = os.path.join(STATE_DIR, "event-presets.json")
+RECURRING_TASKS_FILE = os.path.join(STATE_DIR, "recurring-tasks.json")
 RADICALE_URL = os.environ.get("RADICALE_INTERNAL_URL", "http://100.94.208.16:5232").rstrip("/")
 RADICALE_USERNAME = os.environ.get("RADICALE_USERNAME", "")
 RADICALE_PASSWORD = os.environ.get("RADICALE_PASSWORD", "")
@@ -1967,6 +1971,331 @@ def delete_gdd_generated_event(payload):
     return {"ok": True, "uid": uid, "deleted": False}
 
 
+def read_state_file(path, default):
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except FileNotFoundError:
+        return default
+    if not isinstance(payload, type(default)):
+        return default
+    return payload
+
+
+def write_state_file(path, payload):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    temporary = f"{path}.tmp"
+    with open(temporary, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, indent=2, sort_keys=True)
+        handle.write("\n")
+    os.replace(temporary, path)
+
+
+def clean_id(value):
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", raw):
+        raise ValueError("invalid_id")
+    return raw
+
+
+def short_time(value, default):
+    raw = str(value or "").strip() or default
+    if re.fullmatch(r"\d{2}:\d{2}:\d{2}", raw):
+        raw = raw[:5]
+    return validate_time(raw)
+
+
+def current_utc_iso():
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def public_owner_for_profile(profile):
+    return "family" if profile == "family" else "zin"
+
+
+def share_family_for_owner(owner):
+    return owner == "family"
+
+
+def event_preset_store():
+    payload = read_state_file(EVENT_PRESETS_FILE, {"items": []})
+    items = payload.get("items") if isinstance(payload, dict) else []
+    normalized = [normalize_event_preset(item) for item in items]
+    return [item for item in normalized if item]
+
+
+def save_event_preset_store(items):
+    write_state_file(EVENT_PRESETS_FILE, {"items": items})
+
+
+def normalize_event_preset(item):
+    if not isinstance(item, dict):
+        return None
+    item_id = clean_id(item.get("id") or "")
+    name = str(item.get("name") or item.get("title") or "").strip()
+    title = str(item.get("title") or "").strip()
+    if not item_id or not name or not title:
+        return None
+    owner = str(item.get("owner") or ("family" if item.get("shareFamily") else "zin")).strip()
+    if owner not in {"zin", "wife", "family"}:
+        owner = "family" if item.get("shareFamily") else "zin"
+    return {
+        "id": item_id,
+        "owner": owner,
+        "name": name,
+        "title": title,
+        "allDay": item.get("allDay") is not False,
+        "startTime": short_time(item.get("startTime"), "09:00"),
+        "endTime": short_time(item.get("endTime"), "10:00"),
+        "alarm": short_time(item.get("alarm"), "") if str(item.get("alarm") or "").strip() else "",
+        "memo": str(item.get("memo") or "").strip(),
+        "shareFamily": share_family_for_owner(owner),
+        "createdAt": str(item.get("createdAt") or current_utc_iso()),
+        "updatedAt": str(item.get("updatedAt") or current_utc_iso()),
+    }
+
+
+def event_preset_from_payload(payload, profile, existing=None):
+    existing = existing or {}
+    now = current_utc_iso()
+    owner = existing.get("owner") or (
+        "family" if payload.get("shareFamily") is True or profile == "family" else public_owner_for_profile(profile)
+    )
+    item = {
+        "id": clean_id(existing.get("id") or payload.get("id") or str(uuid.uuid4())),
+        "owner": owner,
+        "name": payload.get("name") or payload.get("presetName") or payload.get("title") or existing.get("name") or "",
+        "title": payload.get("title") or existing.get("title") or "",
+        "allDay": payload.get("allDay", existing.get("allDay", True)),
+        "startTime": payload.get("startTime", existing.get("startTime", "09:00")),
+        "endTime": payload.get("endTime", existing.get("endTime", "10:00")),
+        "alarm": payload.get("alarm", existing.get("alarm", "")),
+        "memo": payload.get("memo", existing.get("memo", "")),
+        "shareFamily": owner == "family",
+        "createdAt": existing.get("createdAt") or now,
+        "updatedAt": now,
+    }
+    normalized = normalize_event_preset(item)
+    if not normalized:
+        raise ValueError("invalid_event_preset")
+    return normalized
+
+
+def list_event_presets(profile):
+    owner = public_owner_for_profile(profile)
+    items = [item for item in event_preset_store() if item["owner"] in {owner, "family"}]
+    items.sort(key=lambda item: (item.get("name", ""), item.get("title", ""), item.get("id", "")))
+    return {"ok": True, "items": items}
+
+
+def upsert_event_preset(payload, profile, item_id=""):
+    items = event_preset_store()
+    target_id = clean_id(item_id or payload.get("id") or "")
+    existing = None
+    if target_id:
+        existing = next((item for item in items if item["id"] == target_id), None)
+        if existing is None and item_id:
+            raise ValueError("event_preset_not_found")
+    saved = event_preset_from_payload({**payload, "id": target_id or payload.get("id")}, profile, existing)
+    items = [item for item in items if item["id"] != saved["id"]]
+    items.append(saved)
+    save_event_preset_store(items)
+    return saved
+
+
+def delete_event_preset(item_id):
+    target_id = clean_id(item_id)
+    items = event_preset_store()
+    kept = [item for item in items if item["id"] != target_id]
+    save_event_preset_store(kept)
+    return {"ok": True, "id": target_id, "deleted": len(kept) != len(items)}
+
+
+def recurring_task_store():
+    payload = read_state_file(RECURRING_TASKS_FILE, {"items": []})
+    items = payload.get("items") if isinstance(payload, dict) else []
+    normalized = [normalize_recurring_task(item) for item in items]
+    return [item for item in normalized if item]
+
+
+def save_recurring_task_store(items):
+    write_state_file(RECURRING_TASKS_FILE, {"items": items})
+
+
+def normalize_recurring_task(item):
+    if not isinstance(item, dict):
+        return None
+    item_id = clean_id(item.get("id") or "")
+    title = str(item.get("title") or "").strip()
+    if not item_id or not title:
+        return None
+    owner = str(item.get("owner") or ("family" if item.get("shareFamily") else "zin")).strip()
+    if owner not in {"zin", "wife", "family"}:
+        owner = "family" if item.get("shareFamily") else "zin"
+    frequency = str(item.get("frequency") or "weekly").strip().lower()
+    if frequency not in {"daily", "weekly", "monthly", "yearly"}:
+        frequency = "weekly"
+    priority = str(item.get("priority") or "").strip()
+    if priority not in {"", "1", "5", "9"}:
+        priority = ""
+    first_due = validate_date(item.get("firstDueDate") or item.get("first_due_date") or "")
+    return {
+        "id": item_id,
+        "owner": owner,
+        "adapterProfile": "family" if owner == "family" else "main",
+        "collectionId": str(item.get("collectionId") or item.get("collection_id") or "").strip(),
+        "title": title,
+        "memo": str(item.get("memo") or "").strip(),
+        "firstDueDate": first_due,
+        "dueTime": short_time(item.get("dueTime") or item.get("due_time"), "10:00"),
+        "priority": priority,
+        "frequency": frequency,
+        "creationPolicy": str(item.get("creationPolicy") or item.get("creation_policy") or "on_schedule"),
+        "enabled": item.get("enabled") is not False,
+        "shareFamily": owner == "family",
+        "activeUid": str(item.get("activeUid") or item.get("active_uid") or "").strip(),
+        "activeCollectionId": str(item.get("activeCollectionId") or item.get("active_collection_id") or "").strip(),
+        "activeDueDate": str(item.get("activeDueDate") or item.get("active_due_date") or "").strip(),
+        "nextDueDate": str(item.get("nextDueDate") or item.get("next_due_date") or "").strip(),
+        "lastCompletedUid": str(item.get("lastCompletedUid") or item.get("last_completed_uid") or "").strip(),
+        "lastCompletedAt": str(item.get("lastCompletedAt") or item.get("last_completed_at") or "").strip(),
+        "error": str(item.get("error") or item.get("lastError") or item.get("last_error") or "").strip(),
+        "createdAt": str(item.get("createdAt") or current_utc_iso()),
+        "updatedAt": str(item.get("updatedAt") or current_utc_iso()),
+    }
+
+
+def recurring_task_from_payload(payload, profile, existing=None):
+    existing = existing or {}
+    now = current_utc_iso()
+    owner = existing.get("owner") or (
+        "family" if payload.get("shareFamily") is True or profile == "family" else public_owner_for_profile(profile)
+    )
+    item = {
+        **existing,
+        "id": clean_id(existing.get("id") or payload.get("id") or str(uuid.uuid4())),
+        "owner": owner,
+        "collectionId": payload.get("collectionId") or existing.get("collectionId") or "",
+        "title": payload.get("title") or existing.get("title") or "",
+        "memo": payload.get("memo", existing.get("memo", "")),
+        "firstDueDate": payload.get("firstDueDate") or existing.get("firstDueDate") or "",
+        "dueTime": payload.get("dueTime") or existing.get("dueTime") or "10:00",
+        "priority": payload.get("priority", existing.get("priority", "")),
+        "frequency": payload.get("frequency") or existing.get("frequency") or "weekly",
+        "creationPolicy": payload.get("creationPolicy") or existing.get("creationPolicy") or "on_schedule",
+        "enabled": payload.get("enabled", existing.get("enabled", True)) is not False,
+        "shareFamily": owner == "family",
+        "createdAt": existing.get("createdAt") or now,
+        "updatedAt": now,
+    }
+    normalized = normalize_recurring_task(item)
+    if not normalized:
+        raise ValueError("invalid_recurring_task")
+    return ensure_recurring_occurrence(normalized)
+
+
+def add_frequency(value, frequency):
+    current = date.fromisoformat(value)
+    if frequency == "daily":
+        return current + timedelta(days=1)
+    if frequency == "weekly":
+        return current + timedelta(days=7)
+    if frequency == "yearly":
+        try:
+            return current.replace(year=current.year + 1)
+        except ValueError:
+            return current.replace(year=current.year + 1, day=28)
+    month = current.month + 1
+    year = current.year
+    if month > 12:
+        month = 1
+        year += 1
+    next_month_year = year + 1 if month == 12 else year
+    next_month = 1 if month == 12 else month + 1
+    last_day = (date(next_month_year, next_month, 1) - timedelta(days=1)).day
+    return date(year, month, min(current.day, last_day))
+
+
+def next_due_on_or_after(first_due, frequency, today):
+    current = date.fromisoformat(first_due)
+    while current < today:
+        current = add_frequency(current.isoformat(), frequency)
+    return current
+
+
+def recurring_occurrence_uid(item, due_date):
+    digest = hashlib.sha1(item["id"].encode("utf-8")).hexdigest()[:32].upper()
+    return f"KAOSGDD-REPEAT-{digest}-{due_date.strftime('%Y%m%d')}"
+
+
+def ensure_recurring_occurrence(item):
+    if not item["enabled"]:
+        return item
+    today = date.today()
+    if item.get("activeUid") and item.get("activeDueDate"):
+        return item
+    due_date = next_due_on_or_after(item["firstDueDate"], item["frequency"], today)
+    profile = item["adapterProfile"]
+    collections = collections_for_profile(profile)
+    collection = select_collection(collections, item.get("collectionId") or "", "VTODO")
+    uid = recurring_occurrence_uid(item, due_date)
+    try:
+        find_task(collections, uid, collection["id"])
+    except ValueError:
+        create_task(
+            {
+                "uid": uid,
+                "collectionId": collection["id"],
+                "title": item["title"],
+                "memo": item["memo"],
+                "dueDate": due_date.isoformat(),
+                "dueTime": item["dueTime"],
+                "priority": item["priority"],
+            },
+            profile,
+        )
+    item = dict(item)
+    item["collectionId"] = collection["id"]
+    item["activeUid"] = uid
+    item["activeCollectionId"] = collection["id"]
+    item["activeDueDate"] = due_date.isoformat()
+    item["nextDueDate"] = ""
+    item["error"] = ""
+    return item
+
+
+def list_recurring_tasks(profile):
+    owner = public_owner_for_profile(profile)
+    items = [item for item in recurring_task_store() if item["owner"] in {owner, "family"}]
+    items.sort(key=lambda item: (not item.get("enabled", True), item.get("title", ""), item.get("id", "")))
+    return {"ok": True, "items": items}
+
+
+def upsert_recurring_task(payload, profile, item_id=""):
+    items = recurring_task_store()
+    target_id = clean_id(item_id or payload.get("id") or "")
+    existing = None
+    if target_id:
+        existing = next((item for item in items if item["id"] == target_id), None)
+        if existing is None and item_id:
+            raise ValueError("recurring_task_not_found")
+    saved = recurring_task_from_payload({**payload, "id": target_id or payload.get("id")}, profile, existing)
+    items = [item for item in items if item["id"] != saved["id"]]
+    items.append(saved)
+    save_recurring_task_store(items)
+    return saved
+
+
+def delete_recurring_task(item_id):
+    target_id = clean_id(item_id)
+    items = recurring_task_store()
+    kept = [item for item in items if item["id"] != target_id]
+    save_recurring_task_store(kept)
+    return {"ok": True, "id": target_id, "deleted": len(kept) != len(items)}
+
+
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urllib.parse.urlparse(self.path).path
@@ -2029,6 +2358,20 @@ class Handler(BaseHTTPRequestHandler):
             except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
                 json_response(self, 502, {"ok": False, "error": type(exc).__name__})
             return
+        if path == "/api/event-presets":
+            try:
+                json_response(self, 200, list_event_presets(profile))
+            except ValueError as exc:
+                json_response(self, 400, {"ok": False, "error": str(exc)})
+            return
+        if path == "/api/recurring-tasks":
+            try:
+                json_response(self, 200, list_recurring_tasks(profile))
+            except (ValueError, ET.ParseError) as exc:
+                json_response(self, 400, {"ok": False, "error": str(exc)})
+            except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
+                json_response(self, 502, {"ok": False, "error": type(exc).__name__})
+            return
         json_response(self, 404, {"error": "not_found"})
 
     def do_PUT(self):
@@ -2082,6 +2425,20 @@ class Handler(BaseHTTPRequestHandler):
             except (ET.ParseError, urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
                 json_response(self, 502, {"configured": configured(profile), "live": False, "profile": profile, "error": type(exc).__name__})
             return
+        if path.startswith("/api/event-presets/"):
+            try:
+                json_response(self, 200, upsert_event_preset(read_json_request(self), profile, path.rsplit("/", 1)[-1]))
+            except ValueError as exc:
+                json_response(self, 400, {"ok": False, "error": str(exc)})
+            return
+        if path.startswith("/api/recurring-tasks/"):
+            try:
+                json_response(self, 200, upsert_recurring_task(read_json_request(self), profile, path.rsplit("/", 1)[-1]))
+            except ValueError as exc:
+                json_response(self, 400, {"ok": False, "error": str(exc)})
+            except (ET.ParseError, urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
+                json_response(self, 502, {"ok": False, "error": type(exc).__name__})
+            return
         json_response(self, 404, {"error": "not_found"})
 
     def do_DELETE(self):
@@ -2127,6 +2484,18 @@ class Handler(BaseHTTPRequestHandler):
             except (ET.ParseError, urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
                 json_response(self, 502, {"configured": configured(profile), "live": False, "profile": profile, "error": type(exc).__name__})
             return
+        if path.startswith("/api/event-presets/"):
+            try:
+                json_response(self, 200, delete_event_preset(path.rsplit("/", 1)[-1]))
+            except ValueError as exc:
+                json_response(self, 400, {"ok": False, "error": str(exc)})
+            return
+        if path.startswith("/api/recurring-tasks/"):
+            try:
+                json_response(self, 200, delete_recurring_task(path.rsplit("/", 1)[-1]))
+            except ValueError as exc:
+                json_response(self, 400, {"ok": False, "error": str(exc)})
+            return
         json_response(self, 404, {"error": "not_found"})
 
     def do_POST(self):
@@ -2155,6 +2524,20 @@ class Handler(BaseHTTPRequestHandler):
                 json_response(self, 400, {"error": str(exc)})
             except (ET.ParseError, urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
                 json_response(self, 502, {"configured": configured(profile), "live": False, "profile": profile, "error": type(exc).__name__})
+            return
+        if path == "/api/event-presets":
+            try:
+                json_response(self, 201, upsert_event_preset(read_json_request(self), profile))
+            except ValueError as exc:
+                json_response(self, 400, {"ok": False, "error": str(exc)})
+            return
+        if path == "/api/recurring-tasks":
+            try:
+                json_response(self, 201, upsert_recurring_task(read_json_request(self), profile))
+            except ValueError as exc:
+                json_response(self, 400, {"ok": False, "error": str(exc)})
+            except (ET.ParseError, urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
+                json_response(self, 502, {"ok": False, "error": type(exc).__name__})
             return
         if path == "/internal/system/logs":
             try:

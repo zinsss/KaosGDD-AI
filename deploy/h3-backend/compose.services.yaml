@@ -163,10 +163,12 @@ services:
         format: raw
     environment:
       PORT: "8091"
+      CALENDAR_ADAPTER_STATE_DIR: "/data/calendar-adapter-state"
     ports:
       - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:8091:8091"
     volumes:
       - ${CALENDAR_ADAPTER_APP_ROOT:-../../apps/calendar-adapter}:/app:ro
+      - ${KAOS_ROOT:-/srv/kaos}/data/calendar-adapter-state:/data/calendar-adapter-state
     command: ["python", "/app/server.py"]
     security_opt:
       - no-new-privileges:true

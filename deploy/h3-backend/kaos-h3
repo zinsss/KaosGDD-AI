@@ -304,6 +304,7 @@ family_transition_preflight() {
   require_file "${root}/data/kaosgdd-gov/postgres/PG_VERSION"
   require_dir "${calendar_adapter_root}"
   require_file "${calendar_adapter_root}/server.py"
+  mkdir -p "${root}/data/calendar-adapter-state"
   COMPOSE_PROFILES=family-transition "${SERVICES_COMPOSE[@]}" config --quiet
   info "Family transition preflight passed."
 }
