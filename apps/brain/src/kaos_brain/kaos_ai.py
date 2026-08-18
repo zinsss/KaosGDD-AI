@@ -41,7 +41,7 @@ class OpenClawKaosAIPlanner:
         if not self.config.enabled:
             return None
         raw = await self._complete(user_text, context=context)
-        return parse_kaosai_plan_response(raw)
+        return normalize_kaosai_plan_scope(user_text, parse_kaosai_plan_response(raw))
 
     async def _complete(self, user_text: str, *, context: Mapping[str, Any]) -> str:
         import aiohttp
@@ -142,6 +142,43 @@ def parse_kaosai_plan_response(raw: str) -> dict[str, Any]:
     if not isinstance(parameters, Mapping):
         raise KaosAIError("kaosai_parameters_required")
     return dict(payload)
+
+
+FAMILY_SCOPE_MARKERS = frozenset(
+    {
+        "family",
+        "shared",
+        "household",
+        "wife",
+        "spouse",
+        "child",
+        "rouny",
+        "가족",
+        "패밀리",
+        "공유",
+        "집",
+        "가정",
+        "와이프",
+        "아내",
+        "부인",
+        "로운",
+        "로운이",
+        "아이",
+        "애기",
+    }
+)
+
+
+def normalize_kaosai_plan_scope(user_text: str, plan: dict[str, Any]) -> dict[str, Any]:
+    scope = str(plan.get("scope") or "").strip().lower()
+    if scope != "family":
+        return plan
+    lowered = user_text.casefold()
+    if any(marker in lowered for marker in FAMILY_SCOPE_MARKERS):
+        return plan
+    normalized = dict(plan)
+    normalized["scope"] = "personal"
+    return normalized
 
 
 def _strip_fence(text: str) -> str:

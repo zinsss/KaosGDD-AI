@@ -8,6 +8,7 @@ from kaos_brain.kaos_ai import (
     KaosAIConfig,
     KaosAIError,
     OpenClawKaosAIPlanner,
+    normalize_kaosai_plan_scope,
     parse_kaosai_plan_response,
 )
 
@@ -57,6 +58,19 @@ class KaosAITests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(plan["intent"], "clarify")
         with self.assertRaisesRegex(KaosAIError, "kaosai_clarify_question_required"):
             parse_kaosai_plan_response('{"intent":"clarify","scope":"personal","parameters":{}}')
+
+    def test_scope_normalization_demotes_implicit_family_to_personal(self) -> None:
+        plan = {
+            "intent": "task.create",
+            "scope": "family",
+            "parameters": {"title": "엄마한테 전화", "dueDate": "2026-08-20"},
+        }
+
+        normalized = normalize_kaosai_plan_scope("내일까지 엄마한테 전화해야돼", plan)
+        family = normalize_kaosai_plan_scope("가족 할 일로 로운이 준비물 챙기기", plan)
+
+        self.assertEqual(normalized["scope"], "personal")
+        self.assertEqual(family["scope"], "family")
 
     def test_rejects_invalid_or_non_object_json(self) -> None:
         with self.assertRaisesRegex(KaosAIError, "invalid_kaosai_json"):
