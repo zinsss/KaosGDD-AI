@@ -44,6 +44,24 @@ class CalendarAdapterServerTests(unittest.TestCase):
         self.assertIn("SEQUENCE:5", body)
         self.assertIn("X-APPLE-SORT-ORDER:123", body)
 
+    def test_updated_vtodo_preserves_existing_uid_case_for_ios_clients(self) -> None:
+        server = load_server_module()
+        existing = {
+            "UID": "ios-Mixed-Case-Task",
+            "CREATED": "20260818T000000Z",
+            "SEQUENCE": "4",
+            "_raw_properties": ["UID:ios-Mixed-Case-Task"],
+        }
+
+        uid, body = server.build_vtodo(
+            {"uid": "ios-Mixed-Case-Task", "title": "Check", "status": "COMPLETED"},
+            existing,
+        )
+
+        self.assertEqual(uid, "ios-Mixed-Case-Task")
+        self.assertIn("UID:ios-Mixed-Case-Task", body)
+        self.assertNotIn("UID:IOS-MIXED-CASE-TASK", body)
+
     def test_reopened_vtodo_removes_completed_timestamp_and_sets_zero_percent(self) -> None:
         server = load_server_module()
         existing = {

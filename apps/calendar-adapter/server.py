@@ -1421,7 +1421,7 @@ def build_vtodo(payload, existing=None):
 
     priority = validate_priority(payload.get("priority") or "")
     description = str(payload.get("memo") or "").strip()
-    uid = str(payload.get("uid") or existing.get("UID") or uuid.uuid4()).upper()
+    uid = str(existing.get("UID") or payload.get("uid") or uuid.uuid4()).strip()
     alarm_uid = str(uuid.uuid4()).upper()
     now = utc_stamp(datetime.now(timezone.utc))
     created = existing.get("CREATED") or now
