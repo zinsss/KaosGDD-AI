@@ -132,12 +132,16 @@ class FakeBot:
     def __init__(self, channel):
         self.channel = channel
         self.user = SimpleNamespace(id=900)
+        self.registered_views = []
 
     def get_channel(self, channel_id):
         return self.channel
 
     async def fetch_channel(self, channel_id):
         return self.channel
+
+    def add_view(self, view, *, message_id=None):
+        self.registered_views.append((view, message_id))
 
 
 class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
@@ -549,6 +553,28 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(channel.next_id, 702)
             self.assertTrue(all(not message.edits for message in messages))
+
+    async def test_ensure_message_registers_views_for_unchanged_existing_messages(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            bot = FakeBot(channel)
+            surface = DiscordTasksSurface(
+                bot,  # type: ignore[arg-type]
+                AccessPolicy(100, frozenset({200}), frozenset({300})),
+                channel_id=300,
+                profile="main",
+                state_path=Path(temporary) / "tasks.json",
+                adapter=FakeAdapter(),  # type: ignore[arg-type]
+            )
+            surface.message_refresh_delay_seconds = 0
+            await surface.ensure_message()
+            bot.registered_views = []
+
+            await surface.ensure_message()
+
+            registered_message_ids = {message_id for _view, message_id in bot.registered_views}
+            self.assertIn(surface.state.completed_archive_message_id, registered_message_ids)
+            self.assertTrue(set(surface.state.message_ids.values()).issubset(registered_message_ids))
 
     async def test_complete_and_delete_task_buttons_use_adapter_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

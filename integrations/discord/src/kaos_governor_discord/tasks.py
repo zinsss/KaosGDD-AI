@@ -262,6 +262,7 @@ class DiscordTasksSurface:
             try:
                 message = await channel.fetch_message(message_id)
                 if _message_matches(message, content=content, view=view):
+                    self._register_view(view, int(message.id))
                     return message
                 return await message.edit(content=content, view=view, allowed_mentions=NO_MENTIONS)
             except (discord.NotFound, discord.HTTPException):
@@ -281,6 +282,7 @@ class DiscordTasksSurface:
             try:
                 message = await channel.fetch_message(message_id)
                 if _message_matches(message, content=content, view=view):
+                    self._register_view(view, int(message.id))
                     return message
                 return await message.edit(content=content, view=view, allowed_mentions=NO_MENTIONS)
             except (discord.NotFound, discord.HTTPException):
@@ -392,6 +394,7 @@ class DiscordTasksSurface:
                     self.state.recent_supplies_message_id = 0
                     return await channel.send(content=content, view=view, allowed_mentions=NO_MENTIONS)
                 if _message_matches(message, content=content, view=view):
+                    self._register_view(view, int(message.id))
                     return message
                 return await message.edit(content=content, view=view, allowed_mentions=NO_MENTIONS)
             except (discord.NotFound, discord.HTTPException):
@@ -402,6 +405,14 @@ class DiscordTasksSurface:
             view=view,
             allowed_mentions=NO_MENTIONS,
         )
+
+    def _register_view(self, view: discord.ui.View | None, message_id: int) -> None:
+        if view is None or not hasattr(self.bot, "add_view"):
+            return
+        try:
+            self.bot.add_view(view, message_id=message_id)
+        except ValueError:
+            LOGGER.info("Could not register persistent %s view for message %s", self.surface_name, message_id)
 
 
 class TaskView(discord.ui.View):
