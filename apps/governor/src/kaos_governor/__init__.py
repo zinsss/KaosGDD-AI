@@ -23,6 +23,7 @@ from .fax import (
     request_from_pdf,
 )
 from .memos import Memo, MemoSearchPage, MemoSearchResult, MemosConfig, MemosError, MemosService
+from .settings import CalendarSettingsRecord, GovernorSettingsError, MemoryGovernorSettingsStore
 
 __all__ = (
     "Actor",
@@ -36,12 +37,14 @@ __all__ = (
     "FaxRequest",
     "FaxService",
     "MemoryDurableGovernorStore",
+    "MemoryGovernorSettingsStore",
     "Memo",
     "MemoSearchPage",
     "MemoSearchResult",
     "MemosConfig",
     "MemosError",
     "MemosService",
+    "GovernorSettingsError",
     "OperationRecord",
     "OperationRequest",
     "OfficeFaxConnectorClient",
@@ -49,6 +52,7 @@ __all__ = (
     "PaperlessDocumentService",
     "PaperlessResult",
     "PaperlessSearchPage",
+    "CalendarSettingsRecord",
     "normalize_destination",
     "request_from_pdf",
     "stable_hash",

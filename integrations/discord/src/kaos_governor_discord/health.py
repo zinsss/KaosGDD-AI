@@ -5,6 +5,7 @@ import logging
 
 from aiohttp import web
 from kaos_governor.memos import MemosError, MemosService
+from kaos_governor.settings import GovernorSettingsError, MemoryGovernorSettingsStore
 
 
 LOGGER = logging.getLogger(__name__)
@@ -19,12 +20,14 @@ class HealthServer:
         *,
         governor_api_token: str = "",
         memos: MemosService | None = None,
+        settings_store: MemoryGovernorSettingsStore | None = None,
     ) -> None:
         self._host = host
         self._port = port
         self._status_provider = status_provider
         self._governor_api_token = governor_api_token
         self._memos = memos
+        self._settings_store = settings_store or MemoryGovernorSettingsStore()
         self._runner: web.AppRunner | None = None
 
     def application(self) -> web.Application:
@@ -33,6 +36,8 @@ class HealthServer:
         app.router.add_get("/ready", self._ready)
         app.router.add_post("/api/v1/memos/search", self._search_memos)
         app.router.add_get("/api/v1/memos/{memo_id}", self._get_memo)
+        app.router.add_get("/api/v1/settings/calendar", self._get_calendar_settings)
+        app.router.add_patch("/api/v1/settings/calendar", self._update_calendar_settings)
         return app
 
     async def start(self) -> None:
@@ -65,6 +70,11 @@ class HealthServer:
             return web.json_response({"error": "governor_api_unauthorized"}, status=401)
         if self._memos is None or not self._memos.config.enabled:
             return web.json_response({"error": "memos_search_disabled"}, status=503)
+        return None
+
+    def _require_admin_access(self, request: web.Request) -> web.Response | None:
+        if not self._authorized(request):
+            return web.json_response({"error": "governor_api_unauthorized"}, status=401)
         return None
 
     async def _search_memos(self, request: web.Request) -> web.Response:
@@ -111,6 +121,28 @@ class HealthServer:
             LOGGER.exception("Unexpected Memos fetch failure")
             return web.json_response({"error": "internal_error"}, status=500)
         return web.json_response({"memo": memo.as_dict(), "source": "memos-live"})
+
+    async def _get_calendar_settings(self, request: web.Request) -> web.Response:
+        denied = self._require_admin_access(request)
+        if denied is not None:
+            return denied
+        return web.json_response(self._settings_store.get_calendar().as_dict())
+
+    async def _update_calendar_settings(self, request: web.Request) -> web.Response:
+        denied = self._require_admin_access(request)
+        if denied is not None:
+            return denied
+        try:
+            payload = await request.json()
+        except Exception:
+            return web.json_response({"error": "invalid_json"}, status=400)
+        if not isinstance(payload, dict):
+            return web.json_response({"error": "invalid_request"}, status=400)
+        try:
+            record = self._settings_store.update_calendar(payload)
+        except GovernorSettingsError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+        return web.json_response(record.as_dict())
 
     @staticmethod
     def _tool_error(error: ValueError | MemosError) -> web.Response:

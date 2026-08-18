@@ -1,4 +1,5 @@
 from datetime import date
+from pathlib import Path
 import unittest
 
 from kaos_governor.calendar import generated
@@ -61,6 +62,27 @@ class GeneratedCalendarDateTests(unittest.TestCase):
         self.assertEqual(settings.weather_location, generated.DEFAULT_WEATHER_LOCATION)
         self.assertEqual(settings.public_holiday_provider, "imported")
         self.assertEqual(settings.public_holiday_region, generated.DEFAULT_PUBLIC_HOLIDAY_REGION)
+
+    def test_settings_migration_declares_governor_settings_table(self) -> None:
+        migration = next(
+            (
+                parent / "migrations" / "003_governor_settings.sql"
+                for parent in Path(__file__).resolve().parents
+                if (parent / "migrations" / "003_governor_settings.sql").exists()
+            ),
+            None,
+        )
+        self.assertIsNotNone(migration)
+        text = migration.read_text(encoding="utf-8") if migration else ""
+
+        for required in (
+            "CREATE TABLE IF NOT EXISTS governor_settings",
+            "settings_key text PRIMARY KEY",
+            "settings_scope text NOT NULL DEFAULT 'system'",
+            "payload jsonb NOT NULL DEFAULT '{}'::jsonb",
+            "governor_settings_scope_idx",
+        ):
+            self.assertIn(required, text)
 
     def test_market_days_are_fixed_dates_on_every_weekday(self) -> None:
         values = generated.market_dates(2026)

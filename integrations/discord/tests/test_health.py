@@ -123,6 +123,61 @@ class HealthServerToolTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 400)
         self.assertEqual((await response.json())["error"], "invalid_request")
 
+    async def test_calendar_settings_require_bearer_token(self) -> None:
+        response = await self.client.get("/api/v1/settings/calendar")
+
+        self.assertEqual(response.status, 401)
+        self.assertEqual((await response.json())["error"], "governor_api_unauthorized")
+
+    async def test_calendar_settings_returns_defaults(self) -> None:
+        response = await self.client.get(
+            "/api/v1/settings/calendar",
+            headers={"Authorization": "Bearer governor-secret"},
+        )
+
+        self.assertEqual(response.status, 200)
+        payload = await response.json()
+        self.assertEqual(payload["kind"], "calendar")
+        self.assertEqual(payload["version"], 1)
+        self.assertEqual(payload["settings"]["weatherLocation"], "Pohang, KR")
+        self.assertEqual(payload["settings"]["publicHolidayProvider"], "imported")
+        self.assertEqual(payload["settings"]["publicHolidayRegion"], "KR")
+
+    async def test_calendar_settings_patch_updates_location_and_holidays(self) -> None:
+        headers = {"Authorization": "Bearer governor-secret"}
+
+        response = await self.client.patch(
+            "/api/v1/settings/calendar",
+            json={
+                "weatherLocation": "Yeongdeok, KR",
+                "publicHolidayProvider": "manual",
+                "publicHolidayRegion": "kr",
+                "publicHolidayCalendarUrl": "https://example.test/kr.ics",
+            },
+            headers=headers,
+        )
+
+        self.assertEqual(response.status, 200)
+        payload = await response.json()
+        self.assertEqual(payload["version"], 2)
+        self.assertEqual(payload["settings"]["weatherLocation"], "Yeongdeok, KR")
+        self.assertEqual(payload["settings"]["publicHolidayProvider"], "manual")
+        self.assertEqual(payload["settings"]["publicHolidayRegion"], "KR")
+        self.assertEqual(payload["settings"]["publicHolidayCalendarUrl"], "https://example.test/kr.ics")
+
+        response = await self.client.get("/api/v1/settings/calendar", headers=headers)
+        self.assertEqual((await response.json())["settings"]["weatherLocation"], "Yeongdeok, KR")
+
+    async def test_calendar_settings_patch_rejects_non_object_json(self) -> None:
+        response = await self.client.patch(
+            "/api/v1/settings/calendar",
+            json=["Pohang"],
+            headers={"Authorization": "Bearer governor-secret"},
+        )
+
+        self.assertEqual(response.status, 400)
+        self.assertEqual((await response.json())["error"], "invalid_request")
+
 
 if __name__ == "__main__":
     unittest.main()
