@@ -465,7 +465,7 @@ def sync_custom_events() -> dict[str, object]:
             "claimDayEnabled": settings.claim_day_enabled,
         }
     )
-    sync = CalendarAdapterClient().sync_custom_events()
+    sync = CalendarAdapterClient().sync_custom_events().get("sync", {})
     return {"ok": True, "version": version, "settings": settings.as_settings_payload(), "sync": sync}
 
 

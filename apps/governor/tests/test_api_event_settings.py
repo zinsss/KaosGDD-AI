@@ -62,6 +62,26 @@ class EventPresetApiTests(unittest.TestCase):
         self.assertEqual(payload["version"], 2)
         self.assertEqual(mirrored, [{"marketDaysEnabled": False, "claimDayEnabled": True}])
 
+    def test_custom_event_sync_flattens_adapter_sync_payload(self) -> None:
+        mirrored: list[dict[str, object]] = []
+
+        class FakeCalendarAdapter:
+            def mirror_custom_event_settings(self, payload: dict[str, object]) -> dict[str, object]:
+                mirrored.append(payload)
+                return {"sync": {"ok": True}}
+
+            def sync_custom_events(self) -> dict[str, object]:
+                return {"ok": True, "sync": {"lastError": "", "lastResult": {"total": 2}}}
+
+        with (
+            patch.object(api, "_read_setting", return_value=({"marketDaysEnabled": True, "claimDayEnabled": False}, 1)),
+            patch.object(api, "CalendarAdapterClient", FakeCalendarAdapter),
+        ):
+            payload = api.sync_custom_events()
+
+        self.assertEqual(payload["sync"], {"lastError": "", "lastResult": {"total": 2}})
+        self.assertEqual(mirrored, [{"marketDaysEnabled": True, "claimDayEnabled": False}])
+
 
 if __name__ == "__main__":
     unittest.main()
