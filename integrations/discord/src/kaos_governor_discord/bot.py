@@ -352,6 +352,31 @@ class GovernorBot(discord.Client):
             )
             view.message = await interaction.original_response()
 
+        @self.tree.command(name="system-refresh", description="Refresh KaosGDD system status messages now")
+        async def system_refresh(interaction: discord.Interaction) -> None:
+            if self.discord_service_status is None:
+                await interaction.response.send_message(
+                    MarkdownMessage(title="System status disabled").render(),
+                    ephemeral=True,
+                    allowed_mentions=NO_MENTIONS,
+                )
+                return
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            try:
+                checked = await self._refresh_service_status_surface()
+            except Exception as exc:
+                LOGGER.exception("Manual service status refresh failed")
+                await interaction.edit_original_response(
+                    content=MarkdownMessage(title="System refresh failed", summary=type(exc).__name__).render()
+                )
+                return
+            await interaction.edit_original_response(
+                content=MarkdownMessage(
+                    title="System status refreshed",
+                    summary=f"{checked} services checked.",
+                ).render()
+            )
+
         @self.tree.command(name="mail-organizer-now", description="Send the Naver unread-mail organizer now")
         async def mail_organizer_now(interaction: discord.Interaction) -> None:
             if not self.mail_organizer.config.enabled or self.discord_mail_organizer is None:
@@ -671,6 +696,12 @@ class GovernorBot(discord.Client):
                 except Exception:
                     LOGGER.exception("Failed to repost Discord %s messages", surface.surface_name)
 
+    async def _refresh_service_status_surface(self) -> int:
+        if self.discord_service_status is None:
+            return 0
+        await self.discord_service_status.ensure_message()
+        return len(self.discord_service_status.last_results)
+
     async def _service_status_loop(self) -> None:
         if self.discord_service_status is None:
             return
@@ -678,7 +709,7 @@ class GovernorBot(discord.Client):
         while not self.is_closed():
             await asyncio.sleep(refresh_seconds)
             try:
-                await self.discord_service_status.ensure_message()
+                await self._refresh_service_status_surface()
             except Exception:
                 LOGGER.exception("Failed to refresh Discord service status message")
 
