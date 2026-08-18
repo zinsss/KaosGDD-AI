@@ -716,10 +716,14 @@ class GovernorBot(discord.Client):
     async def _tasks_midnight_loop(self) -> None:
         while not self.is_closed():
             await asyncio.sleep(seconds_until_next_midnight() + 10)
+            synced_profiles: set[str] = set()
             for surface in (self.discord_tasks, self.discord_supplies):
                 if surface is None:
                     continue
                 try:
+                    if surface.profile not in synced_profiles:
+                        await asyncio.to_thread(surface.adapter.sync_recurring_tasks, surface.profile)
+                        synced_profiles.add(surface.profile)
                     await surface.repost_active_messages()
                 except Exception:
                     LOGGER.exception("Failed to repost Discord %s messages", surface.surface_name)

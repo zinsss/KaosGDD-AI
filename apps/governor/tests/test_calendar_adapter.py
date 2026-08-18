@@ -52,6 +52,10 @@ class CalendarAdapterBoundaryTests(unittest.TestCase):
             adapter.upstream_url("http://adapter:8091", "POST", "/api/calendar/tasks"),
             "http://adapter:8091/api/calendar/tasks",
         )
+        self.assertEqual(
+            adapter.upstream_url("http://adapter:8091", "POST", "/api/recurring-tasks/sync"),
+            "http://adapter:8091/api/recurring-tasks/sync",
+        )
         with self.assertRaisesRegex(adapter.CalendarAdapterError, "calendar_adapter_route_not_allowed"):
             adapter.upstream_url("http://adapter:8091", "GET", "/api/calendar/tasks")
         with self.assertRaisesRegex(adapter.CalendarAdapterError, "calendar_adapter_route_not_allowed"):
@@ -89,6 +93,18 @@ class CalendarAdapterBoundaryTests(unittest.TestCase):
         client = adapter.CalendarAdapterClient(self.config(), urlopen=urlopen)
 
         self.assertEqual(client.list_tasks("main"), [{"uid": "task-1"}, {"uid": "task-2"}])
+
+    def test_sync_recurring_tasks_uses_profile_host(self) -> None:
+        urlopen = mock.Mock(return_value=FakeResponse(body=b'{"ok":true,"changed":false,"items":[]}'))
+        client = adapter.CalendarAdapterClient(self.config(), urlopen=urlopen)
+
+        result = client.sync_recurring_tasks("main")
+
+        request = urlopen.call_args.args[0]
+        self.assertTrue(result["ok"])
+        self.assertEqual(request.full_url, "http://adapter:8091/api/recurring-tasks/sync")
+        self.assertEqual(request.get_method(), "POST")
+        self.assertEqual(request.get_header("Host"), "kaosgdd.net")
 
     def test_month_weather_uses_allowed_weather_route(self) -> None:
         urlopen = mock.Mock(

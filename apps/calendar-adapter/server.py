@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import base64
-import hashlib
 import json
 import os
 import re
@@ -2677,28 +2676,143 @@ def next_due_on_or_after(first_due, frequency, today):
 
 
 def recurring_occurrence_uid(item, due_date):
-    digest = hashlib.sha1(item["id"].encode("utf-8")).hexdigest()[:32].upper()
-    return f"KAOSGDD-REPEAT-{digest}-{due_date.strftime('%Y%m%d')}"
+    definition_id = "".join(character for character in str(item["id"]).upper() if character.isalnum())
+    return f"KAOSGDD-REPEAT-{definition_id}-{due_date.strftime('%Y%m%d')}"
 
 
-def ensure_recurring_occurrence(item):
+def recurring_uid_prefix(item):
+    definition_id = "".join(character for character in str(item["id"]).upper() if character.isalnum())
+    return f"KAOSGDD-REPEAT-{definition_id}-"
+
+
+def recurring_due_from_uid(item, uid):
+    raw = str(uid or "")
+    prefix = recurring_uid_prefix(item)
+    if not raw.startswith(prefix):
+        return None
+    suffix = raw.removeprefix(prefix)
+    if not re.fullmatch(r"\d{8}", suffix):
+        return None
+    return date(int(suffix[:4]), int(suffix[4:6]), int(suffix[6:8]))
+
+
+def task_status(task):
+    return str((task or {}).get("status") or "NEEDS-ACTION").upper()
+
+
+def task_matches_collection(task, collection_id):
+    return not collection_id or task.get("collection") == collection_id
+
+
+def latest_completed_recurring_due(item, tasks, collection_id, today):
+    completed = []
+    for task in tasks:
+        if not task_matches_collection(task, collection_id):
+            continue
+        if task_status(task) != "COMPLETED":
+            continue
+        due = recurring_due_from_uid(item, task.get("uid"))
+        if due and due <= today:
+            completed.append((due, task))
+    return max(completed, default=(None, None), key=lambda row: row[0])
+
+
+def existing_recurring_task(item, tasks, collection_id, due_date):
+    uid = recurring_occurrence_uid(item, due_date)
+    return next(
+        (
+            task
+            for task in tasks
+            if task.get("uid") == uid and task_matches_collection(task, collection_id)
+        ),
+        None,
+    )
+
+
+def cleanup_future_recurring_tasks(item, tasks, collection_id, today, profile):
+    removed = 0
+    for task in tasks:
+        if not task_matches_collection(task, collection_id):
+            continue
+        if task_status(task) == "COMPLETED":
+            continue
+        due = recurring_due_from_uid(item, task.get("uid"))
+        if due and due > today:
+            delete_task({"uid": task["uid"], "collectionId": collection_id}, profile)
+            removed += 1
+    return removed
+
+
+def next_due_after(value, frequency, today):
+    due = add_frequency(value, frequency)
+    while due < today:
+        due = add_frequency(due.isoformat(), frequency)
+    return due
+
+
+def ensure_recurring_occurrence(item, today=None, tasks=None):
     if not item["enabled"]:
         return item
-    today = date.today()
-    if item.get("activeUid") and item.get("activeDueDate"):
-        return item
-    due_date = next_due_on_or_after(item["firstDueDate"], item["frequency"], today)
+    today = today or date.today()
     profile = item["adapterProfile"]
     collections = collections_for_profile(profile)
     collection = select_collection(collections, item.get("collectionId") or "", "VTODO")
+    collection_id = collection["id"]
+    tasks = list(tasks) if tasks is not None else bootstrap_payload(profile).get("tasks", [])
+    item = dict(item)
+    item["collectionId"] = collection_id
+
+    if item.get("activeUid") and item.get("activeDueDate"):
+        active = next(
+            (
+                task
+                for task in tasks
+                if task.get("uid") == item["activeUid"] and task_matches_collection(task, item.get("activeCollectionId") or collection_id)
+            ),
+            None,
+        )
+        if active and task_status(active) != "COMPLETED":
+            item["error"] = ""
+            return item
+        if active and task_status(active) == "COMPLETED":
+            item["lastCompletedUid"] = item["activeUid"]
+            item["lastCompletedAt"] = active.get("completed") or current_utc_iso()
+            next_due = next_due_after(item["activeDueDate"], item["frequency"], today)
+        else:
+            latest_due, latest_task = latest_completed_recurring_due(item, tasks, collection_id, today)
+            if latest_due:
+                item["lastCompletedUid"] = latest_task.get("uid") or item.get("lastCompletedUid", "")
+                item["lastCompletedAt"] = latest_task.get("completed") or item.get("lastCompletedAt", "")
+                next_due = next_due_after(latest_due.isoformat(), item["frequency"], today)
+            else:
+                next_due = next_due_on_or_after(item["firstDueDate"], item["frequency"], today)
+        item["activeUid"] = ""
+        item["activeCollectionId"] = ""
+        item["activeDueDate"] = ""
+        item["nextDueDate"] = next_due.isoformat()
+
+    scheduled_date = date.fromisoformat(item.get("nextDueDate") or item["firstDueDate"])
+    due_date = next_due_on_or_after(scheduled_date.isoformat(), item["frequency"], today)
+    if due_date > today:
+        cleanup_future_recurring_tasks(item, tasks, collection_id, today, profile)
+        item["nextDueDate"] = due_date.isoformat()
+        item["error"] = ""
+        return item
+
+    existing = existing_recurring_task(item, tasks, collection_id, due_date)
+    if existing and task_status(existing) == "COMPLETED":
+        item["lastCompletedUid"] = existing.get("uid") or item.get("lastCompletedUid", "")
+        item["lastCompletedAt"] = existing.get("completed") or item.get("lastCompletedAt", "")
+        item["nextDueDate"] = next_due_after(due_date.isoformat(), item["frequency"], today).isoformat()
+        item["error"] = ""
+        return item
+
     uid = recurring_occurrence_uid(item, due_date)
-    try:
-        find_task(collections, uid, collection["id"])
-    except ValueError:
+    if not existing:
         create_task(
             {
                 "uid": uid,
-                "collectionId": collection["id"],
+                "collectionId": collection_id,
                 "title": item["title"],
                 "memo": item["memo"],
                 "dueDate": due_date.isoformat(),
@@ -2707,10 +2821,8 @@ def ensure_recurring_occurrence(item):
             },
             profile,
         )
-    item = dict(item)
-    item["collectionId"] = collection["id"]
     item["activeUid"] = uid
-    item["activeCollectionId"] = collection["id"]
+    item["activeCollectionId"] = collection_id
     item["activeDueDate"] = due_date.isoformat()
     item["nextDueDate"] = ""
     item["error"] = ""
@@ -2737,6 +2849,28 @@ def upsert_recurring_task(payload, profile, item_id=""):
     items.append(saved)
     save_recurring_task_store(items)
     return saved
+
+
+def sync_recurring_tasks(profile):
+    items = recurring_task_store()
+    synced = []
+    changed = False
+    for item in items:
+        if item.get("adapterProfile") != profile:
+            synced.append(item)
+            continue
+        updated = ensure_recurring_occurrence(item)
+        if updated != item:
+            changed = True
+        synced.append(updated)
+    if changed:
+        save_recurring_task_store(synced)
+    return {
+        "ok": True,
+        "profile": profile,
+        "changed": changed,
+        "items": [item for item in synced if item.get("adapterProfile") == profile],
+    }
 
 
 def delete_recurring_task(item_id):
@@ -3054,6 +3188,14 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/recurring-tasks":
             try:
                 json_response(self, 201, upsert_recurring_task(read_json_request(self), profile))
+            except ValueError as exc:
+                json_response(self, 400, {"ok": False, "error": str(exc)})
+            except (ET.ParseError, urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
+                json_response(self, 502, {"ok": False, "error": type(exc).__name__})
+            return
+        if path == "/api/recurring-tasks/sync":
+            try:
+                json_response(self, 200, sync_recurring_tasks(profile))
             except ValueError as exc:
                 json_response(self, 400, {"ok": False, "error": str(exc)})
             except (ET.ParseError, urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
