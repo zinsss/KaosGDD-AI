@@ -259,11 +259,13 @@ class DiscordDocumentInbox:
                 if not hasattr(channel, "fetch_message"):
                     continue
                 message = await channel.fetch_message(pending.prompt_message_id)
+                view = InboxMenuView(self, source_id)
                 await message.edit(
                     content=render_pending_message(pending.filename),
-                    view=InboxMenuView(self, source_id),
+                    view=view,
                     allowed_mentions=NO_MENTIONS,
                 )
+                self._register_view(view, int(message.id))
                 restored += 1
             except discord.HTTPException:
                 LOGGER.info("Could not restore Paperless inbox prompt %s", pending.prompt_message_id)
@@ -379,6 +381,15 @@ class DiscordDocumentInbox:
             return
         message = await channel.fetch_message(pending.prompt_message_id)
         await message.edit(content=content, view=view, allowed_mentions=NO_MENTIONS)
+        self._register_view(view, int(message.id))
+
+    def _register_view(self, view: discord.ui.View | None, message_id: int) -> None:
+        if view is None or not hasattr(self.bot, "add_view"):
+            return
+        try:
+            self.bot.add_view(view, message_id=message_id)
+        except ValueError:
+            LOGGER.info("Could not register persistent Documents inbox view for message %s", message_id)
 
     def _load_state(self) -> DiscordInboxState:
         try:

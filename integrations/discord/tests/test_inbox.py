@@ -80,7 +80,9 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
             user=SimpleNamespace(id=900),
             get_channel=lambda channel_id: self.channel if channel_id == 300 else None,
             fetch_channel=AsyncMock(return_value=self.channel),
+            add_view=lambda view, *, message_id=None: self.registered_views.append((view, message_id)),
         )
+        self.registered_views = []
 
     def make_message(self, attachments, *, content=""):
         replies = []
@@ -143,6 +145,25 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(paperless.submitted[0][3], ("medical", "tax"))
             self.assertEqual(inbox.status()["pendingCount"], 0)
             self.assertEqual(inbox.status()["trackedSources"], 1)
+
+    async def test_restore_pending_views_registers_existing_prompt_view(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            paperless = FakePaperless()
+            state_path = Path(temporary) / "inbox.json"
+            inbox = self.make_inbox(state_path, paperless)
+            message = self.make_message([FakeAttachment(filename="../문서.pdf")])
+            await inbox.handle_message(message)  # type: ignore[arg-type]
+            source_id = next(iter(inbox.state.pending))
+            pending = inbox.state.pending[source_id]
+            prompt = SimpleNamespace(id=pending.prompt_message_id, edit=AsyncMock())
+            self.channel.fetch_message = AsyncMock(return_value=prompt)
+            self.registered_views = []
+
+            restored = await inbox.restore_pending_views()
+
+            self.assertEqual(restored, 1)
+            prompt.edit.assert_awaited_once()
+            self.assertEqual(self.registered_views[0][1], pending.prompt_message_id)
 
     async def test_rejects_non_pdf_without_submitting(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
