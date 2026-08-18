@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import json
 import logging
 from pathlib import Path
@@ -30,6 +30,7 @@ class DiscordTasksState:
     completed_archive_message_id: int = 0
     recent_supplies_message_id: int = 0
     recent_supplies: list[str] = field(default_factory=list)
+    due_notification_keys: set[str] = field(default_factory=set)
     legacy_message_id: int = 0
 
 
@@ -114,6 +115,44 @@ class DiscordTasksSurface:
         self._save_state()
         await self.ensure_message()
 
+    async def notify_due_tasks(self, *, now: datetime | None = None) -> int:
+        if not self.show_due:
+            return 0
+        current = now or datetime.now()
+        tasks = await asyncio.to_thread(self.adapter.list_tasks, self.profile)
+        active = active_tasks(tasks, collection_id=self.collection_id)
+        self._tasks_by_key.update({task_key(item): item for item in active})
+        channel = await self.channel()
+        sent = 0
+        previous_keys = set(self.state.due_notification_keys)
+        retained_keys = {
+            key
+            for key in self.state.due_notification_keys
+            if key.split("|")[-1] >= current.date().isoformat()
+        }
+        self.state.due_notification_keys = retained_keys
+        for task in active:
+            due_at = due_notification_time(task)
+            if due_at is None or due_at.date() != current.date():
+                continue
+            if current < due_at - timedelta(hours=1):
+                continue
+            notification_key = due_notification_key(task)
+            if notification_key in self.state.due_notification_keys:
+                continue
+            key = task_key(task)
+            await channel.send(
+                content=render_due_notification_message(task),
+                view=TaskView(self, key),
+                allowed_mentions=NO_MENTIONS,
+            )
+            self.state.due_notification_keys.add(notification_key)
+            sent += 1
+            await self._pace_message_refresh()
+        if sent or previous_keys != self.state.due_notification_keys:
+            self._save_state()
+        return sent
+
     async def handle_message(self, message: discord.Message) -> bool:
         if message.channel.id != self.channel_id:
             return False
@@ -155,7 +194,7 @@ class DiscordTasksSurface:
         await self.ensure_message()
         return True
 
-    async def complete_task(self, key: str) -> bool:
+    async def complete_task(self, key: str, *, notification_message_id: int = 0) -> bool:
         task = self._tasks_by_key.get(key)
         if task is None:
             return False
@@ -167,6 +206,8 @@ class DiscordTasksSurface:
         self._save_state()
         if message_id:
             await self._mark_message_completed(message_id, {**task, "status": "COMPLETED"})
+        if notification_message_id and notification_message_id != message_id:
+            await self._mark_message_completed(notification_message_id, {**task, "status": "COMPLETED"})
         await self.ensure_message()
         return True
 
@@ -240,6 +281,7 @@ class DiscordTasksSurface:
             "completedArchiveMessageId": str(self.state.completed_archive_message_id),
             "recentSuppliesMessageId": str(self.state.recent_supplies_message_id),
             "recentSuppliesCount": len(self.state.recent_supplies),
+            "dueNotificationCount": len(self.state.due_notification_keys),
         }
 
     async def channel(self) -> discord.abc.Messageable:
@@ -317,6 +359,11 @@ class DiscordTasksSurface:
                     for item in list(raw.get("recentSupplies") or [])
                     if str(item).strip()
                 ][:MAX_RECENT_SUPPLIES],
+                due_notification_keys={
+                    str(item).strip()
+                    for item in list(raw.get("dueNotificationKeys") or [])
+                    if str(item).strip()
+                },
                 legacy_message_id=int(raw.get("messageId") or 0),
             )
         except (TypeError, ValueError):
@@ -329,6 +376,7 @@ class DiscordTasksSurface:
             "completedArchiveMessageId": self.state.completed_archive_message_id,
             "recentSuppliesMessageId": self.state.recent_supplies_message_id,
             "recentSupplies": self.state.recent_supplies[:MAX_RECENT_SUPPLIES],
+            "dueNotificationKeys": sorted(self.state.due_notification_keys),
         }
         temporary = self.state_path.with_suffix(f"{self.state_path.suffix}.tmp")
         temporary.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
@@ -449,7 +497,8 @@ class TaskView(discord.ui.View):
     def _complete_callback(self, key: str):
         async def callback(interaction: discord.Interaction) -> None:
             await interaction.response.defer(ephemeral=True)
-            if not await self.surface.complete_task(key):
+            notification_message_id = int(getattr(getattr(interaction, "message", None), "id", 0) or 0)
+            if not await self.surface.complete_task(key, notification_message_id=notification_message_id):
                 await interaction.followup.send(
                     f"{self.surface.surface_name.capitalize()} is no longer active.",
                     ephemeral=True,
@@ -759,6 +808,39 @@ def render_task_message(task: Mapping[str, Any], *, show_due: bool = True, compl
             due_text = f"~~{due_text}~~"
         lines.append(f"- due: {due_text}")
     return "\n".join(lines)[:1990]
+
+
+def render_due_notification_message(task: Mapping[str, Any]) -> str:
+    due_at = due_notification_time(task)
+    title = escape_text(task.get("summary") or "Untitled task")
+    due_text = ""
+    if due_at is not None:
+        due_text = due_at.strftime("%Y-%m-%d %H:%M")
+    return "\n".join(
+        [
+            "## Due task",
+            f"### {title}",
+            f"- due: {escape_text(due_text)}" if due_text else "- due: today",
+        ]
+    )[:1990]
+
+
+def due_notification_time(task: Mapping[str, Any]) -> datetime | None:
+    due = str(task.get("due") or "").strip()
+    if not due:
+        return None
+    due_time = str(task.get("dueTime") or "10:00").strip() or "10:00"
+    try:
+        return datetime.strptime(f"{due[:10]} {due_time[:5]}", "%Y-%m-%d %H:%M")
+    except ValueError:
+        return None
+
+
+def due_notification_key(task: Mapping[str, Any]) -> str:
+    due_at = due_notification_time(task)
+    due_date = due_at.date().isoformat() if due_at is not None else str(task.get("due") or "")[:10]
+    due_time = due_at.strftime("%H:%M") if due_at is not None else str(task.get("dueTime") or "")[:5]
+    return f"{task_key(task)}|{due_date}T{due_time}|{due_date}"
 
 
 def task_payload(task: Mapping[str, Any], *, status: str) -> dict[str, Any]:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from types import SimpleNamespace
 import json
@@ -18,9 +18,12 @@ from kaos_governor_discord.tasks import (
     TaskView,
     active_tasks,
     completed_tasks_for_month,
+    due_notification_key,
+    due_notification_time,
     parse_add_task_message,
     parse_due_line,
     render_completed_archive_message,
+    render_due_notification_message,
     render_recent_supplies_message,
     render_task_message,
     task_payload,
@@ -184,6 +187,14 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(content, "## Buy milk")
         self.assertEqual(completed, "## ~~Buy milk~~")
         self.assertNotIn("No due date", content)
+
+    def test_due_notification_uses_due_time_or_default_ten(self) -> None:
+        self.assertEqual(due_notification_time(TASKS[0]), datetime(2026, 8, 13, 9, 0))
+        self.assertEqual(due_notification_time({**TASKS[0], "dueTime": ""}), datetime(2026, 8, 13, 10, 0))
+        self.assertIn("## Due task", render_due_notification_message(TASKS[0]))
+        self.assertIn("### Buy milk", render_due_notification_message(TASKS[0]))
+        self.assertIn("- due: 2026-08-13 09:00", render_due_notification_message(TASKS[0]))
+        self.assertTrue(due_notification_key(TASKS[0]).endswith("|2026-08-13"))
 
     def test_completed_archive_renders_current_month_history(self) -> None:
         content = render_completed_archive_message(TASKS, month=date(2026, 8, 15))
@@ -600,6 +611,52 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(await surface.delete_task("zin:tasks|TASK-1"))
             self.assertEqual(adapter.deleted[0], ("main", "TASK-1", "zin:tasks"))
             self.assertEqual(surface.state.message_ids, {})
+
+    async def test_notify_due_tasks_sends_once_one_hour_before_due(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            adapter = FakeAdapter()
+            surface = self.make_surface(Path(temporary) / "tasks.json", channel, adapter)
+
+            self.assertEqual(await surface.notify_due_tasks(now=datetime(2026, 8, 13, 7, 59)), 0)
+            self.assertEqual(channel.sent, [])
+
+            self.assertEqual(await surface.notify_due_tasks(now=datetime(2026, 8, 13, 8, 0)), 1)
+            self.assertIn("## Due task", channel.sent[0]["content"])
+            self.assertIn("### Buy milk", channel.sent[0]["content"])
+            self.assertIsInstance(channel.sent[0]["view"], TaskView)
+            self.assertEqual(surface.status()["dueNotificationCount"], 1)
+
+            self.assertEqual(await surface.notify_due_tasks(now=datetime(2026, 8, 13, 8, 30)), 0)
+            self.assertEqual(len(channel.sent), 1)
+
+    async def test_notify_due_tasks_sends_late_once_on_due_date_after_restart(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            adapter = FakeAdapter()
+            surface = self.make_surface(Path(temporary) / "tasks.json", channel, adapter)
+
+            self.assertEqual(await surface.notify_due_tasks(now=datetime(2026, 8, 13, 13, 44)), 1)
+            self.assertIn("Buy milk", channel.sent[0]["content"])
+
+    async def test_supplies_surface_does_not_send_due_notifications(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            surface = DiscordTasksSurface(
+                FakeBot(channel),  # type: ignore[arg-type]
+                AccessPolicy(100, frozenset({200}), frozenset({300})),
+                channel_id=300,
+                profile="main",
+                state_path=Path(temporary) / "supplies.json",
+                adapter=FakeAdapter(),  # type: ignore[arg-type]
+                surface_name="supplies",
+                button_prefix="supplies",
+                collection_id="zin:supplies",
+                show_due=False,
+            )
+
+            self.assertEqual(await surface.notify_due_tasks(now=datetime(2026, 8, 13, 13, 44)), 0)
+            self.assertEqual(channel.sent, [])
 
     async def test_edit_button_opens_prefilled_task_modal(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -143,6 +143,7 @@ class GovernorBot(discord.Client):
         self._service_status_task: asyncio.Task | None = None
         self._calendar_midnight_task: asyncio.Task | None = None
         self._tasks_midnight_task: asyncio.Task | None = None
+        self._tasks_due_task: asyncio.Task | None = None
         self.calendar_adapter = CalendarAdapterClient(CalendarAdapterConfig(settings.calendar_adapter_url))
         self.discord_calendar = (
             DiscordCalendarSurface(
@@ -493,6 +494,7 @@ class GovernorBot(discord.Client):
         if self.discord_tasks is not None:
             try:
                 await self.discord_tasks.ensure_message()
+                await self.discord_tasks.notify_due_tasks()
             except Exception:
                 LOGGER.exception("Failed to ensure Discord tasks message")
         if self.discord_supplies is not None:
@@ -504,6 +506,11 @@ class GovernorBot(discord.Client):
             self._tasks_midnight_task = asyncio.create_task(
                 self._tasks_midnight_loop(),
                 name="governor-tasks-midnight",
+            )
+        if self.discord_tasks is not None and self._tasks_due_task is None:
+            self._tasks_due_task = asyncio.create_task(
+                self._tasks_due_loop(),
+                name="governor-tasks-due",
             )
         if self.discord_inbox is not None:
             try:
@@ -585,6 +592,11 @@ class GovernorBot(discord.Client):
             with suppress(asyncio.CancelledError):
                 await self._tasks_midnight_task
             self._tasks_midnight_task = None
+        if self._tasks_due_task is not None:
+            self._tasks_due_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._tasks_due_task
+            self._tasks_due_task = None
         await self._health.stop()
         if self._brain_tools is not None:
             await self._brain_tools.stop()
@@ -700,6 +712,16 @@ class GovernorBot(discord.Client):
                     await surface.repost_active_messages()
                 except Exception:
                     LOGGER.exception("Failed to repost Discord %s messages", surface.surface_name)
+
+    async def _tasks_due_loop(self) -> None:
+        if self.discord_tasks is None:
+            return
+        while not self.is_closed():
+            await asyncio.sleep(60)
+            try:
+                await self.discord_tasks.notify_due_tasks()
+            except Exception:
+                LOGGER.exception("Failed to send Discord due task notifications")
 
     async def _refresh_service_status_surface(self) -> int:
         if self.discord_service_status is None:
