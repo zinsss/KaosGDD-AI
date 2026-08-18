@@ -106,6 +106,9 @@ Allowed parameters by intent:
 Rules:
 - Use YYYY-MM-DD dates.
 - Use HH:MM 24-hour times.
+- Default scope to "personal" unless the user explicitly says family, wife, spouse, child, Rouny, shared, supplies, or household context.
+- Use "family" only for explicitly shared family calendar/task requests.
+- Use "supplies" only for supplies, shopping, inventory, or household stock items.
 - Default task due time to 10:00 when a due date has no time.
 - Do not produce shell, Docker, database, restart, filesystem, SSH, or admin intents.
 - For supplies, do not include dueDate or dueTime.

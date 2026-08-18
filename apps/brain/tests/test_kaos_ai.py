@@ -30,6 +30,8 @@ class KaosAITests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("memo.search", KAOSAI_PLAN_SYSTEM_PROMPT)
         self.assertIn("memo.search: query", KAOSAI_PLAN_SYSTEM_PROMPT)
         self.assertIn("task.edit: dueDate, dueTime, memo, priority, taskTitle, title", KAOSAI_PLAN_SYSTEM_PROMPT)
+        self.assertIn('Default scope to "personal"', KAOSAI_PLAN_SYSTEM_PROMPT)
+        self.assertIn('Use "family" only for explicitly shared family', KAOSAI_PLAN_SYSTEM_PROMPT)
         self.assertNotIn("collectionId", KAOSAI_PLAN_SYSTEM_PROMPT)
 
     def test_parse_strict_plan_json(self) -> None:
