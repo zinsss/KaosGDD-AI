@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import base64
+import calendar
 import json
 import os
 import re
@@ -917,6 +918,167 @@ def list_caregiver_journals(month=""):
         "days": days,
         "settings": settings,
     }
+
+
+CAREGIVER_WEEKDAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"]
+
+
+def caregiver_nonnegative_integer(value):
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, number)
+
+
+def caregiver_time_minutes(value):
+    raw = str(value or "")
+    if not re.fullmatch(r"\d{2}:\d{2}", raw):
+        return None
+    hour, minute = (int(part) for part in raw.split(":", 1))
+    if hour > 23 or minute > 59:
+        return None
+    return hour * 60 + minute
+
+
+def caregiver_normalized_sessions(sessions):
+    if not isinstance(sessions, list):
+        return []
+    normalized = []
+    for session in sessions:
+        if not isinstance(session, dict):
+            continue
+        start = caregiver_time_minutes(session.get("start"))
+        end = caregiver_time_minutes(session.get("end"))
+        if start is not None and end is not None and end > start:
+            normalized.append(
+                {
+                    "start": f"{start // 60:02d}:{start % 60:02d}",
+                    "end": f"{end // 60:02d}:{end % 60:02d}",
+                }
+            )
+    return normalized
+
+
+def caregiver_session_minutes(sessions):
+    return sum(
+        caregiver_time_minutes(session["end"]) - caregiver_time_minutes(session["start"])
+        for session in caregiver_normalized_sessions(sessions)
+    )
+
+
+def caregiver_normalized_extras(extras):
+    if not isinstance(extras, list):
+        return []
+    return [
+        {
+            "label": str(extra.get("label") or "").strip(),
+            "amount": caregiver_nonnegative_integer(extra.get("amount")),
+        }
+        for extra in extras
+        if isinstance(extra, dict)
+        and (str(extra.get("label") or "").strip() or caregiver_nonnegative_integer(extra.get("amount")))
+    ]
+
+
+def caregiver_settings_for_month(settings, month):
+    candidates = []
+    for setting in settings if isinstance(settings, list) else []:
+        if not isinstance(setting, dict):
+            continue
+        setting_month = str(setting.get("month") or "")
+        try:
+            validate_caregiver_month(setting_month)
+        except ValueError:
+            continue
+        if setting_month <= month:
+            candidates.append(setting)
+    selected = max(candidates, key=lambda item: item["month"]) if candidates else {}
+    return {
+        "month": month,
+        "sourceMonth": selected.get("month") or "",
+        "hourlyWage": caregiver_nonnegative_integer(selected.get("hourlyWage")),
+        "transportFee": caregiver_nonnegative_integer(selected.get("transportFee")),
+    }
+
+
+def caregiver_compact_hours(minutes):
+    return round(minutes / 60, 2)
+
+
+def caregiver_base_pay(minutes, hourly_wage):
+    return (minutes * hourly_wage + 30) // 60
+
+
+def caregiver_calculate_month(month, days, settings):
+    selected_month = validate_caregiver_month(month)
+    year, month_number = (int(part) for part in selected_month.split("-", 1))
+    setting = caregiver_settings_for_month(settings, selected_month)
+    records = {}
+    for record in days if isinstance(days, list) else []:
+        if not isinstance(record, dict):
+            continue
+        date_value = str(record.get("date") or "")
+        if date_value.startswith(f"{selected_month}-"):
+            records[date_value] = record
+
+    daily = []
+    total_minutes = 0
+    total_extras = 0
+    worked_days = 0
+    for day_number in range(1, calendar.monthrange(year, month_number)[1] + 1):
+        date_value = f"{selected_month}-{day_number:02d}"
+        record = records.get(date_value, {})
+        sessions = caregiver_normalized_sessions(record.get("sessions"))
+        minutes = caregiver_session_minutes(sessions)
+        extras = caregiver_normalized_extras(record.get("extras"))
+        extras_total = sum(extra["amount"] for extra in extras)
+        if minutes > 0:
+            worked_days += 1
+            total_minutes += minutes
+        total_extras += extras_total
+        daily.append(
+            {
+                "date": date_value,
+                "day": day_number,
+                "weekday": CAREGIVER_WEEKDAY_LABELS[date(year, month_number, day_number).weekday()],
+                "minutes": minutes,
+                "hours": caregiver_compact_hours(minutes),
+                "basePay": caregiver_base_pay(minutes, setting["hourlyWage"]),
+                "extras": extras_total,
+                "sessions": sessions,
+                "extraItems": extras,
+                "notes": ", ".join(
+                    f"{extra['label'] or '추가'} {extra['amount']:,}" for extra in extras
+                ),
+            }
+        )
+
+    base_pay = caregiver_base_pay(total_minutes, setting["hourlyWage"])
+    total = base_pay + total_extras + setting["transportFee"]
+    return {
+        "ok": True,
+        "live": True,
+        "month": selected_month,
+        "settings": setting,
+        "summary": {
+            "days": worked_days,
+            "minutes": total_minutes,
+            "hours": caregiver_compact_hours(total_minutes),
+            "hourlyWage": setting["hourlyWage"],
+            "basePay": base_pay,
+            "extras": total_extras,
+            "transportFee": setting["transportFee"],
+            "total": total,
+        },
+        "daily": daily,
+    }
+
+
+def caregiver_month_payload(month):
+    selected_month = validate_caregiver_month(month)
+    journals = list_caregiver_journals(selected_month)
+    return caregiver_calculate_month(selected_month, journals.get("days"), journals.get("settings"))
 
 
 def put_caregiver_journal(payload, builder):
@@ -2988,6 +3150,16 @@ class Handler(BaseHTTPRequestHandler):
                 status = 404 if str(exc) == "family_profile_required" else 400
                 json_response(self, status, {"ok": False, "error": str(exc)})
             return
+        if path == "/api/caregiver/month":
+            try:
+                require_family_profile(profile)
+                json_response(self, 200, caregiver_month_payload((query.get("month") or [""])[0]))
+            except ValueError as exc:
+                status = 404 if str(exc) == "family_profile_required" else 400
+                json_response(self, status, {"error": str(exc)})
+            except (ET.ParseError, urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
+                json_response(self, 502, {"configured": system_configured(), "live": False, "error": type(exc).__name__})
+            return
         if path == "/api/recurring-tasks":
             try:
                 json_response(self, 200, list_recurring_tasks(profile))
@@ -3094,6 +3266,46 @@ class Handler(BaseHTTPRequestHandler):
                 status = 404 if str(exc) == "family_profile_required" else 400
                 json_response(self, status, {"ok": False, "error": str(exc)})
             return
+        if path == "/api/caregiver/settings":
+            try:
+                require_family_profile(profile)
+                payload = read_json_request(self)
+                month = validate_caregiver_month(payload.get("month"))
+                put_caregiver_settings(
+                    {
+                        "month": month,
+                        "hourlyWage": payload.get("hourlyWage"),
+                        "transportFee": payload.get("transportFee"),
+                    }
+                )
+                json_response(self, 200, caregiver_month_payload(month))
+            except ValueError as exc:
+                status = 404 if str(exc) == "family_profile_required" else 400
+                json_response(self, status, {"error": str(exc)})
+            except (ET.ParseError, urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
+                json_response(self, 502, {"configured": system_configured(), "live": False, "error": type(exc).__name__})
+            return
+        if path == "/api/caregiver/day":
+            try:
+                require_family_profile(profile)
+                payload = read_json_request(self)
+                date_value = validate_date(payload.get("date"))
+                if not date_value:
+                    raise ValueError("caregiver_date_required")
+                put_caregiver_day(
+                    {
+                        "date": date_value,
+                        "sessions": payload.get("sessions"),
+                        "extras": payload.get("extras"),
+                    }
+                )
+                json_response(self, 200, caregiver_month_payload(date_value[:7]))
+            except ValueError as exc:
+                status = 404 if str(exc) == "family_profile_required" else 400
+                json_response(self, status, {"error": str(exc)})
+            except (ET.ParseError, urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
+                json_response(self, 502, {"configured": system_configured(), "live": False, "error": type(exc).__name__})
+            return
         holiday_match = re.fullmatch(r"/api/holidays/(KAOS-HOLIDAY-[A-Fa-f0-9]{24})", path)
         if holiday_match:
             try:
@@ -3117,6 +3329,21 @@ class Handler(BaseHTTPRequestHandler):
                 json_response(self, 200, delete_caregiver_day(read_json_request(self)))
             except ValueError as exc:
                 json_response(self, 400, {"error": str(exc)})
+            except (ET.ParseError, urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
+                json_response(self, 502, {"configured": system_configured(), "live": False, "error": type(exc).__name__})
+            return
+        if path == "/api/caregiver/day":
+            try:
+                require_family_profile(profile)
+                payload = read_json_request(self)
+                date_value = validate_date(payload.get("date"))
+                if not date_value:
+                    raise ValueError("caregiver_date_required")
+                delete_caregiver_day({"date": date_value})
+                json_response(self, 200, caregiver_month_payload(date_value[:7]))
+            except ValueError as exc:
+                status = 404 if str(exc) == "family_profile_required" else 400
+                json_response(self, status, {"error": str(exc)})
             except (ET.ParseError, urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
                 json_response(self, 502, {"configured": system_configured(), "live": False, "error": type(exc).__name__})
             return

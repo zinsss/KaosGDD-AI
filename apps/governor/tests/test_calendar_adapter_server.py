@@ -249,6 +249,63 @@ class CalendarAdapterServerTests(unittest.TestCase):
             server.select_collection = original_select
             server.create_task = original_create
 
+    def test_caregiver_month_payload_calculates_legacy_summary(self) -> None:
+        server = load_server_module()
+        original_list = server.list_caregiver_journals
+        try:
+            server.list_caregiver_journals = lambda month: {
+                "ok": True,
+                "month": month,
+                "days": [
+                    {
+                        "date": "2026-08-01",
+                        "sessions": [{"start": "10:00", "end": "12:30"}],
+                        "extras": [{"label": "식대", "amount": 3000}],
+                    },
+                    {
+                        "date": "2026-07-31",
+                        "sessions": [{"start": "10:00", "end": "12:00"}],
+                        "extras": [{"label": "이전달", "amount": 9000}],
+                    },
+                ],
+                "settings": [
+                    {"month": "2026-07", "hourlyWage": 10000, "transportFee": 1000},
+                    {"month": "2026-08", "hourlyWage": 12000, "transportFee": 5000},
+                ],
+            }
+
+            payload = server.caregiver_month_payload("2026-08")
+
+            self.assertTrue(payload["ok"])
+            self.assertTrue(payload["live"])
+            self.assertEqual(payload["month"], "2026-08")
+            self.assertEqual(payload["settings"]["sourceMonth"], "2026-08")
+            self.assertEqual(payload["summary"]["days"], 1)
+            self.assertEqual(payload["summary"]["minutes"], 150)
+            self.assertEqual(payload["summary"]["hours"], 2.5)
+            self.assertEqual(payload["summary"]["basePay"], 30000)
+            self.assertEqual(payload["summary"]["extras"], 3000)
+            self.assertEqual(payload["summary"]["transportFee"], 5000)
+            self.assertEqual(payload["summary"]["total"], 38000)
+            self.assertEqual(payload["daily"][0]["weekday"], "토")
+            self.assertEqual(payload["daily"][0]["notes"], "식대 3,000")
+            self.assertEqual(len(payload["daily"]), 31)
+        finally:
+            server.list_caregiver_journals = original_list
+
+    def test_caregiver_month_uses_latest_prior_settings(self) -> None:
+        server = load_server_module()
+        payload = server.caregiver_calculate_month(
+            "2026-08",
+            [{"date": "2026-08-03", "sessions": [{"start": "09:00", "end": "10:00"}]}],
+            [{"month": "2026-06", "hourlyWage": 9000, "transportFee": 2000}],
+        )
+
+        self.assertEqual(payload["settings"]["sourceMonth"], "2026-06")
+        self.assertEqual(payload["summary"]["basePay"], 9000)
+        self.assertEqual(payload["summary"]["transportFee"], 2000)
+        self.assertEqual(payload["summary"]["total"], 11000)
+
     def test_recurring_task_repairs_missing_active_from_latest_completed_occurrence(self) -> None:
         server = load_server_module()
         created = []
