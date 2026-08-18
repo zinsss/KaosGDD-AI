@@ -110,6 +110,9 @@ class DiscordTasksSurface:
             recent_message = await self._recreate_recent_supplies_message(channel, force_recreate=message_order_changed)
             self.state.recent_supplies_message_id = int(recent_message.id)
             await self._pace_message_refresh()
+        for key, message_ids in self.state.completed_message_ids.items():
+            for message_id in message_ids:
+                self._register_view(CompletedTaskMessageView(self, key), message_id)
         self._save_state()
 
     async def repost_active_messages(self) -> None:
@@ -218,6 +221,16 @@ class DiscordTasksSurface:
         await self.ensure_message()
         return True
 
+    async def reopen_completed_task(self, key: str) -> bool:
+        task = await self._task_by_key(key)
+        if task is None or str(task.get("status") or "").upper() != "COMPLETED":
+            return False
+        payload = task_payload(task, status="NEEDS-ACTION")
+        payload = normalize_supplies_due(payload, collection_id=self.collection_id or str(task.get("collection") or ""))
+        await asyncio.to_thread(self.adapter.update_task, self.profile, payload)
+        await self.ensure_message()
+        return True
+
     async def edit_task(
         self,
         key: str,
@@ -228,7 +241,7 @@ class DiscordTasksSurface:
         due_time: str = "",
         priority: str = "",
     ) -> tuple[bool, str]:
-        task = self._tasks_by_key.get(key)
+        task = await self._task_by_key(key)
         if task is None:
             return False, f"{self.surface_name}_not_active"
         clean_title = " ".join(title.strip().split())
@@ -261,11 +274,21 @@ class DiscordTasksSurface:
         }
         payload = normalize_supplies_due(payload, collection_id=self.collection_id or str(task.get("collection") or ""))
         await asyncio.to_thread(self.adapter.update_task, self.profile, payload)
+        if str(task.get("status") or "").upper() == "COMPLETED":
+            updated_task = {
+                **task,
+                "summary": clean_title,
+                "description": clean_memo,
+                "due": clean_due_date,
+                "dueTime": clean_due_time,
+                "priority": clean_priority,
+            }
+            await self._refresh_completed_messages(key, updated_task)
         await self.ensure_message()
         return True, ""
 
     async def delete_task(self, key: str) -> bool:
-        task = self._tasks_by_key.get(key)
+        task = await self._task_by_key(key)
         if task is None:
             return False
         await asyncio.to_thread(
@@ -274,8 +297,20 @@ class DiscordTasksSurface:
             str(task.get("uid") or ""),
             str(task.get("collection") or ""),
         )
+        channel = await self.channel()
+        await self._delete_completed_messages(key, channel)
         await self.ensure_message()
         return True
+
+    async def _task_by_key(self, key: str) -> dict[str, Any] | None:
+        task = self._tasks_by_key.get(key)
+        if task is not None:
+            return task
+        tasks = await asyncio.to_thread(self.adapter.list_tasks, self.profile)
+        for item in tasks:
+            if task_key(item) == key:
+                return dict(item)
+        return None
 
     def status(self) -> dict[str, object]:
         return {
@@ -420,6 +455,11 @@ class DiscordTasksSurface:
             deleted = True
         return deleted
 
+    async def _refresh_completed_messages(self, key: str, task: Mapping[str, Any]) -> None:
+        message_ids = self.state.completed_message_ids.get(key, [])
+        for message_id in message_ids:
+            await self._mark_message_completed(message_id, {**task, "status": "COMPLETED"})
+
     def _record_completed_message(self, key: str, message_id: int) -> None:
         if not message_id:
             return
@@ -435,9 +475,10 @@ class DiscordTasksSurface:
             message = await channel.fetch_message(message_id)
             await message.edit(
                 content=render_task_message(task, show_due=self.show_due, completed=True),
-                view=None,
+                view=CompletedTaskMessageView(self, task_key(task)),
                 allowed_mentions=NO_MENTIONS,
             )
+            self._register_view(CompletedTaskMessageView(self, task_key(task)), int(message.id))
             return True
         except (discord.NotFound, discord.HTTPException):
             LOGGER.info("Could not mark completed %s message %s", self.surface_name, message_id)
@@ -558,6 +599,80 @@ class TaskView(discord.ui.View):
             if not await self.surface.delete_task(key):
                 await interaction.followup.send(
                     f"{self.surface.surface_name.capitalize()} is no longer active.",
+                    ephemeral=True,
+                    allowed_mentions=NO_MENTIONS,
+                )
+
+        return callback
+
+
+class CompletedTaskMessageView(discord.ui.View):
+    def __init__(self, surface: DiscordTasksSurface, key: str) -> None:
+        super().__init__(timeout=None)
+        self.surface = surface
+        undone = discord.ui.Button(
+            label="Undone",
+            style=discord.ButtonStyle.success,
+            custom_id=f"{surface.button_prefix}:completed:undone",
+        )
+        edit = discord.ui.Button(
+            label="Edit",
+            style=discord.ButtonStyle.secondary,
+            custom_id=f"{surface.button_prefix}:completed:edit",
+        )
+        delete = discord.ui.Button(
+            label="Delete",
+            style=discord.ButtonStyle.danger,
+            custom_id=f"{surface.button_prefix}:completed:delete",
+        )
+        undone.callback = self._undone_callback(key)
+        edit.callback = self._edit_callback(key)
+        delete.callback = self._delete_callback(key)
+        self.add_item(undone)
+        self.add_item(edit)
+        self.add_item(delete)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if self.surface.policy.allows(interaction.guild_id, interaction.channel_id, interaction.user.id):
+            return True
+        if interaction.response.is_done():
+            await interaction.followup.send("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        else:
+            await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+    def _undone_callback(self, key: str):
+        async def callback(interaction: discord.Interaction) -> None:
+            await interaction.response.defer(ephemeral=True)
+            if not await self.surface.reopen_completed_task(key):
+                await interaction.followup.send(
+                    f"{self.surface.surface_name.capitalize()} is no longer completed.",
+                    ephemeral=True,
+                    allowed_mentions=NO_MENTIONS,
+                )
+
+        return callback
+
+    def _edit_callback(self, key: str):
+        async def callback(interaction: discord.Interaction) -> None:
+            task = await self.surface._task_by_key(key)
+            if task is None:
+                await interaction.response.send_message(
+                    f"{self.surface.surface_name.capitalize()} is no longer available.",
+                    ephemeral=True,
+                    allowed_mentions=NO_MENTIONS,
+                )
+                return
+            await interaction.response.send_modal(TaskEditModal(self.surface, key, task))
+
+        return callback
+
+    def _delete_callback(self, key: str):
+        async def callback(interaction: discord.Interaction) -> None:
+            await interaction.response.defer(ephemeral=True)
+            if not await self.surface.delete_task(key):
+                await interaction.followup.send(
+                    f"{self.surface.surface_name.capitalize()} is no longer available.",
                     ephemeral=True,
                     allowed_mentions=NO_MENTIONS,
                 )
@@ -687,10 +802,10 @@ class CompletedTasksView(discord.ui.View):
         self.surface = surface
         self.tasks = [dict(item) for item in tasks[:MAX_VISIBLE_TASKS]]
         select = discord.ui.Select(
-            placeholder="완료 항목 다시 만들기",
+            placeholder="완료 항목 선택",
             min_values=1,
             max_values=1,
-            custom_id=f"{surface.button_prefix}:completed:recreate",
+            custom_id=f"{surface.button_prefix}:completed:select",
             options=[
                 discord.SelectOption(label=_select_option_label(item.get("summary") or "Untitled task"), value=str(index))
                 for index, item in enumerate(self.tasks)
@@ -716,11 +831,59 @@ class CompletedTasksView(discord.ui.View):
                 task = self.tasks[int(raw_value)]
             except (IndexError, ValueError):
                 return
+            title = escape_text(task.get("summary") or "Untitled task")
+            await interaction.followup.send(
+                f"## {title}",
+                view=CompletedHistoryActionView(self.surface, task),
+                ephemeral=True,
+                allowed_mentions=NO_MENTIONS,
+            )
+
+        return callback
+
+
+class CompletedHistoryActionView(discord.ui.View):
+    def __init__(self, surface: DiscordTasksSurface, task: Mapping[str, Any]) -> None:
+        super().__init__(timeout=300)
+        self.surface = surface
+        self.task = dict(task)
+        undone = discord.ui.Button(label="Undone", style=discord.ButtonStyle.success)
+        make_new = discord.ui.Button(label="Make as new", style=discord.ButtonStyle.secondary)
+        undone.callback = self._undone_callback()
+        make_new.callback = self._make_new_callback()
+        self.add_item(undone)
+        self.add_item(make_new)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if self.surface.policy.allows(interaction.guild_id, interaction.channel_id, interaction.user.id):
+            return True
+        if interaction.response.is_done():
+            await interaction.followup.send("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        else:
+            await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+    def _undone_callback(self):
+        async def callback(interaction: discord.Interaction) -> None:
+            await interaction.response.defer(ephemeral=True)
+            key = task_key(self.task)
+            if not await self.surface.reopen_completed_task(key):
+                await interaction.followup.send(
+                    f"{self.surface.surface_name.capitalize()} is no longer completed.",
+                    ephemeral=True,
+                    allowed_mentions=NO_MENTIONS,
+                )
+
+        return callback
+
+    def _make_new_callback(self):
+        async def callback(interaction: discord.Interaction) -> None:
+            await interaction.response.defer(ephemeral=True)
             await self.surface.create_task(
                 AddTaskCommand(
-                    title=str(task.get("summary") or "Untitled task"),
-                    due_date=str(task.get("due") or ""),
-                    due_time=str(task.get("dueTime") or ""),
+                    title=str(self.task.get("summary") or "Untitled task"),
+                    due_date=str(self.task.get("due") or ""),
+                    due_time=str(self.task.get("dueTime") or ""),
                 )
             )
 

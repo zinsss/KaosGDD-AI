@@ -11,6 +11,8 @@ from unittest.mock import AsyncMock
 from kaos_governor_discord.access import AccessPolicy
 from kaos_governor_discord.tasks import (
     AddTaskCommand,
+    CompletedHistoryActionView,
+    CompletedTaskMessageView,
     CompletedTasksView,
     DiscordTasksSurface,
     RecentSuppliesView,
@@ -232,7 +234,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             select = view.children[0]
 
             self.assertEqual(len(select.options), 25)
-            self.assertEqual(select.custom_id, "tasks:completed:recreate")
+            self.assertEqual(select.custom_id, "tasks:completed:select")
 
     def test_parse_add_task_message_accepts_plus_title_only(self) -> None:
         self.assertEqual(parse_add_task_message("+ Call mom"), AddTaskCommand(title="Call mom"))
@@ -605,7 +607,11 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsInstance(summary_message.edits[-1]["view"], CompletedTasksView)
             self.assertFalse(completed_message.deleted)
             self.assertIn("## ~~Buy milk~~", completed_message.edits[-1]["content"])
-            self.assertIsNone(completed_message.edits[-1]["view"])
+            self.assertIsInstance(completed_message.edits[-1]["view"], CompletedTaskMessageView)
+            self.assertEqual(
+                [item.label for item in completed_message.edits[-1]["view"].children],
+                ["Undone", "Edit", "Delete"],
+            )
 
             adapter.tasks = [{**TASKS[0], "status": "NEEDS-ACTION"}]
             await surface.ensure_message()
@@ -812,10 +818,50 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             )
 
             await view._select_callback(SimpleNamespace(values=["0"]))(interaction)  # type: ignore[attr-defined,arg-type]
+            self.assertEqual(adapter.created, [])
+            history_view = interaction.followup.send.await_args.kwargs["view"]
+            self.assertIsInstance(history_view, CompletedHistoryActionView)
+            self.assertEqual([item.label for item in history_view.children], ["Undone", "Make as new"])
+            await history_view.children[1].callback(interaction)  # type: ignore[misc]
 
             self.assertEqual(adapter.created[-1][1]["title"], "Renew license")
             self.assertEqual(adapter.created[-1][1]["dueDate"], "2026-08-20")
             self.assertEqual(adapter.created[-1][1]["dueTime"], "14:30")
+
+    async def test_completed_history_can_reopen_existing_task(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            adapter = FakeAdapter(
+                tasks=[
+                    {
+                        **TASKS[1],
+                        "uid": "DONE-1",
+                        "collection": "zin:tasks",
+                        "summary": "Renew license",
+                        "due": "2026-08-20",
+                        "dueTime": "14:30",
+                    }
+                ]
+            )
+            surface = self.make_surface(Path(temporary) / "tasks.json", channel, adapter)
+
+            await surface.ensure_message()
+            view = channel.sent[0]["view"]
+            interaction = SimpleNamespace(
+                guild_id=100,
+                channel_id=300,
+                user=SimpleNamespace(id=200),
+                response=SimpleNamespace(defer=AsyncMock(), is_done=lambda: True),
+                followup=SimpleNamespace(send=AsyncMock()),
+            )
+
+            await view._select_callback(SimpleNamespace(values=["0"]))(interaction)  # type: ignore[attr-defined,arg-type]
+            history_view = interaction.followup.send.await_args.kwargs["view"]
+            await history_view.children[0].callback(interaction)  # type: ignore[misc]
+
+            self.assertEqual(adapter.updated[-1][1]["uid"], "DONE-1")
+            self.assertEqual(adapter.updated[-1][1]["status"], "NEEDS-ACTION")
+            self.assertEqual(adapter.created, [])
 
     async def test_recreate_completed_supply_strips_due_date(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -850,7 +896,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             view = channel.sent[0]["view"]
             self.assertIsInstance(view, CompletedTasksView)
             select = view.children[0]
-            self.assertEqual(select.custom_id, "supplies:completed:recreate")
+            self.assertEqual(select.custom_id, "supplies:completed:select")
             interaction = SimpleNamespace(
                 guild_id=100,
                 channel_id=300,
@@ -860,6 +906,8 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             )
 
             await view._select_callback(SimpleNamespace(values=["0"]))(interaction)  # type: ignore[attr-defined,arg-type]
+            history_view = interaction.followup.send.await_args.kwargs["view"]
+            await history_view.children[1].callback(interaction)  # type: ignore[misc]
 
             self.assertEqual(adapter.created[-1][1]["title"], "Paper towels")
             self.assertEqual(adapter.created[-1][1]["collectionId"], "zin:supplies")
