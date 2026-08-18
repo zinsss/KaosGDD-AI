@@ -14,6 +14,7 @@ class BrainHealthSnapshot:
     discord_ready: bool
     chat_model: str
     deep_model: str
+    kaosai_mode: str
     governor_tools_enabled: bool
 
     def payload(self) -> dict[str, Any]:
@@ -22,6 +23,7 @@ class BrainHealthSnapshot:
             "discordReady": self.discord_ready,
             "chatModel": self.chat_model,
             "deepModel": self.deep_model,
+            "kaosAI": {"mode": self.kaosai_mode},
             "governorTools": {"enabled": self.governor_tools_enabled},
         }
 
@@ -59,5 +61,16 @@ def snapshot(settings: Settings, bot: Any) -> BrainHealthSnapshot:
         discord_ready=discord_ready,
         chat_model=settings.chat_model,
         deep_model=settings.deep_model,
+        kaosai_mode=_kaosai_mode(settings),
         governor_tools_enabled=settings.governor_tools_enabled,
     )
+
+
+def _kaosai_mode(settings: Settings) -> str:
+    if not settings.kaosai_enabled:
+        return "disabled"
+    if settings.kaosai_dry_run_enabled:
+        return "dry-run"
+    if settings.kaosai_chat_enabled:
+        return "chat"
+    return "diagnostic"

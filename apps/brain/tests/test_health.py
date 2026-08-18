@@ -27,8 +27,46 @@ class BrainHealthTests(unittest.TestCase):
         self.assertTrue(payload["discordReady"])
         self.assertEqual(payload["chatModel"], "gemma3:4b")
         self.assertEqual(payload["deepModel"], "qwen3:8b")
+        self.assertEqual(payload["kaosAI"], {"mode": "disabled"})
         self.assertEqual(payload["governorTools"], {"enabled": True})
         self.assertNotIn("token", str(payload).lower())
+
+    def test_snapshot_reports_kaosai_modes(self) -> None:
+        bot = SimpleNamespace(is_ready=lambda: True)
+
+        diagnostic = Settings.from_env(
+            {
+                **BASE_ENV,
+                "KAOSAI_ENABLED": "true",
+                "KAOSAI_PROVIDER": "openclaw",
+                "KAOSAI_BASE_URL": "http://127.0.0.1:18789",
+                "KAOSAI_API_TOKEN": "token",
+            }
+        )
+        dry_run = Settings.from_env(
+            {
+                **BASE_ENV,
+                "KAOSAI_ENABLED": "true",
+                "KAOSAI_PROVIDER": "openclaw",
+                "KAOSAI_BASE_URL": "http://127.0.0.1:18789",
+                "KAOSAI_API_TOKEN": "token",
+                "KAOSAI_DRY_RUN_ENABLED": "true",
+            }
+        )
+        chat = Settings.from_env(
+            {
+                **BASE_ENV,
+                "KAOSAI_ENABLED": "true",
+                "KAOSAI_PROVIDER": "openclaw",
+                "KAOSAI_BASE_URL": "http://127.0.0.1:18789",
+                "KAOSAI_API_TOKEN": "token",
+                "KAOSAI_CHAT_ENABLED": "true",
+            }
+        )
+
+        self.assertEqual(snapshot(diagnostic, bot).payload()["kaosAI"], {"mode": "diagnostic"})
+        self.assertEqual(snapshot(dry_run, bot).payload()["kaosAI"], {"mode": "dry-run"})
+        self.assertEqual(snapshot(chat, bot).payload()["kaosAI"], {"mode": "chat"})
 
 
 if __name__ == "__main__":

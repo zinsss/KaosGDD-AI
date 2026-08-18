@@ -75,6 +75,9 @@ GOVERNOR_API_TOKEN_FILE=/run/secrets/governor_api_token
 
 Bind the health endpoint only to loopback or the KaosBrain Tailscale IP. It is
 for KaosGovernor system status probes, not public access.
+The health payload reports `kaosAI.mode` as `disabled`, `diagnostic`,
+`dry-run`, or `chat` so Governor can show the active Brain routing mode without
+seeing KaosAI credentials.
 
 Supported write grammar in this slice:
 
