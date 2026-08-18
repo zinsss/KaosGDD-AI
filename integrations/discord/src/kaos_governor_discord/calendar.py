@@ -152,19 +152,33 @@ class DiscordCalendarSurface:
             try:
                 message = await channel.fetch_message(message_id)
                 if file is None:
-                    return await message.edit(content=content, view=view, allowed_mentions=NO_MENTIONS)
-                return await message.edit(
+                    updated = await message.edit(content=content, view=view, allowed_mentions=NO_MENTIONS)
+                    self._register_view(view, int(updated.id))
+                    return updated
+                updated = await message.edit(
                     content=content,
                     attachments=[file],
                     view=view,
                     allowed_mentions=NO_MENTIONS,
                 )
+                self._register_view(view, int(updated.id))
+                return updated
             except (discord.NotFound, discord.HTTPException):
                 LOGGER.info("Calendar message %s missing; recreating", message_id)
         kwargs: dict[str, Any] = {"content": content, "view": view, "allowed_mentions": NO_MENTIONS}
         if file is not None:
             kwargs["file"] = file
-        return await channel.send(**kwargs)
+        message = await channel.send(**kwargs)
+        self._register_view(view, int(message.id))
+        return message
+
+    def _register_view(self, view: discord.ui.View | None, message_id: int) -> None:
+        if view is None or not hasattr(self.bot, "add_view"):
+            return
+        try:
+            self.bot.add_view(view, message_id=message_id)
+        except ValueError:
+            LOGGER.info("Could not register persistent calendar view for message %s", message_id)
 
     async def navigate_month(self, action: str, *, today: date | None = None) -> None:
         current = today or date.today()

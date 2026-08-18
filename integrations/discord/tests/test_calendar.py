@@ -130,12 +130,16 @@ class FakeBot:
     def __init__(self, channel):
         self.channel = channel
         self.user = SimpleNamespace(id=900)
+        self.registered_views = []
 
     def get_channel(self, channel_id):
         return self.channel
 
     async def fetch_channel(self, channel_id):
         return self.channel
+
+    def add_view(self, view, *, message_id=None):
+        self.registered_views.append((view, message_id))
 
 
 class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
@@ -288,12 +292,21 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as temporary:
             state_path = Path(temporary) / "calendar.json"
             channel = FakeChannel()
-            surface = self.make_surface(state_path, channel)
+            bot = FakeBot(channel)
+            surface = DiscordCalendarSurface(
+                bot,  # type: ignore[arg-type]
+                AccessPolicy(100, frozenset({200}), frozenset({300})),
+                channel_id=300,
+                profile="main",
+                state_path=state_path,
+                adapter=FakeAdapter(),  # type: ignore[arg-type]
+            )
             surface.state = DiscordCalendarState(CalendarViewState(2026, 8), month_message_id=0, agenda_message_id=0)
 
             await surface.ensure_messages(today=date(2026, 8, 13))
             month_id = surface.state.month_message_id
             agenda_id = surface.state.agenda_message_id
+            bot.registered_views = []
             await surface.navigate_month("next", today=date(2026, 8, 13))
 
             self.assertEqual(surface.state.view.visible_year, 2026)
@@ -302,6 +315,7 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(surface.state.month_message_id, month_id)
             self.assertEqual(surface.state.agenda_message_id, agenda_id)
             self.assertIn("2026.09", channel.messages[month_id].edits[-1]["content"])
+            self.assertIn((channel.messages[month_id].edits[-1]["view"], month_id), bot.registered_views)
 
     async def test_midnight_refresh_resets_to_new_today(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
