@@ -28,6 +28,7 @@ KST = timezone(timedelta(hours=9))
 @dataclass
 class DiscordTasksState:
     message_ids: dict[str, int] = field(default_factory=dict)
+    completed_message_ids: dict[str, list[int]] = field(default_factory=dict)
     completed_archive_message_id: int = 0
     recent_supplies_message_id: int = 0
     recent_supplies: list[str] = field(default_factory=list)
@@ -86,6 +87,9 @@ class DiscordTasksSurface:
         message_order_changed = False
         for task in active:
             key = task_key(task)
+            if await self._delete_completed_messages(key, channel):
+                message_order_changed = True
+                await self._pace_message_refresh()
             message_id = self.state.message_ids.get(key, 0)
             if not message_id:
                 message_order_changed = True
@@ -206,9 +210,11 @@ class DiscordTasksSurface:
         self._tasks_by_key.pop(key, None)
         self._save_state()
         if message_id:
-            await self._mark_message_completed(message_id, {**task, "status": "COMPLETED"})
+            if await self._mark_message_completed(message_id, {**task, "status": "COMPLETED"}):
+                self._record_completed_message(key, message_id)
         if notification_message_id and notification_message_id != message_id:
-            await self._mark_message_completed(notification_message_id, {**task, "status": "COMPLETED"})
+            if await self._mark_message_completed(notification_message_id, {**task, "status": "COMPLETED"}):
+                self._record_completed_message(key, notification_message_id)
         await self.ensure_message()
         return True
 
@@ -351,8 +357,14 @@ class DiscordTasksSurface:
                 for key, value in dict(raw.get("messageIds") or {}).items()
                 if str(key) and int(value)
             }
+            completed_message_ids = {
+                str(key): [int(item) for item in list(value or []) if int(item)]
+                for key, value in dict(raw.get("completedMessageIds") or {}).items()
+                if str(key)
+            }
             return DiscordTasksState(
                 message_ids=message_ids,
+                completed_message_ids=completed_message_ids,
                 completed_archive_message_id=int(raw.get("completedArchiveMessageId") or 0),
                 recent_supplies_message_id=int(raw.get("recentSuppliesMessageId") or 0),
                 recent_supplies=[
@@ -374,6 +386,7 @@ class DiscordTasksSurface:
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "messageIds": self.state.message_ids,
+            "completedMessageIds": self.state.completed_message_ids,
             "completedArchiveMessageId": self.state.completed_archive_message_id,
             "recentSuppliesMessageId": self.state.recent_supplies_message_id,
             "recentSupplies": self.state.recent_supplies[:MAX_RECENT_SUPPLIES],
@@ -399,10 +412,25 @@ class DiscordTasksSurface:
         except (discord.NotFound, discord.HTTPException):
             LOGGER.info("Could not delete stale %s message %s", self.surface_name, message_id)
 
-    async def _mark_message_completed(self, message_id: int, task: Mapping[str, Any]) -> None:
+    async def _delete_completed_messages(self, key: str, channel: discord.abc.Messageable) -> bool:
+        message_ids = self.state.completed_message_ids.pop(key, [])
+        deleted = False
+        for message_id in message_ids:
+            await self._delete_message_id(channel, message_id)
+            deleted = True
+        return deleted
+
+    def _record_completed_message(self, key: str, message_id: int) -> None:
+        if not message_id:
+            return
+        message_ids = self.state.completed_message_ids.setdefault(key, [])
+        if message_id not in message_ids:
+            message_ids.append(message_id)
+
+    async def _mark_message_completed(self, message_id: int, task: Mapping[str, Any]) -> bool:
         channel = await self.channel()
         if not hasattr(channel, "fetch_message"):
-            return
+            return False
         try:
             message = await channel.fetch_message(message_id)
             await message.edit(
@@ -410,8 +438,10 @@ class DiscordTasksSurface:
                 view=None,
                 allowed_mentions=NO_MENTIONS,
             )
+            return True
         except (discord.NotFound, discord.HTTPException):
             LOGGER.info("Could not mark completed %s message %s", self.surface_name, message_id)
+            return False
 
     def _is_own_message(self, message: discord.Message) -> bool:
         user = getattr(self.bot, "user", None)

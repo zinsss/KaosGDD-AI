@@ -599,6 +599,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(surface.state.message_ids, {})
             summary_message = channel.messages[700]
             completed_message = channel.messages[701]
+            self.assertEqual(surface.state.completed_message_ids, {"zin:tasks|TASK-1": [701]})
             self.assertIn("## Completed", summary_message.edits[-1]["content"])
             self.assertIn("Buy milk", summary_message.edits[-1]["content"])
             self.assertIsInstance(summary_message.edits[-1]["view"], CompletedTasksView)
@@ -608,6 +609,8 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
 
             adapter.tasks = [{**TASKS[0], "status": "NEEDS-ACTION"}]
             await surface.ensure_message()
+            self.assertTrue(completed_message.deleted)
+            self.assertEqual(surface.state.completed_message_ids, {})
             self.assertTrue(await surface.delete_task("zin:tasks|TASK-1"))
             self.assertEqual(adapter.deleted[0], ("main", "TASK-1", "zin:tasks"))
             self.assertEqual(surface.state.message_ids, {})
