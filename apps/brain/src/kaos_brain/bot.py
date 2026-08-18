@@ -11,6 +11,7 @@ from .brain_guard import BrainGuardContext, BrainGuardError, BrainGuardResult, B
 from .config import Settings
 from .event_intent import EventCreateRequest, parse_event_create
 from .governor_tools import (
+    DocumentTagRequest,
     GovernorToolClient,
     GovernorToolConfig,
     GovernorToolError,
@@ -27,6 +28,8 @@ from .governor_tools import (
     render_memo_edit_completed,
     render_memo_edit_proposal,
     render_document_opened,
+    render_document_tags_completed,
+    render_document_tags_proposal,
     render_event_create_completed,
     render_event_create_proposal,
     render_memo_opened,
@@ -548,6 +551,16 @@ class BrainBot(discord.Client):
                 return (
                     render_memo_edit_proposal(payload),
                     MemoEditConfirmationView(self.governor_tools, guarded.actor_id, str(payload.get("confirmationId") or "")),
+                )
+            if isinstance(request, DocumentTagRequest):
+                payload = await self.governor_tools.propose_document_tags(
+                    request,
+                    actor_id=guarded.actor_id,
+                    idempotency_key=guarded.idempotency_key,
+                )
+                return (
+                    render_document_tags_proposal(payload),
+                    DocumentTagConfirmationView(self.governor_tools, guarded.actor_id, str(payload.get("confirmationId") or "")),
                 )
         except GovernorToolError as exc:
             LOGGER.warning("Guarded Governor proposal failed intent=%s: %s", guarded.intent, exc)
@@ -1725,6 +1738,36 @@ class MemoEditConfirmationView(discord.ui.View):
         for item in self.children:
             item.disabled = True
         await interaction.response.edit_message(content=_tool_cancelled("메모 수정"), view=self, allowed_mentions=NO_MENTIONS)
+        self.stop()
+
+
+class DocumentTagConfirmationView(discord.ui.View):
+    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, confirmation_id: str) -> None:
+        super().__init__(timeout=600)
+        self.governor_tools = governor_tools
+        self.actor_id = actor_id
+        self.confirmation_id = confirmation_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.actor_id:
+            await interaction.response.send_message("Only the requester can confirm this document tag change.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        try:
+            payload = await self.governor_tools.approve_confirmation(self.confirmation_id, actor_id=self.actor_id)
+            content = render_document_tags_completed(payload)
+        except GovernorToolError as exc:
+            LOGGER.warning("Document tag confirmation failed: %s", exc)
+            content = _tool_failed("문서 태그 수정")
+        await interaction.response.edit_message(content=content, view=None, allowed_mentions=NO_MENTIONS)
+        self.stop()
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(content="문서 태그 수정 취소했어요.", view=None, allowed_mentions=NO_MENTIONS)
         self.stop()
 
 

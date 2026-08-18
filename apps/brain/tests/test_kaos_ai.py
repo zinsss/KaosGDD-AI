@@ -30,6 +30,8 @@ class KaosAITests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("task.update_due", KAOSAI_PLAN_SYSTEM_PROMPT)
         self.assertIn("memo.search", KAOSAI_PLAN_SYSTEM_PROMPT)
         self.assertIn("memo.search: query", KAOSAI_PLAN_SYSTEM_PROMPT)
+        self.assertIn("document.update_tags", KAOSAI_PLAN_SYSTEM_PROMPT)
+        self.assertIn("document.update_tags: documentId, tags", KAOSAI_PLAN_SYSTEM_PROMPT)
         self.assertIn("task.edit: dueDate, dueTime, memo, priority, taskTitle, title", KAOSAI_PLAN_SYSTEM_PROMPT)
         self.assertIn('Default scope to "personal"', KAOSAI_PLAN_SYSTEM_PROMPT)
         self.assertIn('Use "family" only for explicitly shared family', KAOSAI_PLAN_SYSTEM_PROMPT)

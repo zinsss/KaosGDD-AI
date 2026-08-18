@@ -187,6 +187,30 @@ class PaperlessDocumentServiceTests(unittest.TestCase):
         self.assertEqual(proposal["proposal"]["tags"], ["medical", "tax"])
         self.assertEqual(urlopen.call_count, 1)
 
+    def test_list_tags_reads_existing_paperless_tags(self) -> None:
+        urlopen = mock.Mock(
+            return_value=FakeResponse(body=b'{"results":[{"id":7,"name":"server"},{"id":8,"name":"Clinic"}]}')
+        )
+        service = PaperlessDocumentService(self.config(), urlopen=urlopen)
+
+        tags = service.list_tags()
+
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.get_method(), "GET")
+        self.assertIn("/api/tags/?", request.full_url)
+        self.assertIn("page_size=200", request.full_url)
+        self.assertEqual([tag.as_dict() for tag in tags], [{"id": 7, "name": "server"}, {"id": 8, "name": "Clinic"}])
+
+    def test_existing_tag_names_filters_ai_suggestions_to_current_paperless_tags(self) -> None:
+        urlopen = mock.Mock(
+            return_value=FakeResponse(body=b'{"results":[{"id":7,"name":"server"},{"id":8,"name":"Clinic"}]}')
+        )
+        service = PaperlessDocumentService(self.config(), urlopen=urlopen)
+
+        tags = service.existing_tag_names(["#Server", "made-up", "clinic", "server"])
+
+        self.assertEqual(tags, ("server", "Clinic"))
+
     def test_get_document_rejects_invalid_id_before_network(self) -> None:
         urlopen = mock.Mock()
         service = PaperlessDocumentService(self.config(), urlopen=urlopen)

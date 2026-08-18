@@ -36,6 +36,12 @@ class TaskEditRequest:
     uid: str = ""
 
 
+@dataclass(frozen=True)
+class DocumentTagRequest:
+    document_id: str
+    tags: tuple[str, ...]
+
+
 class GovernorToolClient:
     def __init__(self, config: GovernorToolConfig) -> None:
         self.config = config
@@ -299,6 +305,25 @@ class GovernorToolClient:
             },
         )
 
+    async def propose_document_tags(
+        self,
+        request: DocumentTagRequest,
+        *,
+        actor_id: int,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        document_id = _document_id(request.document_id)
+        if not document_id:
+            raise GovernorToolError("invalid document id")
+        return await self._post(
+            f"/tools/documents/{document_id}/tags/proposals",
+            {
+                "actorId": str(actor_id),
+                "idempotencyKey": idempotency_key,
+                "tags": list(request.tags),
+            },
+        )
+
     async def approve_confirmation(self, confirmation_id: str, *, actor_id: int) -> dict[str, Any]:
         return await self._post(
             f"/tools/confirmations/{confirmation_id}/approve",
@@ -344,7 +369,7 @@ class GovernorToolClient:
             except aiohttp.ClientError as exc:
                 raise GovernorToolError("Governor tool request failed") from exc
 
-    async def _post(self, path: str, payload: dict[str, str]) -> dict[str, Any]:
+    async def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         import aiohttp
 
         timeout = aiohttp.ClientTimeout(total=self.config.timeout_seconds)
@@ -523,6 +548,23 @@ def render_memo_edit_completed(payload: dict[str, Any]) -> str:
     return "메모 수정했어요."
 
 
+def render_document_tags_proposal(payload: dict[str, Any]) -> str:
+    document = payload.get("document")
+    if not isinstance(document, dict):
+        return "Document tag update requires confirmation."
+    title = str(document.get("title") or "Untitled document")
+    tags = _tag_text(document.get("tags"))
+    ignored = _tag_text(payload.get("ignoredTags"))
+    lines = ["## Confirm document tags", f"- document: {title}", f"- tags: {tags or 'none'}"]
+    if ignored:
+        lines.append(f"- ignored: {ignored}")
+    return "\n".join(lines)
+
+
+def render_document_tags_completed(payload: dict[str, Any]) -> str:
+    return "문서 태그 수정했어요."
+
+
 def _due_text(due_date: str, due_time: str) -> str:
     return " ".join(part for part in (due_date, due_time) if part).strip()
 
@@ -540,6 +582,13 @@ def _memo_preview(content: str) -> str:
     if len(preview) > 1200:
         preview = f"{preview[:1200].rstrip()}..."
     return preview or "(empty)"
+
+
+def _tag_text(values: object) -> str:
+    if not isinstance(values, list | tuple):
+        return ""
+    tags = [str(value).strip().lstrip("#") for value in values if str(value).strip()]
+    return ", ".join(f"#{tag}" for tag in tags)
 
 
 def render_tool_context(request: ToolRequest, payload: dict[str, Any]) -> str:

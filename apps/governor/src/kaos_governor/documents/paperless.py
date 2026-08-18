@@ -110,6 +110,18 @@ class PaperlessDocument:
 
 
 @dataclass(frozen=True)
+class PaperlessTag:
+    tag_id: int
+    name: str
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "id": self.tag_id,
+            "name": self.name,
+        }
+
+
+@dataclass(frozen=True)
 class PaperlessSearchPage:
     query: str
     results: tuple[PaperlessSearchResult, ...]
@@ -314,6 +326,44 @@ class PaperlessDocumentService:
             tag_ids.append(self._ensure_tag(name))
         return tag_ids
 
+    def list_tags(self) -> tuple[PaperlessTag, ...]:
+        if not self.config.enabled:
+            raise DocumentIntakeError("paperless_not_configured")
+        query = urllib.parse.urlencode({"page_size": "200", "ordering": "name"})
+        request = urllib.request.Request(
+            f"{self.config.base_url.rstrip('/')}/api/tags/?{query}",
+            method="GET",
+            headers={
+                "Authorization": f"Token {self.config.api_token}",
+                "Accept": "application/json",
+                "User-Agent": self.config.user_agent,
+            },
+        )
+        try:
+            with self._urlopen(request, timeout=self.config.timeout_seconds) as response:
+                body = response.read()
+            if response.status < 200 or response.status >= 300:
+                raise DocumentIntakeError(f"paperless_tag_http_{response.status}")
+        except urllib.error.HTTPError as exc:
+            self.last_error = f"paperless_tag_http_{exc.code}"
+            raise DocumentIntakeError(self.last_error) from exc
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            self.last_error = "paperless_request_failed"
+            raise DocumentIntakeError(self.last_error) from exc
+        return tuple(paperless_tag(item) for item in decode_results(body) if paperless_tag(item).tag_id > 0)
+
+    def existing_tag_names(self, names: Sequence[str]) -> tuple[str, ...]:
+        requested = tuple(clean_tag_name(name) for name in names if clean_tag_name(name))
+        if not requested:
+            return ()
+        by_key = {tag.name.casefold(): tag.name for tag in self.list_tags()}
+        existing: list[str] = []
+        for name in requested:
+            matched = by_key.get(name.casefold())
+            if matched and matched not in existing:
+                existing.append(matched)
+        return tuple(existing)
+
     def _ensure_tag(self, name: str) -> int:
         existing = self._find_tag(name)
         if existing:
@@ -506,6 +556,14 @@ def paperless_document(payload: Mapping[str, object]) -> PaperlessDocument:
         content=str(payload.get("content") or ""),
         tag_ids=tuple(tag_ids),
     )
+
+
+def paperless_tag(payload: Mapping[str, object]) -> PaperlessTag:
+    try:
+        tag_id = int(payload.get("id") or 0)
+    except (TypeError, ValueError):
+        tag_id = 0
+    return PaperlessTag(tag_id, str(payload.get("name") or "").strip())
 
 
 def validate_pdf(filename: str, content: bytes, max_bytes: int) -> None:

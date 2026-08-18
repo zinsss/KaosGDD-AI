@@ -11,7 +11,7 @@ from kaos_brain.brain_guard import (
     adapt_kaosai_plan,
 )
 from kaos_brain.event_intent import EventCreateRequest
-from kaos_brain.governor_tools import TaskEditRequest
+from kaos_brain.governor_tools import DocumentTagRequest, TaskEditRequest
 from kaos_brain.memo_intent import MemoCreateRequest
 from kaos_brain.task_update_intent import TaskActionRequest, TaskCreateRequest, TaskDueUpdateRequest
 from kaos_brain.tool_intent import ToolKind, ToolRequest
@@ -35,6 +35,7 @@ class BrainGuardTests(unittest.TestCase):
         )
         self.assertEqual(INTENT_PARAMETER_KEYS["memo.search"], frozenset({"query"}))
         self.assertEqual(INTENT_PARAMETER_KEYS["document.search"], frozenset({"query"}))
+        self.assertEqual(INTENT_PARAMETER_KEYS["document.update_tags"], frozenset({"documentId", "tags"}))
 
     def test_memo_search_plan_becomes_readonly_governor_tool(self) -> None:
         result = adapt_kaosai_plan(
@@ -182,6 +183,34 @@ class BrainGuardTests(unittest.TestCase):
         request = result.request
         assert isinstance(request, MemoCreateRequest)
         self.assertEqual(request.content, "# RustDesk\n\n#server")
+
+    def test_document_update_tags_plan_maps_to_governor_request(self) -> None:
+        result = adapt_kaosai_plan(
+            {
+                "intent": "document.update_tags",
+                "parameters": {"documentId": "42", "tags": ["#server", "rustdesk", "server"]},
+            },
+            self.context(),
+        )
+
+        self.assertIsInstance(result.request, DocumentTagRequest)
+        request = result.request
+        assert isinstance(request, DocumentTagRequest)
+        self.assertTrue(result.confirmation_required)
+        self.assertEqual(request.document_id, "42")
+        self.assertEqual(request.tags, ("server", "rustdesk"))
+
+    def test_document_update_tags_rejects_invalid_id_or_empty_tags(self) -> None:
+        with self.assertRaisesRegex(BrainGuardError, "documentId_invalid"):
+            adapt_kaosai_plan(
+                {"intent": "document.update_tags", "parameters": {"documentId": "x", "tags": ["server"]}},
+                self.context(),
+            )
+        with self.assertRaisesRegex(BrainGuardError, "tags_required"):
+            adapt_kaosai_plan(
+                {"intent": "document.update_tags", "parameters": {"documentId": "42", "tags": []}},
+                self.context(),
+            )
 
     def test_unknown_or_system_intent_is_rejected(self) -> None:
         for intent in ("system.restart", "shell.run", "docker.exec", "database.query"):

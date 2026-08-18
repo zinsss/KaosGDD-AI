@@ -11,7 +11,7 @@ from .durable import (
     OperationRequest,
     stable_hash,
 )
-from .documents import DocumentIntakeError, PaperlessConfig, PaperlessDocumentService, PaperlessResult, PaperlessSearchPage
+from .documents import DocumentIntakeError, PaperlessConfig, PaperlessDocumentService, PaperlessResult, PaperlessSearchPage, PaperlessTag
 from .fax import (
     FaxAction,
     FaxConfig,
@@ -52,6 +52,7 @@ __all__ = (
     "PaperlessDocumentService",
     "PaperlessResult",
     "PaperlessSearchPage",
+    "PaperlessTag",
     "CalendarSettingsRecord",
     "normalize_destination",
     "request_from_pdf",

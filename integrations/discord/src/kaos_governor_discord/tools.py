@@ -162,6 +162,7 @@ class BrainToolServer:
         app.router.add_get("/tools/documents/search", self._search_documents)
         app.router.add_get("/tools/documents/{document_id}", self._get_document)
         app.router.add_post("/tools/documents/{document_id}/metadata/proposals", self._propose_document_metadata)
+        app.router.add_post("/tools/documents/{document_id}/tags/proposals", self._propose_document_tags)
         app.router.add_post("/tools/tasks/action/proposals", self._propose_task_action)
         app.router.add_post("/tools/tasks/edit/proposals", self._propose_task_edit)
         app.router.add_post("/tools/tasks/create/proposals", self._propose_task_create)
@@ -363,6 +364,82 @@ class BrainToolServer:
                 "confirmationId": confirmation.confirmation_id,
                 "expiresAt": confirmation.expires_at.isoformat(),
                 "document": _pending_document_metadata_payload(pending),
+                "source": "paperless-live",
+            },
+            status=201,
+        )
+
+    async def _propose_document_tags(self, request: web.Request) -> web.Response:
+        try:
+            body = await request.json()
+        except ValueError:
+            return web.json_response({"error": "invalid_json"}, status=400)
+        if not isinstance(body, Mapping):
+            return web.json_response({"error": "invalid_json"}, status=400)
+        actor_id = str(body.get("actorId") or "").strip()
+        idempotency_key = str(body.get("idempotencyKey") or "").strip()
+        suggested_tags = _normalized_tags(body.get("tags") or [])
+        if not actor_id or not idempotency_key or not suggested_tags:
+            return web.json_response({"error": "document_tags_missing_required_field"}, status=400)
+        try:
+            existing_tags = await asyncio.to_thread(self._paperless.existing_tag_names, suggested_tags)
+            if not existing_tags:
+                return web.json_response(
+                    {
+                        "error": "document_tags_no_existing_matches",
+                        "suggestedTags": list(suggested_tags),
+                    },
+                    status=422,
+                )
+            proposal_payload = await asyncio.to_thread(
+                self._paperless.metadata_proposal,
+                request.match_info["document_id"],
+                tags=existing_tags,
+            )
+            proposal = proposal_payload["proposal"]
+            actor = Actor("user", actor_id, "personal")
+            operation, _created = self._durable.start_operation(
+                OperationRequest(
+                    actor=actor,
+                    idempotency_key=idempotency_key,
+                    tool_name="documents",
+                    operation_type="update_tags",
+                    parameters={
+                        "documentId": int(proposal["id"]),
+                        "oldTitle": str(proposal["oldTitle"]),
+                        "title": str(proposal["title"]),
+                        "tags": list(proposal["tags"]),
+                        "suggestedTags": list(suggested_tags),
+                        "ignoredTags": [tag for tag in suggested_tags if tag.casefold() not in {existing.casefold() for existing in existing_tags}],
+                    },
+                    requires_confirmation=True,
+                )
+            )
+            confirmation = self._durable.create_confirmation(operation.operation_id, ttl=timedelta(minutes=10))
+        except DurableGovernorError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+        except DocumentIntakeError as exc:
+            return _document_error(exc)
+        pending = PendingDocumentMetadata(
+            document_id=int(proposal["id"]),
+            old_title=str(proposal["oldTitle"]),
+            title=str(proposal["title"]),
+            tags=tuple(str(tag) for tag in proposal["tags"]),
+            payload={
+                "documentId": int(proposal["id"]),
+                "title": str(proposal["title"]),
+                "tags": tuple(str(tag) for tag in proposal["tags"]),
+            },
+        )
+        self._pending_document_metadata[operation.operation_id] = pending
+        return web.json_response(
+            {
+                "operationId": operation.operation_id,
+                "confirmationId": confirmation.confirmation_id,
+                "expiresAt": confirmation.expires_at.isoformat(),
+                "document": _pending_document_metadata_payload(pending),
+                "suggestedTags": list(suggested_tags),
+                "ignoredTags": [tag for tag in suggested_tags if tag.casefold() not in {existing.casefold() for existing in pending.tags}],
                 "source": "paperless-live",
             },
             status=201,

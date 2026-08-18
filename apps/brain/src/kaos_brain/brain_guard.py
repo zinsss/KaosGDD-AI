@@ -7,7 +7,7 @@ from typing import Any, Mapping
 import re
 
 from .event_intent import EventCreateRequest
-from .governor_tools import TaskEditRequest
+from .governor_tools import DocumentTagRequest, TaskEditRequest
 from .memo_intent import MemoCreateRequest, MemoDeleteRequest, MemoEditRequest
 from .task_update_intent import TaskActionRequest, TaskCreateRequest, TaskDueUpdateRequest
 from .tool_intent import ToolKind, ToolRequest
@@ -60,6 +60,7 @@ MUTATION_INTENTS = {
     "memo.create",
     "memo.edit",
     "memo.delete",
+    "document.update_tags",
 }
 
 ALLOWED_INTENTS = READONLY_INTENTS | MUTATION_INTENTS
@@ -81,6 +82,7 @@ INTENT_PARAMETER_KEYS: dict[str, frozenset[str]] = {
     "memo.create": frozenset({"content"}),
     "memo.edit": frozenset({"query", "content"}),
     "memo.delete": frozenset({"query"}),
+    "document.update_tags": frozenset({"documentId", "tags"}),
 }
 ACTION_BY_INTENT = {
     "task.complete": "complete",
@@ -197,6 +199,8 @@ def _mutation_request(intent: str, parameters: Mapping[str, Any], scope: str, co
         return MemoEditRequest(_required_text(parameters, "query"), _required_content(parameters, "content"))
     if intent == "memo.delete":
         return MemoDeleteRequest(_required_text(parameters, "query"))
+    if intent == "document.update_tags":
+        return DocumentTagRequest(_required_document_id(parameters, "documentId"), _required_tags(parameters, "tags"))
     raise BrainGuardError("intent_not_allowed")
 
 
@@ -242,6 +246,31 @@ def _required_content(parameters: Mapping[str, Any], key: str) -> str:
     if not value:
         raise BrainGuardError(f"{key}_required")
     return value
+
+
+def _required_document_id(parameters: Mapping[str, Any], key: str) -> str:
+    value = _required_text(parameters, key)
+    try:
+        document_id = int(value)
+    except ValueError as exc:
+        raise BrainGuardError(f"{key}_invalid") from exc
+    if document_id <= 0:
+        raise BrainGuardError(f"{key}_invalid")
+    return str(document_id)
+
+
+def _required_tags(parameters: Mapping[str, Any], key: str) -> tuple[str, ...]:
+    raw = parameters.get(key)
+    if not isinstance(raw, list | tuple):
+        raise BrainGuardError(f"{key}_required")
+    tags: list[str] = []
+    for value in raw:
+        tag = _clean_text(value).lstrip("#")
+        if tag and tag not in tags:
+            tags.append(tag)
+    if not tags:
+        raise BrainGuardError(f"{key}_required")
+    return tuple(tags[:25])
 
 
 def _clean_text(value: object) -> str:

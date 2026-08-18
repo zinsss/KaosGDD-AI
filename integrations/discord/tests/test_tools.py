@@ -160,6 +160,7 @@ class FakePaperless:
         self.search_calls = []
         self.get_calls = []
         self.update_calls = []
+        self.existing_tag_calls = []
 
     def search_page(self, query, *, limit):
         self.search_calls.append((query, limit))
@@ -193,6 +194,11 @@ class FakePaperless:
                 "tags": list(tags),
             },
         }
+
+    def existing_tag_names(self, names):
+        self.existing_tag_calls.append(tuple(names))
+        known = {"server": "server", "rustdesk": "rustdesk", "clinic": "Clinic"}
+        return tuple(known[name.casefold()] for name in names if name.casefold() in known)
 
     def update_metadata(self, document_id, *, title, tags=()):
         self.update_calls.append((document_id, title, tuple(tags)))
@@ -671,6 +677,41 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response.status, 400)
         self.assertEqual((await response.json())["error"], "confirmation_actor_mismatch")
+        self.assertEqual(self.paperless.update_calls, [])
+
+    async def test_document_tag_proposal_keeps_existing_paperless_tags_only(self) -> None:
+        response = await self.client.post(
+            "/tools/documents/42/tags/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "document-tags-1",
+                "tags": ["server", "new-ai-tag", "#Clinic"],
+            },
+        )
+
+        self.assertEqual(response.status, 201)
+        payload = await response.json()
+        self.assertTrue(payload["confirmationId"].startswith("conf_"))
+        self.assertEqual(payload["document"]["tags"], ["server", "Clinic"])
+        self.assertEqual(payload["suggestedTags"], ["server", "new-ai-tag", "Clinic"])
+        self.assertEqual(payload["ignoredTags"], ["new-ai-tag"])
+        self.assertEqual(self.paperless.existing_tag_calls, [("server", "new-ai-tag", "Clinic")])
+        self.assertEqual(self.paperless.update_calls, [])
+
+    async def test_document_tag_proposal_rejects_when_ai_suggests_no_existing_tags(self) -> None:
+        response = await self.client.post(
+            "/tools/documents/42/tags/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "document-tags-2",
+                "tags": ["made-up"],
+            },
+        )
+
+        self.assertEqual(response.status, 422)
+        self.assertEqual((await response.json())["error"], "document_tags_no_existing_matches")
         self.assertEqual(self.paperless.update_calls, [])
 
     async def test_task_due_update_proposal_requires_confirmation_before_write(self) -> None:

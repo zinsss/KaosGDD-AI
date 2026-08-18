@@ -1,6 +1,7 @@
 import unittest
 
 from kaos_brain.governor_tools import (
+    DocumentTagRequest,
     memo_option_label,
     render_event_create_completed,
     render_event_create_proposal,
@@ -12,6 +13,8 @@ from kaos_brain.governor_tools import (
     memo_public_url,
     render_memo_opened,
     render_document_opened,
+    render_document_tags_completed,
+    render_document_tags_proposal,
     render_task_action_completed,
     render_task_create_completed,
     render_task_edit_completed,
@@ -207,6 +210,20 @@ class GovernorToolRenderingTests(unittest.TestCase):
             content,
             "## Insurance receipt\n- 2026-08-14 · Clinic · receipt.pdf\nhttps://paperless.example/documents/42/details",
         )
+
+    def test_render_document_tags_proposal_shows_ignored_ai_tags(self) -> None:
+        content = render_document_tags_proposal(
+            {
+                "document": {"title": "Insurance receipt", "tags": ["medical", "receipt"]},
+                "ignoredTags": ["made-up"],
+            }
+        )
+
+        self.assertIn("## Confirm document tags", content)
+        self.assertIn("- document: Insurance receipt", content)
+        self.assertIn("- tags: #medical, #receipt", content)
+        self.assertIn("- ignored: #made-up", content)
+        self.assertEqual(render_document_tags_completed({}), "문서 태그 수정했어요.")
 
     def test_render_multiple_documents_context_uses_compact_summary(self) -> None:
         context = render_tool_context(
@@ -562,6 +579,32 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
         payload = await client.fetch(ToolRequest(ToolKind.DOCUMENT_SEARCH, "rustdesk"))
         self.assertEqual(client.calls, [("/tools/documents/search", {"query": "rustdesk", "limit": "5"})])
         self.assertNotIn("full", payload["results"][0])
+
+    async def test_propose_document_tags_posts_contract(self) -> None:
+        from kaos_brain.governor_tools import GovernorToolClient, GovernorToolConfig
+
+        class FakeClient(GovernorToolClient):
+            async def _post(self, path: str, payload: dict[str, object]):
+                return {"path": path, "payload": payload}
+
+        client = FakeClient(
+            GovernorToolConfig(
+                base_url="http://127.0.0.1:8098",
+                api_token="token",
+                profile="main",
+                timeout_seconds=1,
+            )
+        )
+        payload = await client.propose_document_tags(
+            DocumentTagRequest("42", ("medical", "receipt")),
+            actor_id=994,
+            idempotency_key="discord:1",
+        )
+
+        self.assertEqual(payload["path"], "/tools/documents/42/tags/proposals")
+        self.assertEqual(payload["payload"]["actorId"], "994")
+        self.assertEqual(payload["payload"]["idempotencyKey"], "discord:1")
+        self.assertEqual(payload["payload"]["tags"], ["medical", "receipt"])
 
     async def test_propose_task_due_update_posts_contract(self) -> None:
         from kaos_brain.governor_tools import GovernorToolClient, GovernorToolConfig

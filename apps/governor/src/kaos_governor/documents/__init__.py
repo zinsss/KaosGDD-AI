@@ -8,6 +8,7 @@ from .paperless import (
     PaperlessResult,
     PaperlessSearchPage,
     PaperlessSearchResult,
+    PaperlessTag,
 )
 
 __all__ = (
@@ -18,4 +19,5 @@ __all__ = (
     "PaperlessResult",
     "PaperlessSearchPage",
     "PaperlessSearchResult",
+    "PaperlessTag",
 )
