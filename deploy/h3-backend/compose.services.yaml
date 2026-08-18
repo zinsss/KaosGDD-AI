@@ -124,35 +124,6 @@ services:
     networks:
       - backend
 
-  kaosgovernor-legacy-api:
-    image: kaosgdd-brain:0.12.11-mail-date1
-    container_name: kaosgovernor-legacy-api
-    restart: unless-stopped
-    profiles: ["family-transition"]
-    depends_on:
-      kaosgovernor-legacy-database:
-        condition: service_healthy
-    env_file:
-      - path: ${KAOS_ROOT:-/srv/kaos}/secrets/kaosgovernor-legacy-api.env
-        format: raw
-    environment:
-      BRAIN_PORT: "8092"
-      BRAIN_VERSION: "0.12.11-mail-date1"
-      BRAIN_DB_HOST: "kaosgovernor-legacy-database"
-      BRAIN_DB_PORT: "5432"
-      CALENDAR_ADAPTER_INTERNAL_URL: "http://calendar-adapter:8091"
-      MEMOS_INTERNAL_URL: "http://memos:5230"
-    ports:
-      - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:8092:8092"
-    volumes:
-      - ${KAOS_ROOT:-/srv/kaos}/data/kaosgdd-gov/documents:/data/documents
-      - ${KAOS_ROOT:-/srv/kaos}/data/kaosgdd-gov/memos:/data/memos
-      - ${KAOS_ROOT:-/srv/kaos}/backups/kaosgdd/ledger:/data/ledger/backups
-    security_opt:
-      - no-new-privileges:true
-    networks:
-      - backend
-
   governor-api:
     build:
       context: ../..

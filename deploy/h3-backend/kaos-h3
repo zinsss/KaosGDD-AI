@@ -298,7 +298,6 @@ family_transition_preflight() {
   local root=${KAOS_ROOT:-/srv/kaos}
   local calendar_adapter_root=${CALENDAR_ADAPTER_APP_ROOT:-${REPO_ROOT}/apps/calendar-adapter}
   require_nonempty_file "${root}/secrets/kaosgovernor-legacy-database.env"
-  require_nonempty_file "${root}/secrets/kaosgovernor-legacy-api.env"
   require_nonempty_file "${root}/secrets/governor-api.env"
   require_nonempty_file "${root}/secrets/kaosgdd-adapters.env"
   require_dir "${root}/data/kaosgdd-gov/postgres"
@@ -322,6 +321,14 @@ edge_preflight() {
   fi
   if grep -Eq 'reverse_proxy[[:space:]]+[^[:space:]]*8008|KAOSSUPPLIES|supplies\.kaosgdd\.net.*reverse_proxy' "${root}/config/Caddyfile"; then
     die "edge config must not proxy retired supplies web routes"
+  fi
+  if awk '
+    /handle[[:space:]]+@(kaosgdd_documents_api|kaosgdd_hwp_handoff_api|kaosgdd_mail_organizer_api|kaosgdd_rhwp|hwp)[[:space:]]*\{/ { block = 1 }
+    block && /reverse_proxy/ { bad = 1 }
+    block && /^	}/ { block = 0 }
+    END { exit bad ? 0 : 1 }
+  ' "${root}/config/Caddyfile"; then
+    die "edge config must not proxy retired portal documents, HWP, or mail-organizer routes"
   fi
   "${EDGE_COMPOSE[@]}" config --quiet
   info "Edge preflight passed."
@@ -350,9 +357,9 @@ Commands:
   services-config    Render migrated service Compose configuration
   services-up        Start migrated non-edge services after guarded preflight
   services-down      Stop migrated non-edge services without deleting data
-  family-preflight   Validate transitional family API services when still needed
-  family-up          Start transitional family API services after guarded preflight
-  family-down        Stop transitional family API services without deleting data
+  family-preflight   Validate family API transition services
+  family-up          Start family API transition services after guarded preflight
+  family-down        Stop family API transition services without deleting data
   edge-preflight     Validate staged Caddy/cloudflared config and secrets
   edge-config        Render edge Compose configuration
   edge-up            Start Caddy/cloudflared after guarded preflight
@@ -381,8 +388,8 @@ case "${command}" in
   services-up) services_preflight; "${SERVICES_COMPOSE[@]}" up --detach memos radicale vaultwarden sftpgo family-portal ;;
   services-down) load_env; "${SERVICES_COMPOSE[@]}" stop memos radicale vaultwarden sftpgo family-portal ;;
   family-preflight) family_transition_preflight ;;
-  family-up) family_transition_preflight; COMPOSE_PROFILES=family-transition "${SERVICES_COMPOSE[@]}" up --detach --build kaosgovernor-legacy-database governor-api calendar-adapter kaosgovernor-legacy-api family-memos-web ;;
-  family-down) load_env; COMPOSE_PROFILES=family-transition "${SERVICES_COMPOSE[@]}" stop governor-api kaosgovernor-legacy-api family-memos-web calendar-adapter kaosgovernor-legacy-database ;;
+  family-up) family_transition_preflight; COMPOSE_PROFILES=family-transition "${SERVICES_COMPOSE[@]}" up --detach --build kaosgovernor-legacy-database governor-api calendar-adapter family-memos-web ;;
+  family-down) load_env; COMPOSE_PROFILES=family-transition "${SERVICES_COMPOSE[@]}" stop governor-api family-memos-web calendar-adapter kaosgovernor-legacy-database ;;
   edge-preflight) edge_preflight ;;
   edge-config) load_env; "${EDGE_COMPOSE[@]}" config | redact_config ;;
   edge-up) edge_preflight; "${EDGE_COMPOSE[@]}" up --detach caddy cloudflared ;;

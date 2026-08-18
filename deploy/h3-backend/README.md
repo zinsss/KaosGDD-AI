@@ -128,8 +128,9 @@ not an approved production migration path.
 `compose.services.yaml` and `compose.edge.yaml` prepare the broader H3 service
 move for Radicale, Memos, Vaultwarden, SFTPGo, Family portal, Caddy, and
 cloudflared. Use their preflight commands only after data and secrets are
-staged. The transitional `family-*` commands are for temporary legacy family
-APIs only; they are not the final KaosGovernor implementation.
+staged. The `family-*` commands now start the remaining family transition
+services: Governor API, calendar adapter, Family Memos web, and the PostgreSQL
+database currently shared with migrated Governor modules.
 
 See [the H3 service migration prep note](../../docs/migration/h3-service-migration-prep.md).
 
