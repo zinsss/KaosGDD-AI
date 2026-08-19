@@ -121,6 +121,16 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
             paperless=paperless or FakePaperless(),
         )
 
+    def make_inbox_with_extra_channel(self, path: Path, paperless=None) -> DiscordDocumentInbox:
+        return DiscordDocumentInbox(
+            self.bot,  # type: ignore[arg-type]
+            AccessPolicy(100, frozenset({200}), frozenset({300, 302})),
+            channel_id=300,
+            extra_channel_ids=frozenset({302}),
+            state_path=path,
+            paperless=paperless or FakePaperless(),
+        )
+
     async def test_pdf_upload_creates_pending_prompt_without_submitting(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             paperless = FakePaperless()
@@ -134,6 +144,21 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("view", message.replies[0][1])
             self.assertEqual(inbox.status()["pendingCount"], 1)
             self.assertEqual(inbox.status()["trackedSources"], 0)
+
+    async def test_pdf_upload_in_extra_channel_creates_pending_prompt(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            paperless = FakePaperless()
+            inbox = self.make_inbox_with_extra_channel(Path(temporary) / "inbox.json", paperless)
+            extra_channel = SimpleNamespace(id=302)
+            message = self.make_message([FakeAttachment(filename="brain.pdf")])
+            message.channel = extra_channel
+
+            self.assertTrue(await inbox.handle_message(message))  # type: ignore[arg-type]
+
+            self.assertEqual(paperless.submitted, [])
+            self.assertIn("Choose how to process", message.replies[0][0])
+            self.assertEqual(inbox.status()["channelIds"], ["300", "302"])
+            self.assertEqual(inbox.status()["pendingCount"], 1)
 
     async def test_process_pending_records_completed_upload(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

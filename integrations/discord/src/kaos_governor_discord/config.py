@@ -91,6 +91,7 @@ class Settings:
     memos_channel_id: int | None
     inbox_enabled: bool
     inbox_channel_id: int | None
+    inbox_extra_channel_ids: frozenset[int]
     inbox_state_path: Path
     service_status_enabled: bool
     service_status_channel_id: int | None
@@ -236,6 +237,13 @@ class Settings:
             raise ConfigurationError("DISCORD_INBOX_CHANNEL_ID is required when DISCORD_INBOX_ENABLED=true")
         if inbox_channel_id is not None and inbox_channel_id not in allowed_channels:
             raise ConfigurationError("DISCORD_INBOX_CHANNEL_ID must be in DISCORD_ALLOWED_CHANNEL_IDS")
+        inbox_extra_channel_ids = {
+            int(part.strip())
+            for part in source.get("DISCORD_INBOX_EXTRA_CHANNEL_IDS", "").split(",")
+            if part.strip()
+        }
+        if not inbox_extra_channel_ids.issubset(allowed_channels):
+            raise ConfigurationError("DISCORD_INBOX_EXTRA_CHANNEL_IDS must be in DISCORD_ALLOWED_CHANNEL_IDS")
         inbox_state_path = Path(
             source.get("DISCORD_INBOX_STATE_PATH", "/data/discord-inbox/state.json").strip()
             or "/data/discord-inbox/state.json"
@@ -316,6 +324,7 @@ class Settings:
             memos_channel_id=memos_channel_id,
             inbox_enabled=inbox_enabled,
             inbox_channel_id=inbox_channel_id,
+            inbox_extra_channel_ids=frozenset(inbox_extra_channel_ids),
             inbox_state_path=inbox_state_path,
             service_status_enabled=service_status_enabled,
             service_status_channel_id=service_status_channel_id,

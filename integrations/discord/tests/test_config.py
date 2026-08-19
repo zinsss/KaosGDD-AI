@@ -9,7 +9,7 @@ BASE_ENV = {
     "DISCORD_BOT_TOKEN": "not-a-real-token",
     "DISCORD_GUILD_ID": "100",
     "DISCORD_ALLOWED_USER_IDS": "200,201",
-    "DISCORD_ALLOWED_CHANNEL_IDS": "300,301",
+    "DISCORD_ALLOWED_CHANNEL_IDS": "300,301,302",
     "DISCORD_SYSTEM_CHANNEL_ID": "301",
 }
 
@@ -277,6 +277,7 @@ class SettingsTests(unittest.TestCase):
                 **BASE_ENV,
                 "DISCORD_INBOX_ENABLED": "true",
                 "DISCORD_INBOX_CHANNEL_ID": "300",
+                "DISCORD_INBOX_EXTRA_CHANNEL_IDS": "302",
                 "DISCORD_INBOX_STATE_PATH": "/tmp/inbox-state.json",
                 "PAPERLESS_BASE_URL": "http://paperless:8000",
                 "PAPERLESS_API_TOKEN": "not-a-real-token",
@@ -286,10 +287,22 @@ class SettingsTests(unittest.TestCase):
         )
         self.assertTrue(settings.inbox_enabled)
         self.assertEqual(settings.inbox_channel_id, 300)
+        self.assertEqual(settings.inbox_extra_channel_ids, frozenset({302}))
         self.assertEqual(str(settings.inbox_state_path), "/tmp/inbox-state.json")
         self.assertEqual(settings.paperless_base_url, "http://paperless:8000")
         self.assertEqual(settings.paperless_api_token, "not-a-real-token")
         self.assertEqual(settings.paperless_max_attachment_mb, 12)
+        with self.assertRaisesRegex(ConfigurationError, "DISCORD_INBOX_EXTRA_CHANNEL_IDS"):
+            Settings.from_env(
+                {
+                    **BASE_ENV,
+                    "DISCORD_INBOX_ENABLED": "true",
+                    "DISCORD_INBOX_CHANNEL_ID": "300",
+                    "DISCORD_INBOX_EXTRA_CHANNEL_IDS": "999",
+                    "PAPERLESS_BASE_URL": "http://paperless:8000",
+                    "PAPERLESS_API_TOKEN": "not-a-real-token",
+                }
+            )
 
     def test_service_status_uses_system_channel_by_default(self) -> None:
         settings = Settings.from_env({**BASE_ENV, "DISCORD_SERVICE_STATUS_ENABLED": "true"})

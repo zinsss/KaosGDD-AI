@@ -205,6 +205,7 @@ class GovernorBot(discord.Client):
                 self,
                 self.policy,
                 channel_id=settings.inbox_channel_id,
+                extra_channel_ids=settings.inbox_extra_channel_ids,
                 state_path=settings.inbox_state_path,
                 paperless=self.paperless,
             )

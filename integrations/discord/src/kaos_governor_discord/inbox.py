@@ -64,12 +64,14 @@ class DiscordDocumentInbox:
         policy: AccessPolicy,
         *,
         channel_id: int,
+        extra_channel_ids: frozenset[int] = frozenset(),
         state_path: Path,
         paperless: PaperlessDocumentService,
     ) -> None:
         self.bot = bot
         self.policy = policy
         self.channel_id = channel_id
+        self.channel_ids = frozenset({channel_id, *extra_channel_ids})
         self.state_path = state_path
         self.paperless = paperless
         self.state = self._load_state()
@@ -79,7 +81,7 @@ class DiscordDocumentInbox:
         self.last_error = ""
 
     async def handle_message(self, message: discord.Message) -> bool:
-        if message.channel.id != self.channel_id:
+        if message.channel.id not in self.channel_ids:
             return False
         if message.author.bot:
             return self._is_own_message(message)
@@ -275,6 +277,7 @@ class DiscordDocumentInbox:
         return {
             "enabled": True,
             "channelId": str(self.channel_id),
+            "channelIds": [str(channel_id) for channel_id in sorted(self.channel_ids)],
             "acceptedCount": self.accepted_count,
             "duplicateCount": self.duplicate_count,
             "rejectedCount": self.rejected_count,
