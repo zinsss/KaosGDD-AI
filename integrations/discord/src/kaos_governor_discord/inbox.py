@@ -8,6 +8,7 @@ import logging
 from pathlib import Path
 import re
 from typing import Any
+import urllib.parse
 
 import discord
 from kaos_governor.documents import (
@@ -218,9 +219,14 @@ class DiscordDocumentInbox:
             self.state.pending.pop(source_id, None)
             self._save_state()
             return record
+        submit_filename = pending.filename
+        if generated_discord_filename(submit_filename):
+            if not title:
+                raise DocumentIntakeError("paperless_metadata_required")
+            submit_filename = safe_filename(f"{title}.pdf")
         result = await asyncio.to_thread(
             self.paperless.submit_pdf,
-            pending.filename,
+            submit_filename,
             content,
             title=title or Path(pending.filename).stem,
             tags=tags,
@@ -499,6 +505,7 @@ def rejection_message(error: Exception) -> str:
         "paperless_source_unavailable": "The original upload is not available.",
         "paperless_attachment_missing": "The original PDF attachment is missing.",
         "paperless_attachment_changed": "The original PDF attachment changed.",
+        "paperless_metadata_required": "Discord did not expose the original filename. Add Metadata is required.",
     }
     return labels.get(str(error), str(error))
 
@@ -511,9 +518,28 @@ async def read_attachment_bytes(attachment: discord.Attachment) -> bytes:
 
 
 def attachment_display_filename(attachment: discord.Attachment) -> str:
-    title = str(getattr(attachment, "title", "") or "").strip()
-    filename = title if title.lower().endswith(".pdf") else str(attachment.filename)
-    return safe_filename(filename)
+    candidates = [
+        getattr(attachment, "title", ""),
+        getattr(attachment, "description", ""),
+        filename_from_url(getattr(attachment, "url", "")),
+        filename_from_url(getattr(attachment, "proxy_url", "")),
+        getattr(attachment, "filename", ""),
+    ]
+    cleaned = [safe_filename(str(candidate)) for candidate in candidates if str(candidate or "").lower().endswith(".pdf")]
+    for filename in cleaned:
+        if not generated_discord_filename(filename):
+            return filename
+    return cleaned[0] if cleaned else safe_filename(str(getattr(attachment, "filename", "") or "document.pdf"))
+
+
+def filename_from_url(value: object) -> str:
+    path = urllib.parse.urlparse(str(value or "")).path
+    return urllib.parse.unquote(Path(path).name)
+
+
+def generated_discord_filename(filename: str) -> bool:
+    stem = Path(filename).stem
+    return bool(re.fullmatch(r"[0-9a-fA-F]{12,64}", stem))
 
 
 class InboxMenuView(discord.ui.View):
@@ -584,6 +610,13 @@ class InboxMenuView(discord.ui.View):
         except (DocumentIntakeError, discord.HTTPException) as exc:
             self.inbox.rejected_count += 1
             self.inbox.last_error = str(exc)
+            if str(exc) == "paperless_metadata_required":
+                await interaction.edit_original_response(
+                    content=render_metadata_message(pending.filename),
+                    view=self,
+                    allowed_mentions=NO_MENTIONS,
+                )
+                return
             await interaction.followup.send(
                 f"Documents import failed: {escape_text(rejection_message(exc))}",
                 ephemeral=True,

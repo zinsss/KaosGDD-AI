@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import AsyncMock
 
 from kaos_governor.documents import (
+    DocumentIntakeError,
     PaperlessConfig,
     PaperlessDocumentService,
     PaperlessResult,
@@ -18,6 +19,7 @@ from kaos_governor_discord.inbox import (
     DiscordDocumentInbox,
     PaperlessSearchView,
     attachment_display_filename,
+    generated_discord_filename,
     parse_metadata_reply,
     rejection_message,
     render_paperless_opened,
@@ -71,12 +73,17 @@ class FakeAttachment:
         content=b"%PDF-1.7\nbody",
         *,
         title=None,
+        url="",
+        proxy_url="",
         fail_cached=False,
         fail_uncached=False,
     ):
         self.id = attachment_id
         self.filename = filename
         self.title = title
+        self.description = ""
+        self.url = url
+        self.proxy_url = proxy_url
         self._content = content
         self.size = len(content)
         self.fail_cached = fail_cached
@@ -208,6 +215,50 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(attachment_display_filename(attachment), "처방전 대리수령 신청서.pdf")
             self.assertIn("처방전 대리수령 신청서.pdf", message.replies[0][0])
             self.assertNotIn("8f0ea2e73b58ad58.pdf", message.replies[0][0])
+
+    async def test_pdf_upload_uses_cdn_url_filename_before_generated_filename(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            paperless = FakePaperless()
+            inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
+            attachment = FakeAttachment(
+                filename="40eeb76102ae4b88.pdf",
+                url="https://cdn.discordapp.com/attachments/1/2/%EC%B2%98%EB%B0%A9%EC%A0%84.pdf?ex=x",
+            )
+            message = self.make_message([attachment])
+
+            self.assertTrue(await inbox.handle_message(message))  # type: ignore[arg-type]
+
+            self.assertEqual(attachment_display_filename(attachment), "처방전.pdf")
+            self.assertIn("처방전.pdf", message.replies[0][0])
+            self.assertNotIn("40eeb76102ae4b88.pdf", message.replies[0][0])
+
+    async def test_process_as_is_rejects_generated_discord_filename_without_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            paperless = FakePaperless()
+            inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
+            message = self.make_message([FakeAttachment(filename="40eeb76102ae4b88.pdf")])
+
+            await inbox.handle_message(message)  # type: ignore[arg-type]
+            source_id = next(iter(inbox.state.pending))
+
+            with self.assertRaisesRegex(DocumentIntakeError, "paperless_metadata_required"):
+                await inbox.process_pending(source_id)
+
+            self.assertEqual(paperless.submitted, [])
+            self.assertTrue(generated_discord_filename("40eeb76102ae4b88.pdf"))
+
+    async def test_process_pending_uses_metadata_title_as_filename_when_discord_filename_is_generated(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            paperless = FakePaperless()
+            inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
+            message = self.make_message([FakeAttachment(filename="40eeb76102ae4b88.pdf")])
+
+            await inbox.handle_message(message)  # type: ignore[arg-type]
+            source_id = next(iter(inbox.state.pending))
+            await inbox.process_pending(source_id, title="처방전 대리수령 신청서", tags=("처방전",))
+
+            self.assertEqual(paperless.submitted[0][0], "처방전 대리수령 신청서.pdf")
+            self.assertEqual(paperless.submitted[0][2], "처방전 대리수령 신청서")
 
     async def test_pdf_upload_in_extra_channel_creates_pending_prompt(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
