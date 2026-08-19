@@ -98,10 +98,22 @@ class BrainImagingServer:
             return web.json_response({"error": error}, status=400)
         try:
             if self.kaosai is not None:
-                result = await self.kaosai.second_look(body)
+                try:
+                    return web.json_response(
+                        {
+                            "status": "completed",
+                            "result": await self.kaosai.second_look(body),
+                        }
+                    )
+                except KaosAIError as exc:
+                    result = await self.ollama.second_look(dict(body))
+                    cautions = list(result.get("cautions", []))
+                    cautions.insert(0, f"KaosAI provider failed; local imaging fallback used: {exc}")
+                    result["cautions"] = cautions[:5]
+                    result["fallback"] = {"from": "kaosai", "to": "ollama"}
             else:
                 result = await self.ollama.second_look(dict(body))
-        except (KaosAIError, OllamaError) as exc:
+        except OllamaError as exc:
             return web.json_response({"error": str(exc)}, status=502)
         return web.json_response(
             {

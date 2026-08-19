@@ -34,6 +34,18 @@ class FakeOllama:
         }
 
 
+class BrokenKaosAI:
+    async def second_look(self, request):
+        raise RuntimeError("wrong exception")
+
+
+class FailingKaosAI:
+    async def second_look(self, request):
+        from kaos_brain.kaos_ai import KaosAIError
+
+        raise KaosAIError("kaosai_gateway_agent_failed:unavailable")
+
+
 def second_look_payload(*, stored: bool = False) -> dict:
     return {
         "source": "kaosaio",
@@ -93,6 +105,22 @@ class BrainImagingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["result"]["summary"], "검토 완료")
         self.assertEqual(payload["result"]["model"], "gemma3:4b")
         self.assertEqual(len(self.ollama.requests), 1)
+
+    async def test_second_look_falls_back_to_ollama_when_kaosai_fails(self) -> None:
+        self.server.kaosai = FailingKaosAI()  # type: ignore[assignment]
+
+        response = await self.client.post(
+            "/imaging/second-look",
+            headers={"Authorization": "Bearer imaging-token"},
+            json=second_look_payload(),
+        )
+
+        self.assertEqual(response.status, 200)
+        payload = await response.json()
+        self.assertEqual(payload["status"], "completed")
+        self.assertEqual(payload["result"]["fallback"], {"from": "kaosai", "to": "ollama"})
+        self.assertIn("local imaging fallback", payload["result"]["cautions"][0])
+        self.assertEqual(payload["result"]["model"], "gemma3:4b")
 
     async def test_second_look_rejects_non_temporary_safety(self) -> None:
         response = await self.client.post(
