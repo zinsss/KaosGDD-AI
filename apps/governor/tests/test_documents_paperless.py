@@ -65,6 +65,31 @@ class PaperlessDocumentServiceTests(unittest.TestCase):
         self.assertIn(b'name="tags"\r\n\r\n8', upload.data)
         self.assertIn(b'name="title"\r\n\r\nScan', upload.data)
 
+    def test_submit_pdf_posts_configured_owner(self) -> None:
+        urlopen = mock.Mock(return_value=FakeResponse(body=b'{"task_id":"abc"}'))
+        config = PaperlessConfig(
+            base_url="http://paperless:8000",
+            api_token="not-a-real-token",
+            default_owner_id=3,
+        )
+        service = PaperlessDocumentService(config, urlopen=urlopen)
+
+        service.submit_pdf("scan.pdf", b"%PDF-1.7\nbody")
+
+        upload = urlopen.call_args.args[0]
+        self.assertIn(b'name="owner"\r\n\r\n3', upload.data)
+
+    def test_config_reads_default_owner_from_env(self) -> None:
+        config = PaperlessConfig.from_env(
+            {
+                "PAPERLESS_BASE_URL": "http://paperless:8000",
+                "PAPERLESS_API_TOKEN": "token",
+                "PAPERLESS_DEFAULT_OWNER_ID": "3",
+            }
+        )
+
+        self.assertEqual(config.default_owner_id, 3)
+
     def test_search_documents_uses_paperless_query_endpoint(self) -> None:
         urlopen = mock.Mock(
             side_effect=[

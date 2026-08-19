@@ -31,6 +31,7 @@ class PaperlessConfig:
     timeout_seconds: float = 60.0
     max_document_bytes: int = 20 * 1024 * 1024
     public_url: str = ""
+    default_owner_id: int = 0
     user_agent: str = "KaosGovernor/paperless-intake"
 
     @classmethod
@@ -44,6 +45,7 @@ class PaperlessConfig:
             timeout_seconds=float(env.get("PAPERLESS_TIMEOUT_SECONDS", "60")),
             max_document_bytes=max_mb * 1024 * 1024,
             public_url=(env.get("PAPERLESS_PUBLIC_URL") or "").strip().rstrip("/"),
+            default_owner_id=optional_positive_int(env.get("PAPERLESS_DEFAULT_OWNER_ID", "")),
         )
 
     @property
@@ -278,6 +280,8 @@ class PaperlessDocumentService:
             "custom_fields": "[]",
             "from_webui": "false",
         }
+        if self.config.default_owner_id > 0:
+            fields["owner"] = str(self.config.default_owner_id)
         if tag_ids:
             fields["tags"] = [str(value) for value in tag_ids]
         body, content_type = multipart_body(fields, "document", clean, content, "application/pdf")
@@ -512,6 +516,19 @@ def normalize_document_id(value: object) -> int:
     if document_id <= 0:
         raise DocumentIntakeError("paperless_document_id_invalid")
     return document_id
+
+
+def optional_positive_int(value: object) -> int:
+    text = str(value or "").strip()
+    if not text:
+        return 0
+    try:
+        number = int(text)
+    except ValueError as exc:
+        raise DocumentIntakeError("paperless_owner_id_invalid") from exc
+    if number <= 0:
+        raise DocumentIntakeError("paperless_owner_id_invalid")
+    return number
 
 
 def paperless_search_result(payload: Mapping[str, object]) -> PaperlessSearchResult:
