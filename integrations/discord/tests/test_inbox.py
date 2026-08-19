@@ -21,6 +21,7 @@ from kaos_governor_discord.access import AccessPolicy
 from kaos_governor_discord.inbox import (
     DiscordDocumentInbox,
     InboxRecord,
+    OcrReadyView,
     PaperlessSearchView,
     attachment_display_filename,
     generated_discord_filename,
@@ -29,6 +30,7 @@ from kaos_governor_discord.inbox import (
     parse_tag_text,
     rejection_message,
     render_metadata_message,
+    render_ocr_done_message,
     render_ocr_pending_message,
     render_ocr_ready_message,
     render_paperless_opened,
@@ -567,8 +569,58 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("Paperless saved", content)
         self.assertIn("OCR ready", content)
+        self.assertIn("수정할 내용이 있으면 Edit", content)
         self.assertIn("`42`", content)
         self.assertIn("문서 42 태그 추천", content)
+
+    def test_ocr_ready_view_keeps_done_as_user_action(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            inbox = self.make_inbox(Path(temporary) / "inbox.json")
+            view = OcrReadyView(inbox, "source")
+
+            self.assertEqual([item.label for item in view.children], ["Edit", "Done"])
+
+    async def test_ocr_ready_done_button_marks_message_complete(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            inbox = self.make_inbox(Path(temporary) / "inbox.json")
+            inbox.state.sources["source"] = InboxRecord(
+                source_id="source",
+                sha256="hash",
+                filename="scan.pdf",
+                task_id="task-1",
+                message_id=1,
+                document_id=42,
+                title="진료기록 열람 및 사본 발급 동의서",
+                tags=("진료기록", "프린트"),
+            )
+            view = OcrReadyView(inbox, "source")
+            interaction = SimpleNamespace(
+                response=SimpleNamespace(edit_message=AsyncMock(), send_message=AsyncMock())
+            )
+
+            await view.children[1].callback(interaction)  # type: ignore[misc]
+
+            interaction.response.edit_message.assert_awaited_once()
+            self.assertIsNone(interaction.response.edit_message.await_args.kwargs["view"])
+            self.assertIn("Done.", interaction.response.edit_message.await_args.kwargs["content"])
+
+    def test_ocr_done_message_is_final_without_edit_prompt(self) -> None:
+        content = render_ocr_done_message(
+            InboxRecord(
+                source_id="source",
+                sha256="hash",
+                filename="scan.pdf",
+                task_id="task-1",
+                message_id=1,
+                document_id=42,
+                title="진료기록 열람 및 사본 발급 동의서",
+                tags=("진료기록",),
+            )
+        )
+
+        self.assertIn("Done.", content)
+        self.assertIn("Paperless saved", content)
+        self.assertNotIn("수정할 내용", content)
 
     def test_ocr_pending_message_keeps_task_id_visible(self) -> None:
         content = render_ocr_pending_message(

@@ -428,7 +428,7 @@ class DiscordDocumentInbox:
                     await self._edit_record_prompt(record, render_ocr_pending_message(record))
                     return
                 document = await asyncio.to_thread(self.paperless.get, task.related_document_ids[0])
-                updated = replace(record, document_id=document.document_id)
+                updated = replace(record, document_id=document.document_id, title=document.title or record.title)
                 self.state.sources[source_id] = updated
                 self._save_state()
                 if not str(document.content or "").strip():
@@ -781,13 +781,25 @@ class OcrReadyView(discord.ui.View):
         await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
         return False
 
-    @discord.ui.button(label="Edit", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="Edit", style=discord.ButtonStyle.primary, custom_id="paperless-ocr:edit")
     async def edit(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         record = self.inbox.state.sources.get(self.source_id)
         if record is None or record.document_id <= 0:
             await interaction.response.send_message("Document is no longer available.", ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         await interaction.response.send_modal(DocumentMetadataModal(self.inbox, self.source_id, record))
+
+    @discord.ui.button(label="Done", style=discord.ButtonStyle.success, custom_id="paperless-ocr:done")
+    async def done(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        record = self.inbox.state.sources.get(self.source_id)
+        if record is None or record.document_id <= 0:
+            await interaction.response.send_message("Document is no longer available.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.response.edit_message(
+            content=render_ocr_done_message(record),
+            view=None,
+            allowed_mentions=NO_MENTIONS,
+        )
 
 
 class DocumentMetadataModal(discord.ui.Modal):
@@ -894,10 +906,27 @@ def render_ocr_ready_message(record: InboxRecord, document_title: str = "") -> s
         f"### {escape_text(title)}",
         "- Paperless saved.",
         "- OCR ready.",
+        "- 수정할 내용이 있으면 Edit, 끝났으면 Done.",
     ]
     if record.document_id:
         lines.append(f"- document: `{record.document_id}`")
         lines.append(f"- KaosAI tag suggestion: `문서 {record.document_id} 태그 추천`")
+    if record.tags:
+        lines.append("- tags: " + " ".join(f"#{escape_text(tag)}" for tag in record.tags))
+    return "\n".join(lines)[:1990]
+
+
+def render_ocr_done_message(record: InboxRecord) -> str:
+    title = record.title or Path(record.filename).stem
+    lines = [
+        "## Documents",
+        f"### {escape_text(title)}",
+        "- Paperless saved.",
+        "- OCR ready.",
+        "- Done.",
+    ]
+    if record.document_id:
+        lines.append(f"- document: `{record.document_id}`")
     if record.tags:
         lines.append("- tags: " + " ".join(f"#{escape_text(tag)}" for tag in record.tags))
     return "\n".join(lines)[:1990]
