@@ -1062,6 +1062,27 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("## Buy milk", channel.sent[3]["content"])
             self.assertIn("## Call school", channel.sent[4]["content"])
 
+    async def test_repost_active_messages_moves_crossed_out_completed_items_to_history(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            adapter = FakeAdapter()
+            surface = self.make_surface(Path(temporary) / "tasks.json", channel, adapter)
+
+            await surface.ensure_message()
+            self.assertTrue(await surface.complete_task("zin:tasks|TASK-1"))
+            completed_message_id = surface.state.completed_message_ids["zin:tasks|TASK-1"][0]
+            completed_message = channel.messages[completed_message_id]
+            self.assertFalse(completed_message.deleted)
+            self.assertIn("## ~~Buy milk~~", completed_message.content)
+
+            await surface.repost_active_messages()
+
+            self.assertTrue(completed_message.deleted)
+            self.assertEqual(surface.state.completed_message_ids, {})
+            archive_message = channel.messages[surface.state.completed_archive_message_id]
+            self.assertIn("## Completed", archive_message.content)
+            self.assertIn("Buy milk", archive_message.content)
+
     async def test_user_messages_in_tasks_channel_are_deleted(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             surface = self.make_surface(Path(temporary) / "tasks.json")

@@ -127,6 +127,8 @@ class DiscordTasksSurface:
         self.state.message_ids = {}
         self._save_state()
         await self.ensure_message()
+        if await self._delete_all_completed_messages(channel):
+            self._save_state()
 
     async def notify_due_tasks(self, *, now: datetime | None = None) -> int:
         if not self.show_due:
@@ -468,6 +470,19 @@ class DiscordTasksSurface:
             await self._delete_message_id(channel, message_id)
             deleted = True
         return deleted
+
+    async def _delete_all_completed_messages(self, channel: discord.abc.Messageable) -> bool:
+        if not self.state.completed_message_ids:
+            return False
+        message_ids = [
+            message_id
+            for task_message_ids in self.state.completed_message_ids.values()
+            for message_id in task_message_ids
+        ]
+        self.state.completed_message_ids = {}
+        for message_id in message_ids:
+            await self._delete_message_id(channel, message_id)
+        return bool(message_ids)
 
     async def _refresh_completed_messages(self, key: str, task: Mapping[str, Any]) -> None:
         message_ids = self.state.completed_message_ids.get(key, [])
