@@ -17,6 +17,7 @@ from kaos_governor_discord.access import AccessPolicy
 from kaos_governor_discord.inbox import (
     DiscordDocumentInbox,
     PaperlessSearchView,
+    attachment_display_filename,
     parse_metadata_reply,
     rejection_message,
     render_paperless_opened,
@@ -63,13 +64,35 @@ class FakePaperless(PaperlessDocumentService):
 
 
 class FakeAttachment:
-    def __init__(self, attachment_id=10, filename="scan.pdf", content=b"%PDF-1.7\nbody"):
+    def __init__(
+        self,
+        attachment_id=10,
+        filename="scan.pdf",
+        content=b"%PDF-1.7\nbody",
+        *,
+        title=None,
+        fail_cached=False,
+        fail_uncached=False,
+    ):
         self.id = attachment_id
         self.filename = filename
+        self.title = title
         self._content = content
         self.size = len(content)
+        self.fail_cached = fail_cached
+        self.fail_uncached = fail_uncached
+        self.read_calls = []
 
     async def read(self, *, use_cached=True):
+        self.read_calls.append(use_cached)
+        if use_cached and self.fail_cached:
+            import discord
+
+            raise discord.HTTPException(SimpleNamespace(status=415, reason="Unsupported Media Type"), "failed to get asset")
+        if not use_cached and self.fail_uncached:
+            import discord
+
+            raise discord.HTTPException(SimpleNamespace(status=404, reason="Not Found"), "failed to get asset")
         return self._content
 
 
@@ -144,6 +167,47 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("view", message.replies[0][1])
             self.assertEqual(inbox.status()["pendingCount"], 1)
             self.assertEqual(inbox.status()["trackedSources"], 0)
+
+    async def test_pdf_upload_uses_canonical_attachment_before_cached_proxy(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            paperless = FakePaperless()
+            inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
+            attachment = FakeAttachment(filename="처방전 대리수령 신청서.pdf", fail_cached=True)
+            message = self.make_message([attachment])
+
+            self.assertTrue(await inbox.handle_message(message))  # type: ignore[arg-type]
+
+            self.assertEqual(attachment.read_calls, [False])
+            self.assertIn("처방전 대리수령 신청서.pdf", message.replies[0][0])
+            self.assertEqual(inbox.status()["pendingCount"], 1)
+
+    async def test_pdf_upload_falls_back_to_cached_attachment_when_canonical_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            paperless = FakePaperless()
+            inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
+            attachment = FakeAttachment(filename="scan.pdf", fail_uncached=True)
+            message = self.make_message([attachment])
+
+            self.assertTrue(await inbox.handle_message(message))  # type: ignore[arg-type]
+
+            self.assertEqual(attachment.read_calls, [False, True])
+            self.assertEqual(inbox.status()["pendingCount"], 1)
+
+    async def test_pdf_upload_uses_discord_attachment_title_for_display_filename(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            paperless = FakePaperless()
+            inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
+            attachment = FakeAttachment(
+                filename="8f0ea2e73b58ad58.pdf",
+                title="처방전 대리수령 신청서.pdf",
+            )
+            message = self.make_message([attachment])
+
+            self.assertTrue(await inbox.handle_message(message))  # type: ignore[arg-type]
+
+            self.assertEqual(attachment_display_filename(attachment), "처방전 대리수령 신청서.pdf")
+            self.assertIn("처방전 대리수령 신청서.pdf", message.replies[0][0])
+            self.assertNotIn("8f0ea2e73b58ad58.pdf", message.replies[0][0])
 
     async def test_pdf_upload_in_extra_channel_creates_pending_prompt(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

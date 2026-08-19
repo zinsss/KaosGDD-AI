@@ -134,7 +134,7 @@ class DiscordDocumentInbox:
             self.rejected_count += 1
             self.last_error = str(exc)
             await message.reply(
-                f"## Documents\n- {escape_text(attachment.filename)}: {escape_text(rejection_message(exc))}",
+                f"## Documents\n- {escape_text(attachment_display_filename(attachment))}: {escape_text(rejection_message(exc))}",
                 mention_author=False,
                 allowed_mentions=NO_MENTIONS,
             )
@@ -162,7 +162,7 @@ class DiscordDocumentInbox:
                 "sourceId": pending.source_id,
                 "sha256": pending.sha256,
             }
-        content = await attachment.read(use_cached=True)
+        content = await read_attachment_bytes(attachment)
         if not content.startswith(b"%PDF-"):
             raise DocumentIntakeError("invalid_pdf_signature")
         digest = hashlib.sha256(content).hexdigest()
@@ -185,7 +185,7 @@ class DiscordDocumentInbox:
             prompt_message_id=0,
             author_id=int(message.author.id),
             sha256=digest,
-            filename=safe_filename(attachment.filename),
+            filename=attachment_display_filename(attachment),
         )
         self.state.pending[source_id] = pending
         self._save_state()
@@ -208,7 +208,7 @@ class DiscordDocumentInbox:
         attachment = next((item for item in source_message.attachments if int(item.id) == pending.attachment_id), None)
         if attachment is None:
             raise DocumentIntakeError("paperless_attachment_missing")
-        content = await attachment.read(use_cached=True)
+        content = await read_attachment_bytes(attachment)
         digest = hashlib.sha256(content).hexdigest()
         if digest != pending.sha256:
             raise DocumentIntakeError("paperless_attachment_changed")
@@ -501,6 +501,19 @@ def rejection_message(error: Exception) -> str:
         "paperless_attachment_changed": "The original PDF attachment changed.",
     }
     return labels.get(str(error), str(error))
+
+
+async def read_attachment_bytes(attachment: discord.Attachment) -> bytes:
+    try:
+        return await attachment.read(use_cached=False)
+    except discord.HTTPException:
+        return await attachment.read(use_cached=True)
+
+
+def attachment_display_filename(attachment: discord.Attachment) -> str:
+    title = str(getattr(attachment, "title", "") or "").strip()
+    filename = title if title.lower().endswith(".pdf") else str(attachment.filename)
+    return safe_filename(filename)
 
 
 class InboxMenuView(discord.ui.View):
