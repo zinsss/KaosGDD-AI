@@ -84,6 +84,7 @@ class DiscordTasksSurface:
         self.state.completed_archive_message_id = int(archive_message.id)
         await self._pace_message_refresh()
         next_message_ids: dict[str, int] = {}
+        previous_message_ids = dict(self.state.message_ids)
         message_order_changed = False
         for task in active:
             key = task_key(task)
@@ -107,6 +108,9 @@ class DiscordTasksSurface:
                 message_order_changed = True
         self.state.message_ids = next_message_ids
         if self._uses_supplies_rules():
+            for task in active:
+                if task_key(task) not in previous_message_ids:
+                    self._record_recent_supply(str(task.get("summary") or ""), promote_existing=False)
             recent_message = await self._recreate_recent_supplies_message(channel, force_recreate=message_order_changed)
             self.state.recent_supplies_message_id = int(recent_message.id)
             await self._pace_message_refresh()
@@ -500,12 +504,15 @@ class DiscordTasksSurface:
     def _uses_supplies_rules(self) -> bool:
         return self.surface_name == "supplies" or self.profile == "supplies" or is_supplies_collection(self.collection_id)
 
-    def _record_recent_supply(self, title: str) -> None:
+    def _record_recent_supply(self, title: str, *, promote_existing: bool = True) -> bool:
         clean_title = title.strip()
         if not clean_title:
-            return
+            return False
+        if not promote_existing and any(item.casefold() == clean_title.casefold() for item in self.state.recent_supplies):
+            return False
         previous = [item for item in self.state.recent_supplies if item.casefold() != clean_title.casefold()]
         self.state.recent_supplies = [clean_title, *previous][:MAX_RECENT_SUPPLIES]
+        return True
 
     def _remembered_supply_title(self, content: str) -> str:
         clean_title = " ".join(str(content or "").split())

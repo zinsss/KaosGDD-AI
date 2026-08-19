@@ -469,6 +469,45 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(select.custom_id, "supplies:recent:add")
             self.assertEqual([option.label for option in select.options], ["Paper towels"])
 
+    async def test_supplies_surface_learns_recent_item_from_external_create(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            adapter = FakeAdapter(
+                tasks=[
+                    {
+                        "uid": "SUPPLY-1",
+                        "collection": "zin:supplies",
+                        "summary": "토프라민",
+                        "description": "",
+                        "due": "",
+                        "dueTime": "",
+                        "priority": "",
+                        "status": "NEEDS-ACTION",
+                    }
+                ]
+            )
+            surface = DiscordTasksSurface(
+                FakeBot(channel),  # type: ignore[arg-type]
+                AccessPolicy(100, frozenset({200}), frozenset({300})),
+                channel_id=300,
+                profile="main",
+                state_path=Path(temporary) / "supplies.json",
+                adapter=adapter,  # type: ignore[arg-type]
+                surface_name="supplies",
+                button_prefix="supplies",
+                collection_id="zin:supplies",
+                show_due=False,
+            )
+            surface.message_refresh_delay_seconds = 0
+
+            await surface.ensure_message()
+
+            self.assertEqual(surface.state.recent_supplies, ["토프라민"])
+            self.assertEqual(channel.sent[-1]["content"], "## 최근 비품\n- + 토프라민")
+            self.assertIsInstance(channel.sent[-1]["view"], RecentSuppliesView)
+            select = channel.sent[-1]["view"].children[0]
+            self.assertEqual([option.label for option in select.options], ["토프라민"])
+
     async def test_supplies_recent_message_keeps_latest_25_inputs_at_bottom(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             channel = FakeChannel()
