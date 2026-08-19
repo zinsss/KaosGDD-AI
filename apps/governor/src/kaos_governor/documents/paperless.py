@@ -72,6 +72,21 @@ class PaperlessResult:
 
 
 @dataclass(frozen=True)
+class PaperlessTask:
+    task_id: str
+    status: str
+    related_document_ids: tuple[int, ...] = ()
+
+    @property
+    def done(self) -> bool:
+        return self.status.casefold() in {"success", "failure", "revoked"}
+
+    @property
+    def success(self) -> bool:
+        return self.status.casefold() == "success"
+
+
+@dataclass(frozen=True)
 class PaperlessSearchResult:
     document_id: int
     title: str
@@ -156,6 +171,25 @@ class PaperlessDocumentService:
 
     def search(self, query: object, *, limit: int = 5) -> list[PaperlessSearchResult]:
         return list(self.search_page(query, limit=limit).results)
+
+    def task(self, task_id: object) -> PaperlessTask:
+        if not self.config.enabled:
+            raise DocumentIntakeError("paperless_not_configured")
+        normalized = " ".join(str(task_id or "").split())
+        if not normalized:
+            raise DocumentIntakeError("paperless_task_id_required")
+        try:
+            payload = self._request_tasks({"task_id": normalized, "page_size": "1"})
+        except urllib.error.HTTPError as exc:
+            self.last_error = f"paperless_task_http_{exc.code}"
+            raise DocumentIntakeError(self.last_error) from exc
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            self.last_error = "paperless_request_failed"
+            raise DocumentIntakeError(self.last_error) from exc
+        results = decode_results_payload(payload)
+        if not results:
+            raise DocumentIntakeError("paperless_task_not_found")
+        return paperless_task(results[0])
 
     def get(self, document_id: object) -> PaperlessDocument:
         if not self.config.enabled:
@@ -446,6 +480,23 @@ class PaperlessDocumentService:
             raise DocumentIntakeError(f"paperless_http_{response.status}")
         return decode_payload(body)
 
+    def _request_tasks(self, query: Mapping[str, str]) -> Mapping[str, object]:
+        query_string = urllib.parse.urlencode(query)
+        request = urllib.request.Request(
+            f"{self.config.base_url.rstrip('/')}/api/tasks/?{query_string}",
+            method="GET",
+            headers={
+                "Authorization": f"Token {self.config.api_token}",
+                "Accept": "application/json",
+                "User-Agent": self.config.user_agent,
+            },
+        )
+        with self._urlopen(request, timeout=self.config.timeout_seconds) as response:
+            body = response.read()
+        if response.status < 200 or response.status >= 300:
+            raise DocumentIntakeError(f"paperless_task_http_{response.status}")
+        return decode_payload(body)
+
     def _request_document(self, document_id: int) -> Mapping[str, object]:
         request = urllib.request.Request(
             f"{self.config.base_url.rstrip('/')}/api/documents/{document_id}/",
@@ -572,6 +623,22 @@ def paperless_document(payload: Mapping[str, object]) -> PaperlessDocument:
         correspondent=result.correspondent,
         content=str(payload.get("content") or ""),
         tag_ids=tuple(tag_ids),
+    )
+
+
+def paperless_task(payload: Mapping[str, object]) -> PaperlessTask:
+    document_ids: list[int] = []
+    for raw_id in payload.get("related_document_ids") or ():
+        try:
+            document_id = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        if document_id > 0:
+            document_ids.append(document_id)
+    return PaperlessTask(
+        task_id=str(payload.get("task_id") or ""),
+        status=str(payload.get("status") or ""),
+        related_document_ids=tuple(document_ids),
     )
 
 

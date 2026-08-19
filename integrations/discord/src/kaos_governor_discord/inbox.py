@@ -34,6 +34,7 @@ class InboxRecord:
     filename: str
     task_id: str
     message_id: int
+    document_id: int = 0
     prompt_message_id: int = 0
     title: str = ""
     tags: tuple[str, ...] = ()
@@ -79,6 +80,8 @@ class DiscordDocumentInbox:
         self.accepted_count = 0
         self.duplicate_count = 0
         self.rejected_count = 0
+        self.ocr_ready_count = 0
+        self.ocr_pending_count = 0
         self.last_error = ""
 
     async def handle_message(self, message: discord.Message) -> bool:
@@ -287,6 +290,8 @@ class DiscordDocumentInbox:
             "acceptedCount": self.accepted_count,
             "duplicateCount": self.duplicate_count,
             "rejectedCount": self.rejected_count,
+            "ocrReadyCount": self.ocr_ready_count,
+            "ocrPendingCount": self.ocr_pending_count,
             "pendingCount": len(self.state.pending),
             "trackedSources": len(self.state.sources),
             "trackedHashes": len(self.state.hashes),
@@ -367,6 +372,7 @@ class DiscordDocumentInbox:
                 render_submitted_message(record),
                 view=InboxClosedView(),
             )
+            self.track_ocr(record)
         except (DocumentIntakeError, discord.HTTPException) as exc:
             self.rejected_count += 1
             self.last_error = str(exc)
@@ -399,6 +405,64 @@ class DiscordDocumentInbox:
         await message.edit(content=content, view=view, allowed_mentions=NO_MENTIONS)
         self._register_view(view, int(message.id))
 
+    def track_ocr(self, record: InboxRecord) -> None:
+        if not record.task_id or not record.prompt_message_id:
+            return
+        asyncio.create_task(self._track_ocr(record.source_id))
+
+    async def _track_ocr(self, source_id: str) -> None:
+        for attempt in range(30):
+            record = self.state.sources.get(source_id)
+            if record is None or not record.task_id:
+                return
+            try:
+                task = await asyncio.to_thread(self.paperless.task, record.task_id)
+                if not task.done:
+                    await asyncio.sleep(10)
+                    continue
+                if not task.success or not task.related_document_ids:
+                    self.ocr_pending_count += 1
+                    await self._edit_record_prompt(record, render_ocr_pending_message(record))
+                    return
+                document = await asyncio.to_thread(self.paperless.get, task.related_document_ids[0])
+                updated = replace(record, document_id=document.document_id)
+                self.state.sources[source_id] = updated
+                self._save_state()
+                if not str(document.content or "").strip():
+                    await asyncio.sleep(10)
+                    continue
+                self.ocr_ready_count += 1
+                await self._edit_record_prompt(updated, render_ocr_ready_message(updated, document.title))
+                return
+            except (DocumentIntakeError, discord.HTTPException) as exc:
+                self.last_error = str(exc)
+                LOGGER.info("Paperless OCR tracking not ready source=%s attempt=%s error=%s", source_id, attempt + 1, exc)
+                await asyncio.sleep(10)
+            except Exception:
+                self.last_error = "internal_error"
+                LOGGER.exception("Unexpected Paperless OCR tracking failure source=%s", source_id)
+                return
+        record = self.state.sources.get(source_id)
+        if record is not None:
+            self.ocr_pending_count += 1
+            await self._edit_record_prompt(record, render_ocr_pending_message(record))
+
+    async def _edit_record_prompt(self, record: InboxRecord, content: str) -> None:
+        if not record.prompt_message_id:
+            return
+        channel_id = self.channel_id
+        parts = record.source_id.split(":")
+        if len(parts) >= 3:
+            try:
+                channel_id = int(parts[2])
+            except ValueError:
+                channel_id = self.channel_id
+        channel = self.bot.get_channel(channel_id) or await self.bot.fetch_channel(channel_id)
+        if not hasattr(channel, "fetch_message"):
+            return
+        message = await channel.fetch_message(record.prompt_message_id)
+        await message.edit(content=content, view=InboxClosedView(), allowed_mentions=NO_MENTIONS)
+
     def _register_view(self, view: discord.ui.View | None, message_id: int) -> None:
         if view is None or not hasattr(self.bot, "add_view"):
             return
@@ -424,6 +488,7 @@ class DiscordDocumentInbox:
                 filename=str(value.get("filename") or "document.pdf"),
                 task_id=str(value.get("taskId") or ""),
                 message_id=int(value.get("messageId") or 0),
+                document_id=int(value.get("documentId") or 0),
                 prompt_message_id=int(value.get("promptMessageId") or 0),
                 title=str(value.get("title") or ""),
                 tags=tuple(str(item) for item in value.get("tags") or ()),
@@ -468,6 +533,7 @@ class DiscordDocumentInbox:
                     "filename": record.filename,
                     "taskId": record.task_id,
                     "messageId": record.message_id,
+                    "documentId": record.document_id,
                     "promptMessageId": record.prompt_message_id,
                     "title": record.title,
                     "tags": list(record.tags),
@@ -623,6 +689,7 @@ class InboxMenuView(discord.ui.View):
                 view=InboxClosedView(),
                 allowed_mentions=NO_MENTIONS,
             )
+            self.inbox.track_ocr(record)
         except (DocumentIntakeError, discord.HTTPException) as exc:
             self.inbox.rejected_count += 1
             self.inbox.last_error = str(exc)
@@ -697,6 +764,33 @@ def render_submitted_message(record: InboxRecord) -> str:
         lines.append(f"- title: {escape_text(record.title)}")
     if record.tags:
         lines.append("- tags: " + " ".join(f"#{escape_text(tag)}" for tag in record.tags))
+    return "\n".join(lines)[:1990]
+
+
+def render_ocr_ready_message(record: InboxRecord, document_title: str = "") -> str:
+    title = document_title or record.title or Path(record.filename).stem
+    lines = [
+        "## Documents",
+        f"### {escape_text(title)}",
+        "- OCR ready.",
+    ]
+    if record.document_id:
+        lines.append(f"- document: `{record.document_id}`")
+        lines.append(f"- KaosAI tag suggestion: `문서 {record.document_id} 태그 추천`")
+    if record.tags:
+        lines.append("- tags: " + " ".join(f"#{escape_text(tag)}" for tag in record.tags))
+    return "\n".join(lines)[:1990]
+
+
+def render_ocr_pending_message(record: InboxRecord) -> str:
+    lines = [
+        "## Documents",
+        f"### {escape_text(record.title or record.filename)}",
+        "- Paperless accepted the file.",
+        "- OCR is still processing. Search again in a few minutes.",
+    ]
+    if record.task_id:
+        lines.append(f"- task: `{escape_text(record.task_id)}`")
     return "\n".join(lines)[:1990]
 
 

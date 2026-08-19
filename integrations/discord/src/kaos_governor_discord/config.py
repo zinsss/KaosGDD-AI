@@ -27,6 +27,12 @@ def _positive_int(value: str, name: str) -> int:
     return parsed
 
 
+def _optional_positive_int(value: str, name: str) -> int:
+    if not str(value or "").strip():
+        return 0
+    return _positive_int(value, name)
+
+
 def _id_set(env: Mapping[str, str], name: str) -> frozenset[int]:
     values = frozenset(
         _positive_int(part.strip(), name)
@@ -107,6 +113,7 @@ class Settings:
     paperless_api_token: str
     paperless_base_url: str
     paperless_public_url: str
+    paperless_default_owner_id: int
     paperless_max_attachment_mb: int
     log_level: str
 
@@ -340,6 +347,10 @@ class Settings:
             paperless_api_token=paperless_api_token,
             paperless_base_url=paperless_base_url,
             paperless_public_url=source.get("PAPERLESS_PUBLIC_URL", "").strip(),
+            paperless_default_owner_id=_optional_positive_int(
+                source.get("PAPERLESS_DEFAULT_OWNER_ID", ""),
+                "PAPERLESS_DEFAULT_OWNER_ID",
+            ),
             paperless_max_attachment_mb=paperless_max_attachment_mb,
             log_level=source.get("LOG_LEVEL", "INFO").strip().upper() or "INFO",
         )

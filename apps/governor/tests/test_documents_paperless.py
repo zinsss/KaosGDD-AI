@@ -118,6 +118,24 @@ class PaperlessDocumentServiceTests(unittest.TestCase):
         self.assertEqual(results[0].correspondent, "Clinic")
         self.assertEqual(service.last_result_count, 1)
 
+    def test_task_reads_related_document_ids(self) -> None:
+        urlopen = mock.Mock(
+            return_value=FakeResponse(
+                body=b'{"count":1,"results":[{"task_id":"abc","status":"success","related_document_ids":[42]}]}'
+            )
+        )
+        service = PaperlessDocumentService(self.config(), urlopen=urlopen)
+
+        task = service.task("abc")
+
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.get_method(), "GET")
+        self.assertIn("/api/tasks/?", request.full_url)
+        self.assertIn("task_id=abc", request.full_url)
+        self.assertTrue(task.done)
+        self.assertTrue(task.success)
+        self.assertEqual(task.related_document_ids, (42,))
+
     def test_search_page_reports_result_and_total_counts(self) -> None:
         urlopen = mock.Mock(
             side_effect=[

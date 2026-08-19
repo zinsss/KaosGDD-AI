@@ -282,6 +282,7 @@ class SettingsTests(unittest.TestCase):
                 "PAPERLESS_BASE_URL": "http://paperless:8000",
                 "PAPERLESS_API_TOKEN": "not-a-real-token",
                 "PAPERLESS_PUBLIC_URL": "https://paperless.example",
+                "PAPERLESS_DEFAULT_OWNER_ID": "3",
                 "PAPERLESS_INBOX_MAX_ATTACHMENT_MB": "12",
             }
         )
@@ -291,6 +292,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(str(settings.inbox_state_path), "/tmp/inbox-state.json")
         self.assertEqual(settings.paperless_base_url, "http://paperless:8000")
         self.assertEqual(settings.paperless_api_token, "not-a-real-token")
+        self.assertEqual(settings.paperless_default_owner_id, 3)
         self.assertEqual(settings.paperless_max_attachment_mb, 12)
         with self.assertRaisesRegex(ConfigurationError, "DISCORD_INBOX_EXTRA_CHANNEL_IDS"):
             Settings.from_env(

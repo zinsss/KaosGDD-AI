@@ -198,6 +198,7 @@ class GovernorBot(discord.Client):
                 api_token=settings.paperless_api_token,
                 max_document_bytes=settings.paperless_max_attachment_mb * 1024 * 1024,
                 public_url=settings.paperless_public_url,
+                default_owner_id=settings.paperless_default_owner_id,
             )
         )
         self.discord_inbox = (

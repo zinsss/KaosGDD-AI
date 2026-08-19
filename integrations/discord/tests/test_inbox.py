@@ -24,6 +24,8 @@ from kaos_governor_discord.inbox import (
     generated_discord_filename,
     parse_metadata_reply,
     rejection_message,
+    render_ocr_pending_message,
+    render_ocr_ready_message,
     render_paperless_opened,
     render_processing_message,
     render_submitted_message,
@@ -459,6 +461,39 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("submitted", content)
         self.assertIn("OCR may still be running", content)
+
+    def test_ocr_ready_message_includes_kaosai_tag_prompt(self) -> None:
+        content = render_ocr_ready_message(
+            InboxRecord(
+                source_id="source",
+                sha256="hash",
+                filename="처방전.pdf",
+                task_id="task-1",
+                message_id=1,
+                document_id=42,
+                title="처방전",
+            ),
+            "처방전 대리수령 신청서",
+        )
+
+        self.assertIn("OCR ready", content)
+        self.assertIn("`42`", content)
+        self.assertIn("문서 42 태그 추천", content)
+
+    def test_ocr_pending_message_keeps_task_id_visible(self) -> None:
+        content = render_ocr_pending_message(
+            InboxRecord(
+                source_id="source",
+                sha256="hash",
+                filename="처방전.pdf",
+                task_id="task-1",
+                message_id=1,
+                title="처방전",
+            )
+        )
+
+        self.assertIn("OCR is still processing", content)
+        self.assertIn("task-1", content)
 
     def test_parse_metadata_reply_extracts_title_and_tags(self) -> None:
         self.assertEqual(
