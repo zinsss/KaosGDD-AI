@@ -26,6 +26,10 @@ CONTAINER_NAME=${KAOSBRAIN_CONTAINER_NAME:-kaos-brain}
 OPENCLAW_STATE_DIR=${KAOSAI_OPENCLAW_STATE_DIR:-${KAOSGDD_ROOT}/kaosai/openclaw}
 OPENCLAW_CONFIG_PATH=${KAOSAI_OPENCLAW_CONFIG_PATH:-${OPENCLAW_STATE_DIR}/openclaw.json}
 OPENCLAW_GATEWAY_SERVICE=${KAOSAI_OPENCLAW_GATEWAY_SERVICE:-openclaw-gateway.service}
+REAUTH_AGENT_ENV_FILE=${KAOSAI_REAUTH_AGENT_ENV_FILE:-${KAOSGDD_ROOT}/kaosai/openclaw-reauth-agent.env}
+REAUTH_AGENT_TOKEN_FILE=${KAOSAI_REAUTH_AGENT_TOKEN_FILE:-${CANONICAL_SECRETS_DIR}/kaosai_reauth_agent_token}
+REAUTH_AGENT_VENV_DIR=${KAOSAI_REAUTH_AGENT_VENV_DIR:-${KAOSGDD_ROOT}/kaosai/openclaw-reauth-agent-venv}
+REAUTH_AGENT_SERVICE_NAME=${KAOSAI_REAUTH_AGENT_SERVICE_NAME:-kaosai-openclaw-reauth-agent.service}
 
 die() {
   printf 'ERROR: %s\n' "$*" >&2
@@ -508,6 +512,58 @@ openclaw_reauth() {
   openclaw models auth list
 }
 
+openclaw_reauth_agent_setup() {
+  require_command python3
+  require_command systemctl
+  install -d -m 0750 "${CANONICAL_SECRETS_DIR}" "$(dirname "${REAUTH_AGENT_ENV_FILE}")" "${HOME}/.config/systemd/user"
+  if [[ ! -s "${REAUTH_AGENT_TOKEN_FILE}" ]]; then
+    if command -v openssl >/dev/null 2>&1; then
+      openssl rand -hex 32 >"${REAUTH_AGENT_TOKEN_FILE}"
+    else
+      python3 - <<'PY' >"${REAUTH_AGENT_TOKEN_FILE}"
+import secrets
+print(secrets.token_hex(32))
+PY
+    fi
+  fi
+  chmod 0640 "${REAUTH_AGENT_TOKEN_FILE}"
+  if [[ ! -f "${REAUTH_AGENT_ENV_FILE}" ]]; then
+    cat >"${REAUTH_AGENT_ENV_FILE}" <<EOF
+KAOSAI_REAUTH_TOKEN_FILE=${REAUTH_AGENT_TOKEN_FILE}
+KAOSAI_REAUTH_HOST=127.0.0.1
+KAOSAI_REAUTH_PORT=18997
+KAOSAI_OPENCLAW_STATE_DIR=${OPENCLAW_STATE_DIR}
+KAOSAI_OPENCLAW_CONFIG_PATH=${OPENCLAW_CONFIG_PATH}
+KAOSAI_OPENCLAW_GATEWAY_SERVICE=${OPENCLAW_GATEWAY_SERVICE}
+KAOSAI_OPENCLAW_NVM_SH=${HOME}/.nvm/nvm.sh
+KAOSAI_OPENCLAW_NODE_VERSION=24
+EOF
+    chmod 0640 "${REAUTH_AGENT_ENV_FILE}"
+  fi
+  python3 -m venv "${REAUTH_AGENT_VENV_DIR}"
+  "${REAUTH_AGENT_VENV_DIR}/bin/python" -m pip install --upgrade pip >/dev/null
+  "${REAUTH_AGENT_VENV_DIR}/bin/python" -m pip install "${REPO_ROOT}/apps/brain" >/dev/null
+  sed \
+    -e "s/__ENV_FILE__/$(sed_escape "${REAUTH_AGENT_ENV_FILE}")/g" \
+    -e "s/__VENV_DIR__/$(sed_escape "${REAUTH_AGENT_VENV_DIR}")/g" \
+    "${DEPLOY_DIR}/openclaw-reauth-agent.service" >"${HOME}/.config/systemd/user/${REAUTH_AGENT_SERVICE_NAME}"
+  systemctl --user daemon-reload
+  systemctl --user enable "${REAUTH_AGENT_SERVICE_NAME}" >/dev/null
+  info "OpenClaw reauth agent setup complete."
+  info "Start it with: ${0} openclaw-reauth-agent-up"
+}
+
+openclaw_reauth_agent_up() {
+  systemctl --user restart "${REAUTH_AGENT_SERVICE_NAME}"
+  sleep 1
+  systemctl --user is-active "${REAUTH_AGENT_SERVICE_NAME}" >/dev/null
+  info "OpenClaw reauth agent is active."
+}
+
+openclaw_reauth_agent_status() {
+  systemctl --user status "${REAUTH_AGENT_SERVICE_NAME}" --no-pager
+}
+
 logs() {
   docker logs --tail "${1:-120}" "${CONTAINER_NAME}"
 }
@@ -529,6 +585,12 @@ Commands:
              Update KaosAI mode in the Brain env, validate, and leave restart explicit
   openclaw-reauth
              Renew the OpenClaw OpenAI/ChatGPT login and restart the OpenClaw gateway
+  openclaw-reauth-agent-setup
+             Install the H4-local token-protected OpenClaw reauth HTTP agent
+  openclaw-reauth-agent-up
+             Restart the H4-local OpenClaw reauth HTTP agent
+  openclaw-reauth-agent-status
+             Show the H4-local OpenClaw reauth HTTP agent status
   logs [n]   Show recent container logs
 EOF
 }
@@ -544,6 +606,9 @@ case "${1:-}" in
   status) status ;;
   kaosai-mode) shift; kaosai_mode "$@" ;;
   openclaw-reauth) openclaw_reauth ;;
+  openclaw-reauth-agent-setup) openclaw_reauth_agent_setup ;;
+  openclaw-reauth-agent-up) openclaw_reauth_agent_up ;;
+  openclaw-reauth-agent-status) openclaw_reauth_agent_status ;;
   logs) shift; logs "$@" ;;
   ""|-h|--help|help) usage ;;
   *) die "unknown command: $1" ;;

@@ -113,6 +113,31 @@ runtime through `nvm` when needed, starts the OpenAI OAuth flow, accepts the
 callback URL or authorization code, restarts `openclaw-gateway.service`, and
 prints the non-secret auth profile status.
 
+For Discord-driven renewal, install the H4-local reauth agent. It is a separate
+loopback-only service with a bearer token, so the Brain container does not get
+host shell access:
+
+```bash
+./deploy/kaosbrain/kaosbrain openclaw-reauth-agent-setup
+./deploy/kaosbrain/kaosbrain openclaw-reauth-agent-up
+```
+
+The agent exposes only:
+
+```text
+POST /reauth/openai/start
+POST /reauth/openai/callback
+GET  /reauth/openai/status
+```
+
+The setup command creates:
+
+```text
+/srv/kaosgdd/kaosai/openclaw-reauth-agent.env
+/srv/kaosgdd/secrets/kaosai_reauth_agent_token
+~/.config/systemd/user/kaosai-openclaw-reauth-agent.service
+```
+
 After the first install, update from the host checkout with:
 
 ```bash

@@ -11,6 +11,7 @@ dependencies = ["aiohttp>=3.10,<4", "discord.py==2.7.1"]
 
 [project.scripts]
 kaos-brain = "kaos_brain.main:main"
+kaos-openclaw-reauth-agent = "kaos_brain.openclaw_reauth_agent:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
