@@ -243,11 +243,13 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(channel.sent[0]["embed"].title, "Healthy")
             self.assertIn("KaosBrain", channel.sent[0]["embed"].description)
             self.assertIn("Brain of KaosGDD", channel.sent[0]["embed"].description)
+            self.assertEqual(channel.sent[0]["embed"].footer.text, "Updated at 09:00")
             self.assertEqual(channel.sent[1]["embed"].title, "Memos")
             self.assertIsInstance(channel.sent[1]["view"], ServiceStatusView)
             self.assertEqual(channel.sent[2]["embed"].title, "Planned")
             self.assertIn("KaosInj", channel.sent[2]["embed"].description)
             self.assertIn("Clinic injection workflow support", channel.sent[2]["embed"].description)
+            self.assertEqual(channel.sent[2]["embed"].footer.text, "Updated at 09:00")
             state = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(set(state["messageIds"]), {"summary:healthy", "issue:memos", "summary:planned"})
 
@@ -329,6 +331,7 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Healthy", embed.description)
         self.assertNotIn("09:15:00", embed.description)
         self.assertIn("HTTP 200", embed.description)
+        self.assertEqual(embed.footer.text, "Updated at 09:15:00")
         self.assertEqual(embed.color.value, EMBED_COLOR_HEALTHY)
 
     def test_service_embed_colors_match_state(self) -> None:
@@ -350,13 +353,14 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
         )
 
     def test_summary_embed_lists_service_labels(self) -> None:
-        embed = render_summary_embed("Healthy", [SERVICES[0], SERVICES[1]], EMBED_COLOR_HEALTHY)
+        embed = render_summary_embed("Healthy", [SERVICES[0], SERVICES[1]], EMBED_COLOR_HEALTHY, updated_at="09:15")
 
         self.assertEqual(embed.title, "Healthy")
         self.assertIn("KaosBrain", embed.description)
         self.assertIn("Brain of KaosGDD", embed.description)
         self.assertIn("KaosGovernor", embed.description)
         self.assertIn("Rules and controller", embed.description)
+        self.assertEqual(embed.footer.text, "Updated at 09:15")
         self.assertEqual(embed.color.value, EMBED_COLOR_HEALTHY)
 
     def test_service_view_only_contains_restart_button(self) -> None:

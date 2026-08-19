@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 import json
 import logging
 import os
@@ -140,7 +141,12 @@ class DiscordServiceStatusSurface:
             message = await self._upsert_embed_message(
                 channel,
                 key=HEALTHY_SUMMARY_KEY,
-                embed=render_summary_embed("Healthy", healthy_items, EMBED_COLOR_HEALTHY),
+                embed=render_summary_embed(
+                    "Healthy",
+                    healthy_items,
+                    EMBED_COLOR_HEALTHY,
+                    updated_at=summary_updated_at(healthy_items, results),
+                ),
                 message_id=current_message_ids.get(HEALTHY_SUMMARY_KEY, 0),
             )
             next_message_ids[HEALTHY_SUMMARY_KEY] = int(message.id)
@@ -161,7 +167,12 @@ class DiscordServiceStatusSurface:
             message = await self._upsert_embed_message(
                 channel,
                 key=PLANNED_SUMMARY_KEY,
-                embed=render_summary_embed("Planned", planned_items, EMBED_COLOR_UNKNOWN),
+                embed=render_summary_embed(
+                    "Planned",
+                    planned_items,
+                    EMBED_COLOR_UNKNOWN,
+                    updated_at=summary_updated_at(planned_items, results),
+                ),
                 message_id=current_message_ids.get(PLANNED_SUMMARY_KEY, 0),
             )
             next_message_ids[PLANNED_SUMMARY_KEY] = int(message.id)
@@ -452,16 +463,38 @@ def render_service_embed(item: ServiceStatusItem, result: ServiceProbeResult | N
         description=f"{item.description}\n\n**{status}**{detail}",
         color=service_embed_color(result),
     )
+    if result.checked_at:
+        embed.set_footer(text=f"Updated at {result.checked_at}")
     return embed
 
 
-def render_summary_embed(title: str, items: list[ServiceStatusItem], color: int) -> discord.Embed:
+def render_summary_embed(
+    title: str,
+    items: list[ServiceStatusItem],
+    color: int,
+    *,
+    updated_at: str = "",
+) -> discord.Embed:
     description = "\n".join(f"**{item.label}**\n{item.description}" for item in items) or "None"
-    return discord.Embed(title=title, description=description, color=color)
+    embed = discord.Embed(title=title, description=description, color=color)
+    if updated_at:
+        embed.set_footer(text=f"Updated at {updated_at}")
+    return embed
 
 
 def service_issue_key(key: str) -> str:
     return f"issue:{key}"
+
+
+def summary_updated_at(
+    items: list[ServiceStatusItem],
+    results: Mapping[str, ServiceProbeResult],
+) -> str:
+    for item in items:
+        value = results[item.key].checked_at
+        if value:
+            return value
+    return ""
 
 
 def service_embed_color(result: ServiceProbeResult) -> int:
@@ -487,7 +520,7 @@ def check_service(
     env: Mapping[str, str],
     timeout_seconds: float,
 ) -> ServiceProbeResult:
-    checked_at = time.strftime("%H:%M:%S", time.localtime())
+    checked_at = checked_at_text()
     url = probe_value(env, item.key, "URL")
     if not url and default_probes_enabled(env):
         url = default_http_probe(env, item.key)
@@ -504,6 +537,11 @@ def check_service(
     if item.key in PLANNED_SERVICE_DETAILS:
         return ServiceProbeResult(item.key, "planned", checked_at, PLANNED_SERVICE_DETAILS[item.key])
     return ServiceProbeResult(item.key, "unknown", checked_at, "No health probe configured.")
+
+
+def checked_at_text() -> str:
+    kst = timezone(timedelta(hours=9), "KST")
+    return datetime.now(kst).strftime("%H:%M:%S KST")
 
 
 def check_http(url: str, timeout_seconds: float) -> tuple[str, str]:
