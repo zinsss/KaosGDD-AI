@@ -25,6 +25,8 @@ from kaos_governor_discord.inbox import (
     parse_metadata_reply,
     rejection_message,
     render_paperless_opened,
+    render_processing_message,
+    render_submitted_message,
 )
 
 
@@ -435,6 +437,28 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("2026-08-13", content)
         self.assertIn("Clinic", content)
         self.assertIn("bill.pdf", content)
+
+    def test_processing_document_message_mentions_paperless_work(self) -> None:
+        content = render_processing_message("처방전.pdf")
+
+        self.assertIn("Processing in Paperless", content)
+        self.assertIn("OCR", content)
+        self.assertIn("처방전.pdf", content)
+
+    def test_submitted_document_message_mentions_ocr_may_continue(self) -> None:
+        content = render_submitted_message(
+            InboxRecord(
+                source_id="source",
+                sha256="hash",
+                filename="처방전.pdf",
+                task_id="task-1",
+                message_id=1,
+                title="처방전",
+            )
+        )
+
+        self.assertIn("submitted", content)
+        self.assertIn("OCR may still be running", content)
 
     def test_parse_metadata_reply_extracts_title_and_tags(self) -> None:
         self.assertEqual(

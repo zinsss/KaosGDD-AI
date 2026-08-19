@@ -356,6 +356,11 @@ class DiscordDocumentInbox:
             return True
         title, tags = metadata
         try:
+            await self._edit_prompt(
+                pending,
+                render_processing_message(pending.filename),
+                view=None,
+            )
             record = await self.process_pending(pending.source_id, title=title, tags=tags)
             await self._edit_prompt(
                 pending,
@@ -607,6 +612,11 @@ class InboxMenuView(discord.ui.View):
             return
         await interaction.response.defer()
         try:
+            await interaction.edit_original_response(
+                content=render_processing_message(pending.filename),
+                view=None,
+                allowed_mentions=NO_MENTIONS,
+            )
             record = await self.inbox.process_pending(self.source_id)
             await interaction.edit_original_response(
                 content=render_submitted_message(record),
@@ -668,9 +678,21 @@ def render_metadata_message(filename: str) -> str:
     )[:1990]
 
 
+def render_processing_message(filename: str) -> str:
+    return "\n".join(
+        (
+            "## Documents",
+            f"### {escape_text(filename)}",
+            "Processing in Paperless...",
+            "OCR and automatic document handling may take a few minutes.",
+        )
+    )[:1990]
+
+
 def render_submitted_message(record: InboxRecord) -> str:
     task = f" `{escape_text(record.task_id)}`" if record.task_id else ""
     lines = ["## Documents", f"- {escape_text(record.filename)}: submitted{task}"]
+    lines.append("- Paperless accepted the file. OCR may still be running.")
     if record.title:
         lines.append(f"- title: {escape_text(record.title)}")
     if record.tags:
