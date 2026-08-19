@@ -694,7 +694,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await response.json())["error"], "confirmation_actor_mismatch")
         self.assertEqual(self.paperless.update_calls, [])
 
-    async def test_document_tag_proposal_keeps_existing_paperless_tags_only(self) -> None:
+    async def test_document_tag_proposal_keeps_new_tags_for_confirmation(self) -> None:
         response = await self.client.post(
             "/tools/documents/42/tags/proposals",
             headers=self.headers(),
@@ -708,13 +708,13 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 201)
         payload = await response.json()
         self.assertTrue(payload["confirmationId"].startswith("conf_"))
-        self.assertEqual(payload["document"]["tags"], ["server", "Clinic"])
+        self.assertEqual(payload["document"]["tags"], ["server", "new-ai-tag", "Clinic"])
         self.assertEqual(payload["suggestedTags"], ["server", "new-ai-tag", "Clinic"])
-        self.assertEqual(payload["ignoredTags"], ["new-ai-tag"])
-        self.assertEqual(self.paperless.existing_tag_calls, [("server", "new-ai-tag", "Clinic")])
+        self.assertEqual(payload["ignoredTags"], [])
+        self.assertEqual(self.paperless.existing_tag_calls, [])
         self.assertEqual(self.paperless.update_calls, [])
 
-    async def test_document_tag_proposal_rejects_when_ai_suggests_no_existing_tags(self) -> None:
+    async def test_document_tag_proposal_accepts_all_new_tags_for_confirmation(self) -> None:
         response = await self.client.post(
             "/tools/documents/42/tags/proposals",
             headers=self.headers(),
@@ -725,8 +725,10 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
             },
         )
 
-        self.assertEqual(response.status, 422)
-        self.assertEqual((await response.json())["error"], "document_tags_no_existing_matches")
+        self.assertEqual(response.status, 201)
+        payload = await response.json()
+        self.assertEqual(payload["document"]["tags"], ["made-up"])
+        self.assertEqual(payload["ignoredTags"], [])
         self.assertEqual(self.paperless.update_calls, [])
 
     async def test_task_due_update_proposal_requires_confirmation_before_write(self) -> None:

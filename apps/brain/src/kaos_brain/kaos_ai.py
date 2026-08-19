@@ -135,14 +135,14 @@ Rules:
 KAOSAI_DOCUMENT_TAG_SYSTEM_PROMPT = """You are KaosAI helping KaosBrain choose Paperless tags.
 Return exactly one JSON object and no markdown.
 Allowed schema:
-{"tags":["existing tag name"]}
+{"tags":["tag name"]}
 
 Rules:
-- Choose only tag names from availableTags.
-- Do not invent new tags.
+- Prefer tag names from availableTags when they fit.
+- You may suggest short new tags when the document clearly supports them; KaosGovernor will ask the user to confirm before creating them.
 - Use at most 5 tags.
 - Prefer tags supported by the document title, filename, correspondent, and contentExcerpt.
-- Return {"tags":[]} when no available tag clearly fits."""
+- Return {"tags":[]} when no tag clearly fits."""
 
 
 def parse_kaosai_plan_response(raw: str) -> dict[str, Any]:
@@ -183,17 +183,14 @@ def parse_document_tag_response(raw: str, context: Mapping[str, Any]) -> tuple[s
         raise KaosAIError("invalid_document_tag_json") from exc
     if not isinstance(payload, Mapping):
         raise KaosAIError("document_tag_response_must_be_object")
-    available = {
-        str(item.get("name") or "").casefold(): str(item.get("name") or "").strip()
-        for item in _available_tag_items(context)
-        if str(item.get("name") or "").strip()
-    }
+    available = _available_tags_by_normalized_name(context)
     selected: list[str] = []
     raw_tags = payload.get("tags")
     if not isinstance(raw_tags, list):
         raise KaosAIError("document_tag_tags_required")
     for raw_tag in raw_tags:
-        tag = available.get(str(raw_tag or "").strip().casefold())
+        candidate = _clean_document_tag(raw_tag)
+        tag = available.get(_normalize_tag_name(candidate), candidate)
         if tag and tag not in selected:
             selected.append(tag)
         if len(selected) >= 5:
@@ -206,7 +203,7 @@ def document_tag_rule_suggestions(context: Mapping[str, Any]) -> tuple[str, ...]
     selected: list[str] = []
 
     def add(candidate: str) -> None:
-        tag = available.get(_normalize_tag_name(candidate))
+        tag = available.get(_normalize_tag_name(candidate), _clean_document_tag(candidate))
         if tag and tag not in selected and len(selected) < 5:
             selected.append(tag)
 
@@ -242,7 +239,11 @@ def _available_tags_by_normalized_name(context: Mapping[str, Any]) -> dict[str, 
 
 
 def _normalize_tag_name(value: object) -> str:
-    return str(value or "").strip().lstrip("#").casefold()
+    return _clean_document_tag(value).casefold()
+
+
+def _clean_document_tag(value: object) -> str:
+    return re.sub(r"[\x00-\x1f\x7f#]+", "", str(value or "")).strip()[:100]
 
 
 def _document_tag_text(context: Mapping[str, Any]) -> str:

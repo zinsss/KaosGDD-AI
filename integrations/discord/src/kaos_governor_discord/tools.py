@@ -402,19 +402,10 @@ class BrainToolServer:
         if not actor_id or not idempotency_key or not suggested_tags:
             return web.json_response({"error": "document_tags_missing_required_field"}, status=400)
         try:
-            existing_tags = await asyncio.to_thread(self._paperless.existing_tag_names, suggested_tags)
-            if not existing_tags:
-                return web.json_response(
-                    {
-                        "error": "document_tags_no_existing_matches",
-                        "suggestedTags": list(suggested_tags),
-                    },
-                    status=422,
-                )
             proposal_payload = await asyncio.to_thread(
                 self._paperless.metadata_proposal,
                 request.match_info["document_id"],
-                tags=existing_tags,
+                tags=suggested_tags,
             )
             proposal = proposal_payload["proposal"]
             actor = Actor("user", actor_id, "personal")
@@ -430,7 +421,7 @@ class BrainToolServer:
                         "title": str(proposal["title"]),
                         "tags": list(proposal["tags"]),
                         "suggestedTags": list(suggested_tags),
-                        "ignoredTags": [tag for tag in suggested_tags if tag.casefold() not in {existing.casefold() for existing in existing_tags}],
+                        "ignoredTags": [],
                     },
                     requires_confirmation=True,
                 )
@@ -459,7 +450,7 @@ class BrainToolServer:
                 "expiresAt": confirmation.expires_at.isoformat(),
                 "document": _pending_document_metadata_payload(pending),
                 "suggestedTags": list(suggested_tags),
-                "ignoredTags": [tag for tag in suggested_tags if tag.casefold() not in {existing.casefold() for existing in pending.tags}],
+                "ignoredTags": [],
                 "source": "paperless-live",
             },
             status=201,

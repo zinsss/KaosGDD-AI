@@ -42,8 +42,8 @@ class KaosAITests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("collectionId", KAOSAI_PLAN_SYSTEM_PROMPT)
 
     def test_document_tag_prompt_limits_ai_to_existing_tags(self) -> None:
-        self.assertIn("Choose only tag names from availableTags", KAOSAI_DOCUMENT_TAG_SYSTEM_PROMPT)
-        self.assertIn("Do not invent new tags", KAOSAI_DOCUMENT_TAG_SYSTEM_PROMPT)
+        self.assertIn("Prefer tag names from availableTags", KAOSAI_DOCUMENT_TAG_SYSTEM_PROMPT)
+        self.assertIn("user to confirm before creating", KAOSAI_DOCUMENT_TAG_SYSTEM_PROMPT)
 
     def test_parse_document_tag_response_keeps_existing_tags_only(self) -> None:
         tags = parse_document_tag_response(
@@ -51,7 +51,7 @@ class KaosAITests(unittest.IsolatedAsyncioTestCase):
             {"availableTags": [{"id": 1, "name": "Clinic"}, {"id": 2, "name": "receipt"}]},
         )
 
-        self.assertEqual(tags, ("Clinic", "receipt"))
+        self.assertEqual(tags, ("Clinic", "made-up", "receipt"))
 
     def test_document_tag_rules_detect_certificate_name_and_year_tags(self) -> None:
         tags = document_tag_rule_suggestions(
@@ -92,7 +92,7 @@ class KaosAITests(unittest.IsolatedAsyncioTestCase):
             "availableTags": [{"id": 1, "name": "이수증"}],
         }
 
-        self.assertEqual(document_tag_rule_suggestions(context), ("이수증",))
+        self.assertEqual(document_tag_rule_suggestions(context), ("이수증", "없는사람", "2024"))
         self.assertEqual(merge_document_tag_suggestions(("이수증",), ("Clinic", "이수증")), ("이수증", "Clinic"))
 
     async def test_disabled_planner_returns_no_document_tags(self) -> None:
