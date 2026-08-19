@@ -440,13 +440,15 @@ def render_task_create_proposal(payload: dict[str, Any]) -> str:
         return "Task creation requires confirmation."
     title = str(task.get("title") or "Untitled task")
     due = _due_text(str(task.get("due") or ""), str(task.get("dueTime") or ""))
-    return "\n".join(
-        [
-            "## Confirm new task",
-            f"- task: {title}",
-            f"- due: {due}",
-        ]
-    )
+    is_supplies = _task_noun(payload) == "비품"
+    subject = "supply" if is_supplies else "task"
+    lines = [
+        f"## Confirm new {subject}",
+        f"- {subject}: {title}",
+    ]
+    if due or not is_supplies:
+        lines.append(f"- due: {due}")
+    return "\n".join(lines)
 
 
 def render_task_create_completed(payload: dict[str, Any]) -> str:

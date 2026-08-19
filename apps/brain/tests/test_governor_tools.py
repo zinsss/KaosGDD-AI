@@ -19,6 +19,7 @@ from kaos_brain.governor_tools import (
     render_document_tags_proposal,
     render_task_action_completed,
     render_task_create_completed,
+    render_task_create_proposal,
     render_task_edit_completed,
     render_task_edit_proposal,
     render_task_due_update_completed,
@@ -311,6 +312,17 @@ class GovernorToolRenderingTests(unittest.TestCase):
             {"task": {"title": "Call school", "due": "2026-08-17", "dueTime": "10:00"}}
         )
         self.assertEqual(content, "할 일 저장했어요.")
+
+    def test_render_supplies_task_create_proposal_uses_supply_label(self) -> None:
+        content = render_task_create_proposal(
+            {"task": {"title": "토프라민", "profile": "supplies", "collectionId": "supplies:abc"}}
+        )
+
+        self.assertIn("## Confirm new supply", content)
+        self.assertIn("- supply: 토프라민", content)
+        self.assertNotIn("new task", content)
+        self.assertNotIn("- task:", content)
+        self.assertNotIn("- due:", content)
 
     def test_render_supplies_task_completed_messages_use_supplies_label(self) -> None:
         payload = {"task": {"title": "Soap", "collectionId": "supplies:main"}}

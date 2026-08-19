@@ -63,7 +63,13 @@ class FakeGovernorTools:
         self.task_create_calls.append((request, actor_id, idempotency_key))
         return {
             "confirmationId": "confirm-task-create",
-            "task": {"title": request.title, "due": request.due_date, "dueTime": request.due_time},
+            "task": {
+                "title": request.title,
+                "due": request.due_date,
+                "dueTime": request.due_time,
+                "profile": request.profile,
+                "collectionId": request.collection_id,
+            },
         }
 
     async def propose_task_due_update(self, request, *, actor_id: int, idempotency_key: str):
@@ -307,7 +313,10 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
         )
 
         request, _, _ = tools.task_create_calls[0]
-        self.assertIn("- task: 휴지", reply)
+        self.assertIn("## Confirm new supply", reply)
+        self.assertIn("- supply: 휴지", reply)
+        self.assertNotIn("- task: 휴지", reply)
+        self.assertNotIn("- due:", reply)
         self.assertEqual(request.profile, "supplies")
         self.assertEqual(request.collection_id, "supplies:abc")
         self.assertEqual(request.due_date, "")
