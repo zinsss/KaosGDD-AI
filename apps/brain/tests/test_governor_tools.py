@@ -678,6 +678,33 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["payload"]["taskTitle"], "Call mom")
         self.assertEqual(payload["payload"]["dueTime"], "10:00")
 
+    async def test_task_create_omits_due_time_without_due_date(self) -> None:
+        from kaos_brain.governor_tools import GovernorToolClient, GovernorToolConfig
+
+        class FakeClient(GovernorToolClient):
+            async def _post(self, path: str, payload: dict[str, str]):
+                return {"path": path, "payload": payload}
+
+        client = FakeClient(
+            GovernorToolConfig(
+                base_url="http://127.0.0.1:8098",
+                api_token="token",
+                profile="main",
+                timeout_seconds=1,
+            )
+        )
+
+        payload = await client.propose_task_create(
+            TaskCreateRequest("오도리 문고리", "", "10:00"),
+            actor_id=994,
+            idempotency_key="discord:1",
+        )
+
+        self.assertEqual(payload["path"], "/tools/tasks/create/proposals")
+        self.assertEqual(payload["payload"]["title"], "오도리 문고리")
+        self.assertNotIn("dueDate", payload["payload"])
+        self.assertNotIn("dueTime", payload["payload"])
+
     async def test_task_proposals_use_request_scope(self) -> None:
         from kaos_brain.governor_tools import GovernorToolClient, GovernorToolConfig
 

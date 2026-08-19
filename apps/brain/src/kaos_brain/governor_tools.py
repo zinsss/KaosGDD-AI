@@ -157,7 +157,7 @@ class GovernorToolClient:
         }
         if request.due_date:
             payload["dueDate"] = request.due_date
-        if request.due_time:
+        if request.due_date and request.due_time:
             payload["dueTime"] = request.due_time
         return await self._post(
             "/tools/tasks/create/proposals",
