@@ -244,6 +244,22 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("처방전 대리수령 신청서.pdf", message.replies[0][0])
             self.assertNotIn("8f0ea2e73b58ad58.pdf", message.replies[0][0])
 
+    async def test_pdf_upload_uses_discord_attachment_title_without_extension(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            paperless = FakePaperless()
+            inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
+            attachment = FakeAttachment(
+                filename="2023_-.pdf",
+                title="2023 진단용방사선안전관리책임자교육-이수증",
+            )
+            message = self.make_message([attachment])
+
+            self.assertTrue(await inbox.handle_message(message))  # type: ignore[arg-type]
+
+            self.assertEqual(attachment_display_filename(attachment), "2023 진단용방사선안전관리책임자교육-이수증.pdf")
+            self.assertIn("2023 진단용방사선안전관리책임자교육-이수증.pdf", message.replies[0][0])
+            self.assertNotIn("2023_-.pdf", message.replies[0][0])
+
     async def test_pdf_upload_uses_cdn_url_filename_before_generated_filename(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             paperless = FakePaperless()

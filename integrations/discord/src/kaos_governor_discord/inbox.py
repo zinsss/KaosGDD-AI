@@ -619,17 +619,30 @@ async def read_attachment_bytes(attachment: discord.Attachment) -> bytes:
 
 def attachment_display_filename(attachment: discord.Attachment) -> str:
     candidates = [
-        getattr(attachment, "title", ""),
-        getattr(attachment, "description", ""),
-        filename_from_url(getattr(attachment, "url", "")),
-        filename_from_url(getattr(attachment, "proxy_url", "")),
-        getattr(attachment, "filename", ""),
+        attachment_filename_candidate(getattr(attachment, "title", "")),
+        attachment_filename_candidate(getattr(attachment, "description", "")),
+        attachment_filename_candidate(filename_from_url(getattr(attachment, "url", ""))),
+        attachment_filename_candidate(filename_from_url(getattr(attachment, "proxy_url", ""))),
+        attachment_filename_candidate(getattr(attachment, "filename", "")),
     ]
-    cleaned = [safe_filename(str(candidate)) for candidate in candidates if str(candidate or "").lower().endswith(".pdf")]
+    cleaned = [safe_filename(candidate) for candidate in candidates if candidate]
     for filename in cleaned:
         if not generated_discord_filename(filename):
             return filename
     return cleaned[0] if cleaned else safe_filename(str(getattr(attachment, "filename", "") or "document.pdf"))
+
+
+def attachment_filename_candidate(value: object) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    filename = safe_filename(raw)
+    suffix = Path(filename).suffix.lower()
+    if suffix == ".pdf":
+        return filename
+    if suffix:
+        return ""
+    return f"{filename}.pdf"
 
 
 def filename_from_url(value: object) -> str:
