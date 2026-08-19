@@ -180,6 +180,22 @@ else
   kv repo not-configured
   kv repo_dirty unknown
 fi
+openclaw_config="/srv/kaosgdd/kaosai/openclaw/openclaw.json"
+if [ -f "$openclaw_config" ]; then
+  kv openclaw_configured yes
+  kv openclaw_gateway "$(systemctl --user is-active openclaw-gateway.service 2>/dev/null || echo unknown)"
+  kv openclaw_reauth_agent "$(systemctl --user is-active kaosai-openclaw-reauth-agent.service 2>/dev/null || echo unknown)"
+  if command -v python3 >/dev/null 2>&1; then
+    kv openclaw_primary_model "$(python3 -c 'import json, sys; payload=json.load(open(sys.argv[1], encoding="utf-8")); print(str(payload.get("agents", dict()).get("defaults", dict()).get("model", dict()).get("primary") or "unknown"))' "$openclaw_config" 2>/dev/null || echo unknown)"
+    kv openclaw_last_touched "$(python3 -c 'import json, sys; payload=json.load(open(sys.argv[1], encoding="utf-8")); print(str(payload.get("meta", dict()).get("lastTouchedAt") or payload.get("wizard", dict()).get("lastRunAt") or "unknown"))' "$openclaw_config" 2>/dev/null || echo unknown)"
+  else
+    kv openclaw_primary_model unknown
+    kv openclaw_last_touched unknown
+  fi
+  kv openclaw_chatgpt_expires unknown
+else
+  kv openclaw_configured no
+fi
 kv docker_image_updates "not checked; requires explicit pull"
 """
 
@@ -263,6 +279,15 @@ def render_maintenance_report(report: MaintenanceReport) -> str:
         f"- containers: running {escape_text(facts.get('docker_running', 'unknown'))}, unhealthy {escape_text(facts.get('docker_unhealthy', 'unknown'))}, exited {escape_text(facts.get('docker_exited', 'unknown'))}",
         f"- repo: {escape_text(facts.get('repo', 'not-configured'))}; dirty {escape_text(facts.get('repo_dirty', 'unknown'))}",
     ]
+    if facts.get("openclaw_configured") == "yes":
+        lines.append(
+            "- OpenClaw: "
+            f"model {escape_text(facts.get('openclaw_primary_model', 'unknown'))}, "
+            f"gateway {escape_text(facts.get('openclaw_gateway', 'unknown'))}, "
+            f"reauth {escape_text(facts.get('openclaw_reauth_agent', 'unknown'))}, "
+            f"ChatGPT expires {escape_text(facts.get('openclaw_chatgpt_expires', 'unknown'))}"
+        )
+        lines.append(f"- OpenClaw config updated: {escape_text(facts.get('openclaw_last_touched', 'unknown'))}")
     return "\n".join(lines)
 
 

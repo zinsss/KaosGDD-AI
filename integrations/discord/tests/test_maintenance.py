@@ -87,6 +87,12 @@ class MaintenanceTests(unittest.IsolatedAsyncioTestCase):
                         "docker_exited": "1",
                         "repo": "## main...origin/main",
                         "repo_dirty": "0",
+                        "openclaw_configured": "yes",
+                        "openclaw_primary_model": "openai/gpt-5.6-sol",
+                        "openclaw_gateway": "active",
+                        "openclaw_reauth_agent": "active",
+                        "openclaw_chatgpt_expires": "unknown",
+                        "openclaw_last_touched": "2026-08-19T13:40:10.649Z",
                     },
                 )
             ]
@@ -94,6 +100,9 @@ class MaintenanceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("OS 12, Docker packages 2", text)
         self.assertIn("Docker version 27.5.1", text)
+        self.assertIn("OpenClaw: model openai/gpt-5.6-sol", text)
+        self.assertIn("ChatGPT expires unknown", text)
+        self.assertIn("OpenClaw config updated: 2026-08-19T13:40:10.649Z", text)
         self.assertIn("Docker image updates are not checked automatically", text)
 
     def test_render_failed_report(self) -> None:

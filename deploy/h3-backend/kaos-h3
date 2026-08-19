@@ -326,6 +326,22 @@ else
   kv repo not-configured
   kv repo_dirty unknown
 fi
+openclaw_config="/srv/kaosgdd/kaosai/openclaw/openclaw.json"
+if [ -f "$openclaw_config" ]; then
+  kv openclaw_configured yes
+  kv openclaw_gateway "$(systemctl --user is-active openclaw-gateway.service 2>/dev/null || echo unknown)"
+  kv openclaw_reauth_agent "$(systemctl --user is-active kaosai-openclaw-reauth-agent.service 2>/dev/null || echo unknown)"
+  if command -v python3 >/dev/null 2>&1; then
+    kv openclaw_primary_model "$(python3 -c 'import json, sys; payload=json.load(open(sys.argv[1], encoding="utf-8")); print(str(payload.get("agents", dict()).get("defaults", dict()).get("model", dict()).get("primary") or "unknown"))' "$openclaw_config" 2>/dev/null || echo unknown)"
+    kv openclaw_last_touched "$(python3 -c 'import json, sys; payload=json.load(open(sys.argv[1], encoding="utf-8")); print(str(payload.get("meta", dict()).get("lastTouchedAt") or payload.get("wizard", dict()).get("lastRunAt") or "unknown"))' "$openclaw_config" 2>/dev/null || echo unknown)"
+  else
+    kv openclaw_primary_model unknown
+    kv openclaw_last_touched unknown
+  fi
+  kv openclaw_chatgpt_expires unknown
+else
+  kv openclaw_configured no
+fi
 kv docker_image_updates "not checked; requires explicit pull"
 """
 
