@@ -227,14 +227,14 @@ class DiscordDocumentInbox:
         if generated_discord_filename(submit_filename):
             if not title:
                 title = infer_pdf_title(content)
-            if not title:
-                raise DocumentIntakeError("paperless_metadata_required")
-            submit_filename = safe_filename(f"{title}.pdf")
+            if title:
+                submit_filename = safe_filename(f"{title}.pdf")
+        submit_title = title or Path(pending.filename).stem
         result = await asyncio.to_thread(
             self.paperless.submit_pdf,
             submit_filename,
             content,
-            title=title or Path(pending.filename).stem,
+            title=submit_title,
             tags=tags,
             source="discord",
         )
@@ -245,7 +245,7 @@ class DiscordDocumentInbox:
             task_id=result.task_id,
             message_id=pending.message_id,
             prompt_message_id=pending.prompt_message_id,
-            title=title or Path(pending.filename).stem,
+            title=submit_title,
             tags=tags,
         )
         self.state.sources[source_id] = record
@@ -600,7 +600,6 @@ def rejection_message(error: Exception) -> str:
         "paperless_source_unavailable": "The original upload is not available.",
         "paperless_attachment_missing": "The original PDF attachment is missing.",
         "paperless_attachment_changed": "The original PDF attachment changed.",
-        "paperless_metadata_required": "Discord did not expose the original filename. Add Metadata is required.",
         "paperless_document_missing": "The Paperless document is no longer available.",
     }
     return labels.get(str(error), str(error))
@@ -749,16 +748,6 @@ class InboxMenuView(discord.ui.View):
         except (DocumentIntakeError, discord.HTTPException) as exc:
             self.inbox.rejected_count += 1
             self.inbox.last_error = str(exc)
-            if str(exc) == "paperless_metadata_required":
-                await interaction.edit_original_response(
-                    content=render_metadata_message(
-                        pending.filename,
-                        reason="Discord did not expose the original filename. Add a title before sending to Paperless.",
-                    ),
-                    view=self,
-                    allowed_mentions=NO_MENTIONS,
-                )
-                return
             await interaction.followup.send(
                 f"Documents import failed: {escape_text(rejection_message(exc))}",
                 ephemeral=True,

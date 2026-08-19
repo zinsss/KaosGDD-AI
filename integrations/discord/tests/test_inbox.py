@@ -255,7 +255,7 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("처방전.pdf", message.replies[0][0])
             self.assertNotIn("40eeb76102ae4b88.pdf", message.replies[0][0])
 
-    async def test_process_as_is_rejects_generated_discord_filename_without_metadata(self) -> None:
+    async def test_process_as_is_accepts_generated_discord_filename_without_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             paperless = FakePaperless()
             inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
@@ -263,11 +263,11 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
 
             await inbox.handle_message(message)  # type: ignore[arg-type]
             source_id = next(iter(inbox.state.pending))
+            record = await inbox.process_pending(source_id)
 
-            with self.assertRaisesRegex(DocumentIntakeError, "paperless_metadata_required"):
-                await inbox.process_pending(source_id)
-
-            self.assertEqual(paperless.submitted, [])
+            self.assertEqual(record.title, "40eeb76102ae4b88")
+            self.assertEqual(paperless.submitted[0][0], "40eeb76102ae4b88.pdf")
+            self.assertEqual(paperless.submitted[0][2], "40eeb76102ae4b88")
             self.assertTrue(generated_discord_filename("40eeb76102ae4b88.pdf"))
 
     async def test_process_pending_uses_metadata_title_as_filename_when_discord_filename_is_generated(self) -> None:
