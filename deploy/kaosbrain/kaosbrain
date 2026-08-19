@@ -543,6 +543,7 @@ EOF
   python3 -m venv "${REAUTH_AGENT_VENV_DIR}"
   "${REAUTH_AGENT_VENV_DIR}/bin/python" -m pip install --upgrade pip >/dev/null
   "${REAUTH_AGENT_VENV_DIR}/bin/python" -m pip install "${REPO_ROOT}/apps/brain" >/dev/null
+  rm -rf "${REPO_ROOT}/apps/brain/build" "${REPO_ROOT}/apps/brain/src/kaos_brain.egg-info"
   sed \
     -e "s/__ENV_FILE__/$(sed_escape "${REAUTH_AGENT_ENV_FILE}")/g" \
     -e "s/__VENV_DIR__/$(sed_escape "${REAUTH_AGENT_VENV_DIR}")/g" \
