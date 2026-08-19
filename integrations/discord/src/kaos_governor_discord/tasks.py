@@ -108,8 +108,9 @@ class DiscordTasksSurface:
                 message_order_changed = True
         self.state.message_ids = next_message_ids
         if self._uses_supplies_rules():
+            recent_supplies_was_empty = not self.state.recent_supplies
             for task in active:
-                if task_key(task) not in previous_message_ids:
+                if recent_supplies_was_empty or task_key(task) not in previous_message_ids:
                     self._record_recent_supply(str(task.get("summary") or ""), promote_existing=False)
             recent_message = await self._recreate_recent_supplies_message(channel, force_recreate=message_order_changed)
             self.state.recent_supplies_message_id = int(recent_message.id)

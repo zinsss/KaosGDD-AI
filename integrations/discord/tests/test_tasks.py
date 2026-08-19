@@ -30,6 +30,7 @@ from kaos_governor_discord.tasks import (
     render_recent_supplies_message,
     render_remembered_supply_confirmation,
     render_task_message,
+    task_key,
     task_payload,
     validate_edit_due,
 )
@@ -507,6 +508,41 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsInstance(channel.sent[-1]["view"], RecentSuppliesView)
             select = channel.sent[-1]["view"].children[0]
             self.assertEqual([option.label for option in select.options], ["토프라민"])
+
+    async def test_supplies_surface_backfills_empty_recent_list_from_active_messages(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            task = {
+                "uid": "SUPPLY-1",
+                "collection": "zin:supplies",
+                "summary": "토프라민",
+                "description": "",
+                "due": "",
+                "dueTime": "",
+                "priority": "",
+                "status": "NEEDS-ACTION",
+            }
+            adapter = FakeAdapter(tasks=[task])
+            surface = DiscordTasksSurface(
+                FakeBot(channel),  # type: ignore[arg-type]
+                AccessPolicy(100, frozenset({200}), frozenset({300})),
+                channel_id=300,
+                profile="main",
+                state_path=Path(temporary) / "supplies.json",
+                adapter=adapter,  # type: ignore[arg-type]
+                surface_name="supplies",
+                button_prefix="supplies",
+                collection_id="zin:supplies",
+                show_due=False,
+            )
+            surface.message_refresh_delay_seconds = 0
+            surface.state.message_ids = {task_key(task): 12345}
+            channel.messages[12345] = FakeMessage(12345, content=render_task_message(task, show_due=False), view=TaskView(surface, task_key(task)))
+
+            await surface.ensure_message()
+
+            self.assertEqual(surface.state.recent_supplies, ["토프라민"])
+            self.assertEqual(channel.sent[-1]["content"], "## 최근 비품\n- + 토프라민")
 
     async def test_supplies_recent_message_keeps_latest_25_inputs_at_bottom(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
