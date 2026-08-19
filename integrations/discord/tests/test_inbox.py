@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import hashlib
 from types import SimpleNamespace
 import tempfile
 import unittest
@@ -17,6 +18,7 @@ from kaos_governor.documents import (
 from kaos_governor_discord.access import AccessPolicy
 from kaos_governor_discord.inbox import (
     DiscordDocumentInbox,
+    InboxRecord,
     PaperlessSearchView,
     attachment_display_filename,
     generated_discord_filename,
@@ -348,6 +350,37 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(len(paperless.submitted), 1)
             self.assertIn("already submitted", message.replies[1][0])
+
+    async def test_duplicate_hash_uses_title_when_original_filename_is_generated(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            paperless = FakePaperless()
+            inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
+            content = b"%PDF-1.7\nbody"
+            digest = hashlib.sha256(content).hexdigest()
+            source_id = "discord:100:300:1:10"
+            inbox.state.sources[source_id] = InboxRecord(
+                source_id=source_id,
+                sha256=digest,
+                filename="40eeb76102ae4b88.pdf",
+                task_id="task-1",
+                message_id=1,
+                title="처방전 대리수령 신청서",
+            )
+            inbox.state.hashes[digest] = source_id
+            message = self.make_message(
+                [
+                    FakeAttachment(
+                        attachment_id=11,
+                        filename="40eeb76102ae4b88.pdf",
+                        content=content,
+                    )
+                ]
+            )
+
+            self.assertTrue(await inbox.handle_message(message))  # type: ignore[arg-type]
+
+            self.assertIn("처방전 대리수령 신청서.pdf: already submitted", message.replies[0][0])
+            self.assertNotIn("40eeb76102ae4b88.pdf", message.replies[0][0])
 
     async def test_dotdot_message_searches_paperless_then_deletes_original(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

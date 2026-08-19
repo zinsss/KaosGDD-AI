@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import hashlib
 import json
 import logging
@@ -151,7 +151,7 @@ class DiscordDocumentInbox:
             record = self.state.sources[source_id]
             return {
                 "duplicate": True,
-                "filename": record.filename,
+                "filename": record_display_filename(record),
                 "taskId": record.task_id,
                 "sha256": record.sha256,
             }
@@ -170,11 +170,11 @@ class DiscordDocumentInbox:
         if digest in self.state.hashes:
             source = self.state.hashes[digest]
             record = self.state.sources[source]
-            self.state.sources[source_id] = record
+            self.state.sources[source_id] = replace(record, source_id=source_id, message_id=int(message.id))
             self._save_state()
             return {
                 "duplicate": True,
-                "filename": record.filename,
+                "filename": record_display_filename(record),
                 "taskId": record.task_id,
                 "sha256": record.sha256,
             }
@@ -215,7 +215,7 @@ class DiscordDocumentInbox:
             raise DocumentIntakeError("paperless_attachment_changed")
         if digest in self.state.hashes:
             record = self.state.sources[self.state.hashes[digest]]
-            self.state.sources[source_id] = record
+            self.state.sources[source_id] = replace(record, source_id=source_id, message_id=pending.message_id)
             self.state.pending.pop(source_id, None)
             self._save_state()
             return record
@@ -540,6 +540,12 @@ def filename_from_url(value: object) -> str:
 def generated_discord_filename(filename: str) -> bool:
     stem = Path(filename).stem
     return bool(re.fullmatch(r"[0-9a-fA-F]{12,64}", stem))
+
+
+def record_display_filename(record: InboxRecord) -> str:
+    if generated_discord_filename(record.filename) and record.title and not generated_discord_filename(f"{record.title}.pdf"):
+        return safe_filename(f"{record.title}.pdf")
+    return record.filename
 
 
 class InboxMenuView(discord.ui.View):
