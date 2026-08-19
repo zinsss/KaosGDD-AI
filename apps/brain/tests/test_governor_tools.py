@@ -2,6 +2,7 @@ import unittest
 
 from kaos_brain.governor_tools import (
     DocumentTagRequest,
+    document_public_url,
     memo_option_label,
     render_event_create_completed,
     render_event_create_proposal,
@@ -170,6 +171,14 @@ class GovernorToolRenderingTests(unittest.TestCase):
     def test_memo_public_url_uses_memo_id(self) -> None:
         self.assertEqual(memo_public_url("https://memos.example", "memos/abc"), "https://memos.example/m/abc")
         self.assertEqual(memo_public_url("", "memos/abc"), "")
+
+    def test_document_public_url_uses_document_id(self) -> None:
+        self.assertEqual(
+            document_public_url("https://paperless.example/", "42"),
+            "https://paperless.example/documents/42/details",
+        )
+        self.assertEqual(document_public_url("", "42"), "")
+        self.assertEqual(document_public_url("https://paperless.example", "bad"), "")
 
     def test_render_single_full_document_context(self) -> None:
         context = render_tool_context(

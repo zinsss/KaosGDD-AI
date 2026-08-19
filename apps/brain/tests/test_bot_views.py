@@ -96,6 +96,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             200,
             "보험",
             [{"id": 42, "title": "Insurance"}],
+            paperless_public_url="https://paperless.example",
         )
         select = next(child for child in view.children if isinstance(child, BrainDocumentSearchSelect))
         select._values = ["0"]
@@ -112,7 +113,9 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("## Insurance receipt", content)
         self.assertNotIn("Documents search", content)
         self.assertIn("Insurance receipt", content)
-        self.assertIsInstance(interaction.followup.send.await_args.kwargs["view"], BrainOpenedDocumentView)
+        opened_view = interaction.followup.send.await_args.kwargs["view"]
+        self.assertIsInstance(opened_view, BrainOpenedDocumentView)
+        self.assertEqual([item.label for item in opened_view.children], ["Close", "Open document"])
 
     def test_memo_confirm_buttons_match_governor_labels(self) -> None:
         edit = BrainMemoEditConfirmView(FakeGovernorTools(), 200, "memos/42", "# Memo")  # type: ignore[arg-type]

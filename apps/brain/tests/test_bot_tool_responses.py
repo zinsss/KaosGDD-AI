@@ -86,7 +86,10 @@ class BrainToolResponseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([item.label for item in view.children], ["Close", "More..."])
 
     async def test_single_document_search_opens_document_with_close(self) -> None:
-        brain = SimpleNamespace(governor_tools=DocumentGovernorTools())
+        brain = SimpleNamespace(
+            governor_tools=DocumentGovernorTools(),
+            settings=SimpleNamespace(paperless_public_url="https://paperless.example"),
+        )
 
         reply, view = await BrainBot._answer_with_governor_tool(  # type: ignore[arg-type]
             brain,
@@ -101,7 +104,7 @@ class BrainToolResponseTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIsNotNone(view)
         assert view is not None
-        self.assertEqual([item.label for item in view.children], ["Close"])
+        self.assertEqual([item.label for item in view.children], ["Close", "Open document"])
 
 
 if __name__ == "__main__":

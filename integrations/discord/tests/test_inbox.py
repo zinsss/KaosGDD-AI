@@ -152,6 +152,19 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(inbox.status()["pendingCount"], 0)
             self.assertEqual(inbox.status()["trackedSources"], 1)
 
+    async def test_process_pending_preserves_original_filename_without_kaos_prefix(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            paperless = FakePaperless()
+            inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
+            message = self.make_message([FakeAttachment(filename="의료기관 보건의료인력.pdf")])
+
+            await inbox.handle_message(message)  # type: ignore[arg-type]
+            source_id = next(iter(inbox.state.pending))
+            await inbox.process_pending(source_id)
+
+            self.assertEqual(paperless.submitted[0][0], "의료기관 보건의료인력.pdf")
+            self.assertFalse(paperless.submitted[0][0].startswith("kaos-"))
+
     async def test_restore_pending_views_registers_existing_prompt_view(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             paperless = FakePaperless()

@@ -17,6 +17,7 @@ from .governor_tools import (
     GovernorToolConfig,
     GovernorToolError,
     TaskEditRequest as GovernorTaskEditRequest,
+    document_public_url,
     document_option_description,
     document_option_label,
     memo_option_description,
@@ -664,9 +665,19 @@ class BrainBot(discord.Client):
             if len(results) == 1:
                 item = results[0]
                 content = render_document_opened(tool_request.query, item)
-                view = BrainOpenedDocumentView(actor_id)
+                view = BrainOpenedDocumentView(actor_id, document_public_url(self.settings.paperless_public_url, item.get("id")))
                 return content, view
-            view = BrainDocumentSearchView(self.governor_tools, actor_id, tool_request.query, results) if len(results) > 1 else None
+            view = (
+                BrainDocumentSearchView(
+                    self.governor_tools,
+                    actor_id,
+                    tool_request.query,
+                    results,
+                    paperless_public_url=self.settings.paperless_public_url,
+                )
+                if len(results) > 1
+                else None
+            )
             return context, view
         if tool_request.kind is ToolKind.COMPLETED_TASKS:
             tasks = _task_results(payload)
@@ -1205,12 +1216,21 @@ class BrainDeletedMemoView(discord.ui.View):
 
 
 class BrainDocumentSearchView(discord.ui.View):
-    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, query: str, results: list[dict[str, Any]]) -> None:
+    def __init__(
+        self,
+        governor_tools: GovernorToolClient,
+        actor_id: int,
+        query: str,
+        results: list[dict[str, Any]],
+        *,
+        paperless_public_url: str = "",
+    ) -> None:
         super().__init__(timeout=600)
         self.governor_tools = governor_tools
         self.actor_id = actor_id
         self.query = query
         self.results = results[:25]
+        self.paperless_public_url = paperless_public_url
         self.add_item(BrainDocumentSearchSelect(self))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -1245,14 +1265,23 @@ class BrainDocumentSearchSelect(discord.ui.Select):
             LOGGER.warning("Document open failed: %s", exc)
             content = _tool_failed("문서 열기")
         await interaction.response.defer()
-        await interaction.followup.send(content, view=BrainOpenedDocumentView(self.parent_view.actor_id), allowed_mentions=NO_MENTIONS)
+        await interaction.followup.send(
+            content,
+            view=BrainOpenedDocumentView(
+                self.parent_view.actor_id,
+                document_public_url(self.parent_view.paperless_public_url, item.get("id")),
+            ),
+            allowed_mentions=NO_MENTIONS,
+        )
         self.parent_view.stop()
 
 
 class BrainOpenedDocumentView(discord.ui.View):
-    def __init__(self, actor_id: int) -> None:
+    def __init__(self, actor_id: int, url: str = "") -> None:
         super().__init__(timeout=600)
         self.actor_id = actor_id
+        if url:
+            self.add_item(discord.ui.Button(label="Open document", style=discord.ButtonStyle.link, url=url))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if int(interaction.user.id) == self.actor_id:

@@ -672,6 +672,16 @@ def document_option_description(item: dict[str, Any]) -> str:
     return _truncate(" · ".join(detail for detail in details if detail), 100)
 
 
+def document_public_url(base_url: str, document_id: object) -> str:
+    try:
+        normalized = int(document_id)
+    except (TypeError, ValueError):
+        return ""
+    if normalized <= 0 or not base_url:
+        return ""
+    return f"{base_url.rstrip('/')}/documents/{normalized}/details"
+
+
 def _render_today(payload: dict[str, Any]) -> str:
     date_text = str(payload.get("date") or "").strip()
     lines = [f"## {date_text}" if date_text else "## 오늘"]

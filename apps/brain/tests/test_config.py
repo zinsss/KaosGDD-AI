@@ -176,8 +176,15 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(magic_dns.governor_tools_base_url, "http://kaosgovernor:8098")
 
     def test_memos_public_url_is_optional(self) -> None:
-        settings = Settings.from_env({**BASE_ENV, "KAOSBRAIN_MEMOS_PUBLIC_URL": "https://memos.example/"})
+        settings = Settings.from_env(
+            {
+                **BASE_ENV,
+                "KAOSBRAIN_MEMOS_PUBLIC_URL": "https://memos.example/",
+                "KAOSBRAIN_PAPERLESS_PUBLIC_URL": "https://paperless.example/",
+            }
+        )
         self.assertEqual(settings.memos_public_url, "https://memos.example")
+        self.assertEqual(settings.paperless_public_url, "https://paperless.example")
 
     def test_health_configuration_is_optional(self) -> None:
         settings = Settings.from_env(

@@ -103,6 +103,7 @@ class Settings:
     governor_tools_supplies_collection_id: str
     governor_tools_timeout_seconds: int
     memos_public_url: str
+    paperless_public_url: str
     health_enabled: bool
     health_host: str
     health_port: int
@@ -186,6 +187,7 @@ class Settings:
                 "KAOSBRAIN_GOVERNOR_TOOLS_TIMEOUT_SECONDS",
             ),
             memos_public_url=source.get("KAOSBRAIN_MEMOS_PUBLIC_URL", "").strip().rstrip("/"),
+            paperless_public_url=source.get("KAOSBRAIN_PAPERLESS_PUBLIC_URL", "").strip().rstrip("/"),
             health_enabled=_boolean(source, "KAOSBRAIN_HEALTH_ENABLED"),
             health_host=source.get("KAOSBRAIN_HEALTH_HOST", "127.0.0.1").strip() or "127.0.0.1",
             health_port=_positive_int(source.get("KAOSBRAIN_HEALTH_PORT", "8099"), "KAOSBRAIN_HEALTH_PORT"),
