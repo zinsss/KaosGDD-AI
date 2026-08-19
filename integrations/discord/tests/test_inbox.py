@@ -26,6 +26,7 @@ from kaos_governor_discord.inbox import (
     PaperlessSearchView,
     PendingDocumentMetadataModal,
     attachment_display_filename,
+    degraded_discord_filename,
     generated_discord_filename,
     infer_pdf_title,
     parse_metadata_reply,
@@ -259,6 +260,29 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("처방전.pdf", message.replies[0][0])
             self.assertNotIn("40eeb76102ae4b88.pdf", message.replies[0][0])
 
+    async def test_pdf_upload_recovers_title_for_degraded_discord_filename(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            from pypdf import PdfWriter
+
+            output = BytesIO()
+            writer = PdfWriter()
+            writer.add_blank_page(width=72, height=72)
+            writer.add_metadata({"/Title": "진단용방사선안전관리책임자교육 이수증"})
+            writer.write(output)
+            paperless = FakePaperless()
+            inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
+            attachment = FakeAttachment(
+                filename="2023_-.pdf",
+                content=output.getvalue(),
+            )
+            message = self.make_message([attachment])
+
+            self.assertTrue(await inbox.handle_message(message))  # type: ignore[arg-type]
+
+            self.assertTrue(degraded_discord_filename("2023_-.pdf"))
+            self.assertIn("진단용방사선안전관리책임자교육 이수증.pdf", message.replies[0][0])
+            self.assertNotIn("2023_-.pdf", message.replies[0][0])
+
     async def test_process_as_is_accepts_generated_discord_filename_without_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             paperless = FakePaperless()
@@ -273,6 +297,27 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(paperless.submitted[0][0], "40eeb76102ae4b88.pdf")
             self.assertEqual(paperless.submitted[0][2], "40eeb76102ae4b88")
             self.assertTrue(generated_discord_filename("40eeb76102ae4b88.pdf"))
+
+    async def test_process_as_is_infers_title_for_degraded_discord_filename(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            from pypdf import PdfWriter
+
+            output = BytesIO()
+            writer = PdfWriter()
+            writer.add_blank_page(width=72, height=72)
+            writer.add_metadata({"/Title": "의료폐기물 배출자 교육"})
+            writer.write(output)
+            paperless = FakePaperless()
+            inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
+            message = self.make_message([FakeAttachment(filename="2023_-.pdf", content=output.getvalue())])
+
+            await inbox.handle_message(message)  # type: ignore[arg-type]
+            source_id = next(iter(inbox.state.pending))
+            record = await inbox.process_pending(source_id)
+
+            self.assertEqual(record.title, "의료폐기물 배출자 교육")
+            self.assertEqual(paperless.submitted[0][0], "의료폐기물 배출자 교육.pdf")
+            self.assertEqual(paperless.submitted[0][2], "의료폐기물 배출자 교육")
 
     async def test_process_pending_uses_metadata_title_as_filename_when_discord_filename_is_generated(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

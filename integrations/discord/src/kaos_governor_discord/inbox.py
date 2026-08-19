@@ -182,6 +182,11 @@ class DiscordDocumentInbox:
                 "taskId": record.task_id,
                 "sha256": record.sha256,
             }
+        filename = attachment_display_filename(attachment)
+        if degraded_discord_filename(filename):
+            inferred_title = infer_pdf_title(content)
+            if inferred_title:
+                filename = safe_filename(f"{inferred_title}.pdf")
         pending = PendingDocument(
             source_id=source_id,
             channel_id=int(message.channel.id),
@@ -190,7 +195,7 @@ class DiscordDocumentInbox:
             prompt_message_id=0,
             author_id=int(message.author.id),
             sha256=digest,
-            filename=attachment_display_filename(attachment),
+            filename=filename,
         )
         self.state.pending[source_id] = pending
         self._save_state()
@@ -224,7 +229,7 @@ class DiscordDocumentInbox:
             self._save_state()
             return record
         submit_filename = pending.filename
-        if generated_discord_filename(submit_filename):
+        if degraded_discord_filename(submit_filename):
             if not title:
                 title = infer_pdf_title(content)
             if title:
@@ -637,6 +642,17 @@ def generated_discord_filename(filename: str) -> bool:
     return bool(re.fullmatch(r"[0-9a-fA-F]{12,64}", stem))
 
 
+def degraded_discord_filename(filename: str) -> bool:
+    stem = Path(filename).stem.strip()
+    if generated_discord_filename(filename):
+        return True
+    if not stem:
+        return True
+    has_letter = any(character.isalpha() for character in stem)
+    has_non_ascii = any(ord(character) > 127 for character in stem)
+    return not has_non_ascii and not has_letter and bool(re.fullmatch(r"[0-9_. -]+", stem))
+
+
 def infer_pdf_title(content: bytes) -> str:
     if b"%%EOF" not in content[-4096:]:
         return ""
@@ -669,7 +685,7 @@ def normalize_inferred_title(value: object) -> str:
 
 
 def record_display_filename(record: InboxRecord) -> str:
-    if generated_discord_filename(record.filename) and record.title and not generated_discord_filename(f"{record.title}.pdf"):
+    if degraded_discord_filename(record.filename) and record.title and not degraded_discord_filename(f"{record.title}.pdf"):
         return safe_filename(f"{record.title}.pdf")
     return record.filename
 
@@ -806,7 +822,7 @@ class PendingDocumentMetadataModal(discord.ui.Modal):
         inferred_title = Path(pending.filename).stem
         self.title_input = discord.ui.TextInput(
             label="Title",
-            default="" if generated_discord_filename(pending.filename) else inferred_title,
+            default="" if degraded_discord_filename(pending.filename) else inferred_title,
             placeholder="문서 제목",
             max_length=128,
             required=True,
