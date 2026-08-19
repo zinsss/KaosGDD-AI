@@ -9,6 +9,8 @@ from kaos_brain.kaos_ai import (
     KaosAIConfig,
     KaosAIError,
     OpenClawKaosAIPlanner,
+    document_tag_rule_suggestions,
+    merge_document_tag_suggestions,
     normalize_kaosai_plan_scope,
     parse_document_tag_response,
     parse_kaosai_plan_response,
@@ -50,6 +52,48 @@ class KaosAITests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(tags, ("Clinic", "receipt"))
+
+    def test_document_tag_rules_detect_certificate_name_and_year_tags(self) -> None:
+        tags = document_tag_rule_suggestions(
+            {
+                "document": {
+                    "title": "2023 진단용방사선안전관리책임자교육-이수증",
+                    "filename": "2023 진단용방사선안전관리책임자교육-이수증.pdf",
+                    "contentExcerpt": "성 명 홍길동\n교육 이수 완료",
+                },
+                "availableTags": [
+                    {"id": 1, "name": "이수증"},
+                    {"id": 2, "name": "수료증"},
+                    {"id": 3, "name": "홍길동"},
+                    {"id": 4, "name": "2023"},
+                    {"id": 5, "name": "의료"},
+                ],
+            }
+        )
+
+        self.assertEqual(tags, ("이수증", "홍길동", "2023"))
+
+    def test_document_tag_rules_detect_completion_certificate_tag(self) -> None:
+        tags = document_tag_rule_suggestions(
+            {
+                "document": {"title": "감염관리 교육 수료증", "contentExcerpt": "이름 김영희"},
+                "availableTags": [
+                    {"id": 1, "name": "#수료증"},
+                    {"id": 2, "name": "김영희"},
+                ],
+            }
+        )
+
+        self.assertEqual(tags, ("#수료증", "김영희"))
+
+    def test_document_tag_rules_never_invent_missing_tags_and_merge_before_ai(self) -> None:
+        context = {
+            "document": {"title": "2024 교육 이수증", "contentExcerpt": "성명 없는사람"},
+            "availableTags": [{"id": 1, "name": "이수증"}],
+        }
+
+        self.assertEqual(document_tag_rule_suggestions(context), ("이수증",))
+        self.assertEqual(merge_document_tag_suggestions(("이수증",), ("Clinic", "이수증")), ("이수증", "Clinic"))
 
     async def test_disabled_planner_returns_no_document_tags(self) -> None:
         planner = DisabledKaosAIPlanner()

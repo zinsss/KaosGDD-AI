@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 import json
+import re
 from uuid import uuid4
 from typing import Any, Mapping, Protocol
 
@@ -53,7 +54,7 @@ class OpenClawKaosAIPlanner:
         if not self.config.enabled:
             return ()
         raw = await self._complete_message(f"{KAOSAI_DOCUMENT_TAG_SYSTEM_PROMPT}\n\n{_render_document_tag_request(context)}")
-        return parse_document_tag_response(raw, context)
+        return merge_document_tag_suggestions(document_tag_rule_suggestions(context), parse_document_tag_response(raw, context))
 
     async def _complete(self, user_text: str, *, context: Mapping[str, Any]) -> str:
         return await self._complete_message(f"{KAOSAI_PLAN_SYSTEM_PROMPT}\n\n{_render_plan_request(user_text, context)}")
@@ -198,6 +199,73 @@ def parse_document_tag_response(raw: str, context: Mapping[str, Any]) -> tuple[s
         if len(selected) >= 5:
             break
     return tuple(selected)
+
+
+def document_tag_rule_suggestions(context: Mapping[str, Any]) -> tuple[str, ...]:
+    available = _available_tags_by_normalized_name(context)
+    selected: list[str] = []
+
+    def add(candidate: str) -> None:
+        tag = available.get(_normalize_tag_name(candidate))
+        if tag and tag not in selected and len(selected) < 5:
+            selected.append(tag)
+
+    text = _document_tag_text(context)
+    if "이수" in text:
+        add("이수증")
+    if "수료" in text:
+        add("수료증")
+    for name in _document_person_names(text):
+        add(name)
+    for year in re.findall(r"(?<!\d)(19\d{2}|20\d{2}|21\d{2})(?!\d)", text):
+        add(year)
+    return tuple(selected)
+
+
+def merge_document_tag_suggestions(*groups: tuple[str, ...]) -> tuple[str, ...]:
+    selected: list[str] = []
+    for group in groups:
+        for tag in group:
+            if tag and tag not in selected:
+                selected.append(tag)
+            if len(selected) >= 5:
+                return tuple(selected)
+    return tuple(selected)
+
+
+def _available_tags_by_normalized_name(context: Mapping[str, Any]) -> dict[str, str]:
+    return {
+        _normalize_tag_name(item.get("name")): str(item.get("name") or "").strip()
+        for item in _available_tag_items(context)
+        if str(item.get("name") or "").strip()
+    }
+
+
+def _normalize_tag_name(value: object) -> str:
+    return str(value or "").strip().lstrip("#").casefold()
+
+
+def _document_tag_text(context: Mapping[str, Any]) -> str:
+    document = context.get("document") if isinstance(context.get("document"), Mapping) else {}
+    if not isinstance(document, Mapping):
+        document = {}
+    parts = [
+        document.get("title"),
+        document.get("filename"),
+        document.get("correspondent"),
+        document.get("created"),
+        document.get("contentExcerpt"),
+    ]
+    return "\n".join(str(part or "") for part in parts)
+
+
+def _document_person_names(text: str) -> tuple[str, ...]:
+    names: list[str] = []
+    for match in re.finditer(r"(?:성\s*명|이름)\s*[:：]?\s*([가-힣]{2,5})", text):
+        name = match.group(1).strip()
+        if name not in names:
+            names.append(name)
+    return tuple(names)
 
 
 FAMILY_SCOPE_MARKERS = frozenset(
