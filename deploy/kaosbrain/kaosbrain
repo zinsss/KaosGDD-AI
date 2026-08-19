@@ -23,6 +23,9 @@ GOVERNOR_TOKEN_FILE=${KAOSBRAIN_GOVERNOR_TOKEN_FILE:-${SECRETS_DIR}/governor_api
 SERVICE_NAME=${KAOSBRAIN_SERVICE_NAME:-kaosbrain.service}
 IMAGE_NAME=${KAOSBRAIN_IMAGE_NAME:-kaos-brain:current}
 CONTAINER_NAME=${KAOSBRAIN_CONTAINER_NAME:-kaos-brain}
+OPENCLAW_STATE_DIR=${KAOSAI_OPENCLAW_STATE_DIR:-${KAOSGDD_ROOT}/kaosai/openclaw}
+OPENCLAW_CONFIG_PATH=${KAOSAI_OPENCLAW_CONFIG_PATH:-${OPENCLAW_STATE_DIR}/openclaw.json}
+OPENCLAW_GATEWAY_SERVICE=${KAOSAI_OPENCLAW_GATEWAY_SERVICE:-openclaw-gateway.service}
 
 die() {
   printf 'ERROR: %s\n' "$*" >&2
@@ -35,6 +38,24 @@ info() {
 
 require_command() {
   command -v "$1" >/dev/null 2>&1 || die "$1 is required"
+}
+
+load_openclaw_cli() {
+  if command -v openclaw >/dev/null 2>&1 && node -v 2>/dev/null | grep -Eq '^v(22|24|25)\.'; then
+    return
+  fi
+  if [[ -s "${HOME}/.nvm/nvm.sh" ]]; then
+    # shellcheck disable=SC1091
+    source "${HOME}/.nvm/nvm.sh"
+    nvm use 24 >/dev/null || true
+  fi
+  command -v openclaw >/dev/null 2>&1 || die "openclaw CLI is required"
+  node -v 2>/dev/null | grep -Eq '^v(22|24|25)\.' || die "OpenClaw requires Node 22, 24, or 25"
+}
+
+export_openclaw_env() {
+  export OPENCLAW_STATE_DIR
+  export OPENCLAW_CONFIG_PATH
 }
 
 load_env() {
@@ -471,6 +492,22 @@ kaosai_mode() {
   info "KaosAI mode set to ${mode}. Run ${0} up to restart Brain with this mode."
 }
 
+openclaw_reauth() {
+  load_openclaw_cli
+  export_openclaw_env
+  [[ -f "${OPENCLAW_CONFIG_PATH}" ]] || die "missing OpenClaw config: ${OPENCLAW_CONFIG_PATH}"
+  info "Starting OpenClaw OpenAI reauth for ${OPENCLAW_CONFIG_PATH}"
+  info "Open the OAuth URL, sign in, then paste the callback URL or authorization code."
+  openclaw models auth login --provider openai --force
+  if systemctl --user list-unit-files "${OPENCLAW_GATEWAY_SERVICE}" >/dev/null 2>&1; then
+    systemctl --user restart "${OPENCLAW_GATEWAY_SERVICE}"
+    info "Restarted ${OPENCLAW_GATEWAY_SERVICE}"
+  else
+    info "OpenClaw auth updated. Restart the OpenClaw gateway manually if it is running outside systemd."
+  fi
+  openclaw models auth list
+}
+
 logs() {
   docker logs --tail "${1:-120}" "${CONTAINER_NAME}"
 }
@@ -490,6 +527,8 @@ Commands:
   status     Show systemd and container status
   kaosai-mode <disabled|diagnostic|dry-run|chat>
              Update KaosAI mode in the Brain env, validate, and leave restart explicit
+  openclaw-reauth
+             Renew the OpenClaw OpenAI/ChatGPT login and restart the OpenClaw gateway
   logs [n]   Show recent container logs
 EOF
 }
@@ -504,6 +543,7 @@ case "${1:-}" in
   doctor) doctor ;;
   status) status ;;
   kaosai-mode) shift; kaosai_mode "$@" ;;
+  openclaw-reauth) openclaw_reauth ;;
   logs) shift; logs "$@" ;;
   ""|-h|--help|help) usage ;;
   *) die "unknown command: $1" ;;

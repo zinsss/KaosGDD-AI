@@ -101,6 +101,18 @@ Use the deploy helper to switch KaosAI modes without hand-editing the env file:
 The helper validates with `preflight` and restores the previous env file if the
 new mode is not deployable. Restart remains explicit with `kaosbrain up`.
 
+When the OpenClaw ChatGPT/OpenAI OAuth profile expires, renew it from the H4
+host checkout with one command:
+
+```bash
+./deploy/kaosbrain/kaosbrain openclaw-reauth
+```
+
+The helper loads the KaosGDD OpenClaw state path, switches to the required Node
+runtime through `nvm` when needed, starts the OpenAI OAuth flow, accepts the
+callback URL or authorization code, restarts `openclaw-gateway.service`, and
+prints the non-secret auth profile status.
+
 After the first install, update from the host checkout with:
 
 ```bash
