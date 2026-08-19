@@ -215,6 +215,15 @@ preflight() {
   if [[ "${KAOSAI_DRY_RUN_ENABLED:-false}" == "true" && "${KAOSAI_ENABLED:-false}" != "true" ]]; then
     die "KAOSAI_ENABLED=true is required when KAOSAI_DRY_RUN_ENABLED=true"
   fi
+  if [[ "${KAOSAI_REAUTH_ENABLED:-false}" == "true" ]]; then
+    [[ -n "${KAOSAI_REAUTH_BASE_URL:-}" ]] || die "KAOSAI_REAUTH_BASE_URL is required when KAOSAI_REAUTH_ENABLED=true"
+    validate_internal_http_url "KAOSAI_REAUTH_BASE_URL" "${KAOSAI_REAUTH_BASE_URL}"
+    if [[ -z "${KAOSAI_REAUTH_TOKEN:-}" ]]; then
+      local reauth_token_path
+      reauth_token_path=$(host_secret_path "${KAOSAI_REAUTH_TOKEN_FILE:-/run/secrets/kaosai_reauth_agent_token}")
+      [[ -s "${reauth_token_path}" ]] || die "missing or empty KaosAI reauth token file: ${reauth_token_path}"
+    fi
+  fi
   curl --fail --silent --show-error "${OLLAMA_BASE_URL:-http://127.0.0.1:11434}/api/tags" >/dev/null \
     || die "Ollama is not reachable"
   info "Preflight passed."

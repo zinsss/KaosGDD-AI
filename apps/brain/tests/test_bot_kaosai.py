@@ -106,6 +106,20 @@ class FailingGovernorTools(FakeGovernorTools):
         raise GovernorToolError("boom")
 
 
+class FakeReauth:
+    def __init__(self) -> None:
+        self.start_calls = 0
+        self.callback_calls = []
+
+    async def start(self):
+        self.start_calls += 1
+        return {"status": "waiting_for_callback", "oauthUrl": "https://auth.openai.com/oauth/authorize?state=test"}
+
+    async def submit_callback(self, callback):
+        self.callback_calls.append(callback)
+        return {"status": "succeeded"}
+
+
 def fake_message() -> SimpleNamespace:
     return SimpleNamespace(
         id=777,
@@ -130,6 +144,8 @@ def fake_discord_message(content: str) -> SimpleNamespace:
     message.author.bot = False
     message.mentions = []
     message.channel.typing = lambda: FakeTyping()
+    message.channel.send = AsyncMock()
+    message.delete = AsyncMock()
     message.reply = AsyncMock()
     return message
 
@@ -140,6 +156,7 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
         bot.settings = Settings.from_env({**BASE_ENV, **(env or {})})
         bot.kaosai = FakeKaosAI(plan, error)
         bot.governor_tools = governor_tools or FakeGovernorTools()
+        bot.reauth = None
         bot._connection = SimpleNamespace(user=None)
         return bot
 
@@ -170,6 +187,31 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(actor_id, 200)
         self.assertEqual(idempotency_key, "discord:777:document-tags")
         self.assertIn("## Confirm document tags", message.reply.await_args.args[0])
+
+    async def test_kaosai_reauth_command_starts_local_agent(self) -> None:
+        brain = self.brain(None)
+        brain.reauth = FakeReauth()
+        message = fake_discord_message("ai:reauth")
+
+        await BrainBot.on_message(brain, message)  # type: ignore[arg-type]
+
+        self.assertEqual(brain.reauth.start_calls, 1)
+        reply = message.reply.await_args.args[0]
+        self.assertIn("## KaosAI login renewal", reply)
+        self.assertIn("https://auth.openai.com/oauth/authorize", reply)
+
+    async def test_kaosai_reauth_callback_is_deleted_and_submitted(self) -> None:
+        brain = self.brain(None)
+        brain.reauth = FakeReauth()
+        callback = "http://localhost:1455/auth/callback?code=ac_secret.value&state=test"
+        message = fake_discord_message(callback)
+
+        await BrainBot.on_message(brain, message)  # type: ignore[arg-type]
+
+        message.delete.assert_awaited_once()
+        self.assertEqual(brain.reauth.callback_calls, [callback])
+        self.assertEqual(message.channel.send.await_args.args[0], "KaosAI login renewed.")
+        self.assertIn("allowed_mentions", message.channel.send.await_args.kwargs)
 
     async def test_kaosai_clarify_plan_returns_question_without_governor(self) -> None:
         brain = self.brain({"intent": "clarify", "scope": "personal", "parameters": {"question": "어떤 메모인가요?"}})

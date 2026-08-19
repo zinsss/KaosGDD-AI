@@ -31,6 +31,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.health_host, "127.0.0.1")
         self.assertEqual(settings.health_port, 8099)
         self.assertFalse(settings.imaging_enabled)
+        self.assertFalse(settings.kaosai_reauth_enabled)
 
     def test_token_can_be_loaded_from_secret_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -251,6 +252,33 @@ class SettingsTests(unittest.TestCase):
         self.assertTrue(settings.health_enabled)
         self.assertEqual(settings.health_host, "100.113.169.46")
         self.assertEqual(settings.health_port, 8099)
+
+    def test_kaosai_reauth_requires_local_agent_url_and_token(self) -> None:
+        with self.assertRaisesRegex(ConfigurationError, "KAOSAI_REAUTH_BASE_URL"):
+            Settings.from_env({**BASE_ENV, "KAOSAI_REAUTH_ENABLED": "true", "KAOSAI_REAUTH_BASE_URL": ""})
+        with self.assertRaisesRegex(ConfigurationError, "KAOSAI_REAUTH_TOKEN"):
+            Settings.from_env(
+                {
+                    **BASE_ENV,
+                    "KAOSAI_REAUTH_ENABLED": "true",
+                    "KAOSAI_REAUTH_BASE_URL": "http://127.0.0.1:18997",
+                }
+            )
+
+        settings = Settings.from_env(
+            {
+                **BASE_ENV,
+                "KAOSAI_REAUTH_ENABLED": "true",
+                "KAOSAI_REAUTH_BASE_URL": "http://127.0.0.1:18997",
+                "KAOSAI_REAUTH_TOKEN": "reauth-token",
+                "KAOSAI_REAUTH_TIMEOUT_SECONDS": "12",
+            }
+        )
+
+        self.assertTrue(settings.kaosai_reauth_enabled)
+        self.assertEqual(settings.kaosai_reauth_base_url, "http://127.0.0.1:18997")
+        self.assertEqual(settings.kaosai_reauth_api_token, "reauth-token")
+        self.assertEqual(settings.kaosai_reauth_timeout_seconds, 12)
 
 
 if __name__ == "__main__":

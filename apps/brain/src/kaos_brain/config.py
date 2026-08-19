@@ -98,6 +98,10 @@ class Settings:
     kaosai_model: str
     kaosai_api_token: str
     kaosai_timeout_seconds: int
+    kaosai_reauth_enabled: bool
+    kaosai_reauth_base_url: str
+    kaosai_reauth_api_token: str
+    kaosai_reauth_timeout_seconds: int
     governor_tools_enabled: bool
     governor_tools_base_url: str
     governor_tools_api_token: str
@@ -168,6 +172,15 @@ class Settings:
             raise ConfigurationError("KAOSAI_CHAT_ENABLED and KAOSAI_DRY_RUN_ENABLED cannot both be true")
         if imaging_enabled and imaging_provider == "kaosai" and not kaosai_enabled:
             raise ConfigurationError("KAOSAI_ENABLED=true is required when KAOSBRAIN_IMAGING_PROVIDER=kaosai")
+        kaosai_reauth_enabled = _boolean(source, "KAOSAI_REAUTH_ENABLED")
+        kaosai_reauth_base_url = source.get("KAOSAI_REAUTH_BASE_URL", "").strip()
+        kaosai_reauth_api_token = _secret(source, "KAOSAI_REAUTH_TOKEN") if kaosai_reauth_enabled else ""
+        if kaosai_reauth_enabled:
+            if not kaosai_reauth_base_url:
+                raise ConfigurationError("KAOSAI_REAUTH_BASE_URL is required when KAOSAI_REAUTH_ENABLED=true")
+            kaosai_reauth_base_url = _internal_http_base_url(kaosai_reauth_base_url, "KAOSAI_REAUTH_BASE_URL")
+            if not kaosai_reauth_api_token:
+                raise ConfigurationError("KAOSAI_REAUTH_TOKEN or KAOSAI_REAUTH_TOKEN_FILE is required")
         max_reply_chars = _positive_int(source.get("KAOSBRAIN_MAX_REPLY_CHARS", "1800"), "KAOSBRAIN_MAX_REPLY_CHARS")
         if max_reply_chars > 1900:
             raise ConfigurationError("KAOSBRAIN_MAX_REPLY_CHARS must be at most 1900")
@@ -194,6 +207,13 @@ class Settings:
             kaosai_model=source.get("KAOSAI_MODEL", "default").strip() or "default",
             kaosai_api_token=kaosai_api_token,
             kaosai_timeout_seconds=_positive_int(source.get("KAOSAI_TIMEOUT_SECONDS", "30"), "KAOSAI_TIMEOUT_SECONDS"),
+            kaosai_reauth_enabled=kaosai_reauth_enabled,
+            kaosai_reauth_base_url=kaosai_reauth_base_url,
+            kaosai_reauth_api_token=kaosai_reauth_api_token,
+            kaosai_reauth_timeout_seconds=_positive_int(
+                source.get("KAOSAI_REAUTH_TIMEOUT_SECONDS", "60"),
+                "KAOSAI_REAUTH_TIMEOUT_SECONDS",
+            ),
             governor_tools_enabled=governor_tools_enabled,
             governor_tools_base_url=governor_tools_base_url,
             governor_tools_api_token=governor_tools_api_token,

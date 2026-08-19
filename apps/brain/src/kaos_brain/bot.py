@@ -50,6 +50,7 @@ from .intent import Route, parse_request
 from .kaos_ai import DisabledKaosAIPlanner, KaosAIConfig, KaosAIError, KaosAIPlanner, OpenClawKaosAIPlanner
 from .memo_intent import MemoCreateRequest, MemoDeleteRequest, MemoEditRequest, parse_memo_create, parse_memo_delete, parse_memo_edit
 from .ollama import OllamaClient, OllamaConfig, OllamaError
+from .reauth import OpenClawReauthClient, ReauthConfig, ReauthError
 from .task_update_intent import (
     TaskActionRequest,
     TaskCreateRequest,
@@ -67,6 +68,8 @@ NO_MENTIONS = discord.AllowedMentions.none()
 KST = ZoneInfo("Asia/Seoul")
 DOCUMENT_TAG_SUGGESTION_PATTERN = re.compile(r"\b(?:document|doc|문서)?\s*(\d{1,9})\b")
 BRAIN_SEARCH_WINDOW_SECONDS = 600
+OPENAI_CALLBACK_PREFIX = "http://localhost:1455/auth/callback?"
+OPENAI_CODE_PATTERN = re.compile(r"^ac_[A-Za-z0-9_.-]+$")
 
 
 def _bind_view_message(view: discord.ui.View | None, message: discord.Message) -> None:
@@ -115,6 +118,46 @@ def _tool_failed(action: str) -> str:
 
 def _tool_cancelled(action: str) -> str:
     return f"{action} 취소했어요."
+
+
+def _is_openai_callback(text: str) -> bool:
+    stripped = text.strip()
+    return stripped.startswith(OPENAI_CALLBACK_PREFIX) or bool(OPENAI_CODE_PATTERN.match(stripped))
+
+
+def _is_kaosai_reauth_command(text: str) -> bool:
+    normalized = text.strip().lower()
+    return normalized in {
+        "ai:reauth",
+        "kaosai reauth",
+        "kaosai login",
+        "chatgpt reauth",
+        "chatgpt login",
+        "openclaw reauth",
+    }
+
+
+def _looks_like_auth_failure(text: str) -> bool:
+    lowered = text.lower()
+    return "token_expired" in lowered or "authentication failed" in lowered or "401" in lowered
+
+
+async def _start_reauth_message(reauth: OpenClawReauthClient) -> str:
+    try:
+        payload = await reauth.start()
+    except ReauthError as exc:
+        return f"KaosAI login renewal failed to start: `{exc}`"
+    oauth_url = str(payload.get("oauthUrl") or "").strip()
+    status = str(payload.get("status") or "").strip() or "unknown"
+    if not oauth_url:
+        return f"KaosAI login renewal started, but no login URL is available yet. Status: `{status}`"
+    return "\n".join(
+        [
+            "## KaosAI login renewal",
+            "Open this URL, sign in, then paste the callback URL here.",
+            oauth_url,
+        ]
+    )
 
 
 def _render_kaosai_clarify_preview(plan: dict[str, Any]) -> str:
@@ -261,6 +304,17 @@ class BrainBot(discord.Client):
             )
         )
         self.kaosai = kaosai or _kaosai_planner_from_settings(settings)
+        self.reauth = (
+            OpenClawReauthClient(
+                ReauthConfig(
+                    base_url=settings.kaosai_reauth_base_url,
+                    api_token=settings.kaosai_reauth_api_token,
+                    timeout_seconds=settings.kaosai_reauth_timeout_seconds,
+                )
+            )
+            if settings.kaosai_reauth_enabled
+            else None
+        )
         self.governor_tools = (
             GovernorToolClient(
                 GovernorToolConfig(
@@ -303,8 +357,15 @@ class BrainBot(discord.Client):
         mentioned = self.user is not None and self.user in message.mentions
         if not self.settings.respond_without_mention and not mentioned:
             return
-        request = parse_request(self._strip_mention(message))
+        text = self._strip_mention(message)
+        if _is_openai_callback(text):
+            await self._submit_kaosai_reauth_callback(message, text)
+            return
+        request = parse_request(text)
         if request is None:
+            return
+        if request.route is Route.CHAT and _is_kaosai_reauth_command(request.text):
+            await self._start_kaosai_reauth(message)
             return
         if request.route is Route.CHAT and request.text.strip().lower().startswith("ai:"):
             await self._answer_with_kaosai_diagnostic(message, request.text)
@@ -421,6 +482,8 @@ class BrainBot(discord.Client):
             )
         except KaosAIError as exc:
             LOGGER.warning("KaosAI planner failed: %s", exc)
+            if self.reauth is not None and _looks_like_auth_failure(str(exc)):
+                return ("## KaosAI login expired\nRenew ChatGPT login.", KaosAIReauthView(self.reauth, int(message.author.id)))
             return None
         if plan is None:
             return None
@@ -472,6 +535,38 @@ class BrainBot(discord.Client):
             mention_author=False,
             allowed_mentions=NO_MENTIONS,
         )
+
+    async def _start_kaosai_reauth(self, message: discord.Message) -> None:
+        if self.reauth is None:
+            await message.reply(
+                "KaosAI reauth agent is not enabled.",
+                mention_author=False,
+                allowed_mentions=NO_MENTIONS,
+            )
+            return
+        async with message.channel.typing():
+            content = await _start_reauth_message(self.reauth)
+        await message.reply(content[: self.settings.max_reply_chars], mention_author=False, allowed_mentions=NO_MENTIONS)
+
+    async def _submit_kaosai_reauth_callback(self, message: discord.Message, callback: str) -> None:
+        if self.reauth is None:
+            return
+        try:
+            await message.delete()
+        except discord.HTTPException:
+            LOGGER.warning("Failed to delete OpenAI callback message")
+        async with message.channel.typing():
+            try:
+                payload = await self.reauth.submit_callback(callback)
+            except ReauthError as exc:
+                reply = f"KaosAI login renewal failed: `{exc}`"
+            else:
+                status = str(payload.get("status") or "")
+                if status == "succeeded":
+                    reply = "KaosAI login renewed."
+                else:
+                    reply = f"KaosAI login renewal status: `{status or 'unknown'}`"
+        await message.channel.send(reply[: self.settings.max_reply_chars], allowed_mentions=NO_MENTIONS)
 
     async def _render_kaosai_diagnostic(self, user_text: str, *, message: discord.Message) -> str:
         try:
@@ -991,6 +1086,25 @@ class BrainTemporarySearchView(discord.ui.View):
             LOGGER.info("Could not expire Brain search window %s", getattr(self._message, "id", ""))
         finally:
             self._message = None
+
+
+class KaosAIReauthView(discord.ui.View):
+    def __init__(self, reauth: OpenClawReauthClient, actor_id: int) -> None:
+        super().__init__(timeout=600)
+        self.reauth = reauth
+        self.actor_id = actor_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.actor_id:
+            await interaction.response.send_message("이 버튼은 요청한 사용자만 사용할 수 있어요.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Renew ChatGPT Login", style=discord.ButtonStyle.primary)
+    async def renew(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer()
+        content = await _start_reauth_message(self.reauth)
+        await interaction.edit_original_response(content=content, view=None, allowed_mentions=NO_MENTIONS)
 
 
 class BrainMemoSearchView(BrainTemporarySearchView):
