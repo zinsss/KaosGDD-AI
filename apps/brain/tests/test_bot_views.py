@@ -18,6 +18,7 @@ from kaos_brain.bot import (
     BrainOpenedDocumentView,
     BrainMemoSearchSelect,
     BrainMemoSearchView,
+    TaskCreateConfirmationView,
 )
 from kaos_brain.tool_intent import ToolKind, ToolRequest
 
@@ -26,6 +27,7 @@ class FakeGovernorTools:
     def __init__(self) -> None:
         self.task_action_calls = []
         self.task_edit_calls = []
+        self.approve_calls = []
 
     async def get_memo(self, name: str):
         return {"memo": {"name": name, "content": "# Rustdesk\nUse Tailscale."}}
@@ -65,6 +67,10 @@ class FakeGovernorTools:
                 "dueTime": request.due_time,
             },
         }
+
+    async def approve_confirmation(self, confirmation_id: str, *, actor_id: int):
+        self.approve_calls.append((confirmation_id, actor_id))
+        return {"task": {"title": "오도리 문고리", "due": "", "dueTime": ""}}
 
 
 class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
@@ -317,6 +323,32 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(idempotency_key, "brain-task-edit-1002")
         content = interaction.response.send_message.await_args.args[0]
         self.assertIn("## Confirm task edit", content)
+
+    async def test_task_create_confirm_defers_before_approving(self) -> None:
+        tools = FakeGovernorTools()
+        view = TaskCreateConfirmationView(tools, 200, "confirm-create-1")  # type: ignore[arg-type]
+        order: list[str] = []
+
+        async def defer() -> None:
+            order.append("defer")
+
+        async def approve_confirmation(confirmation_id: str, *, actor_id: int):
+            order.append("approve")
+            return {"task": {"title": "오도리 문고리", "due": "", "dueTime": ""}}
+
+        tools.approve_confirmation = approve_confirmation  # type: ignore[method-assign]
+        interaction = SimpleNamespace(
+            user=SimpleNamespace(id=200),
+            response=SimpleNamespace(defer=AsyncMock(side_effect=defer), send_message=AsyncMock()),
+            edit_original_response=AsyncMock(),
+        )
+
+        await view.children[0].callback(interaction)  # type: ignore[arg-type,union-attr]
+
+        self.assertEqual(order, ["defer", "approve"])
+        interaction.edit_original_response.assert_awaited_once()
+        content = interaction.edit_original_response.await_args.kwargs["content"]
+        self.assertIn("할 일 저장했어요.", content)
 
 
 if __name__ == "__main__":

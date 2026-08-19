@@ -75,6 +75,19 @@ def _bind_view_message(view: discord.ui.View | None, message: discord.Message) -
         bind(message)
 
 
+async def _defer_component_update(interaction: discord.Interaction) -> None:
+    await interaction.response.defer()
+
+
+async def _edit_deferred_component(
+    interaction: discord.Interaction,
+    *,
+    content: str,
+    view: discord.ui.View | None,
+) -> None:
+    await interaction.edit_original_response(content=content, view=view, allowed_mentions=NO_MENTIONS)
+
+
 def _kaosai_planner_from_settings(settings: Settings) -> KaosAIPlanner:
     if not settings.kaosai_enabled:
         return DisabledKaosAIPlanner()
@@ -1617,6 +1630,7 @@ class TaskEditConfirmationView(discord.ui.View):
 
     @discord.ui.button(label="Confirm", style=discord.ButtonStyle.success)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await _defer_component_update(interaction)
         try:
             payload = await self.governor_tools.approve_confirmation(self.confirmation_id, actor_id=self.actor_id)
             content = render_task_edit_completed(payload)
@@ -1625,7 +1639,7 @@ class TaskEditConfirmationView(discord.ui.View):
             content = _tool_failed("할 일 수정")
         for item in self.children:
             item.disabled = True
-        await interaction.response.edit_message(content=content, view=self, allowed_mentions=NO_MENTIONS)
+        await _edit_deferred_component(interaction, content=content, view=self)
         self.stop()
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
@@ -1651,6 +1665,7 @@ class TaskUpdateConfirmationView(discord.ui.View):
 
     @discord.ui.button(label="Confirm", style=discord.ButtonStyle.success)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await _defer_component_update(interaction)
         try:
             payload = await self.governor_tools.approve_confirmation(self.confirmation_id, actor_id=self.actor_id)
             content = render_task_due_update_completed(payload)
@@ -1659,7 +1674,7 @@ class TaskUpdateConfirmationView(discord.ui.View):
             content = _tool_failed("할 일 수정")
         for item in self.children:
             item.disabled = True
-        await interaction.response.edit_message(content=content, view=self, allowed_mentions=NO_MENTIONS)
+        await _edit_deferred_component(interaction, content=content, view=self)
         self.stop()
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
@@ -1685,6 +1700,7 @@ class TaskCreateConfirmationView(discord.ui.View):
 
     @discord.ui.button(label="Confirm", style=discord.ButtonStyle.success)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await _defer_component_update(interaction)
         try:
             payload = await self.governor_tools.approve_confirmation(self.confirmation_id, actor_id=self.actor_id)
             content = render_task_create_completed(payload)
@@ -1693,7 +1709,7 @@ class TaskCreateConfirmationView(discord.ui.View):
             content = _tool_failed("할 일 저장")
         for item in self.children:
             item.disabled = True
-        await interaction.response.edit_message(content=content, view=self, allowed_mentions=NO_MENTIONS)
+        await _edit_deferred_component(interaction, content=content, view=self)
         self.stop()
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
@@ -1719,6 +1735,7 @@ class EventCreateConfirmationView(discord.ui.View):
 
     @discord.ui.button(label="Confirm", style=discord.ButtonStyle.success)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await _defer_component_update(interaction)
         try:
             payload = await self.governor_tools.approve_confirmation(self.confirmation_id, actor_id=self.actor_id)
             content = render_event_create_completed(payload)
@@ -1727,7 +1744,7 @@ class EventCreateConfirmationView(discord.ui.View):
             content = _tool_failed("일정 저장")
         for item in self.children:
             item.disabled = True
-        await interaction.response.edit_message(content=content, view=self, allowed_mentions=NO_MENTIONS)
+        await _edit_deferred_component(interaction, content=content, view=self)
         self.stop()
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
@@ -1753,6 +1770,7 @@ class TaskActionConfirmationView(discord.ui.View):
 
     @discord.ui.button(label="Confirm", style=discord.ButtonStyle.success)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await _defer_component_update(interaction)
         try:
             payload = await self.governor_tools.approve_confirmation(self.confirmation_id, actor_id=self.actor_id)
             content = render_task_action_completed(payload)
@@ -1761,7 +1779,7 @@ class TaskActionConfirmationView(discord.ui.View):
             content = _tool_failed("할 일 변경")
         for item in self.children:
             item.disabled = True
-        await interaction.response.edit_message(content=content, view=self, allowed_mentions=NO_MENTIONS)
+        await _edit_deferred_component(interaction, content=content, view=self)
         self.stop()
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
@@ -1787,6 +1805,7 @@ class MemoCreateConfirmationView(discord.ui.View):
 
     @discord.ui.button(label="Confirm", style=discord.ButtonStyle.success)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await _defer_component_update(interaction)
         try:
             payload = await self.governor_tools.approve_confirmation(self.confirmation_id, actor_id=self.actor_id)
             content = render_memo_create_completed(payload)
@@ -1795,7 +1814,7 @@ class MemoCreateConfirmationView(discord.ui.View):
             content = _tool_failed("메모 저장")
         for item in self.children:
             item.disabled = True
-        await interaction.response.edit_message(content=content, view=self, allowed_mentions=NO_MENTIONS)
+        await _edit_deferred_component(interaction, content=content, view=self)
         self.stop()
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
@@ -1821,6 +1840,7 @@ class MemoDeleteConfirmationView(discord.ui.View):
 
     @discord.ui.button(label="Confirm", style=discord.ButtonStyle.danger)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await _defer_component_update(interaction)
         try:
             payload = await self.governor_tools.approve_confirmation(self.confirmation_id, actor_id=self.actor_id)
             content = render_memo_delete_completed(payload)
@@ -1829,7 +1849,7 @@ class MemoDeleteConfirmationView(discord.ui.View):
             content = _tool_failed("메모 삭제")
         for item in self.children:
             item.disabled = True
-        await interaction.response.edit_message(content=content, view=self, allowed_mentions=NO_MENTIONS)
+        await _edit_deferred_component(interaction, content=content, view=self)
         self.stop()
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
@@ -1855,6 +1875,7 @@ class MemoEditConfirmationView(discord.ui.View):
 
     @discord.ui.button(label="Confirm", style=discord.ButtonStyle.success)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await _defer_component_update(interaction)
         try:
             payload = await self.governor_tools.approve_confirmation(self.confirmation_id, actor_id=self.actor_id)
             content = render_memo_edit_completed(payload)
@@ -1863,7 +1884,7 @@ class MemoEditConfirmationView(discord.ui.View):
             content = _tool_failed("메모 수정")
         for item in self.children:
             item.disabled = True
-        await interaction.response.edit_message(content=content, view=self, allowed_mentions=NO_MENTIONS)
+        await _edit_deferred_component(interaction, content=content, view=self)
         self.stop()
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
@@ -1889,13 +1910,14 @@ class DocumentTagConfirmationView(discord.ui.View):
 
     @discord.ui.button(label="Confirm", style=discord.ButtonStyle.success)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await _defer_component_update(interaction)
         try:
             payload = await self.governor_tools.approve_confirmation(self.confirmation_id, actor_id=self.actor_id)
             content = render_document_tags_completed(payload)
         except GovernorToolError as exc:
             LOGGER.warning("Document tag confirmation failed: %s", exc)
             content = _tool_failed("문서 태그 수정")
-        await interaction.response.edit_message(content=content, view=None, allowed_mentions=NO_MENTIONS)
+        await _edit_deferred_component(interaction, content=content, view=None)
         self.stop()
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
