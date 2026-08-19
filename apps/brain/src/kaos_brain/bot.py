@@ -946,8 +946,9 @@ class BrainBot(discord.Client):
 
 
 class BrainTemporarySearchView(discord.ui.View):
-    def __init__(self) -> None:
+    def __init__(self, search_title: str) -> None:
         super().__init__(timeout=BRAIN_SEARCH_WINDOW_SECONDS)
+        self.search_title = search_title.strip() or "search"
         self._message: discord.Message | None = None
 
     def bind_message(self, message: discord.Message) -> None:
@@ -964,7 +965,18 @@ class BrainTemporarySearchView(discord.ui.View):
             self._message = None
 
     async def on_timeout(self) -> None:
-        await self.delete_message()
+        if self._message is None:
+            return
+        try:
+            await self._message.edit(
+                content=f"Search result of {self.search_title} expired after 10 mins.",
+                view=None,
+                allowed_mentions=NO_MENTIONS,
+            )
+        except discord.HTTPException:
+            LOGGER.info("Could not expire Brain search window %s", getattr(self._message, "id", ""))
+        finally:
+            self._message = None
 
 
 class BrainMemoSearchView(BrainTemporarySearchView):
@@ -977,7 +989,7 @@ class BrainMemoSearchView(BrainTemporarySearchView):
         *,
         memos_public_url: str = "",
     ) -> None:
-        super().__init__()
+        super().__init__(query)
         self.governor_tools = governor_tools
         self.actor_id = actor_id
         self.query = query
@@ -1258,7 +1270,7 @@ class BrainDocumentSearchView(BrainTemporarySearchView):
         *,
         paperless_public_url: str = "",
     ) -> None:
-        super().__init__()
+        super().__init__(query)
         self.governor_tools = governor_tools
         self.actor_id = actor_id
         self.query = query

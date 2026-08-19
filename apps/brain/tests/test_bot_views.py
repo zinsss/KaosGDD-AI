@@ -123,19 +123,24 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([item.label for item in opened_view.children], ["Close", "Open document"])
         search_message.delete.assert_awaited_once()
 
-    async def test_brain_search_window_deletes_on_timeout(self) -> None:
+    async def test_brain_search_window_shows_expired_notice_on_timeout(self) -> None:
         view = BrainMemoSearchView(
             FakeGovernorTools(),  # type: ignore[arg-type]
             200,
             "rustdesk",
             [{"name": "memos/42", "snippet": "# Rustdesk"}],
         )
-        search_message = SimpleNamespace(id=902, delete=AsyncMock())
+        search_message = SimpleNamespace(id=902, edit=AsyncMock())
         view.bind_message(search_message)  # type: ignore[arg-type]
 
         await view.on_timeout()
 
-        search_message.delete.assert_awaited_once()
+        search_message.edit.assert_awaited_once()
+        self.assertEqual(
+            search_message.edit.await_args.kwargs["content"],
+            "Search result of rustdesk expired after 10 mins.",
+        )
+        self.assertIsNone(search_message.edit.await_args.kwargs["view"])
 
     def test_memo_confirm_buttons_match_governor_labels(self) -> None:
         edit = BrainMemoEditConfirmView(FakeGovernorTools(), 200, "memos/42", "# Memo")  # type: ignore[arg-type]
