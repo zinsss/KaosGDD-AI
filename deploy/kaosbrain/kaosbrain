@@ -290,17 +290,22 @@ doctor() {
   local ollama_tags
   if ollama_tags=$(curl --fail --silent --show-error "${OLLAMA_BASE_URL:-http://127.0.0.1:11434}/api/tags"); then
     check_line "Ollama" "ok" "${OLLAMA_BASE_URL:-http://127.0.0.1:11434}"
-    python3 - "$ollama_tags" "${KAOSBRAIN_CHAT_MODEL:-}" "${KAOSBRAIN_DEEP_MODEL:-}" <<'PY'
+    python3 - "$ollama_tags" "${KAOSBRAIN_CHAT_MODEL:-}" "${KAOSBRAIN_DEEP_MODEL:-}" "${KAOSBRAIN_IMAGING_MODEL:-}" "${KAOSBRAIN_IMAGING_ENABLED:-false}" <<'PY'
 import json
 import sys
 
 payload = json.loads(sys.argv[1])
 chat = sys.argv[2]
 deep = sys.argv[3]
+imaging = sys.argv[4]
+imaging_enabled = sys.argv[5].lower() in {"1", "true", "yes", "on"}
 names = {model.get("name", "") for model in payload.get("models", [])}
 for label, model in (("Chat model", chat), ("Deep model", deep)):
     state = "ok" if model and model in names else "missing"
     print(f"{label:<34} {state} ({model or 'unset'})")
+if imaging_enabled:
+    state = "ok" if imaging and imaging in names else "missing"
+    print(f"{'Imaging model':<34} {state} ({imaging or 'unset'})")
 PY
   else
     check_line "Ollama" "fail" "${OLLAMA_BASE_URL:-http://127.0.0.1:11434}"
@@ -326,7 +331,7 @@ PY
   fi
 
   if [[ "${KAOSBRAIN_IMAGING_ENABLED:-false}" == "true" ]]; then
-    check_line "KaosBrain imaging" "ok" "enabled"
+    check_line "KaosBrain imaging" "ok" "enabled, model=${KAOSBRAIN_IMAGING_MODEL:-unset}"
   else
     check_line "KaosBrain imaging" "disabled"
   fi

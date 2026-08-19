@@ -21,6 +21,7 @@ class OllamaConfig:
     chat_model: str
     deep_model: str
     timeout_seconds: int
+    imaging_model: str = ""
 
 
 class OllamaClient:
@@ -62,8 +63,9 @@ class OllamaClient:
         if not images:
             raise OllamaError("second-look request did not include images")
         prompt = _second_look_prompt(request)
+        model = self.imaging_model()
         raw = await self._complete(
-            self.deep_model_for_imaging(),
+            model,
             [
                 {
                     "role": "system",
@@ -77,10 +79,10 @@ class OllamaClient:
             ],
             num_predict=700,
         )
-        return _parse_second_look_response(raw, model=self.deep_model_for_imaging())
+        return _parse_second_look_response(raw, model=model)
 
-    def deep_model_for_imaging(self) -> str:
-        return self.config.deep_model
+    def imaging_model(self) -> str:
+        return self.config.imaging_model or self.config.chat_model
 
     async def route(self, user_text: str) -> RouteDecision:
         try:

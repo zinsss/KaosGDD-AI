@@ -30,7 +30,7 @@ class FakeOllama:
             "cautions": ["최종 판단은 진료자가 합니다."],
             "recommendation": "임상 소견과 대조",
             "disclaimer": "AI 보조 검토입니다. 최종 판단은 진료자가 합니다.",
-            "model": "qwen3:8b",
+            "model": "gemma3:4b",
         }
 
 
@@ -91,7 +91,7 @@ class BrainImagingTests(unittest.IsolatedAsyncioTestCase):
         payload = await response.json()
         self.assertEqual(payload["status"], "completed")
         self.assertEqual(payload["result"]["summary"], "검토 완료")
-        self.assertEqual(payload["result"]["model"], "qwen3:8b")
+        self.assertEqual(payload["result"]["model"], "gemma3:4b")
         self.assertEqual(len(self.ollama.requests), 1)
 
     async def test_second_look_rejects_non_temporary_safety(self) -> None:

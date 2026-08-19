@@ -84,6 +84,7 @@ class Settings:
     ollama_base_url: str
     chat_model: str
     deep_model: str
+    imaging_model: str
     request_timeout_seconds: int
     max_reply_chars: int
     respond_without_mention: bool
@@ -173,6 +174,7 @@ class Settings:
             or "http://127.0.0.1:11434",
             chat_model=source.get("KAOSBRAIN_CHAT_MODEL", "gemma3:4b").strip() or "gemma3:4b",
             deep_model=source.get("KAOSBRAIN_DEEP_MODEL", "qwen3:8b").strip() or "qwen3:8b",
+            imaging_model=source.get("KAOSBRAIN_IMAGING_MODEL", "gemma3:4b").strip() or "gemma3:4b",
             request_timeout_seconds=timeout,
             max_reply_chars=max_reply_chars,
             respond_without_mention=_boolean(source, "KAOSBRAIN_RESPOND_WITHOUT_MENTION", default=True),

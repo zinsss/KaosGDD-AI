@@ -256,6 +256,7 @@ class BrainBot(discord.Client):
                 base_url=settings.ollama_base_url,
                 chat_model=settings.chat_model,
                 deep_model=settings.deep_model,
+                imaging_model=settings.imaging_model,
                 timeout_seconds=settings.request_timeout_seconds,
             )
         )

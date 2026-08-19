@@ -23,6 +23,7 @@ class FakeOllamaClient(OllamaClient):  # type: ignore[misc,valid-type]
                 base_url="http://127.0.0.1:11434",
                 chat_model="gemma3:4b",
                 deep_model="qwen3:8b",
+                imaging_model="gemma3:4b",
                 timeout_seconds=1,
             )
         )

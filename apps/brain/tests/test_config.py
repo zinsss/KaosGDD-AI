@@ -21,6 +21,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.brain_channel_id, 300)
         self.assertEqual(settings.chat_model, "gemma3:4b")
         self.assertEqual(settings.deep_model, "qwen3:8b")
+        self.assertEqual(settings.imaging_model, "gemma3:4b")
         self.assertTrue(settings.respond_without_mention)
         self.assertTrue(settings.auto_route_enabled)
         self.assertFalse(settings.kaosai_enabled)
@@ -190,6 +191,14 @@ class SettingsTests(unittest.TestCase):
 
         self.assertTrue(settings.imaging_enabled)
         self.assertEqual(settings.imaging_api_token, "not-a-real-secret")
+        self.assertEqual(settings.imaging_model, "gemma3:4b")
+
+    def test_imaging_model_can_be_configured_independently(self) -> None:
+        settings = Settings.from_env({**BASE_ENV, "KAOSBRAIN_IMAGING_MODEL": "llava:7b"})
+
+        self.assertEqual(settings.chat_model, "gemma3:4b")
+        self.assertEqual(settings.deep_model, "qwen3:8b")
+        self.assertEqual(settings.imaging_model, "llava:7b")
 
     def test_memos_public_url_is_optional(self) -> None:
         settings = Settings.from_env(
