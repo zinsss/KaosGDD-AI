@@ -892,6 +892,7 @@ def render_ocr_ready_message(record: InboxRecord, document_title: str = "") -> s
     lines = [
         "## Documents",
         f"### {escape_text(title)}",
+        "- Paperless saved.",
         "- OCR ready.",
     ]
     if record.document_id:

@@ -565,6 +565,7 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
             "처방전 대리수령 신청서",
         )
 
+        self.assertIn("Paperless saved", content)
         self.assertIn("OCR ready", content)
         self.assertIn("`42`", content)
         self.assertIn("문서 42 태그 추천", content)
