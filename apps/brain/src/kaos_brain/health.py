@@ -15,6 +15,7 @@ class BrainHealthSnapshot:
     discord_ready: bool
     chat_model: str
     deep_model: str
+    imaging_provider: str
     imaging_model: str
     kaosai_mode: str
     governor_tools_enabled: bool
@@ -25,6 +26,7 @@ class BrainHealthSnapshot:
             "discordReady": self.discord_ready,
             "chatModel": self.chat_model,
             "deepModel": self.deep_model,
+            "imagingProvider": self.imaging_provider,
             "imagingModel": self.imaging_model,
             "kaosAI": {"mode": self.kaosai_mode},
             "governorTools": {"enabled": self.governor_tools_enabled},
@@ -65,6 +67,7 @@ def snapshot(settings: Settings, bot: Any) -> BrainHealthSnapshot:
         discord_ready=discord_ready,
         chat_model=settings.chat_model,
         deep_model=settings.deep_model,
+        imaging_provider=settings.imaging_provider,
         imaging_model=settings.imaging_model,
         kaosai_mode=_kaosai_mode(settings),
         governor_tools_enabled=settings.governor_tools_enabled,

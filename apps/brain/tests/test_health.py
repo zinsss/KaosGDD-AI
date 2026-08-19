@@ -27,6 +27,8 @@ class BrainHealthTests(unittest.TestCase):
         self.assertTrue(payload["discordReady"])
         self.assertEqual(payload["chatModel"], "gemma3:4b")
         self.assertEqual(payload["deepModel"], "qwen3:8b")
+        self.assertEqual(payload["imagingProvider"], "ollama")
+        self.assertEqual(payload["imagingModel"], "gemma3:4b")
         self.assertEqual(payload["kaosAI"], {"mode": "disabled"})
         self.assertEqual(payload["governorTools"], {"enabled": True})
         self.assertNotIn("token", str(payload).lower())

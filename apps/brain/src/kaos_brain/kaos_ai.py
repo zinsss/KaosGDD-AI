@@ -21,6 +21,9 @@ class KaosAIPlanner(Protocol):
     async def suggest_document_tags(self, context: Mapping[str, Any]) -> tuple[str, ...]:
         """Return existing Paperless tag names suggested for a document."""
 
+    async def second_look(self, request: Mapping[str, Any]) -> dict[str, Any]:
+        """Return a temporary medical image second-look result."""
+
 
 @dataclass(frozen=True)
 class KaosAIConfig:
@@ -39,6 +42,9 @@ class DisabledKaosAIPlanner:
     async def suggest_document_tags(self, context: Mapping[str, Any]) -> tuple[str, ...]:
         return ()
 
+    async def second_look(self, request: Mapping[str, Any]) -> dict[str, Any]:
+        raise KaosAIError("kaosai_disabled")
+
 
 class OpenClawKaosAIPlanner:
     def __init__(self, config: KaosAIConfig) -> None:
@@ -56,10 +62,22 @@ class OpenClawKaosAIPlanner:
         raw = await self._complete_message(f"{KAOSAI_DOCUMENT_TAG_SYSTEM_PROMPT}\n\n{_render_document_tag_request(context)}")
         return merge_document_tag_suggestions(document_tag_rule_suggestions(context), parse_document_tag_response(raw, context))
 
+    async def second_look(self, request: Mapping[str, Any]) -> dict[str, Any]:
+        if not self.config.enabled:
+            raise KaosAIError("kaosai_disabled")
+        attachments = _render_second_look_attachments(request)
+        if not attachments:
+            raise KaosAIError("kaosai_second_look_missing_image")
+        raw = await self._complete_message(
+            f"{KAOSAI_SECOND_LOOK_SYSTEM_PROMPT}\n\n{_render_second_look_request(request)}",
+            attachments=attachments,
+        )
+        return parse_second_look_response(raw, model=self.config.model or "default")
+
     async def _complete(self, user_text: str, *, context: Mapping[str, Any]) -> str:
         return await self._complete_message(f"{KAOSAI_PLAN_SYSTEM_PROMPT}\n\n{_render_plan_request(user_text, context)}")
 
-    async def _complete_message(self, message: str) -> str:
+    async def _complete_message(self, message: str, *, attachments: list[Mapping[str, str]] | None = None) -> str:
         import aiohttp
 
         if not self.config.api_token:
@@ -73,6 +91,7 @@ class OpenClawKaosAIPlanner:
                         websocket,
                         model=self.config.model,
                         message=message,
+                        attachments=attachments,
                     )
             except (TimeoutError, asyncio.TimeoutError) as exc:
                 raise KaosAIError("kaosai_request_timed_out") from exc
@@ -143,6 +162,27 @@ Rules:
 - Use at most 5 tags.
 - Prefer tags supported by the document title, filename, correspondent, and contentExcerpt.
 - Return {"tags":[]} when no tag clearly fits."""
+
+
+KAOSAI_SECOND_LOOK_SYSTEM_PROMPT = """You are KaosAI providing a temporary medical image second-look checklist.
+Return exactly one JSON object and no markdown.
+Do not diagnose, do not claim certainty, and do not provide a final report.
+Use Korean unless the user question is clearly in another language.
+
+Allowed schema:
+{
+  "summary": "...",
+  "checklist": ["..."],
+  "cautions": ["..."],
+  "recommendation": "..."
+}
+
+Rules:
+- Review only the attached rendered preview image.
+- Focus on visible image-quality issues and easy-to-miss review checklist points.
+- Mention that final judgment belongs to the clinician.
+- Do not infer hidden DICOM metadata.
+- Do not suggest that PACS, Orthanc, or medical records were modified."""
 
 
 def parse_kaosai_plan_response(raw: str) -> dict[str, Any]:
@@ -228,6 +268,45 @@ def merge_document_tag_suggestions(*groups: tuple[str, ...]) -> tuple[str, ...]:
             if len(selected) >= 5:
                 return tuple(selected)
     return tuple(selected)
+
+
+def _string_list(value: Any, *, limit: int) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    items: list[str] = []
+    for item in value:
+        text = str(item or "").strip()
+        if text and text not in items:
+            items.append(text[:500])
+        if len(items) >= limit:
+            break
+    return items
+
+
+def parse_second_look_response(raw: str, *, model: str) -> dict[str, Any]:
+    text = raw.strip()
+    if text.startswith("```"):
+        text = _strip_fence(text)
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        payload = {"summary": raw, "checklist": [], "cautions": [], "recommendation": ""}
+    if not isinstance(payload, Mapping):
+        payload = {"summary": raw, "checklist": [], "cautions": [], "recommendation": ""}
+    summary = str(payload.get("summary") or "").strip() or raw.strip()[:1000]
+    checklist = _string_list(payload.get("checklist"), limit=8)
+    cautions = _string_list(payload.get("cautions"), limit=5)
+    recommendation = str(payload.get("recommendation") or "").strip()
+    if not cautions:
+        cautions = ["AI 보조 검토입니다. 최종 판단은 진료자가 합니다."]
+    return {
+        "summary": summary[:1400],
+        "checklist": checklist,
+        "cautions": cautions,
+        "recommendation": recommendation[:800],
+        "disclaimer": "AI 보조 검토입니다. 최종 판단은 진료자가 합니다.",
+        "model": model,
+    }
 
 
 def _available_tags_by_normalized_name(context: Mapping[str, Any]) -> dict[str, str]:
@@ -348,6 +427,47 @@ def _render_document_tag_request(context: Mapping[str, Any]) -> str:
     )
 
 
+def _render_second_look_request(request: Mapping[str, Any]) -> str:
+    return json.dumps(
+        {
+            "source": request.get("source"),
+            "requestId": request.get("requestId"),
+            "modality": request.get("modality"),
+            "bodyPart": request.get("bodyPart"),
+            "viewPosition": request.get("viewPosition"),
+            "aiDomain": request.get("aiDomain"),
+            "question": request.get("question"),
+            "safety": request.get("safety"),
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+
+
+def _render_second_look_attachments(request: Mapping[str, Any]) -> list[Mapping[str, str]]:
+    attachments: list[Mapping[str, str]] = []
+    images = request.get("images")
+    if not isinstance(images, list):
+        return attachments
+    for index, image in enumerate(images[:4], start=1):
+        if not isinstance(image, Mapping):
+            continue
+        image_format = str(image.get("format") or "").strip().lower()
+        content = str(image.get("contentBase64") or "").strip()
+        if image_format == "jpg":
+            image_format = "jpeg"
+        if image_format not in {"png", "jpeg"} or not content:
+            continue
+        attachments.append(
+            {
+                "mimeType": f"image/{image_format}",
+                "content": content,
+                "name": f"kaosaio-second-look-{index}.{image_format}",
+            }
+        )
+    return attachments
+
+
 def _available_tag_items(context: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     raw_items = context.get("availableTags")
     if not isinstance(raw_items, list):
@@ -390,7 +510,13 @@ async def _openclaw_connect(websocket: Any, *, token: str) -> None:
         raise KaosAIError(_openclaw_error_code(frame, "kaosai_gateway_connect_failed"))
 
 
-async def _openclaw_agent_request(websocket: Any, *, model: str, message: str) -> Mapping[str, Any]:
+async def _openclaw_agent_request(
+    websocket: Any,
+    *,
+    model: str,
+    message: str,
+    attachments: list[Mapping[str, str]] | None = None,
+) -> Mapping[str, Any]:
     request_id = str(uuid4())
     session_id = f"kaosbrain-plan-{uuid4()}"
     model_name = model.strip()
@@ -413,6 +539,8 @@ async def _openclaw_agent_request(websocket: Any, *, model: str, message: str) -
             params["model"] = selected_model
         else:
             params["model"] = model_name
+    if attachments:
+        params["attachments"] = [dict(item) for item in attachments]
     await websocket.send_json({"type": "req", "id": request_id, "method": "agent", "params": params})
     frame = await _receive_openclaw_response(websocket, request_id, expect_final=True)
     if not frame.get("ok"):

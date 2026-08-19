@@ -162,10 +162,17 @@ preflight() {
     validate_internal_http_url "KAOSBRAIN_GOVERNOR_HEALTH_URL" "${KAOSBRAIN_GOVERNOR_HEALTH_URL}" true
   fi
   if [[ "${KAOSBRAIN_IMAGING_ENABLED:-false}" == "true" ]]; then
+    case "${KAOSBRAIN_IMAGING_PROVIDER:-ollama}" in
+      ollama|kaosai) ;;
+      *) die "KAOSBRAIN_IMAGING_PROVIDER must be ollama or kaosai" ;;
+    esac
     if [[ -z "${KAOSBRAIN_IMAGING_API_TOKEN:-}" ]]; then
       local imaging_token_path
       imaging_token_path=$(host_secret_path "${KAOSBRAIN_IMAGING_API_TOKEN_FILE:-/run/secrets/governor_api_token}")
       [[ -s "${imaging_token_path}" ]] || die "missing or empty KaosBrain imaging token file: ${imaging_token_path}"
+    fi
+    if [[ "${KAOSBRAIN_IMAGING_PROVIDER:-ollama}" == "kaosai" && "${KAOSAI_ENABLED:-false}" != "true" ]]; then
+      die "KAOSAI_ENABLED=true is required when KAOSBRAIN_IMAGING_PROVIDER=kaosai"
     fi
   fi
   if [[ "${KAOSAI_ENABLED:-false}" == "true" ]]; then
@@ -290,7 +297,7 @@ doctor() {
   local ollama_tags
   if ollama_tags=$(curl --fail --silent --show-error "${OLLAMA_BASE_URL:-http://127.0.0.1:11434}/api/tags"); then
     check_line "Ollama" "ok" "${OLLAMA_BASE_URL:-http://127.0.0.1:11434}"
-    python3 - "$ollama_tags" "${KAOSBRAIN_CHAT_MODEL:-}" "${KAOSBRAIN_DEEP_MODEL:-}" "${KAOSBRAIN_IMAGING_MODEL:-}" "${KAOSBRAIN_IMAGING_ENABLED:-false}" <<'PY'
+    python3 - "$ollama_tags" "${KAOSBRAIN_CHAT_MODEL:-}" "${KAOSBRAIN_DEEP_MODEL:-}" "${KAOSBRAIN_IMAGING_MODEL:-}" "${KAOSBRAIN_IMAGING_ENABLED:-false}" "${KAOSBRAIN_IMAGING_PROVIDER:-ollama}" <<'PY'
 import json
 import sys
 
@@ -299,11 +306,12 @@ chat = sys.argv[2]
 deep = sys.argv[3]
 imaging = sys.argv[4]
 imaging_enabled = sys.argv[5].lower() in {"1", "true", "yes", "on"}
+imaging_provider = sys.argv[6].lower()
 names = {model.get("name", "") for model in payload.get("models", [])}
 for label, model in (("Chat model", chat), ("Deep model", deep)):
     state = "ok" if model and model in names else "missing"
     print(f"{label:<34} {state} ({model or 'unset'})")
-if imaging_enabled:
+if imaging_enabled and imaging_provider == "ollama":
     state = "ok" if imaging and imaging in names else "missing"
     print(f"{'Imaging model':<34} {state} ({imaging or 'unset'})")
 PY
@@ -331,7 +339,11 @@ PY
   fi
 
   if [[ "${KAOSBRAIN_IMAGING_ENABLED:-false}" == "true" ]]; then
-    check_line "KaosBrain imaging" "ok" "enabled, model=${KAOSBRAIN_IMAGING_MODEL:-unset}"
+    if [[ "${KAOSBRAIN_IMAGING_PROVIDER:-ollama}" == "kaosai" ]]; then
+      check_line "KaosBrain imaging" "ok" "enabled, provider=kaosai, model=${KAOSAI_MODEL:-default}"
+    else
+      check_line "KaosBrain imaging" "ok" "enabled, provider=ollama, model=${KAOSBRAIN_IMAGING_MODEL:-unset}"
+    fi
   else
     check_line "KaosBrain imaging" "disabled"
   fi

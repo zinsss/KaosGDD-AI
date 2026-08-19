@@ -8,6 +8,7 @@ from typing import Any, Mapping
 from aiohttp import web
 
 from .config import Settings
+from .kaos_ai import KaosAIConfig, KaosAIError, OpenClawKaosAIPlanner
 from .ollama import OllamaClient, OllamaConfig, OllamaError
 
 
@@ -66,6 +67,20 @@ class BrainImagingServer:
                 timeout_seconds=settings.request_timeout_seconds,
             )
         )
+        self.kaosai = (
+            OpenClawKaosAIPlanner(
+                KaosAIConfig(
+                    enabled=settings.kaosai_enabled,
+                    provider=settings.kaosai_provider,
+                    base_url=settings.kaosai_base_url,
+                    model=settings.kaosai_model,
+                    api_token=settings.kaosai_api_token,
+                    timeout_seconds=settings.kaosai_timeout_seconds,
+                )
+            )
+            if settings.imaging_provider == "kaosai"
+            else None
+        )
 
     async def second_look(self, request: web.Request) -> web.Response:
         if not self.settings.imaging_enabled:
@@ -82,8 +97,11 @@ class BrainImagingServer:
         if error:
             return web.json_response({"error": error}, status=400)
         try:
-            result = await self.ollama.second_look(dict(body))
-        except OllamaError as exc:
+            if self.kaosai is not None:
+                result = await self.kaosai.second_look(body)
+            else:
+                result = await self.ollama.second_look(dict(body))
+        except (KaosAIError, OllamaError) as exc:
             return web.json_response({"error": str(exc)}, status=502)
         return web.json_response(
             {

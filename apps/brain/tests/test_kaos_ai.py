@@ -14,6 +14,7 @@ from kaos_brain.kaos_ai import (
     normalize_kaosai_plan_scope,
     parse_document_tag_response,
     parse_kaosai_plan_response,
+    parse_second_look_response,
 )
 
 AIOHTTP_AVAILABLE = find_spec("aiohttp") is not None
@@ -27,6 +28,9 @@ class KaosAITests(unittest.IsolatedAsyncioTestCase):
         planner = DisabledKaosAIPlanner()
 
         self.assertIsNone(await planner.plan("hello", context={}))
+        self.assertEqual(await planner.suggest_document_tags({}), ())
+        with self.assertRaisesRegex(KaosAIError, "kaosai_disabled"):
+            await planner.second_look({})
 
     def test_plan_prompt_forbids_direct_tool_access(self) -> None:
         self.assertIn("cannot call tools", KAOSAI_PLAN_SYSTEM_PROMPT)
@@ -44,6 +48,18 @@ class KaosAITests(unittest.IsolatedAsyncioTestCase):
     def test_document_tag_prompt_limits_ai_to_existing_tags(self) -> None:
         self.assertIn("Prefer tag names from availableTags", KAOSAI_DOCUMENT_TAG_SYSTEM_PROMPT)
         self.assertIn("user to confirm before creating", KAOSAI_DOCUMENT_TAG_SYSTEM_PROMPT)
+
+    def test_parse_second_look_response_normalizes_json(self) -> None:
+        result = parse_second_look_response(
+            '{"summary":"확인","checklist":["폐야"],"cautions":[],"recommendation":"대조"}',
+            model="openai/gpt-5",
+        )
+
+        self.assertEqual(result["summary"], "확인")
+        self.assertEqual(result["checklist"], ["폐야"])
+        self.assertEqual(result["recommendation"], "대조")
+        self.assertEqual(result["model"], "openai/gpt-5")
+        self.assertIn("최종 판단", result["cautions"][0])
 
     def test_parse_document_tag_response_keeps_existing_tags_only(self) -> None:
         tags = parse_document_tag_response(
@@ -206,6 +222,79 @@ class KaosAITests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(requests[1]["params"]["promptMode"], "none")
             self.assertIn("cannot call tools", requests[1]["params"]["message"])
             self.assertIn("rustdesk 메모 찾아줘", requests[1]["params"]["message"])
+        finally:
+            await runner.cleanup()
+
+    @unittest.skipUnless(AIOHTTP_AVAILABLE, "aiohttp is required for OpenClawKaosAIPlanner tests")
+    async def test_openclaw_second_look_sends_image_attachment(self) -> None:
+        requests: list[dict[str, Any]] = []
+
+        async def handler(request):
+            websocket = web.WebSocketResponse()
+            await websocket.prepare(request)
+            await websocket.send_json({"type": "event", "event": "connect.challenge", "payload": {"nonce": "nonce"}})
+            async for message in websocket:
+                frame = message.json()
+                requests.append(frame)
+                if frame["method"] == "connect":
+                    await websocket.send_json({"type": "res", "id": frame["id"], "ok": True, "payload": {}})
+                elif frame["method"] == "agent":
+                    await websocket.send_json({"type": "res", "id": frame["id"], "ok": True, "payload": {"status": "accepted"}})
+                    await websocket.send_json(
+                        {
+                            "type": "res",
+                            "id": frame["id"],
+                            "ok": True,
+                            "payload": {
+                                "status": "ok",
+                                "result": {
+                                    "payloads": [
+                                        {
+                                            "text": (
+                                                '{"summary":"확인","checklist":["품질"],'
+                                                '"cautions":["최종 판단은 진료자가 합니다."],"recommendation":"대조"}'
+                                            )
+                                        }
+                                    ]
+                                },
+                            },
+                        }
+                    )
+            return websocket
+
+        runner, base_url = await self._start_server(handler)
+        try:
+            planner = OpenClawKaosAIPlanner(
+                KaosAIConfig(
+                    enabled=True,
+                    provider="openclaw",
+                    base_url=base_url,
+                    model="openai/gpt-5",
+                    api_token="gateway-token",
+                    timeout_seconds=1,
+                )
+            )
+
+            result = await planner.second_look(
+                {
+                    "source": "kaosaio",
+                    "requestId": "request-1",
+                    "modality": "DX",
+                    "bodyPart": "CHEST",
+                    "viewPosition": "PA",
+                    "aiDomain": "cxr",
+                    "images": [{"format": "png", "contentBase64": "cG5n"}],
+                    "question": "확인해주세요",
+                    "safety": {"temporary": True},
+                }
+            )
+
+            self.assertEqual(result["summary"], "확인")
+            self.assertEqual(result["model"], "openai/gpt-5")
+            self.assertEqual(requests[1]["params"]["provider"], "openai")
+            self.assertEqual(requests[1]["params"]["model"], "gpt-5")
+            self.assertEqual(requests[1]["params"]["attachments"], [{"mimeType": "image/png", "content": "cG5n", "name": "kaosaio-second-look-1.png"}])
+            self.assertIn("temporary", requests[1]["params"]["message"])
         finally:
             await runner.cleanup()
 

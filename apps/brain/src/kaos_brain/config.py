@@ -84,6 +84,7 @@ class Settings:
     ollama_base_url: str
     chat_model: str
     deep_model: str
+    imaging_provider: str
     imaging_model: str
     request_timeout_seconds: int
     max_reply_chars: int
@@ -137,6 +138,9 @@ class Settings:
                 "KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL",
             )
         imaging_enabled = _boolean(source, "KAOSBRAIN_IMAGING_ENABLED")
+        imaging_provider = source.get("KAOSBRAIN_IMAGING_PROVIDER", "ollama").strip().lower() or "ollama"
+        if imaging_provider not in {"ollama", "kaosai"}:
+            raise ConfigurationError("KAOSBRAIN_IMAGING_PROVIDER must be ollama or kaosai")
         imaging_api_token = _secret(source, "KAOSBRAIN_IMAGING_API_TOKEN") if imaging_enabled else ""
         if imaging_enabled and not imaging_api_token:
             raise ConfigurationError(
@@ -162,6 +166,8 @@ class Settings:
             raise ConfigurationError("KAOSAI_ENABLED=true is required when KAOSAI_CHAT_ENABLED=true")
         if kaosai_chat_enabled and kaosai_dry_run_enabled:
             raise ConfigurationError("KAOSAI_CHAT_ENABLED and KAOSAI_DRY_RUN_ENABLED cannot both be true")
+        if imaging_enabled and imaging_provider == "kaosai" and not kaosai_enabled:
+            raise ConfigurationError("KAOSAI_ENABLED=true is required when KAOSBRAIN_IMAGING_PROVIDER=kaosai")
         max_reply_chars = _positive_int(source.get("KAOSBRAIN_MAX_REPLY_CHARS", "1800"), "KAOSBRAIN_MAX_REPLY_CHARS")
         if max_reply_chars > 1900:
             raise ConfigurationError("KAOSBRAIN_MAX_REPLY_CHARS must be at most 1900")
@@ -174,6 +180,7 @@ class Settings:
             or "http://127.0.0.1:11434",
             chat_model=source.get("KAOSBRAIN_CHAT_MODEL", "gemma3:4b").strip() or "gemma3:4b",
             deep_model=source.get("KAOSBRAIN_DEEP_MODEL", "qwen3:8b").strip() or "qwen3:8b",
+            imaging_provider=imaging_provider,
             imaging_model=source.get("KAOSBRAIN_IMAGING_MODEL", "gemma3:4b").strip() or "gemma3:4b",
             request_timeout_seconds=timeout,
             max_reply_chars=max_reply_chars,

@@ -21,6 +21,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.brain_channel_id, 300)
         self.assertEqual(settings.chat_model, "gemma3:4b")
         self.assertEqual(settings.deep_model, "qwen3:8b")
+        self.assertEqual(settings.imaging_provider, "ollama")
         self.assertEqual(settings.imaging_model, "gemma3:4b")
         self.assertTrue(settings.respond_without_mention)
         self.assertTrue(settings.auto_route_enabled)
@@ -180,6 +181,17 @@ class SettingsTests(unittest.TestCase):
     def test_imaging_endpoint_requires_token_when_enabled(self) -> None:
         with self.assertRaisesRegex(ConfigurationError, "KAOSBRAIN_IMAGING_API_TOKEN"):
             Settings.from_env({**BASE_ENV, "KAOSBRAIN_IMAGING_ENABLED": "true"})
+        with self.assertRaisesRegex(ConfigurationError, "KAOSBRAIN_IMAGING_PROVIDER"):
+            Settings.from_env({**BASE_ENV, "KAOSBRAIN_IMAGING_PROVIDER": "chatgpt"})
+        with self.assertRaisesRegex(ConfigurationError, "KAOSAI_ENABLED"):
+            Settings.from_env(
+                {
+                    **BASE_ENV,
+                    "KAOSBRAIN_IMAGING_ENABLED": "true",
+                    "KAOSBRAIN_IMAGING_PROVIDER": "kaosai",
+                    "KAOSBRAIN_IMAGING_API_TOKEN": "not-a-real-secret",
+                }
+            )
 
         settings = Settings.from_env(
             {
@@ -191,7 +203,22 @@ class SettingsTests(unittest.TestCase):
 
         self.assertTrue(settings.imaging_enabled)
         self.assertEqual(settings.imaging_api_token, "not-a-real-secret")
+        self.assertEqual(settings.imaging_provider, "ollama")
         self.assertEqual(settings.imaging_model, "gemma3:4b")
+
+        kaosai = Settings.from_env(
+            {
+                **BASE_ENV,
+                "KAOSBRAIN_IMAGING_ENABLED": "true",
+                "KAOSBRAIN_IMAGING_PROVIDER": "kaosai",
+                "KAOSBRAIN_IMAGING_API_TOKEN": "not-a-real-secret",
+                "KAOSAI_ENABLED": "true",
+                "KAOSAI_PROVIDER": "openclaw",
+                "KAOSAI_BASE_URL": "http://127.0.0.1:18789",
+                "KAOSAI_API_TOKEN": "gateway-token",
+            }
+        )
+        self.assertEqual(kaosai.imaging_provider, "kaosai")
 
     def test_imaging_model_can_be_configured_independently(self) -> None:
         settings = Settings.from_env({**BASE_ENV, "KAOSBRAIN_IMAGING_MODEL": "llava:7b"})
