@@ -21,8 +21,10 @@ from kaos_governor_discord.access import AccessPolicy
 from kaos_governor_discord.inbox import (
     DiscordDocumentInbox,
     InboxRecord,
+    InboxMenuView,
     OcrReadyView,
     PaperlessSearchView,
+    PendingDocumentMetadataModal,
     attachment_display_filename,
     generated_discord_filename,
     infer_pdf_title,
@@ -284,6 +286,50 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(paperless.submitted[0][0], "처방전 대리수령 신청서.pdf")
             self.assertEqual(paperless.submitted[0][2], "처방전 대리수령 신청서")
+
+    async def test_manual_metadata_button_opens_modal(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            paperless = FakePaperless()
+            inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
+            message = self.make_message([FakeAttachment(filename="40eeb76102ae4b88.pdf")])
+            await inbox.handle_message(message)  # type: ignore[arg-type]
+            source_id = next(iter(inbox.state.pending))
+            view = InboxMenuView(inbox, source_id)
+            interaction = SimpleNamespace(
+                response=SimpleNamespace(send_modal=AsyncMock(), edit_message=AsyncMock())
+            )
+
+            self.assertEqual([item.label for item in view.children], ["Manual", "Process as is", "Close"])
+            await view.children[0].callback(interaction)  # type: ignore[misc]
+
+            interaction.response.send_modal.assert_awaited_once()
+            self.assertIsInstance(interaction.response.send_modal.await_args.args[0], PendingDocumentMetadataModal)
+
+    async def test_manual_metadata_modal_submits_document_with_title_and_tags(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            paperless = FakePaperless()
+            inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
+            message = self.make_message([FakeAttachment(filename="40eeb76102ae4b88.pdf")])
+            await inbox.handle_message(message)  # type: ignore[arg-type]
+            source_id = next(iter(inbox.state.pending))
+            pending = inbox.state.pending[source_id]
+            modal = PendingDocumentMetadataModal(inbox, source_id, pending)
+            modal.title_input._value = "처방전 대리수령 신청서"
+            modal.tags_input._value = "#처방전 #프린트"
+            prompt_message = SimpleNamespace(id=pending.prompt_message_id, edit=AsyncMock())
+            self.channel.fetch_message = AsyncMock(side_effect=[prompt_message, message, prompt_message])
+            interaction = SimpleNamespace(
+                response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+                followup=SimpleNamespace(send=AsyncMock()),
+            )
+
+            await modal.on_submit(interaction)  # type: ignore[arg-type]
+
+            self.assertEqual(paperless.submitted[0][0], "처방전 대리수령 신청서.pdf")
+            self.assertEqual(paperless.submitted[0][2], "처방전 대리수령 신청서")
+            self.assertEqual(paperless.submitted[0][3], ("처방전", "프린트"))
+            self.assertEqual(inbox.status()["pendingCount"], 0)
+            self.assertEqual(prompt_message.edit.await_count, 2)
 
     async def test_process_pending_infers_pdf_title_when_discord_filename_is_generated(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

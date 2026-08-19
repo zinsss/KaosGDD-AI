@@ -680,9 +680,9 @@ class InboxMenuView(discord.ui.View):
         self.inbox = inbox
         self.source_id = source_id
         add_metadata = discord.ui.Button(
-            label="Add Metadata",
+            label="Manual",
             style=discord.ButtonStyle.primary,
-            custom_id="paperless-inbox:add-metadata",
+            custom_id="paperless-inbox:manual",
         )
         process = discord.ui.Button(
             label="Process as is",
@@ -716,11 +716,7 @@ class InboxMenuView(discord.ui.View):
                 allowed_mentions=NO_MENTIONS,
             )
             return
-        await interaction.response.edit_message(
-            content=render_metadata_message(pending.filename),
-            view=self,
-            allowed_mentions=NO_MENTIONS,
-        )
+        await interaction.response.send_modal(PendingDocumentMetadataModal(self.inbox, self.source_id, pending))
 
     async def _process_as_is(self, interaction: discord.Interaction) -> None:
         pending = self.inbox.state.pending.get(self.source_id)
@@ -800,6 +796,67 @@ class OcrReadyView(discord.ui.View):
             view=None,
             allowed_mentions=NO_MENTIONS,
         )
+
+
+class PendingDocumentMetadataModal(discord.ui.Modal):
+    def __init__(self, inbox: DiscordDocumentInbox, source_id: str, pending: PendingDocument) -> None:
+        super().__init__(title="Document metadata")
+        self.inbox = inbox
+        self.source_id = source_id
+        inferred_title = Path(pending.filename).stem
+        self.title_input = discord.ui.TextInput(
+            label="Title",
+            default="" if generated_discord_filename(pending.filename) else inferred_title,
+            placeholder="문서 제목",
+            max_length=128,
+            required=True,
+        )
+        self.tags_input = discord.ui.TextInput(
+            label="Tags",
+            placeholder="#tag1 #tag2 #tag3",
+            style=discord.TextStyle.paragraph,
+            max_length=500,
+            required=False,
+        )
+        self.add_item(self.title_input)
+        self.add_item(self.tags_input)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        pending = self.inbox.state.pending.get(self.source_id)
+        if pending is None:
+            await interaction.response.send_message(
+                "This item is no longer pending.",
+                ephemeral=True,
+                allowed_mentions=NO_MENTIONS,
+            )
+            return
+        title = " ".join(str(self.title_input.value or "").split())
+        tags = parse_tag_text(str(self.tags_input.value or ""))
+        if not title:
+            await interaction.response.send_message("Title is required.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.response.defer()
+        try:
+            await self.inbox._edit_prompt(
+                pending,
+                render_processing_message(pending.filename),
+                view=None,
+            )
+            record = await self.inbox.process_pending(self.source_id, title=title, tags=tags)
+            await self.inbox._edit_prompt(
+                pending,
+                render_submitted_message(record),
+                view=InboxClosedView(),
+            )
+            self.inbox.track_ocr(record)
+        except (DocumentIntakeError, discord.HTTPException) as exc:
+            self.inbox.rejected_count += 1
+            self.inbox.last_error = str(exc)
+            await interaction.followup.send(
+                f"Documents import failed: {escape_text(rejection_message(exc))}",
+                ephemeral=True,
+                allowed_mentions=NO_MENTIONS,
+            )
 
 
 class DocumentMetadataModal(discord.ui.Modal):
