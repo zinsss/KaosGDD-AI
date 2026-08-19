@@ -802,18 +802,15 @@ class RecentSuppliesView(discord.ui.View):
         super().__init__(timeout=None)
         self.surface = surface
         self.items = items[:MAX_RECENT_SUPPLIES]
-        select = discord.ui.Select(
-            placeholder="다시 추가할 비품 선택",
-            min_values=1,
-            max_values=1,
-            custom_id=f"{surface.button_prefix}:recent:add",
-            options=[
-                discord.SelectOption(label=_select_option_label(item), value=str(index))
-                for index, item in enumerate(self.items)
-            ],
-        )
-        select.callback = self._select_callback(select)
-        self.add_item(select)
+        for index, item in enumerate(self.items):
+            button = discord.ui.Button(
+                label=_button_label(item),
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"{surface.button_prefix}:recent:add:{index}",
+                row=index // 5,
+            )
+            button.callback = self._button_callback(index)
+            self.add_item(button)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if self.surface.policy.allows(interaction.guild_id, interaction.channel_id, interaction.user.id):
@@ -824,13 +821,12 @@ class RecentSuppliesView(discord.ui.View):
             await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
         return False
 
-    def _select_callback(self, select: discord.ui.Select):
+    def _button_callback(self, index: int):
         async def callback(interaction: discord.Interaction) -> None:
             await interaction.response.defer(ephemeral=True)
-            raw_value = select.values[0] if select.values else ""
             try:
-                title = self.items[int(raw_value)]
-            except (IndexError, ValueError):
+                title = self.items[index]
+            except IndexError:
                 return
             await self.surface.create_task(title)
 
@@ -1023,8 +1019,6 @@ def render_recent_supplies_message(items: list[str]) -> str:
     lines = ["## 최근 비품"]
     if not items:
         lines.append("- none")
-    else:
-        lines.extend(f"- + {escape_text(item)}" for item in items[:MAX_RECENT_SUPPLIES])
     return "\n".join(lines)[:1990]
 
 
@@ -1227,3 +1221,8 @@ def _task_month_date(task: Mapping[str, Any]) -> date | None:
 def _select_option_label(value: str) -> str:
     label = value.strip() or "Untitled"
     return label[:100]
+
+
+def _button_label(value: str) -> str:
+    label = value.strip() or "Untitled"
+    return label[:80]

@@ -464,11 +464,11 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(adapter.created[0][1]["dueDate"], "")
             self.assertEqual(adapter.created[0][1]["dueTime"], "")
             self.assertEqual(channel.sent[1]["content"], "## Paper towels")
-            self.assertEqual(channel.sent[2]["content"], "## 최근 비품\n- + Paper towels")
+            self.assertEqual(channel.sent[2]["content"], "## 최근 비품")
             self.assertIsInstance(channel.sent[2]["view"], RecentSuppliesView)
-            select = channel.sent[2]["view"].children[0]
-            self.assertEqual(select.custom_id, "supplies:recent:add")
-            self.assertEqual([option.label for option in select.options], ["Paper towels"])
+            button = channel.sent[2]["view"].children[0]
+            self.assertEqual(button.custom_id, "supplies:recent:add:0")
+            self.assertEqual(button.label, "Paper towels")
 
     async def test_supplies_surface_learns_recent_item_from_external_create(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -504,10 +504,10 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             await surface.ensure_message()
 
             self.assertEqual(surface.state.recent_supplies, ["토프라민"])
-            self.assertEqual(channel.sent[-1]["content"], "## 최근 비품\n- + 토프라민")
+            self.assertEqual(channel.sent[-1]["content"], "## 최근 비품")
             self.assertIsInstance(channel.sent[-1]["view"], RecentSuppliesView)
-            select = channel.sent[-1]["view"].children[0]
-            self.assertEqual([option.label for option in select.options], ["토프라민"])
+            button = channel.sent[-1]["view"].children[0]
+            self.assertEqual(button.label, "토프라민")
 
     async def test_supplies_surface_backfills_empty_recent_list_from_active_messages(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -542,7 +542,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             await surface.ensure_message()
 
             self.assertEqual(surface.state.recent_supplies, ["토프라민"])
-            self.assertEqual(channel.sent[-1]["content"], "## 최근 비품\n- + 토프라민")
+            self.assertEqual(channel.sent[-1]["content"], "## 최근 비품")
 
     async def test_supplies_recent_message_keeps_latest_25_inputs_at_bottom(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -570,13 +570,43 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(surface.state.recent_supplies), 25)
             self.assertNotIn("Item 00", surface.state.recent_supplies)
             latest_content = channel.sent[-1]["content"]
-            self.assertIn("## 최근 비품", latest_content)
-            self.assertIn("- + Item 05", latest_content.splitlines()[1])
+            self.assertEqual("## 최근 비품", latest_content)
             self.assertIsInstance(channel.sent[-1]["view"], RecentSuppliesView)
-            select = channel.sent[-1]["view"].children[0]
-            self.assertEqual(len(select.options), 25)
-            self.assertEqual(select.options[0].label, "Item 05")
+            buttons = channel.sent[-1]["view"].children
+            self.assertEqual(len(buttons), 25)
+            self.assertEqual(buttons[0].label, "Item 05")
+            self.assertEqual(buttons[0].custom_id, "supplies:recent:add:0")
             self.assertEqual(surface.status()["recentSuppliesCount"], 25)
+
+    async def test_supplies_recent_button_creates_supply(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            adapter = FakeAdapter(tasks=[])
+            surface = DiscordTasksSurface(
+                FakeBot(channel),  # type: ignore[arg-type]
+                AccessPolicy(100, frozenset({200}), frozenset({300})),
+                channel_id=300,
+                profile="main",
+                state_path=Path(temporary) / "supplies.json",
+                adapter=adapter,  # type: ignore[arg-type]
+                surface_name="supplies",
+                button_prefix="supplies",
+                collection_id="zin:supplies",
+                show_due=False,
+            )
+            view = RecentSuppliesView(surface, ["토프라민"])
+            interaction = SimpleNamespace(
+                guild_id=100,
+                channel_id=300,
+                user=SimpleNamespace(id=200),
+                response=SimpleNamespace(defer=AsyncMock(), is_done=lambda: True),
+                followup=SimpleNamespace(send=AsyncMock()),
+            )
+
+            await view.children[0].callback(interaction)  # type: ignore[misc]
+
+            self.assertEqual(adapter.created[-1][1]["title"], "토프라민")
+            self.assertEqual(adapter.created[-1][1]["collectionId"], "zin:supplies")
 
     async def test_supplies_surface_strips_due_dates_as_rule(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -609,12 +639,11 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(adapter.created[0][1]["dueDate"], "")
             self.assertEqual(adapter.created[0][1]["dueTime"], "")
 
-    def test_render_recent_supplies_message_escapes_and_limits_items(self) -> None:
+    def test_render_recent_supplies_message_uses_buttons_for_items(self) -> None:
         content = render_recent_supplies_message(["@everyone", *[f"Item {index}" for index in range(30)]])
 
-        self.assertIn("- + @\u200beveryone", content)
-        self.assertIn("- + Item 23", content)
-        self.assertNotIn("- + Item 24", content)
+        self.assertEqual(content, "## 최근 비품")
+        self.assertEqual(render_recent_supplies_message([]), "## 최근 비품\n- none")
 
     def test_render_remembered_supply_confirmation(self) -> None:
         self.assertEqual(render_remembered_supply_confirmation("@everyone"), "## 비품 다시 추가\n- @\u200beveryone")
