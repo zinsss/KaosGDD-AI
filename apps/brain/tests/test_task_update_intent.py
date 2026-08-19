@@ -86,6 +86,34 @@ class TaskUpdateIntentTests(unittest.TestCase):
         self.assertEqual(request.due_date, "")
         self.assertEqual(request.due_time, "")
 
+    def test_comma_task_create_without_due(self) -> None:
+        request = parse_task_create("할일, 엄마 전화", today=date(2026, 8, 14))
+        assert request is not None
+        self.assertEqual(request.title, "엄마 전화")
+        self.assertEqual(request.due_date, "")
+        self.assertEqual(request.due_time, "")
+
+    def test_comma_task_create_accepts_natural_due_date(self) -> None:
+        request = parse_task_create("할일, 내일까지 엄마한테 전화", today=date(2026, 8, 14))
+        assert request is not None
+        self.assertEqual(request.title, "엄마한테 전화")
+        self.assertEqual(request.due_date, "2026-08-15")
+        self.assertEqual(request.due_time, "10:00")
+
+    def test_comma_task_create_accepts_natural_due_date_and_time(self) -> None:
+        request = parse_task_create("할일, 8월 20일 오후 3시까지 보험 서류 준비", today=date(2026, 8, 14))
+        assert request is not None
+        self.assertEqual(request.title, "보험 서류 준비")
+        self.assertEqual(request.due_date, "2026-08-20")
+        self.assertEqual(request.due_time, "15:00")
+
+    def test_comma_family_task_create_sets_profile(self) -> None:
+        request = parse_task_create("할일, 가족 내일까지 엄마한테 전화", today=date(2026, 8, 14))
+        assert request is not None
+        self.assertEqual(request.title, "엄마한테 전화")
+        self.assertEqual(request.profile, "family")
+        self.assertEqual(request.due_date, "2026-08-15")
+
     def test_supplies_create_without_due_date(self) -> None:
         request = parse_task_create("비품 비누 추가해줘", today=date(2026, 8, 14))
         assert request is not None
@@ -97,6 +125,14 @@ class TaskUpdateIntentTests(unittest.TestCase):
     def test_old_supplies_word_still_maps_to_supplies(self) -> None:
         request = parse_task_create("준비물 비누 추가해줘", today=date(2026, 8, 14))
         assert request is not None
+        self.assertEqual(request.profile, "supplies")
+
+    def test_comma_supplies_create_without_due_date(self) -> None:
+        request = parse_task_create("비품, 토프라민", today=date(2026, 8, 14))
+        assert request is not None
+        self.assertEqual(request.title, "토프라민")
+        self.assertEqual(request.due_date, "")
+        self.assertEqual(request.due_time, "")
         self.assertEqual(request.profile, "supplies")
 
     def test_iso_date_create(self) -> None:

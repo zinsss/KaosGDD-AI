@@ -108,6 +108,9 @@ def parse_task_create(content: str, *, today: date) -> TaskCreateRequest | None:
         return None
     if not text or any(marker in text for marker in ("편집", "변경", "바꿔", "수정")):
         return None
+    prefixed_create = _parse_prefixed_create(text, today=today)
+    if prefixed_create is not None:
+        return prefixed_create
     supplies_request = _is_supplies(text)
     if supplies_request:
         supplies_create = _parse_supplies_create(text)
@@ -301,6 +304,37 @@ def _parse_supplies_create(text: str) -> TaskCreateRequest | None:
     if not title:
         return None
     return TaskCreateRequest(title=title, due_date="", due_time="", profile="supplies")
+
+
+def _parse_prefixed_create(text: str, *, today: date) -> TaskCreateRequest | None:
+    match = re.match(r"^(할\s*일|할일|task|태스크|비품|준비물|용품|supplies|supply)\s*[,，:：]\s*(.+)$", text, flags=re.IGNORECASE)
+    if match is None:
+        return None
+    prefix = match.group(1)
+    body = match.group(2).strip()
+    if not body:
+        return None
+    if _is_supplies(prefix):
+        title = _clean_action_title(_strip_scope_words(body))
+        if not title:
+            return None
+        return TaskCreateRequest(title=title, due_date="", due_time="", profile="supplies")
+    profile, collection_id = _scope(body)
+    parsed = _extract_due_date(body, today=today)
+    due_date = ""
+    due_time = ""
+    title = body
+    if parsed is not None:
+        phrase, due = parsed
+        due_date = due.isoformat()
+        due_time = _extract_due_time(body) or "10:00"
+        title = body.replace(phrase, " ", 1)
+        title = _remove_time_phrase(title)
+        title = re.sub(r"(까지로|까지는|까지)", " ", title, count=1)
+    title = _clean_create_title(_strip_scope_words(title))
+    if not title:
+        return None
+    return TaskCreateRequest(title=title, due_date=due_date, due_time=due_time, profile=profile, collection_id=collection_id)
 
 
 def _parse_explicit_task_create(text: str) -> TaskCreateRequest | None:
