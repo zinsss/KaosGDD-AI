@@ -102,6 +102,8 @@ class Settings:
     governor_tools_profile: str
     governor_tools_supplies_collection_id: str
     governor_tools_timeout_seconds: int
+    imaging_enabled: bool
+    imaging_api_token: str
     memos_public_url: str
     paperless_public_url: str
     health_enabled: bool
@@ -132,6 +134,12 @@ class Settings:
             governor_tools_base_url = _internal_http_base_url(
                 governor_tools_base_url,
                 "KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL",
+            )
+        imaging_enabled = _boolean(source, "KAOSBRAIN_IMAGING_ENABLED")
+        imaging_api_token = _secret(source, "KAOSBRAIN_IMAGING_API_TOKEN") if imaging_enabled else ""
+        if imaging_enabled and not imaging_api_token:
+            raise ConfigurationError(
+                "KAOSBRAIN_IMAGING_API_TOKEN or KAOSBRAIN_IMAGING_API_TOKEN_FILE is required when KAOSBRAIN_IMAGING_ENABLED=true"
             )
         kaosai_enabled = _boolean(source, "KAOSAI_ENABLED")
         kaosai_provider = source.get("KAOSAI_PROVIDER", "disabled").strip().lower() or "disabled"
@@ -186,6 +194,8 @@ class Settings:
                 source.get("KAOSBRAIN_GOVERNOR_TOOLS_TIMEOUT_SECONDS", "10"),
                 "KAOSBRAIN_GOVERNOR_TOOLS_TIMEOUT_SECONDS",
             ),
+            imaging_enabled=imaging_enabled,
+            imaging_api_token=imaging_api_token,
             memos_public_url=source.get("KAOSBRAIN_MEMOS_PUBLIC_URL", "").strip().rstrip("/"),
             paperless_public_url=source.get("KAOSBRAIN_PAPERLESS_PUBLIC_URL", "").strip().rstrip("/"),
             health_enabled=_boolean(source, "KAOSBRAIN_HEALTH_ENABLED"),

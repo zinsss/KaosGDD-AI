@@ -5,10 +5,11 @@ from datetime import date
 from types import SimpleNamespace
 import unittest
 
+from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 from kaos_governor.documents import PaperlessDocument, PaperlessSearchPage, PaperlessSearchResult, PaperlessTag
 from kaos_governor.memos import Memo, MemoSearchPage, MemoSearchResult
-from kaos_governor_discord.tools import BrainToolServer
+from kaos_governor_discord.tools import BrainToolServer, ImagingSecondLookClient, ImagingSecondLookConfig
 
 
 class FakeCalendarAdapter:
@@ -217,6 +218,33 @@ class FakePaperless:
         )
 
 
+def _second_look_payload(request_id: str) -> dict:
+    return {
+        "source": "kaosaio",
+        "requestId": request_id,
+        "studyInstanceUid": "1.2.3",
+        "seriesInstanceUid": "1.2.3.4",
+        "sopInstanceUid": "1.2.3.4.5",
+        "modality": "DX",
+        "bodyPart": "CHEST",
+        "viewPosition": "PA",
+        "aiDomain": "cxr",
+        "images": [{"format": "png", "contentBase64": base64.b64encode(b"png").decode("ascii")}],
+        "question": "눈에 띄는 이상 소견이나 놓치기 쉬운 포인트를 체크해주세요.",
+        "safety": {
+            "temporary": True,
+            "storedInAioReports": False,
+            "dicomMetadataSent": False,
+            "orthancReadOnly": True,
+            "dicomModified": False,
+            "pacsFinalReport": False,
+            "renderedPreview": True,
+            "burnedInAnnotationsPossible": True,
+            "disclaimer": "KaosAIO Opinion...",
+        },
+    }
+
+
 class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         self.calendar = FakeCalendarAdapter()
@@ -314,6 +342,66 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response.status, 400)
         self.assertEqual((await response.json())["error"], "imaging_second_look_safety_rejected")
+
+    async def test_imaging_second_look_forwards_to_configured_provider(self) -> None:
+        provider_requests = []
+
+        async def provider(request):
+            provider_requests.append(await request.json())
+            self.assertEqual(request.headers.get("Authorization"), "Bearer imaging-token")
+            return web.json_response(
+                {
+                    "status": "completed",
+                    "result": {
+                        "summary": "검토 완료",
+                        "checklist": ["폐야 확인"],
+                        "cautions": ["최종 판단은 진료자가 합니다."],
+                        "recommendation": "임상 소견과 대조",
+                        "model": "qwen2.5vl",
+                    },
+                }
+            )
+
+        app = web.Application()
+        app.router.add_post("/imaging/second-look", provider)
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, "127.0.0.1", 0)
+        await site.start()
+        port = site._server.sockets[0].getsockname()[1]
+        try:
+            server = BrainToolServer(
+                "127.0.0.1",
+                8098,
+                governor_api_token="governor-secret",
+                calendar_adapter=self.calendar,  # type: ignore[arg-type]
+                memos=self.memos,  # type: ignore[arg-type]
+                paperless=self.paperless,  # type: ignore[arg-type]
+                imaging_second_look=ImagingSecondLookClient(
+                    ImagingSecondLookConfig(
+                        url=f"http://127.0.0.1:{port}/imaging/second-look",
+                        token="imaging-token",
+                    )
+                ),
+            )
+            client = TestClient(TestServer(server.application()))
+            await client.start_server()
+            try:
+                response = await client.post(
+                    "/tools/imaging/second-look",
+                    headers=self.headers(),
+                    json=_second_look_payload("kaosaio-second-look-forwarded"),
+                )
+                self.assertEqual(response.status, 200)
+                payload = await response.json()
+                self.assertEqual(payload["status"], "completed")
+                self.assertEqual(payload["result"]["summary"], "검토 완료")
+                self.assertEqual(payload["result"]["model"], "qwen2.5vl")
+                self.assertEqual(len(provider_requests), 1)
+            finally:
+                await client.close()
+        finally:
+            await runner.cleanup()
 
     async def test_today_returns_events_due_tasks_and_weather(self) -> None:
         response = await self.client.get("/tools/today?profile=main", headers=self.headers())

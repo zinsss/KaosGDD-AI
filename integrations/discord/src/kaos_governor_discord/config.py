@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import os
 from pathlib import Path
 from typing import Literal, Mapping
+from urllib.parse import urlsplit
 
 
 class ConfigurationError(ValueError):
@@ -66,6 +67,20 @@ def _secret(env: Mapping[str, str], name: str) -> str:
         raise ConfigurationError(f"unable to read {name}_FILE") from exc
 
 
+def _internal_http_url(value: str, name: str) -> str:
+    parsed = urlsplit(value)
+    if parsed.scheme != "http" or not parsed.hostname:
+        raise ConfigurationError(f"{name} must be an internal http URL")
+    if parsed.username or parsed.password:
+        raise ConfigurationError(f"{name} must not include credentials")
+    if parsed.query or parsed.fragment:
+        raise ConfigurationError(f"{name} must not include query or fragment")
+    hostname = parsed.hostname.lower().rstrip(".")
+    if hostname == "kaosgdd.net" or hostname.endswith(".kaosgdd.net"):
+        raise ConfigurationError(f"{name} must not point at a public KaosGDD route")
+    return value.rstrip("/")
+
+
 @dataclass(frozen=True)
 class Settings:
     token: str
@@ -115,6 +130,9 @@ class Settings:
     paperless_public_url: str
     paperless_default_owner_id: int
     paperless_max_attachment_mb: int
+    imaging_second_look_url: str
+    imaging_second_look_token: str
+    imaging_second_look_timeout_seconds: int
     log_level: str
 
     @classmethod
@@ -301,6 +319,14 @@ class Settings:
             source.get("PAPERLESS_INBOX_MAX_ATTACHMENT_MB", "20"),
             "PAPERLESS_INBOX_MAX_ATTACHMENT_MB",
         )
+        imaging_second_look_url = source.get("IMAGING_SECOND_LOOK_URL", "").strip()
+        imaging_second_look_token = _secret(source, "IMAGING_SECOND_LOOK_TOKEN") if imaging_second_look_url else ""
+        if imaging_second_look_url:
+            imaging_second_look_url = _internal_http_url(imaging_second_look_url, "IMAGING_SECOND_LOOK_URL")
+            if not imaging_second_look_token:
+                raise ConfigurationError(
+                    "IMAGING_SECOND_LOOK_TOKEN or IMAGING_SECOND_LOOK_TOKEN_FILE is required when IMAGING_SECOND_LOOK_URL is set"
+                )
         return cls(
             token=_secret(source, "DISCORD_BOT_TOKEN") or _required(source, "DISCORD_BOT_TOKEN"),
             guild_id=_positive_int(_required(source, "DISCORD_GUILD_ID"), "DISCORD_GUILD_ID"),
@@ -352,5 +378,11 @@ class Settings:
                 "PAPERLESS_DEFAULT_OWNER_ID",
             ),
             paperless_max_attachment_mb=paperless_max_attachment_mb,
+            imaging_second_look_url=imaging_second_look_url,
+            imaging_second_look_token=imaging_second_look_token,
+            imaging_second_look_timeout_seconds=_positive_int(
+                source.get("IMAGING_SECOND_LOOK_TIMEOUT_SECONDS", "180"),
+                "IMAGING_SECOND_LOOK_TIMEOUT_SECONDS",
+            ),
             log_level=source.get("LOG_LEVEL", "INFO").strip().upper() or "INFO",
         )

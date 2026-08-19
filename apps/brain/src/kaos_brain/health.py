@@ -6,6 +6,7 @@ from typing import Any
 from aiohttp import web
 
 from .config import Settings
+from .imaging import BrainImagingServer
 
 
 @dataclass(frozen=True)
@@ -36,8 +37,9 @@ class BrainHealthServer:
         self._site: web.TCPSite | None = None
 
     async def start(self) -> None:
-        app = web.Application()
+        app = web.Application(client_max_size=32 * 1024 * 1024)
         app.router.add_get("/health", self.handle_health)
+        app.router.add_post("/imaging/second-look", BrainImagingServer(self.settings).second_look)
         runner = web.AppRunner(app)
         await runner.setup()
         self._runner = runner

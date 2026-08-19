@@ -371,6 +371,37 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.brain_tools_port, 8098)
         self.assertEqual(settings.governor_api_token, "not-a-real-secret")
 
+    def test_imaging_second_look_provider_requires_internal_url_and_token(self) -> None:
+        with self.assertRaisesRegex(ConfigurationError, "IMAGING_SECOND_LOOK_TOKEN"):
+            Settings.from_env({**BASE_ENV, "IMAGING_SECOND_LOOK_URL": "http://100.88.0.10:8099/imaging/second-look"})
+        for url in (
+            "https://100.88.0.10:8099/imaging/second-look",
+            "http://kaosgdd.net/imaging/second-look",
+            "http://user:pass@100.88.0.10:8099/imaging/second-look",
+            "http://100.88.0.10:8099/imaging/second-look?x=1",
+        ):
+            with self.assertRaises(ConfigurationError):
+                Settings.from_env(
+                    {
+                        **BASE_ENV,
+                        "IMAGING_SECOND_LOOK_URL": url,
+                        "IMAGING_SECOND_LOOK_TOKEN": "not-a-real-secret",
+                    }
+                )
+
+        settings = Settings.from_env(
+            {
+                **BASE_ENV,
+                "IMAGING_SECOND_LOOK_URL": "http://100.88.0.10:8099/imaging/second-look",
+                "IMAGING_SECOND_LOOK_TOKEN": "not-a-real-secret",
+                "IMAGING_SECOND_LOOK_TIMEOUT_SECONDS": "45",
+            }
+        )
+
+        self.assertEqual(settings.imaging_second_look_url, "http://100.88.0.10:8099/imaging/second-look")
+        self.assertEqual(settings.imaging_second_look_token, "not-a-real-secret")
+        self.assertEqual(settings.imaging_second_look_timeout_seconds, 45)
+
     def test_governor_api_token_can_be_loaded_from_a_secret_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             token_file = Path(temporary_directory) / "governor-api-token"

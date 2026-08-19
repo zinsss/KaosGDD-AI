@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from typing import Any
 
 import aiohttp
@@ -52,6 +53,35 @@ class OllamaClient:
             num_predict=512,
         )
 
+    async def second_look(self, request: dict[str, Any]) -> dict[str, Any]:
+        images = [
+            str(image.get("contentBase64") or "")
+            for image in request.get("images", [])
+            if isinstance(image, dict) and str(image.get("contentBase64") or "")
+        ]
+        if not images:
+            raise OllamaError("second-look request did not include images")
+        prompt = _second_look_prompt(request)
+        raw = await self._complete(
+            self.deep_model_for_imaging(),
+            [
+                {
+                    "role": "system",
+                    "content": SECOND_LOOK_SYSTEM_PROMPT,
+                },
+                {
+                    "role": "user",
+                    "content": prompt,
+                    "images": images[:4],
+                },
+            ],
+            num_predict=700,
+        )
+        return _parse_second_look_response(raw, model=self.deep_model_for_imaging())
+
+    def deep_model_for_imaging(self) -> str:
+        return self.config.deep_model
+
     async def route(self, user_text: str) -> RouteDecision:
         try:
             raw = await self._complete(
@@ -66,7 +96,7 @@ class OllamaClient:
             return RouteDecision.ANSWER
         return parse_route_decision(raw)
 
-    async def _complete(self, model: str, messages: list[dict[str, str]], *, num_predict: int) -> str:
+    async def _complete(self, model: str, messages: list[dict[str, Any]], *, num_predict: int) -> str:
         payload: dict[str, Any] = {
             "model": model,
             "stream": False,
@@ -95,3 +125,75 @@ class OllamaClient:
         if not isinstance(content, str) or not content.strip():
             raise OllamaError("Ollama response was empty")
         return content.strip()
+
+
+SECOND_LOOK_SYSTEM_PROMPT = """You are KaosAI providing a temporary medical image second-look checklist.
+Return exactly one JSON object and no markdown.
+Do not diagnose, do not claim certainty, and do not provide a final report.
+Use Korean unless the user question is clearly in another language.
+
+Allowed schema:
+{
+  "summary": "...",
+  "checklist": ["..."],
+  "cautions": ["..."],
+  "recommendation": "..."
+}
+
+Rules:
+- Focus on visible, general image-quality and review-checklist observations.
+- Mention that the final judgment belongs to the clinician.
+- Do not infer hidden DICOM metadata.
+- Do not suggest that PACS, Orthanc, or medical records were modified."""
+
+
+def _second_look_prompt(request: dict[str, Any]) -> str:
+    fields = {
+        "modality": request.get("modality", ""),
+        "bodyPart": request.get("bodyPart", ""),
+        "viewPosition": request.get("viewPosition", ""),
+        "aiDomain": request.get("aiDomain", ""),
+        "question": request.get("question", ""),
+    }
+    return "\n".join(f"{key}: {value}" for key, value in fields.items() if str(value or "").strip())
+
+
+def _parse_second_look_response(raw: str, *, model: str) -> dict[str, Any]:
+    text = raw.strip()
+    if text.startswith("```"):
+        text = text.strip("`")
+        if text.startswith("json"):
+            text = text[4:].strip()
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        payload = {"summary": raw, "checklist": [], "cautions": [], "recommendation": ""}
+    if not isinstance(payload, dict):
+        payload = {"summary": raw, "checklist": [], "cautions": [], "recommendation": ""}
+    summary = str(payload.get("summary") or "").strip() or raw.strip()[:1000]
+    checklist = _string_list(payload.get("checklist"), limit=8)
+    cautions = _string_list(payload.get("cautions"), limit=5)
+    recommendation = str(payload.get("recommendation") or "").strip()
+    if not cautions:
+        cautions = ["AI 보조 검토입니다. 최종 판단은 진료자가 합니다."]
+    return {
+        "summary": summary[:1400],
+        "checklist": checklist,
+        "cautions": cautions,
+        "recommendation": recommendation[:800],
+        "disclaimer": "AI 보조 검토입니다. 최종 판단은 진료자가 합니다.",
+        "model": model,
+    }
+
+
+def _string_list(value: Any, *, limit: int) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    items: list[str] = []
+    for item in value:
+        text = str(item or "").strip()
+        if text and text not in items:
+            items.append(text[:500])
+        if len(items) >= limit:
+            break
+    return items

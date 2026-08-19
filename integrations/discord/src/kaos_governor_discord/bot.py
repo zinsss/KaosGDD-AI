@@ -35,7 +35,7 @@ from .memos import DiscordMemosCapture
 from .organizer import DiscordMailOrganizer
 from .system_status import DiscordServiceStatusSurface
 from .tasks import DiscordTasksSurface
-from .tools import BrainToolServer
+from .tools import BrainToolServer, ImagingSecondLookClient, ImagingSecondLookConfig
 
 LOGGER = logging.getLogger(__name__)
 
@@ -277,6 +277,13 @@ class GovernorBot(discord.Client):
                 memos=self.memos,
                 paperless=self.paperless,
                 calendar_refresh_callback=self._refresh_calendar_surfaces,
+                imaging_second_look=ImagingSecondLookClient(
+                    ImagingSecondLookConfig(
+                        url=settings.imaging_second_look_url,
+                        token=settings.imaging_second_look_token,
+                        timeout_seconds=settings.imaging_second_look_timeout_seconds,
+                    )
+                ),
             )
             if settings.brain_tools_enabled
             else None

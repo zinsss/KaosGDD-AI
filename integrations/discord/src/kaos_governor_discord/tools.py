@@ -11,6 +11,7 @@ import hmac
 import logging
 from typing import Any
 
+import aiohttp
 from aiohttp import web
 from kaos_governor import Actor, DurableGovernorError, MemoryDurableGovernorStore, OperationRequest
 from kaos_governor.calendar import CalendarAdapterClient, CalendarAdapterError, profile_host
@@ -116,6 +117,44 @@ class PendingDocumentMetadata:
     payload: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class ImagingSecondLookConfig:
+    url: str = ""
+    token: str = ""
+    timeout_seconds: int = 180
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.url and self.token)
+
+
+class ImagingSecondLookClient:
+    def __init__(self, config: ImagingSecondLookConfig) -> None:
+        self.config = config
+
+    async def second_look(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        if not self.config.enabled:
+            raise RuntimeError("imaging_second_look_not_configured")
+        timeout = aiohttp.ClientTimeout(total=self.config.timeout_seconds)
+        headers = {"Authorization": f"Bearer {self.config.token}"}
+        async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+            try:
+                async with session.post(self.config.url, json=dict(payload)) as response:
+                    data = await response.json()
+                    if response.status >= 400:
+                        error = str(data.get("error") or f"http_{response.status}") if isinstance(data, Mapping) else f"http_{response.status}"
+                        raise RuntimeError(error)
+            except (TimeoutError, asyncio.TimeoutError) as exc:
+                raise RuntimeError("imaging_second_look_timed_out") from exc
+            except aiohttp.ClientError as exc:
+                raise RuntimeError("imaging_second_look_request_failed") from exc
+            except ValueError as exc:
+                raise RuntimeError("imaging_second_look_response_not_json") from exc
+        if not isinstance(data, Mapping):
+            raise RuntimeError("imaging_second_look_response_not_object")
+        return _normalize_second_look_provider_response(data)
+
+
 class BrainToolServer:
     def __init__(
         self,
@@ -130,6 +169,7 @@ class BrainToolServer:
         calendar_refresh_callback: Callable[[], Awaitable[None]] | None = None,
         today_provider: Callable[[], date] | None = None,
         durable_store: MemoryDurableGovernorStore | None = None,
+        imaging_second_look: ImagingSecondLookClient | None = None,
     ) -> None:
         self._host = host
         self._port = port
@@ -140,6 +180,7 @@ class BrainToolServer:
         self._calendar_refresh_callback = calendar_refresh_callback or task_refresh_callback
         self._today_provider = today_provider or date.today
         self._durable = durable_store or MemoryDurableGovernorStore()
+        self._imaging_second_look_client = imaging_second_look or ImagingSecondLookClient(ImagingSecondLookConfig())
         self._pending_task_due_updates: dict[str, PendingTaskDueUpdate] = {}
         self._pending_task_creates: dict[str, PendingTaskCreate] = {}
         self._pending_task_actions: dict[str, PendingTaskAction] = {}
@@ -630,7 +671,13 @@ class BrainToolServer:
             return web.json_response({"error": error}, status=400)
 
         request_id = str(body["requestId"]).strip()
-        job_id = "imaging_" + hashlib.sha256(request_id.encode("utf-8")).hexdigest()[:24]
+        job_id = _second_look_job_id(request_id)
+        if self._imaging_second_look_client.config.enabled:
+            try:
+                provider_payload = await self._imaging_second_look_client.second_look(body)
+            except RuntimeError as exc:
+                return web.json_response({"error": str(exc)}, status=502)
+            return web.json_response({"jobId": job_id, **provider_payload})
         modality = str(body.get("modality") or "").strip().upper()
         ai_domain = str(body.get("aiDomain") or "").strip().lower()
         question = " ".join(str(body.get("question") or "").split())
@@ -1718,6 +1765,41 @@ def _validate_second_look_request(body: Mapping[str, Any]) -> str:
         if not decoded or len(decoded) > 8 * 1024 * 1024:
             return "imaging_second_look_image_size_rejected"
     return ""
+
+
+def _second_look_job_id(request_id: str) -> str:
+    return "imaging_" + hashlib.sha256(request_id.encode("utf-8")).hexdigest()[:24]
+
+
+def _normalize_second_look_provider_response(payload: Mapping[str, Any]) -> dict[str, Any]:
+    status = str(payload.get("status") or "completed").strip() or "completed"
+    result = payload.get("result")
+    if not isinstance(result, Mapping):
+        raise RuntimeError("imaging_second_look_missing_result")
+    return {
+        "status": status,
+        "result": {
+            "summary": str(result.get("summary") or "").strip(),
+            "checklist": _string_items(result.get("checklist"), limit=10),
+            "cautions": _string_items(result.get("cautions"), limit=8),
+            "recommendation": str(result.get("recommendation") or "").strip(),
+            "disclaimer": str(result.get("disclaimer") or "AI 보조 검토입니다. 최종 판단은 진료자가 합니다.").strip(),
+            "model": str(result.get("model") or "unknown").strip(),
+        },
+    }
+
+
+def _string_items(value: object, *, limit: int) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    items: list[str] = []
+    for item in value:
+        text = str(item or "").strip()
+        if text:
+            items.append(text[:800])
+        if len(items) >= limit:
+            break
+    return items
 
 
 def _completed_document_metadata_payload(

@@ -28,6 +28,7 @@ class SettingsTests(unittest.TestCase):
         self.assertFalse(settings.health_enabled)
         self.assertEqual(settings.health_host, "127.0.0.1")
         self.assertEqual(settings.health_port, 8099)
+        self.assertFalse(settings.imaging_enabled)
 
     def test_token_can_be_loaded_from_secret_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -174,6 +175,21 @@ class SettingsTests(unittest.TestCase):
             }
         )
         self.assertEqual(magic_dns.governor_tools_base_url, "http://kaosgovernor:8098")
+
+    def test_imaging_endpoint_requires_token_when_enabled(self) -> None:
+        with self.assertRaisesRegex(ConfigurationError, "KAOSBRAIN_IMAGING_API_TOKEN"):
+            Settings.from_env({**BASE_ENV, "KAOSBRAIN_IMAGING_ENABLED": "true"})
+
+        settings = Settings.from_env(
+            {
+                **BASE_ENV,
+                "KAOSBRAIN_IMAGING_ENABLED": "true",
+                "KAOSBRAIN_IMAGING_API_TOKEN": "not-a-real-secret",
+            }
+        )
+
+        self.assertTrue(settings.imaging_enabled)
+        self.assertEqual(settings.imaging_api_token, "not-a-real-secret")
 
     def test_memos_public_url_is_optional(self) -> None:
         settings = Settings.from_env(

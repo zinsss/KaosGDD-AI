@@ -77,6 +77,8 @@ KAOSBRAIN_GOVERNOR_TOOLS_ENABLED=true
 KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL=http://<kaosgovernor-tailscale-ip>:8098
 KAOSBRAIN_GOVERNOR_HEALTH_URL=http://<kaosgovernor-tailscale-ip>:8097/health
 KAOSBRAIN_GOVERNOR_TOOLS_PROFILE=main
+KAOSBRAIN_IMAGING_ENABLED=false
+KAOSBRAIN_IMAGING_API_TOKEN_FILE=/run/secrets/governor_api_token
 GOVERNOR_API_TOKEN_FILE=/run/secrets/governor_api_token
 ```
 

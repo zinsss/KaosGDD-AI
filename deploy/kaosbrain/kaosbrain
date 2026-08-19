@@ -161,6 +161,13 @@ preflight() {
   if [[ -n "${KAOSBRAIN_GOVERNOR_HEALTH_URL:-}" ]]; then
     validate_internal_http_url "KAOSBRAIN_GOVERNOR_HEALTH_URL" "${KAOSBRAIN_GOVERNOR_HEALTH_URL}" true
   fi
+  if [[ "${KAOSBRAIN_IMAGING_ENABLED:-false}" == "true" ]]; then
+    if [[ -z "${KAOSBRAIN_IMAGING_API_TOKEN:-}" ]]; then
+      local imaging_token_path
+      imaging_token_path=$(host_secret_path "${KAOSBRAIN_IMAGING_API_TOKEN_FILE:-/run/secrets/governor_api_token}")
+      [[ -s "${imaging_token_path}" ]] || die "missing or empty KaosBrain imaging token file: ${imaging_token_path}"
+    fi
+  fi
   if [[ "${KAOSAI_ENABLED:-false}" == "true" ]]; then
     [[ "${KAOSAI_PROVIDER:-}" == "openclaw" ]] || die "KAOSAI_PROVIDER must be openclaw when KAOSAI_ENABLED=true"
     [[ -n "${KAOSAI_BASE_URL:-}" ]] || die "KAOSAI_BASE_URL is required when KAOSAI_ENABLED=true"
@@ -316,6 +323,12 @@ PY
     fi
   else
     check_line "Governor tools" "disabled"
+  fi
+
+  if [[ "${KAOSBRAIN_IMAGING_ENABLED:-false}" == "true" ]]; then
+    check_line "KaosBrain imaging" "ok" "enabled"
+  else
+    check_line "KaosBrain imaging" "disabled"
   fi
 
   if [[ -n "${KAOSBRAIN_GOVERNOR_HEALTH_URL:-}" ]]; then
