@@ -904,15 +904,14 @@ def render_ocr_ready_message(record: InboxRecord, document_title: str = "") -> s
     lines = [
         "## Documents",
         f"### {escape_text(title)}",
-        "- Paperless saved.",
-        "- OCR ready.",
-        "- 수정할 내용이 있으면 Edit, 끝났으면 Done.",
     ]
-    if record.document_id:
-        lines.append(f"- document: `{record.document_id}`")
-        lines.append(f"- KaosAI tag suggestion: `문서 {record.document_id} 태그 추천`")
     if record.tags:
-        lines.append("- tags: " + " ".join(f"#{escape_text(tag)}" for tag in record.tags))
+        lines.append("- " + " ".join(f"#{escape_text(tag)}" for tag in record.tags))
+    if record.document_id:
+        lines.append(f"- document no `{record.document_id}`")
+        lines.append(f"- KaosAI tag suggestion: `문서 {record.document_id} 태그 추천`")
+    lines.append("- Paperless saved. OCR ready.")
+    lines.append("- 수정할까요? Edit 또는 Done.")
     return "\n".join(lines)[:1990]
 
 
@@ -921,14 +920,12 @@ def render_ocr_done_message(record: InboxRecord) -> str:
     lines = [
         "## Documents",
         f"### {escape_text(title)}",
-        "- Paperless saved.",
-        "- OCR ready.",
-        "- Done.",
     ]
-    if record.document_id:
-        lines.append(f"- document: `{record.document_id}`")
     if record.tags:
-        lines.append("- tags: " + " ".join(f"#{escape_text(tag)}" for tag in record.tags))
+        lines.append("- " + " ".join(f"#{escape_text(tag)}" for tag in record.tags))
+    if record.document_id:
+        lines.append(f"- document no `{record.document_id}`")
+    lines.append("- Paperless saved. OCR ready. Done.")
     return "\n".join(lines)[:1990]
 
 

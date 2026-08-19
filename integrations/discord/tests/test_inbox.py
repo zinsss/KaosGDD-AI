@@ -563,13 +563,15 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
                 message_id=1,
                 document_id=42,
                 title="처방전",
+                tags=("진료기록", "프린트"),
             ),
             "처방전 대리수령 신청서",
         )
 
-        self.assertIn("Paperless saved", content)
-        self.assertIn("OCR ready", content)
-        self.assertIn("수정할 내용이 있으면 Edit", content)
+        self.assertIn("- #진료기록", content)
+        self.assertIn("- Paperless saved. OCR ready.", content)
+        self.assertIn("- 수정할까요? Edit 또는 Done.", content)
+        self.assertIn("document no `42`", content)
         self.assertIn("`42`", content)
         self.assertIn("문서 42 태그 추천", content)
 
@@ -602,7 +604,7 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
 
             interaction.response.edit_message.assert_awaited_once()
             self.assertIsNone(interaction.response.edit_message.await_args.kwargs["view"])
-            self.assertIn("Done.", interaction.response.edit_message.await_args.kwargs["content"])
+            self.assertIn("Paperless saved. OCR ready. Done.", interaction.response.edit_message.await_args.kwargs["content"])
 
     def test_ocr_done_message_is_final_without_edit_prompt(self) -> None:
         content = render_ocr_done_message(
@@ -618,9 +620,10 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
             )
         )
 
-        self.assertIn("Done.", content)
-        self.assertIn("Paperless saved", content)
-        self.assertNotIn("수정할 내용", content)
+        self.assertIn("- #진료기록", content)
+        self.assertIn("document no `42`", content)
+        self.assertIn("Paperless saved. OCR ready. Done.", content)
+        self.assertNotIn("수정할까요", content)
 
     def test_ocr_pending_message_keeps_task_id_visible(self) -> None:
         content = render_ocr_pending_message(
