@@ -287,8 +287,9 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
             message=fake_message(),
         )
 
-        self.assertIn("## Confirm new task", reply)
-        self.assertIn("- task: 엄마한테 전화", reply)
+        self.assertIn("Confirm New Task", reply)
+        self.assertIn("## 엄마한테 전화", reply)
+        self.assertIn("- due: 2026-08-18 10:00", reply)
         self.assertIsNotNone(view)
         request, actor_id, idempotency_key = tools.task_create_calls[0]
         self.assertEqual(request.due_time, "10:00")
@@ -313,8 +314,8 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
         )
 
         request, _, _ = tools.task_create_calls[0]
-        self.assertIn("## Confirm new supply", reply)
-        self.assertIn("- supply: 휴지", reply)
+        self.assertIn("Confirm New Supply", reply)
+        self.assertIn("## 휴지", reply)
         self.assertNotIn("- task: 휴지", reply)
         self.assertNotIn("- due:", reply)
         self.assertEqual(request.profile, "supplies")

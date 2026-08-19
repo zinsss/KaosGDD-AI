@@ -441,12 +441,12 @@ def render_task_create_proposal(payload: dict[str, Any]) -> str:
     title = str(task.get("title") or "Untitled task")
     due = _due_text(str(task.get("due") or ""), str(task.get("dueTime") or ""))
     is_supplies = _task_noun(payload) == "비품"
-    subject = "supply" if is_supplies else "task"
+    subject = "Supply" if is_supplies else "Task"
     lines = [
-        f"## Confirm new {subject}",
-        f"- {subject}: {title}",
+        f"Confirm New {subject}",
+        f"## {title}",
     ]
-    if due or not is_supplies:
+    if due:
         lines.append(f"- due: {due}")
     return "\n".join(lines)
 

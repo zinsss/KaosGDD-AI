@@ -318,11 +318,17 @@ class GovernorToolRenderingTests(unittest.TestCase):
             {"task": {"title": "토프라민", "profile": "supplies", "collectionId": "supplies:abc"}}
         )
 
-        self.assertIn("## Confirm new supply", content)
-        self.assertIn("- supply: 토프라민", content)
-        self.assertNotIn("new task", content)
+        self.assertEqual(content, "Confirm New Supply\n## 토프라민")
+        self.assertNotIn("New Task", content)
         self.assertNotIn("- task:", content)
         self.assertNotIn("- due:", content)
+
+    def test_render_task_create_proposal_uses_title_headline_and_optional_due(self) -> None:
+        content = render_task_create_proposal(
+            {"task": {"title": "엄마한테 전화", "due": "2026-08-18", "dueTime": "10:00"}}
+        )
+
+        self.assertEqual(content, "Confirm New Task\n## 엄마한테 전화\n- due: 2026-08-18 10:00")
 
     def test_render_supplies_task_completed_messages_use_supplies_label(self) -> None:
         payload = {"task": {"title": "Soap", "collectionId": "supplies:main"}}
