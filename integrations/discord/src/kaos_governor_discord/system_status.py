@@ -27,6 +27,8 @@ EMBED_COLOR_HEALTHY = 0xA3BE8C
 EMBED_COLOR_DOWN = 0xBF616A
 EMBED_COLOR_UNKNOWN = 0x4C566A
 MESSAGE_REFRESH_DELAY_SECONDS = 1.25
+HEALTHY_SUMMARY_KEY = "summary:healthy"
+PLANNED_SUMMARY_KEY = "summary:planned"
 
 
 @dataclass(frozen=True)
@@ -132,14 +134,37 @@ class DiscordServiceStatusSurface:
             self.state.legacy_message_id = 0
         next_message_ids: dict[str, int] = {}
         current_message_ids = dict(self.state.message_ids or {})
+        healthy_items = [item for item in SERVICES if results[item.key].state == "healthy"]
+        planned_items = [item for item in SERVICES if results[item.key].state == "planned"]
+        if healthy_items:
+            message = await self._upsert_embed_message(
+                channel,
+                key=HEALTHY_SUMMARY_KEY,
+                embed=render_summary_embed("Healthy", healthy_items, EMBED_COLOR_HEALTHY),
+                message_id=current_message_ids.get(HEALTHY_SUMMARY_KEY, 0),
+            )
+            next_message_ids[HEALTHY_SUMMARY_KEY] = int(message.id)
+            await self._pace_message_refresh()
         for item in SERVICES:
+            if results[item.key].state in {"healthy", "planned"}:
+                continue
+            message_key = service_issue_key(item.key)
             message = await self._upsert_service_message(
                 channel,
                 item,
                 result=results[item.key],
-                message_id=current_message_ids.get(item.key, 0),
+                message_id=current_message_ids.get(message_key, 0) or current_message_ids.get(item.key, 0),
             )
-            next_message_ids[item.key] = int(message.id)
+            next_message_ids[message_key] = int(message.id)
+            await self._pace_message_refresh()
+        if planned_items:
+            message = await self._upsert_embed_message(
+                channel,
+                key=PLANNED_SUMMARY_KEY,
+                embed=render_summary_embed("Planned", planned_items, EMBED_COLOR_UNKNOWN),
+                message_id=current_message_ids.get(PLANNED_SUMMARY_KEY, 0),
+            )
+            next_message_ids[PLANNED_SUMMARY_KEY] = int(message.id)
             await self._pace_message_refresh()
         for key, message_id in current_message_ids.items():
             if key not in next_message_ids:
@@ -244,6 +269,25 @@ class DiscordServiceStatusSurface:
             except (discord.NotFound, discord.HTTPException):
                 LOGGER.info("Service status message %s for %s missing; recreating", message_id, item.key)
         return await channel.send(content=content, embed=embed, view=view, allowed_mentions=NO_MENTIONS)
+
+    async def _upsert_embed_message(
+        self,
+        channel: discord.abc.Messageable,
+        *,
+        key: str,
+        embed: discord.Embed,
+        message_id: int,
+    ) -> discord.Message:
+        content = ""
+        if message_id and hasattr(channel, "fetch_message"):
+            try:
+                message = await channel.fetch_message(message_id)
+                if _message_matches(message, content=content, embed=embed, view=None):
+                    return message
+                return await message.edit(content=content, embed=embed, view=None, allowed_mentions=NO_MENTIONS)
+            except (discord.NotFound, discord.HTTPException):
+                LOGGER.info("Service status summary message %s for %s missing; recreating", message_id, key)
+        return await channel.send(content=content, embed=embed, view=None, allowed_mentions=NO_MENTIONS)
 
     def _register_view(self, view: discord.ui.View | None, message_id: int) -> None:
         if view is None or not hasattr(self.bot, "add_view"):
@@ -409,6 +453,15 @@ def render_service_embed(item: ServiceStatusItem, result: ServiceProbeResult | N
         color=service_embed_color(result),
     )
     return embed
+
+
+def render_summary_embed(title: str, items: list[ServiceStatusItem], color: int) -> discord.Embed:
+    description = "\n".join(item.label for item in items) or "None"
+    return discord.Embed(title=title, description=description, color=color)
+
+
+def service_issue_key(key: str) -> str:
+    return f"issue:{key}"
 
 
 def service_embed_color(result: ServiceProbeResult) -> int:

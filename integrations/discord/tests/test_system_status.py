@@ -24,6 +24,7 @@ from kaos_governor_discord.system_status import (
     check_tcp,
     render_service_embed,
     render_service_message,
+    render_summary_embed,
     restart_service_sync,
 )
 
@@ -130,10 +131,10 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("Unknown", channel.sent[0]["embed"].description)
             self.assertIsNone(channel.sent[0]["view"])
             state = json.loads(path.read_text(encoding="utf-8"))
-            self.assertEqual(state["messageIds"]["kaosbrain"], 700)
-            self.assertEqual(state["messageIds"]["rustdesk"], 709)
+            self.assertEqual(state["messageIds"]["issue:kaosbrain"], 700)
+            self.assertEqual(state["messageIds"]["summary:planned"], 709)
 
-    async def test_ensure_message_edits_existing_messages(self) -> None:
+    async def test_ensure_message_migrates_existing_service_message_keys(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             channel = FakeChannel()
             message = FakeMessage(777)
@@ -149,6 +150,9 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(message.edits[0]["content"], "")
             self.assertEqual(message.edits[0]["embed"].title, "KaosBrain")
             self.assertIn("Unknown", message.edits[0]["embed"].description)
+            state = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(state["messageIds"]["issue:kaosbrain"], 777)
+            self.assertNotIn("kaosbrain", state["messageIds"])
 
     async def test_ensure_message_skips_unchanged_existing_messages(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -194,7 +198,7 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
 
             await surface.ensure_message()
 
-            memos_message_id = surface.state.message_ids["memos"]  # type: ignore[index]
+            memos_message_id = surface.state.message_ids["issue:memos"]  # type: ignore[index]
             registered_message_ids = {message_id for _view, message_id in bot.registered_views}
             self.assertIn(memos_message_id, registered_message_ids)
             self.assertTrue(all(not message.edits for message in channel.messages.values()))
@@ -214,6 +218,36 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
             state = json.loads(path.read_text(encoding="utf-8"))
             self.assertNotIn("messageId", state)
             self.assertEqual(len(state["messageIds"]), 10)
+
+    async def test_ensure_message_groups_healthy_services_into_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            path = Path(temporary) / "status.json"
+            surface = self.make_surface(path, channel)
+
+            async def fake_check_services():
+                return {
+                    item.key: ServiceProbeResult(
+                        item.key,
+                        "down" if item.key == "memos" else "planned" if item.key == "kaosinj" else "healthy",
+                        "09:00",
+                        "connection refused" if item.key == "memos" else "",
+                    )
+                    for item in SERVICES
+                }
+
+            surface.check_services = fake_check_services  # type: ignore[method-assign]
+            await surface.ensure_message()
+
+            self.assertEqual(len(channel.sent), 3)
+            self.assertEqual(channel.sent[0]["embed"].title, "Healthy")
+            self.assertIn("KaosBrain", channel.sent[0]["embed"].description)
+            self.assertEqual(channel.sent[1]["embed"].title, "Memos")
+            self.assertIsInstance(channel.sent[1]["view"], ServiceStatusView)
+            self.assertEqual(channel.sent[2]["embed"].title, "Planned")
+            self.assertIn("KaosInj", channel.sent[2]["embed"].description)
+            state = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(set(state["messageIds"]), {"summary:healthy", "issue:memos", "summary:planned"})
 
     async def test_restart_request_is_recorded_for_future_down_services(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -312,6 +346,14 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
             render_service_embed(SERVICES[3], ServiceProbeResult("kaosinj", "planned", "", "")).color.value,
             EMBED_COLOR_UNKNOWN,
         )
+
+    def test_summary_embed_lists_service_labels(self) -> None:
+        embed = render_summary_embed("Healthy", [SERVICES[0], SERVICES[1]], EMBED_COLOR_HEALTHY)
+
+        self.assertEqual(embed.title, "Healthy")
+        self.assertIn("KaosBrain", embed.description)
+        self.assertIn("KaosGovernor", embed.description)
+        self.assertEqual(embed.color.value, EMBED_COLOR_HEALTHY)
 
     def test_service_view_only_contains_restart_button(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
