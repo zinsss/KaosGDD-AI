@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from io import BytesIO
 from dataclasses import dataclass, field, replace
 import hashlib
 import json
@@ -224,6 +225,8 @@ class DiscordDocumentInbox:
             return record
         submit_filename = pending.filename
         if generated_discord_filename(submit_filename):
+            if not title:
+                title = infer_pdf_title(content)
             if not title:
                 raise DocumentIntakeError("paperless_metadata_required")
             submit_filename = safe_filename(f"{title}.pdf")
@@ -633,6 +636,37 @@ def filename_from_url(value: object) -> str:
 def generated_discord_filename(filename: str) -> bool:
     stem = Path(filename).stem
     return bool(re.fullmatch(r"[0-9a-fA-F]{12,64}", stem))
+
+
+def infer_pdf_title(content: bytes) -> str:
+    if b"%%EOF" not in content[-4096:]:
+        return ""
+    try:
+        from pypdf import PdfReader
+
+        reader = PdfReader(BytesIO(content), strict=False)
+        title = normalize_inferred_title(getattr(reader.metadata, "title", "") if reader.metadata else "")
+        if title:
+            return title
+        if reader.pages:
+            text = reader.pages[0].extract_text() or ""
+            for line in text.splitlines():
+                title = normalize_inferred_title(line)
+                if title:
+                    return title
+    except Exception:
+        return ""
+    return ""
+
+
+def normalize_inferred_title(value: object) -> str:
+    title = " ".join(str(value or "").replace("\x00", " ").split())
+    title = title.strip(" \t\r\n-_:;,.")
+    if not title or generated_discord_filename(f"{title}.pdf"):
+        return ""
+    if len(title) < 2 or len(title) > 120:
+        return ""
+    return title
 
 
 def record_display_filename(record: InboxRecord) -> str:

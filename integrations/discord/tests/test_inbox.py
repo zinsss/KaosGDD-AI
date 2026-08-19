@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
 import hashlib
 from types import SimpleNamespace
@@ -23,6 +24,7 @@ from kaos_governor_discord.inbox import (
     PaperlessSearchView,
     attachment_display_filename,
     generated_discord_filename,
+    infer_pdf_title,
     parse_metadata_reply,
     parse_tag_text,
     rejection_message,
@@ -280,6 +282,45 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(paperless.submitted[0][0], "처방전 대리수령 신청서.pdf")
             self.assertEqual(paperless.submitted[0][2], "처방전 대리수령 신청서")
+
+    async def test_process_pending_infers_pdf_title_when_discord_filename_is_generated(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            from pypdf import PdfWriter
+
+            output = BytesIO()
+            writer = PdfWriter()
+            writer.add_blank_page(width=72, height=72)
+            writer.add_metadata({"/Title": "처방전 대리수령 신청서"})
+            writer.write(output)
+            paperless = FakePaperless()
+            inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
+            message = self.make_message(
+                [
+                    FakeAttachment(
+                        filename="40eeb76102ae4b88.pdf",
+                        content=output.getvalue(),
+                    )
+                ]
+            )
+
+            await inbox.handle_message(message)  # type: ignore[arg-type]
+            source_id = next(iter(inbox.state.pending))
+            record = await inbox.process_pending(source_id)
+
+            self.assertEqual(record.title, "처방전 대리수령 신청서")
+            self.assertEqual(paperless.submitted[0][0], "처방전 대리수령 신청서.pdf")
+            self.assertEqual(paperless.submitted[0][2], "처방전 대리수령 신청서")
+
+    def test_infer_pdf_title_reads_metadata_title(self) -> None:
+        from pypdf import PdfWriter
+
+        output = BytesIO()
+        writer = PdfWriter()
+        writer.add_blank_page(width=72, height=72)
+        writer.add_metadata({"/Title": " 보험 서류 "})
+        writer.write(output)
+
+        self.assertEqual(infer_pdf_title(output.getvalue()), "보험 서류")
 
     async def test_pdf_upload_in_extra_channel_creates_pending_prompt(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
