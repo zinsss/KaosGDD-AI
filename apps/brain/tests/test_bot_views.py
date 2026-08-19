@@ -348,7 +348,8 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(order, ["defer", "approve"])
         interaction.edit_original_response.assert_awaited_once()
         content = interaction.edit_original_response.await_args.kwargs["content"]
-        self.assertIn("할 일 저장했어요.", content)
+        self.assertEqual(content, "Task added.")
+        self.assertIsNone(interaction.edit_original_response.await_args.kwargs["view"])
 
 
 if __name__ == "__main__":

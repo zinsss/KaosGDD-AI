@@ -452,7 +452,7 @@ def render_task_create_proposal(payload: dict[str, Any]) -> str:
 
 
 def render_task_create_completed(payload: dict[str, Any]) -> str:
-    return f"{_task_noun(payload)} 저장했어요."
+    return "Supply added." if _task_noun(payload) == "비품" else "Task added."
 
 
 def render_task_action_proposal(payload: dict[str, Any]) -> str:

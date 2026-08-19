@@ -311,7 +311,7 @@ class GovernorToolRenderingTests(unittest.TestCase):
         content = render_task_create_completed(
             {"task": {"title": "Call school", "due": "2026-08-17", "dueTime": "10:00"}}
         )
-        self.assertEqual(content, "할 일 저장했어요.")
+        self.assertEqual(content, "Task added.")
 
     def test_render_supplies_task_create_proposal_uses_supply_label(self) -> None:
         content = render_task_create_proposal(
@@ -333,7 +333,7 @@ class GovernorToolRenderingTests(unittest.TestCase):
     def test_render_supplies_task_completed_messages_use_supplies_label(self) -> None:
         payload = {"task": {"title": "Soap", "collectionId": "supplies:main"}}
 
-        self.assertEqual(render_task_create_completed(payload), "비품 저장했어요.")
+        self.assertEqual(render_task_create_completed(payload), "Supply added.")
         self.assertEqual(render_task_edit_completed(payload), "비품 수정했어요.")
         self.assertEqual(render_task_action_completed({"task": {**payload["task"], "action": "delete"}}), "비품 삭제했어요.")
         self.assertEqual(render_task_action_completed({"task": {**payload["task"], "action": "complete"}}), "비품 완료했어요.")

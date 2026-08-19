@@ -210,9 +210,11 @@ class TaskUpdateIntentTests(unittest.TestCase):
             "할 일 삭제했어요",
             "할 일 수정했어요",
             "할 일 완료했어요",
+            "Task added.",
             "비품 저장했어요",
             "비품 삭제했어요",
             "비품 수정했어요",
+            "Supply added.",
         ):
             with self.subTest(content=content):
                 self.assertIsNone(parse_task_create(content, today=date(2026, 8, 14)))
