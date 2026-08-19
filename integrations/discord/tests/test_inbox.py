@@ -335,6 +335,28 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(paperless.submitted[0][0], "의료폐기물 배출자 교육.pdf")
             self.assertEqual(paperless.submitted[0][2], "의료폐기물 배출자 교육")
 
+    async def test_process_as_is_recovers_attachment_title_for_existing_degraded_pending(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            paperless = FakePaperless()
+            inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
+            message = self.make_message(
+                [
+                    FakeAttachment(
+                        filename="2023_-.pdf",
+                        title="2023 진단용방사선안전관리책임자교육-이수증",
+                    )
+                ]
+            )
+
+            await inbox.handle_message(message)  # type: ignore[arg-type]
+            source_id = next(iter(inbox.state.pending))
+            inbox.state.pending[source_id].filename = "2023_-.pdf"
+            record = await inbox.process_pending(source_id)
+
+            self.assertEqual(record.title, "2023 진단용방사선안전관리책임자교육-이수증")
+            self.assertEqual(paperless.submitted[0][0], "2023 진단용방사선안전관리책임자교육-이수증.pdf")
+            self.assertEqual(paperless.submitted[0][2], "2023 진단용방사선안전관리책임자교육-이수증")
+
     async def test_process_pending_uses_metadata_title_as_filename_when_discord_filename_is_generated(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             paperless = FakePaperless()

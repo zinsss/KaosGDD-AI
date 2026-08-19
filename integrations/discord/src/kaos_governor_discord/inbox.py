@@ -228,13 +228,14 @@ class DiscordDocumentInbox:
             self.state.pending.pop(source_id, None)
             self._save_state()
             return record
-        submit_filename = pending.filename
+        attachment_filename = attachment_display_filename(attachment)
+        submit_filename = attachment_filename if not degraded_discord_filename(attachment_filename) else pending.filename
         if degraded_discord_filename(submit_filename):
             if not title:
                 title = infer_pdf_title(content)
             if title:
                 submit_filename = safe_filename(f"{title}.pdf")
-        submit_title = title or Path(pending.filename).stem
+        submit_title = title or Path(submit_filename).stem
         result = await asyncio.to_thread(
             self.paperless.submit_pdf,
             submit_filename,
