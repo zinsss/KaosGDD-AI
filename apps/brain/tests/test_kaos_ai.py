@@ -4,11 +4,13 @@ from importlib.util import find_spec
 
 from kaos_brain.kaos_ai import (
     DisabledKaosAIPlanner,
+    KAOSAI_DOCUMENT_TAG_SYSTEM_PROMPT,
     KAOSAI_PLAN_SYSTEM_PROMPT,
     KaosAIConfig,
     KaosAIError,
     OpenClawKaosAIPlanner,
     normalize_kaosai_plan_scope,
+    parse_document_tag_response,
     parse_kaosai_plan_response,
 )
 
@@ -36,6 +38,23 @@ class KaosAITests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('Default scope to "personal"', KAOSAI_PLAN_SYSTEM_PROMPT)
         self.assertIn('Use "family" only for explicitly shared family', KAOSAI_PLAN_SYSTEM_PROMPT)
         self.assertNotIn("collectionId", KAOSAI_PLAN_SYSTEM_PROMPT)
+
+    def test_document_tag_prompt_limits_ai_to_existing_tags(self) -> None:
+        self.assertIn("Choose only tag names from availableTags", KAOSAI_DOCUMENT_TAG_SYSTEM_PROMPT)
+        self.assertIn("Do not invent new tags", KAOSAI_DOCUMENT_TAG_SYSTEM_PROMPT)
+
+    def test_parse_document_tag_response_keeps_existing_tags_only(self) -> None:
+        tags = parse_document_tag_response(
+            '{"tags":["clinic","made-up","Receipt","clinic"]}',
+            {"availableTags": [{"id": 1, "name": "Clinic"}, {"id": 2, "name": "receipt"}]},
+        )
+
+        self.assertEqual(tags, ("Clinic", "receipt"))
+
+    async def test_disabled_planner_returns_no_document_tags(self) -> None:
+        planner = DisabledKaosAIPlanner()
+
+        self.assertEqual(await planner.suggest_document_tags({}), ())
 
     def test_parse_strict_plan_json(self) -> None:
         plan = parse_kaosai_plan_response(

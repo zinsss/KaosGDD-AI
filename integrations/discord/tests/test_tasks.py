@@ -16,6 +16,7 @@ from kaos_governor_discord.tasks import (
     CompletedTasksView,
     DiscordTasksSurface,
     RecentSuppliesView,
+    RememberedSupplyConfirmationView,
     TaskEditModal,
     TaskView,
     active_tasks,
@@ -27,6 +28,7 @@ from kaos_governor_discord.tasks import (
     render_completed_archive_message,
     render_due_notification_message,
     render_recent_supplies_message,
+    render_remembered_supply_confirmation,
     render_task_message,
     task_payload,
     validate_edit_due,
@@ -538,6 +540,58 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("- + @\u200beveryone", content)
         self.assertIn("- + Item 23", content)
         self.assertNotIn("- + Item 24", content)
+
+    def test_render_remembered_supply_confirmation(self) -> None:
+        self.assertEqual(render_remembered_supply_confirmation("@everyone"), "## 비품 다시 추가\n- @\u200beveryone")
+
+    async def test_plain_remembered_supply_message_requires_confirmation_before_create(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            adapter = FakeAdapter(tasks=[])
+            surface = DiscordTasksSurface(
+                FakeBot(channel),  # type: ignore[arg-type]
+                AccessPolicy(100, frozenset({200}), frozenset({300})),
+                channel_id=300,
+                profile="main",
+                state_path=Path(temporary) / "supplies.json",
+                adapter=adapter,  # type: ignore[arg-type]
+                surface_name="supplies",
+                button_prefix="supplies",
+                collection_id="zin:supplies",
+                show_due=False,
+            )
+            surface.message_refresh_delay_seconds = 0
+            surface.state.recent_supplies = ["Paper towels"]
+            message = SimpleNamespace(
+                id=1,
+                content="paper towels",
+                channel=SimpleNamespace(id=300),
+                author=SimpleNamespace(id=200, bot=False),
+                delete=AsyncMock(),
+            )
+
+            self.assertTrue(await surface.handle_message(message))  # type: ignore[arg-type]
+
+            self.assertEqual(adapter.created, [])
+            self.assertIn("## 비품 다시 추가", channel.sent[0]["content"])
+            view = channel.sent[0]["view"]
+            self.assertIsInstance(view, RememberedSupplyConfirmationView)
+            prompt_message = channel.messages[700]
+            interaction = SimpleNamespace(
+                guild_id=100,
+                channel_id=300,
+                user=SimpleNamespace(id=200),
+                message=prompt_message,
+                response=SimpleNamespace(defer=AsyncMock(), is_done=lambda: True),
+                followup=SimpleNamespace(send=AsyncMock()),
+            )
+
+            await view.children[0].callback(interaction)  # type: ignore[misc]
+
+            self.assertEqual(adapter.created[-1][1]["title"], "Paper towels")
+            self.assertEqual(adapter.created[-1][1]["collectionId"], "zin:supplies")
+            self.assertTrue(prompt_message.deleted)
+            message.delete.assert_awaited_once()
 
     async def test_ensure_message_deletes_legacy_combined_message(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -161,6 +161,7 @@ class BrainToolServer:
         app.router.add_post("/tools/memos/delete/proposals", self._propose_memo_delete)
         app.router.add_get("/tools/documents/search", self._search_documents)
         app.router.add_get("/tools/documents/{document_id}", self._get_document)
+        app.router.add_get("/tools/documents/{document_id}/tag-context", self._get_document_tag_context)
         app.router.add_post("/tools/documents/{document_id}/metadata/proposals", self._propose_document_metadata)
         app.router.add_post("/tools/documents/{document_id}/tags/proposals", self._propose_document_tags)
         app.router.add_post("/tools/tasks/action/proposals", self._propose_task_action)
@@ -303,6 +304,25 @@ class BrainToolServer:
             LOGGER.exception("Unexpected Brain document fetch failure")
             return web.json_response({"error": "internal_error"}, status=500)
         return web.json_response({"document": document.as_dict(), "source": "paperless-live"})
+
+    async def _get_document_tag_context(self, request: web.Request) -> web.Response:
+        try:
+            document, tags = await asyncio.gather(
+                asyncio.to_thread(self._paperless.get, request.match_info["document_id"]),
+                asyncio.to_thread(self._paperless.list_tags),
+            )
+        except DocumentIntakeError as exc:
+            return _document_error(exc)
+        except Exception:
+            LOGGER.exception("Unexpected Brain document tag-context failure")
+            return web.json_response({"error": "internal_error"}, status=500)
+        return web.json_response(
+            {
+                "document": _document_tag_context_document_payload(document.as_dict()),
+                "availableTags": [tag.as_dict() for tag in tags],
+                "source": "paperless-live",
+            }
+        )
 
     async def _propose_document_metadata(self, request: web.Request) -> web.Response:
         try:
@@ -1613,6 +1633,14 @@ def _pending_document_metadata_payload(pending: PendingDocumentMetadata) -> dict
         "tags": list(pending.tags),
         "action": "update_metadata",
     }
+
+
+def _document_tag_context_document_payload(document: Mapping[str, object]) -> dict[str, object]:
+    payload = dict(document)
+    content = str(payload.pop("content", "") or "")
+    payload["contentExcerpt"] = content[:4000]
+    payload["contentLength"] = len(content)
+    return payload
 
 
 def _completed_document_metadata_payload(

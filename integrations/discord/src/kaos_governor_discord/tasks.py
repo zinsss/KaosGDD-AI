@@ -169,6 +169,15 @@ class DiscordTasksSurface:
         command = parse_add_task_message(str(message.content or ""))
         if command is not None:
             await self.create_task(command)
+        elif self._uses_supplies_rules():
+            remembered_title = self._remembered_supply_title(str(message.content or ""))
+            if remembered_title:
+                channel = await self.channel()
+                await channel.send(
+                    content=render_remembered_supply_confirmation(remembered_title),
+                    view=RememberedSupplyConfirmationView(self, remembered_title),
+                    allowed_mentions=NO_MENTIONS,
+                )
         await self._delete_message(message)
         return True
 
@@ -498,6 +507,15 @@ class DiscordTasksSurface:
         previous = [item for item in self.state.recent_supplies if item.casefold() != clean_title.casefold()]
         self.state.recent_supplies = [clean_title, *previous][:MAX_RECENT_SUPPLIES]
 
+    def _remembered_supply_title(self, content: str) -> str:
+        clean_title = " ".join(str(content or "").split())
+        if not clean_title or "\n" in str(content or "") or clean_title.startswith(("+", ":")):
+            return ""
+        for item in self.state.recent_supplies:
+            if item.casefold() == clean_title.casefold():
+                return item
+        return ""
+
     async def _recreate_recent_supplies_message(
         self,
         channel: discord.abc.Messageable,
@@ -796,6 +814,46 @@ class RecentSuppliesView(discord.ui.View):
         return callback
 
 
+class RememberedSupplyConfirmationView(discord.ui.View):
+    def __init__(self, surface: DiscordTasksSurface, title: str) -> None:
+        super().__init__(timeout=300)
+        self.surface = surface
+        self.title = title
+        add = discord.ui.Button(label="Add", style=discord.ButtonStyle.success)
+        cancel = discord.ui.Button(label="Cancel", style=discord.ButtonStyle.secondary)
+        add.callback = self._add_callback()
+        cancel.callback = self._cancel_callback()
+        self.add_item(add)
+        self.add_item(cancel)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if self.surface.policy.allows(interaction.guild_id, interaction.channel_id, interaction.user.id):
+            return True
+        if interaction.response.is_done():
+            await interaction.followup.send("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        else:
+            await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+    def _add_callback(self):
+        async def callback(interaction: discord.Interaction) -> None:
+            await interaction.response.defer(ephemeral=True)
+            ok = await self.surface.create_task(self.title)
+            if not ok:
+                await interaction.followup.send("비품을 추가하지 못했어요.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+                return
+            await _delete_interaction_message(interaction)
+
+        return callback
+
+    def _cancel_callback(self):
+        async def callback(interaction: discord.Interaction) -> None:
+            await interaction.response.defer(ephemeral=True)
+            await _delete_interaction_message(interaction)
+
+        return callback
+
+
 class CompletedTasksView(discord.ui.View):
     def __init__(self, surface: DiscordTasksSurface, tasks: list[Mapping[str, Any]]) -> None:
         super().__init__(timeout=None)
@@ -947,6 +1005,10 @@ def render_recent_supplies_message(items: list[str]) -> str:
     return "\n".join(lines)[:1990]
 
 
+def render_remembered_supply_confirmation(title: str) -> str:
+    return f"## 비품 다시 추가\n- {escape_text(title)}"
+
+
 def parse_add_task_message(content: str) -> AddTaskCommand | None:
     lines = [line.strip() for line in content.strip().splitlines() if line.strip()]
     if not lines or not lines[0].startswith("+"):
@@ -1089,6 +1151,16 @@ def _view_signature(view: discord.ui.View | None) -> tuple[tuple[str, str], ...]
         )
         for item in getattr(view, "children", [])
     )
+
+
+async def _delete_interaction_message(interaction: discord.Interaction) -> None:
+    message = getattr(interaction, "message", None)
+    if message is None or not hasattr(message, "delete"):
+        return
+    try:
+        await message.delete()
+    except discord.HTTPException:
+        LOGGER.info("Could not delete interaction message %s", getattr(message, "id", ""))
 
 
 def task_key(task: Mapping[str, Any]) -> str:

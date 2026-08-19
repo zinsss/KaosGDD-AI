@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import logging
+import re
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -63,6 +64,7 @@ from .tool_intent import ToolKind, ToolRequest, parse_tool_request
 LOGGER = logging.getLogger(__name__)
 NO_MENTIONS = discord.AllowedMentions.none()
 KST = ZoneInfo("Asia/Seoul")
+DOCUMENT_TAG_SUGGESTION_PATTERN = re.compile(r"\b(?:document|doc|문서)?\s*(\d{1,9})\b")
 
 
 def _kaosai_planner_from_settings(settings: Settings) -> KaosAIPlanner:
@@ -112,6 +114,19 @@ def _render_kaosai_rejected_preview(plan: dict[str, Any], reason: str) -> str:
         lines.append(f"scope: {scope}")
     lines.append("- execution: skipped")
     return "\n".join(lines)
+
+
+def parse_document_tag_suggestion(text: str) -> str:
+    lowered = text.casefold()
+    if not any(marker in lowered for marker in ("tag", "tags", "태그")):
+        return ""
+    if not any(marker in lowered for marker in ("suggest", "recommend", "auto", "자동", "추천")):
+        return ""
+    for match in DOCUMENT_TAG_SUGGESTION_PATTERN.finditer(text):
+        document_id = match.group(1)
+        if int(document_id) > 0:
+            return document_id
+    return ""
 
 
 def _render_kaosai_guard_preview(guarded: BrainGuardResult) -> str:
@@ -324,6 +339,10 @@ class BrainBot(discord.Client):
         memo_create = parse_memo_create(request.text) if request.route is Route.CHAT else None
         if memo_create is not None:
             await self._propose_memo_create(message, memo_create)
+            return
+        document_tag_suggestion = parse_document_tag_suggestion(request.text) if request.route is Route.CHAT else ""
+        if document_tag_suggestion:
+            await self._propose_document_tag_suggestion(message, document_tag_suggestion)
             return
         view: discord.ui.View | None = None
         async with message.channel.typing():
@@ -566,6 +585,45 @@ class BrainBot(discord.Client):
             LOGGER.warning("Guarded Governor proposal failed intent=%s: %s", guarded.intent, exc)
             return _tool_failed("요청 처리"), None
         return _tool_failed("요청 처리"), None
+
+    async def _propose_document_tag_suggestion(self, message: discord.Message, document_id: str) -> None:
+        if self.governor_tools is None:
+            await message.reply(
+                _tool_unavailable(),
+                mention_author=False,
+                allowed_mentions=NO_MENTIONS,
+            )
+            return
+        async with message.channel.typing():
+            try:
+                context = await self.governor_tools.get_document_tag_context(document_id)
+                tags = await self.kaosai.suggest_document_tags(context)
+                if not tags:
+                    await message.reply(
+                        "추천할 기존 태그를 못 찾았어요.",
+                        mention_author=False,
+                        allowed_mentions=NO_MENTIONS,
+                    )
+                    return
+                payload = await self.governor_tools.propose_document_tags(
+                    DocumentTagRequest(document_id, tags),
+                    actor_id=int(message.author.id),
+                    idempotency_key=f"discord:{message.id}:document-tags",
+                )
+            except (GovernorToolError, KaosAIError) as exc:
+                LOGGER.warning("Document tag suggestion failed document_id=%s: %s", document_id, exc)
+                await message.reply(
+                    _tool_failed("문서 태그 추천"),
+                    mention_author=False,
+                    allowed_mentions=NO_MENTIONS,
+                )
+                return
+        await message.reply(
+            render_document_tags_proposal(payload)[: self.settings.max_reply_chars],
+            view=DocumentTagConfirmationView(self.governor_tools, int(message.author.id), str(payload.get("confirmationId") or "")),
+            mention_author=False,
+            allowed_mentions=NO_MENTIONS,
+        )
 
     async def _answer_with_governor_tool(
         self,

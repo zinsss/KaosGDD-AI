@@ -115,6 +115,12 @@ class GovernorToolClient:
             raise GovernorToolError("invalid document id")
         return await self._get(f"/tools/documents/{normalized}", {})
 
+    async def get_document_tag_context(self, document_id: object) -> dict[str, Any]:
+        normalized = _document_id(document_id)
+        if not normalized:
+            raise GovernorToolError("invalid document id")
+        return await self._get(f"/tools/documents/{normalized}/tag-context", {})
+
     async def propose_task_due_update(
         self,
         request: TaskDueUpdateRequest,

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import unittest
 
 from aiohttp.test_utils import TestClient, TestServer
-from kaos_governor.documents import PaperlessDocument, PaperlessSearchPage, PaperlessSearchResult
+from kaos_governor.documents import PaperlessDocument, PaperlessSearchPage, PaperlessSearchResult, PaperlessTag
 from kaos_governor.memos import Memo, MemoSearchPage, MemoSearchResult
 from kaos_governor_discord.tools import BrainToolServer
 
@@ -199,6 +199,9 @@ class FakePaperless:
         self.existing_tag_calls.append(tuple(names))
         known = {"server": "server", "rustdesk": "rustdesk", "clinic": "Clinic"}
         return tuple(known[name.casefold()] for name in names if name.casefold() in known)
+
+    def list_tags(self):
+        return (PaperlessTag(7, "server"), PaperlessTag(8, "Clinic"), PaperlessTag(9, "receipt"))
 
     def update_metadata(self, document_id, *, title, tags=()):
         self.update_calls.append((document_id, title, tuple(tags)))
@@ -607,6 +610,18 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["document"]["content"], "Full OCR body")
         self.assertEqual(payload["document"]["tagIds"], [7])
         self.assertEqual(self.paperless.get_calls, ["42"])
+
+    async def test_document_tag_context_returns_excerpt_and_existing_tags(self) -> None:
+        response = await self.client.get("/tools/documents/42/tag-context", headers=self.headers())
+
+        self.assertEqual(response.status, 200)
+        payload = await response.json()
+        self.assertEqual(payload["source"], "paperless-live")
+        self.assertEqual(payload["document"]["id"], 42)
+        self.assertEqual(payload["document"]["contentExcerpt"], "Full OCR body")
+        self.assertEqual(payload["document"]["contentLength"], 13)
+        self.assertNotIn("content", payload["document"])
+        self.assertEqual(payload["availableTags"], [{"id": 7, "name": "server"}, {"id": 8, "name": "Clinic"}, {"id": 9, "name": "receipt"}])
 
     async def test_document_metadata_proposal_requires_confirmation_before_write(self) -> None:
         response = await self.client.post(

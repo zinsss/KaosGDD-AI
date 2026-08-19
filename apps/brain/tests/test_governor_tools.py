@@ -606,6 +606,27 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["payload"]["idempotencyKey"], "discord:1")
         self.assertEqual(payload["payload"]["tags"], ["medical", "receipt"])
 
+    async def test_get_document_tag_context_gets_contract(self) -> None:
+        from kaos_brain.governor_tools import GovernorToolClient, GovernorToolConfig
+
+        class FakeClient(GovernorToolClient):
+            async def _get(self, path: str, params: dict[str, str]):
+                return {"path": path, "params": params}
+
+        client = FakeClient(
+            GovernorToolConfig(
+                base_url="http://127.0.0.1:8098",
+                api_token="token",
+                profile="main",
+                timeout_seconds=1,
+            )
+        )
+
+        payload = await client.get_document_tag_context("42")
+
+        self.assertEqual(payload["path"], "/tools/documents/42/tag-context")
+        self.assertEqual(payload["params"], {})
+
     async def test_propose_task_due_update_posts_contract(self) -> None:
         from kaos_brain.governor_tools import GovernorToolClient, GovernorToolConfig
 

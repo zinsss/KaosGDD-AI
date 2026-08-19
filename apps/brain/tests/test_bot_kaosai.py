@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock
 
-from kaos_brain.bot import BrainBot, _kaosai_planner_from_settings
+from kaos_brain.bot import BrainBot, _kaosai_planner_from_settings, parse_document_tag_suggestion
 from kaos_brain.config import Settings
 from kaos_brain.governor_tools import GovernorToolError
 from kaos_brain.kaos_ai import DisabledKaosAIPlanner, KaosAIError, OpenClawKaosAIPlanner
@@ -30,12 +30,20 @@ class FakeKaosAI:
         self.plan_value = plan
         self.error = error
         self.calls = []
+        self.document_tag_calls = []
+        self.document_tags = ("Clinic", "receipt")
 
     async def plan(self, user_text: str, *, context):
         self.calls.append((user_text, context))
         if self.error is not None:
             raise self.error
         return self.plan_value
+
+    async def suggest_document_tags(self, context):
+        self.document_tag_calls.append(context)
+        if self.error is not None:
+            raise self.error
+        return self.document_tags
 
 
 class FakeGovernorTools:
@@ -44,6 +52,8 @@ class FakeGovernorTools:
         self.task_create_calls = []
         self.task_due_calls = []
         self.memo_create_calls = []
+        self.document_tag_context_calls = []
+        self.document_tag_calls = []
 
     async def fetch(self, request):
         self.fetch_calls.append(request)
@@ -72,6 +82,17 @@ class FakeGovernorTools:
     async def propose_memo_create(self, request, *, actor_id: int, idempotency_key: str):
         self.memo_create_calls.append((request, actor_id, idempotency_key))
         return {"confirmationId": "confirm-memo-create", "memo": {"content": request.content}}
+
+    async def get_document_tag_context(self, document_id):
+        self.document_tag_context_calls.append(document_id)
+        return {
+            "document": {"id": int(document_id), "title": "Receipt", "contentExcerpt": "Clinic receipt"},
+            "availableTags": [{"id": 1, "name": "Clinic"}, {"id": 2, "name": "receipt"}],
+        }
+
+    async def propose_document_tags(self, request, *, actor_id: int, idempotency_key: str):
+        self.document_tag_calls.append((request, actor_id, idempotency_key))
+        return {"confirmationId": "confirm-document-tags", "document": {"title": "Receipt", "tags": list(request.tags)}}
 
 
 class FailingGovernorTools(FakeGovernorTools):
@@ -122,6 +143,27 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsInstance(disabled, DisabledKaosAIPlanner)
         self.assertIsInstance(enabled, OpenClawKaosAIPlanner)
+
+    def test_parse_document_tag_suggestion_requires_explicit_tag_request(self) -> None:
+        self.assertEqual(parse_document_tag_suggestion("문서 42 태그 추천"), "42")
+        self.assertEqual(parse_document_tag_suggestion("document 42 tag suggest"), "42")
+        self.assertEqual(parse_document_tag_suggestion("문서 42 보여줘"), "")
+
+    async def test_document_tag_suggestion_uses_ai_context_then_governor_confirmation(self) -> None:
+        governor_tools = FakeGovernorTools()
+        brain = self.brain(None, governor_tools=governor_tools)
+        message = fake_discord_message("문서 42 태그 추천")
+
+        await BrainBot.on_message(brain, message)  # type: ignore[arg-type]
+
+        self.assertEqual(governor_tools.document_tag_context_calls, ["42"])
+        self.assertEqual(brain.kaosai.document_tag_calls[0]["document"]["title"], "Receipt")
+        request, actor_id, idempotency_key = governor_tools.document_tag_calls[0]
+        self.assertEqual(request.document_id, "42")
+        self.assertEqual(request.tags, ("Clinic", "receipt"))
+        self.assertEqual(actor_id, 200)
+        self.assertEqual(idempotency_key, "discord:777:document-tags")
+        self.assertIn("## Confirm document tags", message.reply.await_args.args[0])
 
     async def test_kaosai_clarify_plan_returns_question_without_governor(self) -> None:
         brain = self.brain({"intent": "clarify", "scope": "personal", "parameters": {"question": "어떤 메모인가요?"}})

@@ -17,6 +17,9 @@ class KaosAIPlanner(Protocol):
     async def plan(self, user_text: str, *, context: Mapping[str, Any]) -> dict[str, Any] | None:
         """Return a KaosAI plan or None when planning is unavailable."""
 
+    async def suggest_document_tags(self, context: Mapping[str, Any]) -> tuple[str, ...]:
+        """Return existing Paperless tag names suggested for a document."""
+
 
 @dataclass(frozen=True)
 class KaosAIConfig:
@@ -32,6 +35,9 @@ class DisabledKaosAIPlanner:
     async def plan(self, user_text: str, *, context: Mapping[str, Any]) -> dict[str, Any] | None:
         return None
 
+    async def suggest_document_tags(self, context: Mapping[str, Any]) -> tuple[str, ...]:
+        return ()
+
 
 class OpenClawKaosAIPlanner:
     def __init__(self, config: KaosAIConfig) -> None:
@@ -43,7 +49,16 @@ class OpenClawKaosAIPlanner:
         raw = await self._complete(user_text, context=context)
         return normalize_kaosai_plan_scope(user_text, parse_kaosai_plan_response(raw))
 
+    async def suggest_document_tags(self, context: Mapping[str, Any]) -> tuple[str, ...]:
+        if not self.config.enabled:
+            return ()
+        raw = await self._complete_message(f"{KAOSAI_DOCUMENT_TAG_SYSTEM_PROMPT}\n\n{_render_document_tag_request(context)}")
+        return parse_document_tag_response(raw, context)
+
     async def _complete(self, user_text: str, *, context: Mapping[str, Any]) -> str:
+        return await self._complete_message(f"{KAOSAI_PLAN_SYSTEM_PROMPT}\n\n{_render_plan_request(user_text, context)}")
+
+    async def _complete_message(self, message: str) -> str:
         import aiohttp
 
         if not self.config.api_token:
@@ -56,7 +71,7 @@ class OpenClawKaosAIPlanner:
                     data = await _openclaw_agent_request(
                         websocket,
                         model=self.config.model,
-                        message=f"{KAOSAI_PLAN_SYSTEM_PROMPT}\n\n{_render_plan_request(user_text, context)}",
+                        message=message,
                     )
             except (TimeoutError, asyncio.TimeoutError) as exc:
                 raise KaosAIError("kaosai_request_timed_out") from exc
@@ -116,6 +131,19 @@ Rules:
 - If the request is ambiguous, return {{"intent":"clarify","scope":"personal","parameters":{{"question":"..."}}}}."""
 
 
+KAOSAI_DOCUMENT_TAG_SYSTEM_PROMPT = """You are KaosAI helping KaosBrain choose Paperless tags.
+Return exactly one JSON object and no markdown.
+Allowed schema:
+{"tags":["existing tag name"]}
+
+Rules:
+- Choose only tag names from availableTags.
+- Do not invent new tags.
+- Use at most 5 tags.
+- Prefer tags supported by the document title, filename, correspondent, and contentExcerpt.
+- Return {"tags":[]} when no available tag clearly fits."""
+
+
 def parse_kaosai_plan_response(raw: str) -> dict[str, Any]:
     text = raw.strip()
     if not text:
@@ -142,6 +170,34 @@ def parse_kaosai_plan_response(raw: str) -> dict[str, Any]:
     if not isinstance(parameters, Mapping):
         raise KaosAIError("kaosai_parameters_required")
     return dict(payload)
+
+
+def parse_document_tag_response(raw: str, context: Mapping[str, Any]) -> tuple[str, ...]:
+    text = raw.strip()
+    if text.startswith("```"):
+        text = _strip_fence(text)
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise KaosAIError("invalid_document_tag_json") from exc
+    if not isinstance(payload, Mapping):
+        raise KaosAIError("document_tag_response_must_be_object")
+    available = {
+        str(item.get("name") or "").casefold(): str(item.get("name") or "").strip()
+        for item in _available_tag_items(context)
+        if str(item.get("name") or "").strip()
+    }
+    selected: list[str] = []
+    raw_tags = payload.get("tags")
+    if not isinstance(raw_tags, list):
+        raise KaosAIError("document_tag_tags_required")
+    for raw_tag in raw_tags:
+        tag = available.get(str(raw_tag or "").strip().casefold())
+        if tag and tag not in selected:
+            selected.append(tag)
+        if len(selected) >= 5:
+            break
+    return tuple(selected)
 
 
 FAMILY_SCOPE_MARKERS = frozenset(
@@ -202,6 +258,32 @@ def _render_plan_request(user_text: str, context: Mapping[str, Any]) -> str:
         ensure_ascii=False,
         sort_keys=True,
     )
+
+
+def _render_document_tag_request(context: Mapping[str, Any]) -> str:
+    document = context.get("document") if isinstance(context.get("document"), Mapping) else {}
+    return json.dumps(
+        {
+            "document": {
+                "id": document.get("id") if isinstance(document, Mapping) else "",
+                "title": str(document.get("title") or "") if isinstance(document, Mapping) else "",
+                "created": str(document.get("created") or "") if isinstance(document, Mapping) else "",
+                "filename": str(document.get("filename") or "") if isinstance(document, Mapping) else "",
+                "correspondent": str(document.get("correspondent") or "") if isinstance(document, Mapping) else "",
+                "contentExcerpt": str(document.get("contentExcerpt") or "")[:4000] if isinstance(document, Mapping) else "",
+            },
+            "availableTags": [dict(item) for item in _available_tag_items(context)],
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+
+
+def _available_tag_items(context: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    raw_items = context.get("availableTags")
+    if not isinstance(raw_items, list):
+        return []
+    return [item for item in raw_items if isinstance(item, Mapping)]
 
 
 async def _openclaw_connect(websocket: Any, *, token: str) -> None:
