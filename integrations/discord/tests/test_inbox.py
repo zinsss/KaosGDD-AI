@@ -26,6 +26,7 @@ from kaos_governor_discord.inbox import (
     parse_metadata_reply,
     parse_tag_text,
     rejection_message,
+    render_metadata_message,
     render_ocr_pending_message,
     render_ocr_ready_message,
     render_paperless_opened,
@@ -483,6 +484,16 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Processing in Paperless", content)
         self.assertIn("OCR", content)
         self.assertIn("처방전.pdf", content)
+
+    def test_metadata_message_can_explain_missing_original_filename(self) -> None:
+        content = render_metadata_message(
+            "99c6de265eeaf83e.pdf",
+            reason="Discord did not expose the original filename. Add a title before sending to Paperless.",
+        )
+
+        self.assertIn("99c6de265eeaf83e.pdf", content)
+        self.assertIn("original filename", content)
+        self.assertIn("### {title of document}", content)
 
     def test_submitted_document_message_mentions_ocr_may_continue(self) -> None:
         content = render_submitted_message(

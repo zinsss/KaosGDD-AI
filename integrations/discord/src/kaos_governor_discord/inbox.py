@@ -717,7 +717,10 @@ class InboxMenuView(discord.ui.View):
             self.inbox.last_error = str(exc)
             if str(exc) == "paperless_metadata_required":
                 await interaction.edit_original_response(
-                    content=render_metadata_message(pending.filename),
+                    content=render_metadata_message(
+                        pending.filename,
+                        reason="Discord did not expose the original filename. Add a title before sending to Paperless.",
+                    ),
                     view=self,
                     allowed_mentions=NO_MENTIONS,
                 )
@@ -820,18 +823,23 @@ def render_pending_message(filename: str) -> str:
     )[:1990]
 
 
-def render_metadata_message(filename: str) -> str:
-    return "\n".join(
+def render_metadata_message(filename: str, *, reason: str = "") -> str:
+    lines = [
+        "## Documents",
+        f"### {escape_text(filename)}",
+    ]
+    if reason:
+        lines.append(escape_text(reason))
+    lines.extend(
         (
-            "## Documents",
-            f"### {escape_text(filename)}",
             "Reply to this message with:",
             "```md",
             "### {title of document}",
             "#tag1 #tag2 #tag3",
             "```",
         )
-    )[:1990]
+    )
+    return "\n".join(lines)[:1990]
 
 
 def render_processing_message(filename: str) -> str:
