@@ -242,10 +242,12 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(channel.sent), 3)
             self.assertEqual(channel.sent[0]["embed"].title, "Healthy")
             self.assertIn("KaosBrain", channel.sent[0]["embed"].description)
+            self.assertIn("Brain of KaosGDD", channel.sent[0]["embed"].description)
             self.assertEqual(channel.sent[1]["embed"].title, "Memos")
             self.assertIsInstance(channel.sent[1]["view"], ServiceStatusView)
             self.assertEqual(channel.sent[2]["embed"].title, "Planned")
             self.assertIn("KaosInj", channel.sent[2]["embed"].description)
+            self.assertIn("Clinic injection workflow support", channel.sent[2]["embed"].description)
             state = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(set(state["messageIds"]), {"summary:healthy", "issue:memos", "summary:planned"})
 
@@ -352,7 +354,9 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(embed.title, "Healthy")
         self.assertIn("KaosBrain", embed.description)
+        self.assertIn("Brain of KaosGDD", embed.description)
         self.assertIn("KaosGovernor", embed.description)
+        self.assertIn("Rules and controller", embed.description)
         self.assertEqual(embed.color.value, EMBED_COLOR_HEALTHY)
 
     def test_service_view_only_contains_restart_button(self) -> None:

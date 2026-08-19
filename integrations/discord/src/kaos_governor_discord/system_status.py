@@ -456,7 +456,7 @@ def render_service_embed(item: ServiceStatusItem, result: ServiceProbeResult | N
 
 
 def render_summary_embed(title: str, items: list[ServiceStatusItem], color: int) -> discord.Embed:
-    description = "\n".join(item.label for item in items) or "None"
+    description = "\n".join(f"**{item.label}**\n{item.description}" for item in items) or "None"
     return discord.Embed(title=title, description=description, color=color)
 
 
