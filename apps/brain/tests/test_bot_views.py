@@ -75,6 +75,8 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             "rustdesk",
             [{"name": "memos/42", "snippet": "# Rustdesk", "tags": ["server"]}],
         )
+        search_message = SimpleNamespace(id=900, delete=AsyncMock())
+        view.bind_message(search_message)  # type: ignore[arg-type]
         select = next(child for child in view.children if isinstance(child, BrainMemoSearchSelect))
         select._values = ["0"]
         interaction = SimpleNamespace(
@@ -89,6 +91,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         content = interaction.followup.send.await_args.args[0]
         self.assertEqual(content, "# Rustdesk\nUse Tailscale.")
         self.assertIn("view", interaction.followup.send.await_args.kwargs)
+        search_message.delete.assert_awaited_once()
 
     async def test_document_search_select_opens_selected_document_as_new_message(self) -> None:
         view = BrainDocumentSearchView(
@@ -98,6 +101,8 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             [{"id": 42, "title": "Insurance"}],
             paperless_public_url="https://paperless.example",
         )
+        search_message = SimpleNamespace(id=901, delete=AsyncMock())
+        view.bind_message(search_message)  # type: ignore[arg-type]
         select = next(child for child in view.children if isinstance(child, BrainDocumentSearchSelect))
         select._values = ["0"]
         interaction = SimpleNamespace(
@@ -116,6 +121,21 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         opened_view = interaction.followup.send.await_args.kwargs["view"]
         self.assertIsInstance(opened_view, BrainOpenedDocumentView)
         self.assertEqual([item.label for item in opened_view.children], ["Close", "Open document"])
+        search_message.delete.assert_awaited_once()
+
+    async def test_brain_search_window_deletes_on_timeout(self) -> None:
+        view = BrainMemoSearchView(
+            FakeGovernorTools(),  # type: ignore[arg-type]
+            200,
+            "rustdesk",
+            [{"name": "memos/42", "snippet": "# Rustdesk"}],
+        )
+        search_message = SimpleNamespace(id=902, delete=AsyncMock())
+        view.bind_message(search_message)  # type: ignore[arg-type]
+
+        await view.on_timeout()
+
+        search_message.delete.assert_awaited_once()
 
     def test_memo_confirm_buttons_match_governor_labels(self) -> None:
         edit = BrainMemoEditConfirmView(FakeGovernorTools(), 200, "memos/42", "# Memo")  # type: ignore[arg-type]

@@ -172,6 +172,8 @@ class DiscordMemosCapture:
             view = MemosOpenedView(self, page.query, page.results[0].memo)
         sent = await message.channel.send(content, view=view, allowed_mentions=NO_MENTIONS)
         if len(page.results) != 1:
+            if isinstance(view, MemosSearchView):
+                view.bind_message(sent)
             self._track_temporary_search_message(sent)
         self.last_error = ""
 
@@ -184,6 +186,12 @@ class DiscordMemosCapture:
     def preserve_search_message(self, message: discord.Message | None) -> None:
         if message is not None:
             self._temporary_search_messages.discard(int(message.id))
+
+    async def close_search_message(self, message: discord.Message | None) -> None:
+        if message is None:
+            return
+        self._temporary_search_messages.discard(int(message.id))
+        await self._delete_message(message)
 
     def _track_temporary_search_message(self, message: discord.Message) -> None:
         if self.search_result_delete_after <= 0:
@@ -261,7 +269,19 @@ class MemosSearchView(discord.ui.View):
         super().__init__(timeout=600)
         self.page = page
         self.capture = capture
+        self._message: discord.Message | None = None
         self.add_item(MemosSearchSelect(page, capture))
+
+    def bind_message(self, message: discord.Message) -> None:
+        self._message = message
+
+    async def on_timeout(self) -> None:
+        if self._message is None:
+            return
+        try:
+            await self._message.edit(view=None, allowed_mentions=NO_MENTIONS)
+        except discord.HTTPException:
+            LOGGER.info("Could not clear expired Memos search view %s", getattr(self._message, "id", ""))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if self.capture.policy.allows(interaction.guild_id, interaction.channel_id, interaction.user.id):
@@ -297,13 +317,13 @@ class MemosSearchSelect(discord.ui.Select):
         except (IndexError, TypeError, ValueError):
             await interaction.response.send_message("Memo selection expired.", ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
-        self.capture.preserve_search_message(interaction.message)
         await interaction.response.defer()
         await interaction.followup.send(
             content=render_memo_opened(self.page.query, result),
             view=MemosOpenedView(self.capture, self.page.query, result.memo),
             allowed_mentions=NO_MENTIONS,
         )
+        await self.capture.close_search_message(interaction.message)
 
 
 class MemosOpenedView(discord.ui.View):

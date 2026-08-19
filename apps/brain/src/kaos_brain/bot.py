@@ -66,6 +66,13 @@ LOGGER = logging.getLogger(__name__)
 NO_MENTIONS = discord.AllowedMentions.none()
 KST = ZoneInfo("Asia/Seoul")
 DOCUMENT_TAG_SUGGESTION_PATTERN = re.compile(r"\b(?:document|doc|문서)?\s*(\d{1,9})\b")
+BRAIN_SEARCH_WINDOW_SECONDS = 600
+
+
+def _bind_view_message(view: discord.ui.View | None, message: discord.Message) -> None:
+    bind = getattr(view, "bind_message", None)
+    if callable(bind):
+        bind(message)
 
 
 def _kaosai_planner_from_settings(settings: Settings) -> KaosAIPlanner:
@@ -352,12 +359,13 @@ class BrainBot(discord.Client):
                     kaosai_reply = await self._answer_with_kaosai_plan(request.text, message=message)
                     if kaosai_reply is not None:
                         reply, view = kaosai_reply
-                        await message.reply(
+                        sent = await message.reply(
                             reply[: self.settings.max_reply_chars],
                             view=view,
                             mention_author=False,
                             allowed_mentions=NO_MENTIONS,
                         )
+                        _bind_view_message(view, sent)
                         return
                 tool_request = (
                     parse_tool_request(request.text, today=message.created_at.astimezone(KST).date())
@@ -374,12 +382,13 @@ class BrainBot(discord.Client):
                 LOGGER.warning("Ollama failed route=%s: %s", request.route.value, exc)
                 label = "Deep thinking failed" if request.route is Route.DEEP else "Brain failed"
                 reply = f"{label}: {exc}"
-        await message.reply(
+        sent = await message.reply(
             reply[: self.settings.max_reply_chars],
             view=view,
             mention_author=False,
             allowed_mentions=NO_MENTIONS,
         )
+        _bind_view_message(view, sent)
 
     async def _answer_with_kaosai_plan(
         self,
@@ -936,7 +945,29 @@ class BrainBot(discord.Client):
         )
 
 
-class BrainMemoSearchView(discord.ui.View):
+class BrainTemporarySearchView(discord.ui.View):
+    def __init__(self) -> None:
+        super().__init__(timeout=BRAIN_SEARCH_WINDOW_SECONDS)
+        self._message: discord.Message | None = None
+
+    def bind_message(self, message: discord.Message) -> None:
+        self._message = message
+
+    async def delete_message(self) -> None:
+        if self._message is None:
+            return
+        try:
+            await self._message.delete()
+        except discord.HTTPException:
+            LOGGER.info("Could not delete Brain search window %s", getattr(self._message, "id", ""))
+        finally:
+            self._message = None
+
+    async def on_timeout(self) -> None:
+        await self.delete_message()
+
+
+class BrainMemoSearchView(BrainTemporarySearchView):
     def __init__(
         self,
         governor_tools: GovernorToolClient,
@@ -946,7 +977,7 @@ class BrainMemoSearchView(discord.ui.View):
         *,
         memos_public_url: str = "",
     ) -> None:
-        super().__init__(timeout=600)
+        super().__init__()
         self.governor_tools = governor_tools
         self.actor_id = actor_id
         self.query = query
@@ -990,6 +1021,8 @@ class BrainMemoSearchSelect(discord.ui.Select):
         view = BrainOpenedMemoView(self.parent_view.governor_tools, self.parent_view.actor_id, str(item.get("name") or ""), content)
         await interaction.response.defer()
         await interaction.followup.send(content, view=view, allowed_mentions=NO_MENTIONS)
+        await self.parent_view.delete_message()
+        self.parent_view.stop()
 
 
 class BrainOpenedMemoView(discord.ui.View):
@@ -1215,7 +1248,7 @@ class BrainDeletedMemoView(discord.ui.View):
         await interaction.message.delete()
 
 
-class BrainDocumentSearchView(discord.ui.View):
+class BrainDocumentSearchView(BrainTemporarySearchView):
     def __init__(
         self,
         governor_tools: GovernorToolClient,
@@ -1225,7 +1258,7 @@ class BrainDocumentSearchView(discord.ui.View):
         *,
         paperless_public_url: str = "",
     ) -> None:
-        super().__init__(timeout=600)
+        super().__init__()
         self.governor_tools = governor_tools
         self.actor_id = actor_id
         self.query = query
@@ -1273,6 +1306,7 @@ class BrainDocumentSearchSelect(discord.ui.Select):
             ),
             allowed_mentions=NO_MENTIONS,
         )
+        await self.parent_view.delete_message()
         self.parent_view.stop()
 
 

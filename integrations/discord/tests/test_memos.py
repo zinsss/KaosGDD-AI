@@ -15,6 +15,7 @@ from kaos_governor_discord.memos import (
     MemosDeleteConfirmView,
     MemosOpenedView,
     MemosSearchSelect,
+    MemosSearchView,
     memo_option_description,
     memo_option_label,
     parse_create_memo_message,
@@ -310,8 +311,9 @@ class DiscordMemosCaptureTests(unittest.IsolatedAsyncioTestCase):
             user=SimpleNamespace(id=200),
             response=SimpleNamespace(defer=AsyncMock()),
             followup=SimpleNamespace(send=AsyncMock()),
-            message=SimpleNamespace(id=900),
+            message=SimpleNamespace(id=900, delete=AsyncMock()),
         )
+        capture._temporary_search_messages.add(900)
 
         await select.callback(interaction)  # type: ignore[arg-type]
 
@@ -319,6 +321,24 @@ class DiscordMemosCaptureTests(unittest.IsolatedAsyncioTestCase):
         content = interaction.followup.send.await_args.kwargs["content"]
         self.assertIn("## Rustdesk LAN", content)
         self.assertIsInstance(interaction.followup.send.await_args.kwargs["view"], MemosOpenedView)
+        interaction.message.delete.assert_awaited_once()
+        self.assertEqual(capture._temporary_search_messages, set())
+
+    async def test_search_view_clears_controls_on_timeout(self) -> None:
+        service = FakeMemos()
+        capture = DiscordMemosCapture(
+            service,  # type: ignore[arg-type]
+            AccessPolicy(100, frozenset({200}), frozenset({300})),
+            channel_id=300,
+        )
+        page = service.search_page("rustdesk", None, 20)
+        view = MemosSearchView(page, capture)
+        message = SimpleNamespace(id=901, edit=AsyncMock())
+        view.bind_message(message)  # type: ignore[arg-type]
+
+        await view.on_timeout()
+
+        message.edit.assert_awaited_once()
 
     async def test_opened_memo_more_button_reveals_edit_and_delete_buttons(self) -> None:
         service = FakeMemos()
