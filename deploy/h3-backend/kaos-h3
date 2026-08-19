@@ -246,6 +246,148 @@ smoke() {
   die "Governor ready endpoint did not become ready: ${ready_url}"
 }
 
+maintenance_report() {
+  load_env
+  require_command python3
+  local root report_path targets timeout
+  root=$(governor_state_root)
+  install_state_directories "${root}"
+  report_path="${root}/discord-system/maintenance.json"
+  targets="${SYSTEM_MAINTENANCE_TARGETS:-kaosgdd=local:/srv/projects/KaosGDD-AI,kaosbrain=ssh:zin@kaosbrain:/srv/projects/KaosGDD-AI,kaosclinic=ssh:zin@kaosclinic:}"
+  timeout="${SYSTEM_MAINTENANCE_TIMEOUT_SECONDS:-12}"
+  python3 - "${report_path}" "${targets}" "${timeout}" <<'PY'
+import json
+import os
+import shlex
+import subprocess
+import sys
+import tempfile
+from datetime import datetime, timezone
+
+report_path, raw_targets, raw_timeout = sys.argv[1:4]
+try:
+    timeout = min(max(float(raw_timeout), 3.0), 60.0)
+except ValueError:
+    timeout = 12.0
+
+
+def parse_targets(raw):
+    targets = []
+    for part in raw.split(","):
+        entry = part.strip()
+        if not entry or "=" not in entry:
+            continue
+        name, spec = entry.split("=", 1)
+        mode, _, remainder = spec.partition(":")
+        if mode == "local":
+            targets.append({"name": name.strip(), "mode": "local", "address": "", "repoPath": remainder.strip()})
+        elif mode == "ssh":
+            address, _, repo_path = remainder.partition(":")
+            if address.strip():
+                targets.append({"name": name.strip(), "mode": "ssh", "address": address.strip(), "repoPath": repo_path.strip()})
+    return [target for target in targets if target["name"]]
+
+
+def probe_script(repo_path):
+    repo = shlex.quote(repo_path)
+    return f"""set +e
+kv() {{ printf '%s=%s\\n' "$1" "$2"; }}
+kv hostname "$(hostname 2>/dev/null)"
+kv checked_at "$(date +%Y-%m-%dT%H:%M:%S%z 2>/dev/null)"
+kv uptime "$(uptime -p 2>/dev/null)"
+kv reboot_required "$([ -f /var/run/reboot-required ] && echo yes || echo no)"
+kv disk_root "$(df -h / 2>/dev/null | awk 'NR==2{{print $5 " used, " $4 " free"}}')"
+kv memory "$(free -m 2>/dev/null | awk '/^Mem:/{{print $3 "MiB/" $2 "MiB"}}')"
+if command -v apt >/dev/null 2>&1; then
+  kv os_updates "$(apt list --upgradable 2>/dev/null | awk 'NR>1{{c++}} END{{print c+0}}')"
+  kv docker_package_updates "$(apt list --upgradable 2>/dev/null | awk -F/ '/^(docker|docker-ce|docker.io|containerd|containerd.io|docker-compose-plugin)\\//{{c++}} END{{print c+0}}')"
+else
+  kv os_updates unknown
+  kv docker_package_updates unknown
+fi
+if command -v docker >/dev/null 2>&1; then
+  kv docker_engine "$(docker --version 2>/dev/null | sed 's/, build.*//')"
+  kv docker_compose "$(docker compose version --short 2>/dev/null || echo unavailable)"
+  kv docker_running "$(docker ps -q 2>/dev/null | wc -l | tr -d ' ')"
+  kv docker_unhealthy "$(docker ps --filter health=unhealthy -q 2>/dev/null | wc -l | tr -d ' ')"
+  kv docker_exited "$(docker ps -a --filter status=exited -q 2>/dev/null | wc -l | tr -d ' ')"
+else
+  kv docker_engine unavailable
+  kv docker_compose unavailable
+  kv docker_running unknown
+  kv docker_unhealthy unknown
+  kv docker_exited unknown
+fi
+repo={repo}
+if [ -n "$repo" ] && [ -d "$repo/.git" ]; then
+  kv repo "$(git -C "$repo" status -sb 2>/dev/null | head -n 1)"
+  kv repo_dirty "$(git -C "$repo" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
+else
+  kv repo not-configured
+  kv repo_dirty unknown
+fi
+kv docker_image_updates "not checked; requires explicit pull"
+"""
+
+
+def parse_output(output):
+    facts = {}
+    for line in output.splitlines():
+        key, separator, value = line.partition("=")
+        if separator and key:
+            facts[key] = value.strip()
+    return facts
+
+
+def run_target(target):
+    script = probe_script(target.get("repoPath", ""))
+    try:
+        if target["mode"] == "local":
+            completed = subprocess.run(["bash", "-s"], input=script, capture_output=True, text=True, timeout=timeout)
+        elif target["mode"] == "ssh":
+            completed = subprocess.run(
+                [
+                    "ssh",
+                    "-o",
+                    "BatchMode=yes",
+                    "-o",
+                    "ConnectTimeout=5",
+                    "-o",
+                    "StrictHostKeyChecking=accept-new",
+                    target["address"],
+                    "bash -s",
+                ],
+                input=script,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+        else:
+            completed = subprocess.CompletedProcess([], 2, "", f"unsupported mode: {target['mode']}")
+    except (OSError, subprocess.SubprocessError) as exc:
+        return {"target": target, "ok": False, "facts": {}, "error": str(exc)[:200]}
+    if completed.returncode:
+        detail = (completed.stderr or completed.stdout or f"exit {completed.returncode}").strip()
+        return {"target": target, "ok": False, "facts": {}, "error": detail[:200]}
+    return {"target": target, "ok": True, "facts": parse_output(completed.stdout), "error": ""}
+
+
+payload = {
+    "collectedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "reports": [run_target(target) for target in parse_targets(raw_targets)],
+}
+os.makedirs(os.path.dirname(report_path), exist_ok=True)
+fd, tmp_path = tempfile.mkstemp(prefix=".maintenance.", dir=os.path.dirname(report_path), text=True)
+with os.fdopen(fd, "w", encoding="utf-8") as handle:
+    json.dump(payload, handle, ensure_ascii=False, indent=2, sort_keys=True)
+    handle.write("\n")
+os.chmod(tmp_path, 0o660)
+os.replace(tmp_path, report_path)
+print(report_path)
+PY
+  info "Maintenance report written: ${report_path}"
+}
+
 backends_preflight() {
   load_env
   require_command sqlite3
@@ -350,6 +492,7 @@ Commands:
   status             Show Compose and health status
   logs               Follow Governor logs
   smoke              Check local/Tailscale health and Discord readiness
+  maintenance-report Write a read-only host maintenance JSON report for Discord
   config             Render the effective Compose configuration
   backends-preflight Validate staged Memos and Radicale data for cutover
   backends-up         Start migrated Memos and Radicale after guarded preflight
@@ -380,6 +523,7 @@ case "${command}" in
   status) load_env; "${COMPOSE[@]}" ps; smoke ;;
   logs) load_env; "${COMPOSE[@]}" logs --follow --tail=100 governor-discord ;;
   smoke) smoke ;;
+  maintenance-report) maintenance_report ;;
   config) load_env; "${COMPOSE[@]}" config | redact_config ;;
   backends-preflight) backends_preflight ;;
   backends-up) backends_preflight; "${BACKENDS_COMPOSE[@]}" up --detach memos radicale ;;

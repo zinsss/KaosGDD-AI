@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+import json
 import os
+from pathlib import Path
 import shlex
 import subprocess
 from typing import Callable, Mapping
@@ -12,6 +14,7 @@ from .markdown import escape_text
 
 DEFAULT_MAINTENANCE_TIMEOUT_SECONDS = 12.0
 DEFAULT_TARGETS = "kaosgdd=local:/srv/projects/KaosGDD-AI,kaosbrain=ssh:zin@kaosbrain:/srv/projects/KaosGDD-AI,kaosclinic=ssh:zin@kaosclinic:"
+DEFAULT_REPORT_PATH = "/data/discord-system/maintenance.json"
 
 
 @dataclass(frozen=True)
@@ -28,6 +31,7 @@ class MaintenanceReport:
     ok: bool
     facts: Mapping[str, str]
     error: str = ""
+    collected_at: str = ""
 
 
 Runner = Callable[[MaintenanceTarget, str, float], subprocess.CompletedProcess[str]]
@@ -39,6 +43,8 @@ async def collect_maintenance_reports(
     runner: Runner | None = None,
 ) -> list[MaintenanceReport]:
     source = os.environ if env is None else env
+    if not maintenance_commands_allowed(source):
+        return load_stored_maintenance_reports(source)
     targets = maintenance_targets(source)
     timeout_seconds = maintenance_timeout_seconds(source)
     run = default_runner if runner is None else runner
@@ -56,6 +62,52 @@ def collect_maintenance_report(target: MaintenanceTarget, timeout_seconds: float
         detail = (completed.stderr or completed.stdout or f"exit {completed.returncode}").strip()
         return MaintenanceReport(target, False, {}, detail[:200])
     return MaintenanceReport(target, True, parse_probe_output(completed.stdout))
+
+
+def load_stored_maintenance_reports(env: Mapping[str, str]) -> list[MaintenanceReport]:
+    path = Path(env.get("SYSTEM_MAINTENANCE_REPORT_PATH", "").strip() or DEFAULT_REPORT_PATH)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return [
+            MaintenanceReport(
+                MaintenanceTarget("maintenance", "file", "", str(path)),
+                False,
+                {},
+                f"no report yet; run ./deploy/h3-backend/kaos-h3 maintenance-report",
+            )
+        ]
+    except (OSError, json.JSONDecodeError) as exc:
+        return [MaintenanceReport(MaintenanceTarget("maintenance", "file", "", str(path)), False, {}, stable_error(exc))]
+    collected_at = str(payload.get("collectedAt") or "")
+    reports = []
+    for item in list(payload.get("reports") or []):
+        if not isinstance(item, dict):
+            continue
+        target_payload = dict(item.get("target") or {})
+        target = MaintenanceTarget(
+            str(target_payload.get("name") or item.get("name") or "unknown"),
+            str(target_payload.get("mode") or ""),
+            str(target_payload.get("address") or ""),
+            str(target_payload.get("repoPath") or ""),
+        )
+        facts = {
+            str(key): str(value)
+            for key, value in dict(item.get("facts") or {}).items()
+            if str(key)
+        }
+        reports.append(
+            MaintenanceReport(
+                target,
+                bool(item.get("ok")),
+                facts,
+                str(item.get("error") or ""),
+                str(item.get("collectedAt") or collected_at),
+            )
+        )
+    if not reports:
+        return [MaintenanceReport(MaintenanceTarget("maintenance", "file", "", str(path)), False, {}, "empty report")]
+    return reports
 
 
 def default_runner(target: MaintenanceTarget, script: str, timeout_seconds: float) -> subprocess.CompletedProcess[str]:
@@ -171,8 +223,20 @@ def maintenance_timeout_seconds(env: Mapping[str, str]) -> float:
     return min(max(value, 3.0), 60.0)
 
 
+def maintenance_commands_allowed(env: Mapping[str, str]) -> bool:
+    return env.get("SYSTEM_MAINTENANCE_ALLOW_COMMANDS", "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
 def render_maintenance_reports(reports: list[MaintenanceReport]) -> str:
     sections = ["## System maintenance"]
+    collected = next((report.collected_at for report in reports if report.collected_at), "")
+    if collected:
+        sections.append(f"-# Collected {escape_text(collected)}")
     for report in reports:
         sections.append(render_maintenance_report(report))
     sections.append("-# Docker image updates are not checked automatically because that requires pulling images.")

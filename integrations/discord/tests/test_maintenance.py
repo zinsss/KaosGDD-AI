@@ -1,19 +1,23 @@
 from __future__ import annotations
 
 import subprocess
+import tempfile
 import unittest
+from pathlib import Path
 
 from kaos_governor_discord.maintenance import (
     MaintenanceReport,
     MaintenanceTarget,
+    collect_maintenance_reports,
     collect_maintenance_report,
+    load_stored_maintenance_reports,
     maintenance_targets,
     parse_probe_output,
     render_maintenance_reports,
 )
 
 
-class MaintenanceTests(unittest.TestCase):
+class MaintenanceTests(unittest.IsolatedAsyncioTestCase):
     def test_parse_targets_supports_local_and_ssh_hosts(self) -> None:
         targets = maintenance_targets(
             {
@@ -106,6 +110,67 @@ class MaintenanceTests(unittest.TestCase):
 
         self.assertIn("kaosclinic", text)
         self.assertIn("check failed", text)
+
+    def test_load_stored_report_for_discord_container(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "maintenance.json"
+            path.write_text(
+                """
+                {
+                  "collectedAt": "2026-08-20T00:00:00Z",
+                  "reports": [
+                    {
+                      "target": {"name": "kaosgdd", "mode": "local", "address": "", "repoPath": "/repo"},
+                      "ok": true,
+                      "facts": {"hostname": "kaosgdd", "os_updates": 3, "docker_package_updates": 1},
+                      "error": ""
+                    }
+                  ]
+                }
+                """,
+                encoding="utf-8",
+            )
+
+            reports = load_stored_maintenance_reports({"SYSTEM_MAINTENANCE_REPORT_PATH": str(path)})
+
+        self.assertEqual(len(reports), 1)
+        self.assertEqual(reports[0].target.name, "kaosgdd")
+        self.assertEqual(reports[0].facts["docker_package_updates"], "1")
+        self.assertEqual(reports[0].collected_at, "2026-08-20T00:00:00Z")
+
+    async def test_collect_defaults_to_stored_report_not_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "missing.json"
+
+            def runner(*_args):
+                raise AssertionError("runner should not be called")
+
+            reports = await collect_maintenance_reports(
+                {"SYSTEM_MAINTENANCE_REPORT_PATH": str(path)},
+                runner=runner,
+            )
+
+        self.assertFalse(reports[0].ok)
+        self.assertIn("no report yet", reports[0].error)
+
+    async def test_collect_can_run_commands_when_explicitly_allowed(self) -> None:
+        def runner(
+            _target: MaintenanceTarget,
+            _script: str,
+            _timeout: float,
+        ) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess([], 0, "hostname=kaosgdd\n", "")
+
+        reports = await collect_maintenance_reports(
+            {
+                "SYSTEM_MAINTENANCE_ALLOW_COMMANDS": "true",
+                "SYSTEM_MAINTENANCE_TARGETS": "kaosgdd=local:/repo",
+            },
+            runner=runner,
+        )
+
+        self.assertTrue(reports[0].ok)
+        self.assertEqual(reports[0].facts["hostname"], "kaosgdd")
 
 
 if __name__ == "__main__":
