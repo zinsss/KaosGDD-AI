@@ -1776,7 +1776,7 @@ def _normalize_second_look_provider_response(payload: Mapping[str, Any]) -> dict
     result = payload.get("result")
     if not isinstance(result, Mapping):
         raise RuntimeError("imaging_second_look_missing_result")
-    return {
+    normalized = {
         "status": status,
         "result": {
             "summary": str(result.get("summary") or "").strip(),
@@ -1787,6 +1787,13 @@ def _normalize_second_look_provider_response(payload: Mapping[str, Any]) -> dict
             "model": str(result.get("model") or "unknown").strip(),
         },
     }
+    fallback = result.get("fallback")
+    if isinstance(fallback, Mapping):
+        normalized["result"]["fallback"] = {
+            "from": str(fallback.get("from") or "").strip(),
+            "to": str(fallback.get("to") or "").strip(),
+        }
+    return normalized
 
 
 def _string_items(value: object, *, limit: int) -> list[str]:

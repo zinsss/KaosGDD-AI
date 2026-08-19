@@ -358,6 +358,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
                         "cautions": ["최종 판단은 진료자가 합니다."],
                         "recommendation": "임상 소견과 대조",
                         "model": "qwen2.5vl",
+                        "fallback": {"from": "kaosai", "to": "ollama"},
                     },
                 }
             )
@@ -397,6 +398,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(payload["status"], "completed")
                 self.assertEqual(payload["result"]["summary"], "검토 완료")
                 self.assertEqual(payload["result"]["model"], "qwen2.5vl")
+                self.assertEqual(payload["result"]["fallback"], {"from": "kaosai", "to": "ollama"})
                 self.assertEqual(len(provider_requests), 1)
             finally:
                 await client.close()
