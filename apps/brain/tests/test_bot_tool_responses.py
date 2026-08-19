@@ -100,7 +100,7 @@ class BrainToolResponseTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             reply,
-            "## Insurance receipt\n- 2026-08-14 · Clinic · receipt.pdf\nhttps://paperless.example/documents/42/details",
+            "## Insurance receipt\n- 2026-08-14 · Clinic\nhttps://paperless.example/documents/42/details",
         )
         self.assertIsNotNone(view)
         assert view is not None

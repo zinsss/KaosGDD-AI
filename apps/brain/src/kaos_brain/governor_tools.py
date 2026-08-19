@@ -623,14 +623,10 @@ def render_memo_deleted(content: str, deleted_at: str) -> str:
 
 
 def render_document_opened(query: str, item: dict[str, Any]) -> str:
-    title = _truncate(
-        str(item.get("title") or item.get("originalFileName") or item.get("filename") or "Untitled document").strip(),
-        80,
-    )
+    title = document_display_title(item, 80)
     created = str(item.get("created") or item.get("createdDate") or "").strip()
-    filename = str(item.get("filename") or item.get("originalFileName") or "").strip()
     correspondent = str(item.get("correspondent") or "").strip()
-    details = [value for value in (created[:10], correspondent, filename) if value]
+    details = [value for value in (created[:10], correspondent) if value]
     lines = [f"## {title}"]
     if details:
         lines.append(f"- {_truncate(' · '.join(details), 180)}")
@@ -660,16 +656,21 @@ def memo_public_url(base_url: str, name: str) -> str:
 
 
 def document_option_label(item: dict[str, Any]) -> str:
-    return _truncate(str(item.get("title") or item.get("originalFileName") or item.get("filename") or "Untitled document"), 100)
+    return document_display_title(item, 100)
 
 
 def document_option_description(item: dict[str, Any]) -> str:
     details = [
         str(item.get("created") or item.get("createdDate") or "")[:10],
         str(item.get("correspondent") or ""),
-        str(item.get("filename") or item.get("originalFileName") or ""),
     ]
     return _truncate(" · ".join(detail for detail in details if detail), 100)
+
+
+def document_display_title(item: dict[str, Any], limit: int = 100) -> str:
+    title = str(item.get("title") or "").strip()
+    fallback = str(item.get("originalFileName") or item.get("filename") or "").strip()
+    return _truncate(title or fallback or "Untitled document", limit)
 
 
 def document_public_url(base_url: str, document_id: object) -> str:
@@ -880,11 +881,10 @@ def _escape_mentions(value: str) -> str:
 
 
 def _document_line(item: dict[str, Any]) -> str:
-    title = _truncate(str(item.get("title") or item.get("originalFileName") or item.get("filename") or "Untitled document").strip(), 80)
+    title = document_display_title(item, 80)
     created = str(item.get("created") or item.get("createdDate") or "").strip()
-    filename = str(item.get("filename") or item.get("originalFileName") or "").strip()
     correspondent = str(item.get("correspondent") or "").strip()
-    details = [value for value in (created[:10], correspondent, filename) if value]
+    details = [value for value in (created[:10], correspondent) if value]
     if details:
         return f"### {title}\n- {_truncate(' · '.join(details), 180)}"
     return f"### {title}"

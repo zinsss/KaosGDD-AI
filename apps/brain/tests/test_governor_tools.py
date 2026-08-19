@@ -2,6 +2,7 @@ import unittest
 
 from kaos_brain.governor_tools import (
     DocumentTagRequest,
+    document_display_title,
     document_public_url,
     memo_option_label,
     render_event_create_completed,
@@ -200,7 +201,8 @@ class GovernorToolRenderingTests(unittest.TestCase):
             },
         )
         self.assertIn("Searched..\n## rustdesk\n1 results in 12 documents", context)
-        self.assertIn("### Rustdesk setup\n- 2026-08-14 · Clinic · rustdesk.pdf", context)
+        self.assertIn("### Rustdesk setup\n- 2026-08-14 · Clinic", context)
+        self.assertNotIn("rustdesk.pdf", context)
 
     def test_render_opened_document_uses_title_as_header(self) -> None:
         content = render_document_opened(
@@ -217,8 +219,12 @@ class GovernorToolRenderingTests(unittest.TestCase):
 
         self.assertEqual(
             content,
-            "## Insurance receipt\n- 2026-08-14 · Clinic · receipt.pdf\nhttps://paperless.example/documents/42/details",
+            "## Insurance receipt\n- 2026-08-14 · Clinic\nhttps://paperless.example/documents/42/details",
         )
+
+    def test_document_display_title_uses_filename_only_as_fallback(self) -> None:
+        self.assertEqual(document_display_title({"title": "보험 영수증", "filename": "scan.pdf"}), "보험 영수증")
+        self.assertEqual(document_display_title({"filename": "scan.pdf"}), "scan.pdf")
 
     def test_render_document_tags_proposal_shows_ignored_ai_tags(self) -> None:
         content = render_document_tags_proposal(
