@@ -31,6 +31,7 @@ from .fax import DiscordFaxTransport, rejection_message
 from .governor_api import GovernorApiClient, GovernorApiConfig
 from .mail import render_mail_summary, safe_attachment_filename
 from .markdown import MarkdownField, MarkdownMessage, NO_MENTIONS
+from .maintenance import collect_maintenance_reports, render_maintenance_reports
 from .memos import DiscordMemosCapture
 from .organizer import DiscordMailOrganizer
 from .system_status import DiscordServiceStatusSurface
@@ -394,6 +395,19 @@ class GovernorBot(discord.Client):
                     summary=f"{checked} services checked.",
                 ).render()
             )
+
+        @self.tree.command(name="maintenance-report", description="Check read-only maintenance status for KaosGDD hosts")
+        async def maintenance_report(interaction: discord.Interaction) -> None:
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            try:
+                reports = await collect_maintenance_reports()
+            except Exception as exc:
+                LOGGER.exception("Maintenance report failed")
+                await interaction.edit_original_response(
+                    content=MarkdownMessage(title="Maintenance report failed", summary=type(exc).__name__).render()
+                )
+                return
+            await interaction.edit_original_response(content=render_maintenance_reports(reports))
 
         @self.tree.command(name="mail-organizer-now", description="Send the Naver unread-mail organizer now")
         async def mail_organizer_now(interaction: discord.Interaction) -> None:

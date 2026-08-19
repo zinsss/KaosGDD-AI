@@ -110,6 +110,13 @@ kaos-h3 edge-down
 `down`, `backends-down`, `services-down`, `family-down`, and `edge-down` never
 delete volumes or host data.
 
+The Discord `/maintenance-report` command is read-only. It checks the
+configured `SYSTEM_MAINTENANCE_TARGETS` hosts for cached OS package updates,
+Docker package updates, reboot-required state, disk/memory, Docker container
+health counts, and repo status. It does not run upgrades, pull Docker images,
+restart services, or reboot hosts. Docker image update checks remain manual
+because checking them reliably requires an explicit image pull.
+
 ## Stateful backends
 
 `compose.backends.yaml` pins the exact Memos and Radicale images observed on
