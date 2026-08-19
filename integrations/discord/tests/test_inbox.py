@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock
 from kaos_governor.documents import (
     DocumentIntakeError,
     PaperlessConfig,
+    PaperlessDocument,
     PaperlessDocumentService,
     PaperlessResult,
     PaperlessSearchPage,
@@ -23,6 +24,7 @@ from kaos_governor_discord.inbox import (
     attachment_display_filename,
     generated_discord_filename,
     parse_metadata_reply,
+    parse_tag_text,
     rejection_message,
     render_ocr_pending_message,
     render_ocr_ready_message,
@@ -43,6 +45,7 @@ class FakePaperless(PaperlessDocumentService):
         )
         self.submitted = []
         self.searches = []
+        self.metadata_updates = []
 
     def submit_pdf(self, filename, content, *, title="", tags=(), source="discord"):
         self.submitted.append((filename, content, title, tuple(tags), source))
@@ -68,6 +71,17 @@ class FakePaperless(PaperlessDocumentService):
             ),
             13,
             213,
+        )
+
+    def update_metadata(self, document_id, *, title, tags=()):
+        self.metadata_updates.append((document_id, title, tuple(tags)))
+        return PaperlessDocument(
+            int(document_id),
+            title,
+            "2026-08-19",
+            "scan.pdf",
+            content="OCR body",
+            tag_ids=(1, 2),
         )
 
 
@@ -311,6 +325,29 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(paperless.submitted[0][0], "의료기관 보건의료인력.pdf")
             self.assertFalse(paperless.submitted[0][0].startswith("kaos-"))
 
+    async def test_update_record_metadata_updates_paperless_and_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            paperless = FakePaperless()
+            inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
+            source_id = "discord:100:300:1:10"
+            inbox.state.sources[source_id] = InboxRecord(
+                source_id=source_id,
+                sha256="hash",
+                filename="scan.pdf",
+                task_id="task-1",
+                message_id=1,
+                document_id=42,
+                title="Old",
+                tags=("old",),
+            )
+
+            record = await inbox.update_record_metadata(source_id, title="New title", tags=("처방전", "프린트"))
+
+            self.assertEqual(paperless.metadata_updates, [(42, "New title", ("처방전", "프린트"))])
+            self.assertEqual(record.title, "New title")
+            self.assertEqual(record.tags, ("처방전", "프린트"))
+            self.assertEqual(inbox.state.sources[source_id].title, "New title")
+
     async def test_restore_pending_views_registers_existing_prompt_view(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             paperless = FakePaperless()
@@ -501,6 +538,9 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
             ("Insurance document", ("medical", "Tax", "의료")),
         )
         self.assertIsNone(parse_metadata_reply("#tag-only"))
+
+    def test_parse_tag_text_accepts_hashes_commas_and_plain_words(self) -> None:
+        self.assertEqual(parse_tag_text("#처방전, #프린트 clinic clinic"), ("처방전", "프린트", "clinic"))
 
     def test_rejection_message_is_stable(self) -> None:
         self.assertIn("Only PDF", rejection_message(ValueError("pdf_attachment_required")))

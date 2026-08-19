@@ -461,7 +461,28 @@ class DiscordDocumentInbox:
         if not hasattr(channel, "fetch_message"):
             return
         message = await channel.fetch_message(record.prompt_message_id)
-        await message.edit(content=content, view=InboxClosedView(), allowed_mentions=NO_MENTIONS)
+        view = OcrReadyView(self, record.source_id) if record.document_id else InboxClosedView()
+        await message.edit(content=content, view=view, allowed_mentions=NO_MENTIONS)
+
+    async def update_record_metadata(self, source_id: str, *, title: str, tags: tuple[str, ...]) -> InboxRecord:
+        record = self.state.sources.get(source_id)
+        if record is None or record.document_id <= 0:
+            raise DocumentIntakeError("paperless_document_missing")
+        document = await asyncio.to_thread(
+            self.paperless.update_metadata,
+            record.document_id,
+            title=title,
+            tags=tags,
+        )
+        updated = replace(
+            record,
+            title=document.title,
+            tags=tuple(tags),
+            document_id=document.document_id,
+        )
+        self.state.sources[source_id] = updated
+        self._save_state()
+        return updated
 
     def _register_view(self, view: discord.ui.View | None, message_id: int) -> None:
         if view is None or not hasattr(self.bot, "add_view"):
@@ -577,6 +598,7 @@ def rejection_message(error: Exception) -> str:
         "paperless_attachment_missing": "The original PDF attachment is missing.",
         "paperless_attachment_changed": "The original PDF attachment changed.",
         "paperless_metadata_required": "Discord did not expose the original filename. Add Metadata is required.",
+        "paperless_document_missing": "The Paperless document is no longer available.",
     }
     return labels.get(str(error), str(error))
 
@@ -719,6 +741,73 @@ class InboxClosedView(discord.ui.View):
     def __init__(self) -> None:
         super().__init__(timeout=None)
         self.add_item(discord.ui.Button(label="Closed", style=discord.ButtonStyle.secondary, disabled=True))
+
+
+class OcrReadyView(discord.ui.View):
+    def __init__(self, inbox: DiscordDocumentInbox, source_id: str) -> None:
+        super().__init__(timeout=None)
+        self.inbox = inbox
+        self.source_id = source_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if self.inbox.policy.allows(interaction.guild_id, interaction.channel_id, interaction.user.id):
+            return True
+        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+    @discord.ui.button(label="Edit", style=discord.ButtonStyle.primary)
+    async def edit(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        record = self.inbox.state.sources.get(self.source_id)
+        if record is None or record.document_id <= 0:
+            await interaction.response.send_message("Document is no longer available.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.response.send_modal(DocumentMetadataModal(self.inbox, self.source_id, record))
+
+
+class DocumentMetadataModal(discord.ui.Modal):
+    def __init__(self, inbox: DiscordDocumentInbox, source_id: str, record: InboxRecord) -> None:
+        super().__init__(title="Edit document")
+        self.inbox = inbox
+        self.source_id = source_id
+        self.title_input = discord.ui.TextInput(
+            label="Title",
+            default=record.title or Path(record.filename).stem,
+            max_length=128,
+            required=True,
+        )
+        self.tags_input = discord.ui.TextInput(
+            label="Tags",
+            default=" ".join(f"#{tag}" for tag in record.tags),
+            placeholder="#tag1 #tag2 #tag3",
+            style=discord.TextStyle.paragraph,
+            max_length=500,
+            required=False,
+        )
+        self.add_item(self.title_input)
+        self.add_item(self.tags_input)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        title = " ".join(str(self.title_input.value or "").split())
+        tags = parse_tag_text(str(self.tags_input.value or ""))
+        if not title:
+            await interaction.response.send_message("Title is required.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.response.defer()
+        try:
+            record = await self.inbox.update_record_metadata(self.source_id, title=title, tags=tags)
+        except (DocumentIntakeError, discord.HTTPException) as exc:
+            self.inbox.last_error = str(exc)
+            await interaction.followup.send(
+                f"Documents metadata update failed: {escape_text(rejection_message(exc))}",
+                ephemeral=True,
+                allowed_mentions=NO_MENTIONS,
+            )
+            return
+        await interaction.edit_original_response(
+            content=render_ocr_ready_message(record),
+            view=OcrReadyView(self.inbox, self.source_id),
+            allowed_mentions=NO_MENTIONS,
+        )
 
 
 def render_pending_message(filename: str) -> str:
@@ -943,12 +1032,17 @@ def parse_metadata_reply(content: str) -> tuple[str, tuple[str, ...]] | None:
     title = lines[0][4:].strip()
     if not title:
         return None
+    return title, parse_tag_text("\n".join(lines[1:]))
+
+
+def parse_tag_text(content: str) -> tuple[str, ...]:
     tags: list[str] = []
     seen: set[str] = set()
-    for tag in re.findall(r"#([^\s#]+)", "\n".join(lines[1:])):
+    normalized = str(content or "").replace(",", " ")
+    for tag in re.findall(r"#?([^\s#]+)", normalized):
         cleaned = tag.strip(".,;:!?) ]}").strip("([{")
         key = cleaned.casefold()
         if cleaned and key not in seen:
             seen.add(key)
             tags.append(cleaned)
-    return title, tuple(tags)
+    return tuple(tags)
