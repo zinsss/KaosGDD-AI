@@ -742,7 +742,7 @@ class BrainToolServer:
         collection_id = str(body.get("collectionId") or "").strip()
         if not actor_id or not idempotency_key or not title:
             return web.json_response({"error": "task_create_missing_required_field"}, status=400)
-        allow_empty_due = bool(collection_id) and not due_date and not due_time
+        allow_empty_due = not due_date and not due_time
         if not allow_empty_due and not _valid_due(due_date, due_time):
             return web.json_response({"error": "task_create_invalid_due"}, status=400)
         payload = {

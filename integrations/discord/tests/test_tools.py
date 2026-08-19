@@ -1004,6 +1004,36 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.calendar.created[0][1]["dueDate"], "2026-08-17")
         self.assertEqual(self.calendar_refresh_count, 1)
 
+    async def test_task_create_allows_personal_task_without_due_date(self) -> None:
+        proposal = await self.client.post(
+            "/tools/tasks/create/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-create-no-due-1",
+                "profile": "main",
+                "title": "오도리 문고리",
+            },
+        )
+        self.assertEqual(proposal.status, 201)
+        proposal_payload = await proposal.json()
+        self.assertEqual(proposal_payload["task"]["title"], "오도리 문고리")
+        self.assertEqual(proposal_payload["task"]["due"], "")
+        self.assertEqual(proposal_payload["task"]["dueTime"], "")
+        confirmation_id = proposal_payload["confirmationId"]
+
+        response = await self.client.post(
+            f"/tools/confirmations/{confirmation_id}/approve",
+            headers=self.headers(),
+            json={"actorId": "994579996960104529"},
+        )
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(self.calendar.created[0][0], "main")
+        self.assertEqual(self.calendar.created[0][1]["title"], "오도리 문고리")
+        self.assertEqual(self.calendar.created[0][1]["dueDate"], "")
+        self.assertEqual(self.calendar.created[0][1]["dueTime"], "")
+
     async def test_task_create_approval_preserves_collection_id(self) -> None:
         proposal = await self.client.post(
             "/tools/tasks/create/proposals",
