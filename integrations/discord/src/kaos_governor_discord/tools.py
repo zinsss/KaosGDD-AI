@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+import hashlib
 import hmac
 import logging
 from typing import Any
@@ -149,7 +152,7 @@ class BrainToolServer:
         self._runner: web.AppRunner | None = None
 
     def application(self) -> web.Application:
-        app = web.Application(client_max_size=32 * 1024)
+        app = web.Application(client_max_size=32 * 1024 * 1024)
         app.middlewares.append(self._auth_middleware)
         app.router.add_get("/tools/today", self._today)
         app.router.add_get("/tools/tasks/active", self._active_tasks)
@@ -169,6 +172,7 @@ class BrainToolServer:
         app.router.add_post("/tools/tasks/create/proposals", self._propose_task_create)
         app.router.add_post("/tools/tasks/update-due/proposals", self._propose_task_due_update)
         app.router.add_post("/tools/events/create/proposals", self._propose_event_create)
+        app.router.add_post("/tools/imaging/second-look", self._imaging_second_look)
         app.router.add_post("/tools/confirmations/{confirmation_id}/approve", self._approve_confirmation)
         return app
 
@@ -612,6 +616,45 @@ class BrainToolServer:
                 status=409,
             )
         return await asyncio.to_thread(self._memos.get, results[0].memo.name)
+
+    async def _imaging_second_look(self, request: web.Request) -> web.Response:
+        try:
+            body = await request.json()
+        except ValueError:
+            return web.json_response({"error": "invalid_json"}, status=400)
+        if not isinstance(body, Mapping):
+            return web.json_response({"error": "invalid_json"}, status=400)
+
+        error = _validate_second_look_request(body)
+        if error:
+            return web.json_response({"error": error}, status=400)
+
+        request_id = str(body["requestId"]).strip()
+        job_id = "imaging_" + hashlib.sha256(request_id.encode("utf-8")).hexdigest()[:24]
+        modality = str(body.get("modality") or "").strip().upper()
+        ai_domain = str(body.get("aiDomain") or "").strip().lower()
+        question = " ".join(str(body.get("question") or "").split())
+        return web.json_response(
+            {
+                "jobId": job_id,
+                "status": "completed",
+                "result": {
+                    "summary": "AI second-look model is not connected yet. No clinical image opinion was generated.",
+                    "checklist": [
+                        f"Request accepted from KaosAIO for temporary review only.",
+                        f"Modality: {modality or 'unknown'}; domain: {ai_domain or 'unknown'}.",
+                        "Rendered preview image was received and discarded after request validation.",
+                    ],
+                    "cautions": [
+                        "No DICOM, Orthanc, PACS, or AIO report data was modified.",
+                        "This placeholder is not a diagnostic interpretation.",
+                    ],
+                    "recommendation": question or "Connect the approved KaosAI imaging model before using second-look output.",
+                    "disclaimer": "AI 보조 검토입니다. 최종 판단은 진료자가 합니다.",
+                    "model": "not-connected",
+                },
+            }
+        )
 
     async def _propose_task_due_update(self, request: web.Request) -> web.Response:
         try:
@@ -1632,6 +1675,49 @@ def _document_tag_context_document_payload(document: Mapping[str, object]) -> di
     payload["contentExcerpt"] = content[:4000]
     payload["contentLength"] = len(content)
     return payload
+
+
+def _validate_second_look_request(body: Mapping[str, Any]) -> str:
+    if str(body.get("source") or "").strip() != "kaosaio":
+        return "imaging_second_look_invalid_source"
+    for name in ("requestId", "modality", "aiDomain", "question"):
+        if not str(body.get(name) or "").strip():
+            return "imaging_second_look_missing_required_field"
+    safety = body.get("safety")
+    if not isinstance(safety, Mapping):
+        return "imaging_second_look_missing_safety"
+    required_safety = {
+        "temporary": True,
+        "storedInAioReports": False,
+        "dicomMetadataSent": False,
+        "orthancReadOnly": True,
+        "dicomModified": False,
+        "pacsFinalReport": False,
+        "renderedPreview": True,
+    }
+    for name, expected in required_safety.items():
+        if safety.get(name) is not expected:
+            return "imaging_second_look_safety_rejected"
+    images = body.get("images")
+    if not isinstance(images, list) or not images:
+        return "imaging_second_look_missing_image"
+    if len(images) > 4:
+        return "imaging_second_look_too_many_images"
+    for image in images:
+        if not isinstance(image, Mapping):
+            return "imaging_second_look_invalid_image"
+        if str(image.get("format") or "").strip().lower() not in {"png", "jpg", "jpeg"}:
+            return "imaging_second_look_unsupported_image_format"
+        content = str(image.get("contentBase64") or "").strip()
+        if not content:
+            return "imaging_second_look_missing_image"
+        try:
+            decoded = base64.b64decode(content, validate=True)
+        except (binascii.Error, ValueError):
+            return "imaging_second_look_invalid_image_base64"
+        if not decoded or len(decoded) > 8 * 1024 * 1024:
+            return "imaging_second_look_image_size_rejected"
+    return ""
 
 
 def _completed_document_metadata_payload(

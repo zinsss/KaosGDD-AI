@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from datetime import date
 from types import SimpleNamespace
 import unittest
@@ -250,6 +251,69 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response.status, 401)
         self.assertEqual((await response.json())["error"], "governor_api_unauthorized")
+
+    async def test_imaging_second_look_accepts_kaosaio_temporary_preview(self) -> None:
+        response = await self.client.post(
+            "/tools/imaging/second-look",
+            headers=self.headers(),
+            json={
+                "source": "kaosaio",
+                "requestId": "kaosaio-second-look-1",
+                "studyInstanceUid": "1.2.3",
+                "seriesInstanceUid": "1.2.3.4",
+                "sopInstanceUid": "1.2.3.4.5",
+                "modality": "DX",
+                "bodyPart": "CHEST",
+                "viewPosition": "PA",
+                "aiDomain": "cxr",
+                "images": [{"format": "png", "contentBase64": base64.b64encode(b"png").decode("ascii")}],
+                "question": "눈에 띄는 이상 소견이나 놓치기 쉬운 포인트를 체크해주세요.",
+                "safety": {
+                    "temporary": True,
+                    "storedInAioReports": False,
+                    "dicomMetadataSent": False,
+                    "orthancReadOnly": True,
+                    "dicomModified": False,
+                    "pacsFinalReport": False,
+                    "renderedPreview": True,
+                    "burnedInAnnotationsPossible": True,
+                    "disclaimer": "KaosAIO Opinion...",
+                },
+            },
+        )
+
+        self.assertEqual(response.status, 200)
+        payload = await response.json()
+        self.assertTrue(payload["jobId"].startswith("imaging_"))
+        self.assertEqual(payload["status"], "completed")
+        self.assertEqual(payload["result"]["model"], "not-connected")
+        self.assertIn("AI 보조 검토", payload["result"]["disclaimer"])
+
+    async def test_imaging_second_look_rejects_unsafe_request(self) -> None:
+        response = await self.client.post(
+            "/tools/imaging/second-look",
+            headers=self.headers(),
+            json={
+                "source": "kaosaio",
+                "requestId": "kaosaio-second-look-2",
+                "modality": "DX",
+                "aiDomain": "cxr",
+                "images": [{"format": "png", "contentBase64": base64.b64encode(b"png").decode("ascii")}],
+                "question": "check",
+                "safety": {
+                    "temporary": True,
+                    "storedInAioReports": True,
+                    "dicomMetadataSent": False,
+                    "orthancReadOnly": True,
+                    "dicomModified": False,
+                    "pacsFinalReport": False,
+                    "renderedPreview": True,
+                },
+            },
+        )
+
+        self.assertEqual(response.status, 400)
+        self.assertEqual((await response.json())["error"], "imaging_second_look_safety_rejected")
 
     async def test_today_returns_events_due_tasks_and_weather(self) -> None:
         response = await self.client.get("/tools/today?profile=main", headers=self.headers())
