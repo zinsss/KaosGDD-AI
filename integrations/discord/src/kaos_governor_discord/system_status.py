@@ -80,6 +80,7 @@ class DiscordServiceStatusState:
 
 SERVICES: tuple[ServiceStatusItem, ...] = (
     ServiceStatusItem("kaosbrain", "KaosBrain", "Brain of KaosGDD on Odroid H4 Ultra"),
+    ServiceStatusItem("kaosai-second-look", "KaosAI Second-Look", "Temporary AIO image second-look provider path"),
     ServiceStatusItem("kaosgovernor", "KaosGovernor", "Rules and controller of KaosGDD"),
     ServiceStatusItem("kaospacs", "KaosPACS", "Clinic PACS and DICOM infrastructure"),
     ServiceStatusItem("kaosinj", "KaosInj", "Clinic injection workflow support"),
@@ -521,6 +522,9 @@ def check_service(
     timeout_seconds: float,
 ) -> ServiceProbeResult:
     checked_at = checked_at_text()
+    if item.key == "kaosai-second-look":
+        state, detail = check_second_look_status(env, timeout_seconds)
+        return ServiceProbeResult(item.key, state, checked_at, detail)
     url = probe_value(env, item.key, "URL")
     if not url and default_probes_enabled(env):
         url = default_http_probe(env, item.key)
@@ -594,6 +598,66 @@ def brain_health_detail(status: int, body: bytes) -> str:
     deep_model = str(payload.get("deepModel") or "").strip()
     if chat_model or deep_model:
         parts.append(f"models {chat_model or '?'} / {deep_model or '?'}")
+    return "; ".join(parts)
+
+
+def check_second_look_status(env: Mapping[str, str], timeout_seconds: float) -> tuple[str, str]:
+    governor_url = env.get("IMAGING_SECOND_LOOK_URL", "").strip()
+    provider_url = env.get("SERVICE_STATUS_KAOSAI_SECOND_LOOK_URL", "").strip()
+    if not provider_url:
+        provider_url = second_look_health_url(governor_url)
+    if not provider_url:
+        return "unknown", "IMAGING_SECOND_LOOK_URL is not configured."
+    state, detail = check_second_look_provider_http(provider_url, timeout_seconds)
+    if state != "healthy":
+        return state, detail
+    if governor_url:
+        return state, f"{detail}; Governor route configured"
+    return state, detail
+
+
+def check_second_look_provider_http(url: str, timeout_seconds: float) -> tuple[str, str]:
+    request = urllib.request.Request(url, method="GET", headers={"User-Agent": "KaosGovernor/service-status"})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            status = int(response.status)
+            body = response.read(8192)
+    except urllib.error.HTTPError as exc:
+        status = int(exc.code)
+        body = exc.read(8192)
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        return "down", stable_error(exc)
+    if status == 401:
+        return "healthy", "Provider reachable; auth required"
+    if 200 <= status < 400:
+        return "healthy", second_look_health_detail(status, body)
+    return "down", f"HTTP {status}"
+
+
+def second_look_health_url(url: str) -> str:
+    normalized = url.strip()
+    if normalized.endswith("/imaging/second-look"):
+        return normalized[: -len("/imaging/second-look")] + "/health"
+    if normalized.endswith("/tools/imaging/second-look"):
+        return normalized[: -len("/tools/imaging/second-look")] + "/health"
+    return normalized
+
+
+def second_look_health_detail(status: int, body: bytes) -> str:
+    detail = f"HTTP {status}"
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return detail
+    if not isinstance(payload, dict):
+        return detail
+    parts = [detail]
+    imaging_provider = str(payload.get("imagingProvider") or "").strip()
+    imaging_model = str(payload.get("imagingModel") or "").strip()
+    if imaging_provider:
+        parts.append(f"provider={imaging_provider}")
+    if imaging_model:
+        parts.append(f"model={imaging_model}")
     return "; ".join(parts)
 
 

@@ -109,11 +109,14 @@ class BrainImagingServer:
                         }
                     )
                 except KaosAIError as exc:
-                    result = await self.ollama.second_look(dict(body))
-                    cautions = list(result.get("cautions", []))
-                    cautions.insert(0, f"KaosAI provider failed; local imaging fallback used: {exc}")
-                    result["cautions"] = cautions[:5]
-                    result["fallback"] = {"from": "kaosai", "to": "ollama"}
+                    return web.json_response(
+                        {
+                            "error": "kaosai_second_look_unavailable",
+                            "message": "KaosAI 인증 갱신이 필요하거나 이미지 보조 검토 제공자가 응답하지 않습니다.",
+                            "detail": str(exc),
+                        },
+                        status=502,
+                    )
             else:
                 result = await self.ollama.second_look(dict(body))
         except OllamaError as exc:

@@ -20,12 +20,14 @@ from kaos_governor_discord.system_status import (
     ServiceStatusView,
     brain_health_detail,
     check_service,
-    default_http_probe,
     check_tcp,
+    default_http_probe,
     render_service_embed,
     render_service_message,
     render_summary_embed,
     restart_service_sync,
+    second_look_health_detail,
+    second_look_health_url,
 )
 
 
@@ -103,6 +105,7 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
             labels,
             [
                 "KaosBrain",
+                "KaosAI Second-Look",
                 "KaosGovernor",
                 "KaosPACS",
                 "KaosInj",
@@ -115,7 +118,8 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
         self.assertEqual(SERVICES[0].description, "Brain of KaosGDD on Odroid H4 Ultra")
-        self.assertEqual(SERVICES[1].description, "Rules and controller of KaosGDD")
+        self.assertEqual(SERVICES[1].description, "Temporary AIO image second-look provider path")
+        self.assertEqual(SERVICES[2].description, "Rules and controller of KaosGDD")
 
     async def test_ensure_message_creates_one_status_message_per_service(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -125,14 +129,14 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
 
             await surface.ensure_message()
 
-            self.assertEqual(len(channel.sent), 10)
+            self.assertEqual(len(channel.sent), 11)
             self.assertEqual(channel.sent[0]["content"], "")
             self.assertEqual(channel.sent[0]["embed"].title, "KaosBrain")
             self.assertIn("Unknown", channel.sent[0]["embed"].description)
             self.assertIsNone(channel.sent[0]["view"])
             state = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(state["messageIds"]["issue:kaosbrain"], 700)
-            self.assertEqual(state["messageIds"]["summary:planned"], 709)
+            self.assertEqual(state["messageIds"]["summary:planned"], 710)
 
     async def test_ensure_message_migrates_existing_service_message_keys(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -145,7 +149,7 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
 
             await surface.ensure_message()
 
-            self.assertEqual(len(channel.sent), 9)
+            self.assertEqual(len(channel.sent), 10)
             self.assertEqual(len(message.edits), 1)
             self.assertEqual(message.edits[0]["content"], "")
             self.assertEqual(message.edits[0]["embed"].title, "KaosBrain")
@@ -164,7 +168,7 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
             messages = list(channel.messages.values())
             await surface.ensure_message()
 
-            self.assertEqual(channel.next_id, 710)
+            self.assertEqual(channel.next_id, 711)
             self.assertTrue(all(not message.edits for message in messages))
 
     async def test_ensure_message_registers_restart_view_for_unchanged_down_message(self) -> None:
@@ -217,7 +221,7 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(legacy.deleted)
             state = json.loads(path.read_text(encoding="utf-8"))
             self.assertNotIn("messageId", state)
-            self.assertEqual(len(state["messageIds"]), 10)
+            self.assertEqual(len(state["messageIds"]), 11)
 
     async def test_ensure_message_groups_healthy_services_into_summary(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -318,11 +322,11 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
 
     def test_render_service_message_includes_health_state(self) -> None:
         content = render_service_message(
-            SERVICES[1],
+            SERVICES[2],
             ServiceProbeResult("kaosgovernor", "healthy", "09:15:00", "HTTP 200"),
         )
         embed = render_service_embed(
-            SERVICES[1],
+            SERVICES[2],
             ServiceProbeResult("kaosgovernor", "healthy", "09:15:00", "HTTP 200"),
         )
 
@@ -336,24 +340,24 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
 
     def test_service_embed_colors_match_state(self) -> None:
         self.assertEqual(
-            render_service_embed(SERVICES[1], ServiceProbeResult("kaosgovernor", "healthy", "", "")).color.value,
+            render_service_embed(SERVICES[2], ServiceProbeResult("kaosgovernor", "healthy", "", "")).color.value,
             EMBED_COLOR_HEALTHY,
         )
         self.assertEqual(
-            render_service_embed(SERVICES[1], ServiceProbeResult("kaosgovernor", "down", "", "")).color.value,
+            render_service_embed(SERVICES[2], ServiceProbeResult("kaosgovernor", "down", "", "")).color.value,
             EMBED_COLOR_DOWN,
         )
         self.assertEqual(
-            render_service_embed(SERVICES[1], ServiceProbeResult("kaosgovernor", "unknown", "", "")).color.value,
+            render_service_embed(SERVICES[2], ServiceProbeResult("kaosgovernor", "unknown", "", "")).color.value,
             EMBED_COLOR_UNKNOWN,
         )
         self.assertEqual(
-            render_service_embed(SERVICES[3], ServiceProbeResult("kaosinj", "planned", "", "")).color.value,
+            render_service_embed(SERVICES[4], ServiceProbeResult("kaosinj", "planned", "", "")).color.value,
             EMBED_COLOR_UNKNOWN,
         )
 
     def test_summary_embed_lists_service_labels(self) -> None:
-        embed = render_summary_embed("Healthy", [SERVICES[0], SERVICES[1]], EMBED_COLOR_HEALTHY, updated_at="09:15")
+        embed = render_summary_embed("Healthy", [SERVICES[0], SERVICES[2]], EMBED_COLOR_HEALTHY, updated_at="09:15")
 
         self.assertEqual(embed.title, "Healthy")
         self.assertIn("KaosBrain", embed.description)
@@ -368,7 +372,7 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
             surface = self.make_surface(Path(temporary) / "status.json")
             view = ServiceStatusView(
                 surface,
-                SERVICES[1],
+                SERVICES[2],
                 ServiceProbeResult("kaosgovernor", "down", "09:15:00", "Connection refused"),
             )
 
@@ -378,7 +382,7 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
     def test_restart_confirm_view_requires_explicit_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             surface = self.make_surface(Path(temporary) / "status.json")
-            view = ServiceRestartConfirmView(surface, SERVICES[1], 200)
+            view = ServiceRestartConfirmView(surface, SERVICES[2], 200)
 
             self.assertEqual([child.label for child in view.children], ["Confirm Restart", "Cancel"])
 
@@ -392,13 +396,26 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.state, "unknown")
         self.assertIn("No health probe", result.detail)
 
+    def test_second_look_probe_derives_health_url_and_reports_provider(self) -> None:
+        self.assertEqual(
+            second_look_health_url("http://100.113.169.46:8099/imaging/second-look"),
+            "http://100.113.169.46:8099/health",
+        )
+        detail = second_look_health_detail(
+            200,
+            json.dumps({"imagingProvider": "kaosai", "imagingModel": "openai/gpt-5.6-sol"}).encode("utf-8"),
+        )
+
+        self.assertIn("provider=kaosai", detail)
+        self.assertIn("model=openai/gpt-5.6-sol", detail)
+
     def test_planned_service_renders_as_planned_without_probe(self) -> None:
         result = check_service(
-            SERVICES[3],
+            SERVICES[4],
             {"SERVICE_STATUS_DEFAULT_PROBES_ENABLED": "false"},
             0.5,
         )
-        embed = render_service_embed(SERVICES[3], result)
+        embed = render_service_embed(SERVICES[4], result)
 
         self.assertEqual(result.state, "planned")
         self.assertIn("No service is deployed yet", result.detail)
