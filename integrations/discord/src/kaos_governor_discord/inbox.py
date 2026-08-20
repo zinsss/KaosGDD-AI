@@ -979,7 +979,7 @@ def render_processing_message(filename: str) -> str:
         (
             "## Documents",
             f"### {escape_text(filename)}",
-            "Processing in Paperless...",
+            "- ***Paperless saved. OCR processing.***",
             "OCR and automatic document handling may take a few minutes.",
         )
     )[:1990]

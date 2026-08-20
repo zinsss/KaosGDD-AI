@@ -670,7 +670,7 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
     def test_processing_document_message_mentions_paperless_work(self) -> None:
         content = render_processing_message("처방전.pdf")
 
-        self.assertIn("Processing in Paperless", content)
+        self.assertIn("***Paperless saved. OCR processing.***", content)
         self.assertIn("OCR", content)
         self.assertIn("처방전.pdf", content)
 
