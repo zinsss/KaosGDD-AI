@@ -1279,6 +1279,7 @@ class BrainMemoEditModal(discord.ui.Modal, title="Edit memo"):
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         content = str(self.content_input.value).strip()
+        await interaction.response.defer(ephemeral=True)
         try:
             proposal = await self.governor_tools.propose_memo_edit_by_name(
                 self.name,
@@ -1295,14 +1296,18 @@ class BrainMemoEditModal(discord.ui.Modal, title="Edit memo"):
                 content = str(memo.get("content") or content)
         except GovernorToolError as exc:
             LOGGER.warning("Memo edit failed: %s", exc)
-            await interaction.response.send_message(_tool_failed("메모 수정"), ephemeral=True, allowed_mentions=NO_MENTIONS)
+            await interaction.followup.send(_tool_failed("메모 수정"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         if self.source_message is not None:
             view = BrainOpenedMemoView(self.governor_tools, self.actor_id, self.name, content)
-            await interaction.response.defer(ephemeral=True)
             await self.source_message.edit(content=content[:1900], view=view, allowed_mentions=NO_MENTIONS)
             return
-        await interaction.response.send_message(content[:1900], view=BrainOpenedMemoView(self.governor_tools, self.actor_id, self.name, content), ephemeral=True, allowed_mentions=NO_MENTIONS)
+        await interaction.followup.send(
+            content[:1900],
+            view=BrainOpenedMemoView(self.governor_tools, self.actor_id, self.name, content),
+            ephemeral=True,
+            allowed_mentions=NO_MENTIONS,
+        )
 
 
 class BrainMemoDeleteConfirmView(discord.ui.View):
@@ -1321,6 +1326,7 @@ class BrainMemoDeleteConfirmView(discord.ui.View):
 
     @discord.ui.button(label="Delete Memo", style=discord.ButtonStyle.danger)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await _defer_component_update(interaction)
         try:
             proposal = await self.governor_tools.propose_memo_delete_by_name(
                 self.name,
@@ -1330,11 +1336,11 @@ class BrainMemoDeleteConfirmView(discord.ui.View):
             await self.governor_tools.approve_confirmation(str(proposal.get("confirmationId") or ""), actor_id=self.actor_id)
         except GovernorToolError as exc:
             LOGGER.warning("Memo delete failed: %s", exc)
-            await interaction.response.send_message(_tool_failed("메모 삭제"), ephemeral=True, allowed_mentions=NO_MENTIONS)
+            await _edit_deferred_component(interaction, content=_tool_failed("메모 삭제"), view=self)
             return
         deleted_at = datetime.now(KST).strftime("%Y-%m-%d %H:%M")
         view = BrainDeletedMemoView(self.governor_tools, self.actor_id, self.content)
-        await interaction.response.edit_message(content=render_memo_deleted(self.content, deleted_at), view=view, allowed_mentions=NO_MENTIONS)
+        await _edit_deferred_component(interaction, content=render_memo_deleted(self.content, deleted_at), view=view)
         self.stop()
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
@@ -1359,6 +1365,7 @@ class BrainDeletedMemoView(discord.ui.View):
 
     @discord.ui.button(label="Undo Delete", style=discord.ButtonStyle.primary)
     async def undo(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await _defer_component_update(interaction)
         try:
             proposal = await self.governor_tools.propose_memo_create(
                 MemoCreateRequest(self.content),
@@ -1374,10 +1381,10 @@ class BrainDeletedMemoView(discord.ui.View):
             content = str(memo.get("content") or self.content) if isinstance(memo, dict) else self.content
         except GovernorToolError as exc:
             LOGGER.warning("Memo restore failed: %s", exc)
-            await interaction.response.send_message(_tool_failed("메모 복구"), ephemeral=True, allowed_mentions=NO_MENTIONS)
+            await _edit_deferred_component(interaction, content=_tool_failed("메모 복구"), view=self)
             return
         view = BrainOpenedMemoView(self.governor_tools, self.actor_id, name, content)
-        await interaction.response.edit_message(content=content[:1900], view=view, allowed_mentions=NO_MENTIONS)
+        await _edit_deferred_component(interaction, content=content[:1900], view=view)
         self.stop()
 
     @discord.ui.button(label="Delete this Message", style=discord.ButtonStyle.danger)

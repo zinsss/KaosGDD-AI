@@ -8,6 +8,7 @@ from kaos_brain.bot import (
     BrainActiveTaskActionsView,
     BrainActiveTasksSelect,
     BrainActiveTasksView,
+    BrainDeletedMemoView,
     BrainTaskEditModal,
     BrainCompletedTasksSelect,
     BrainCompletedTasksView,
@@ -71,6 +72,12 @@ class FakeGovernorTools:
     async def approve_confirmation(self, confirmation_id: str, *, actor_id: int):
         self.approve_calls.append((confirmation_id, actor_id))
         return {"task": {"title": "오도리 문고리", "due": "", "dueTime": ""}}
+
+    async def propose_memo_create(self, request, *, actor_id: int, idempotency_key: str):
+        return {"confirmationId": "confirm-memo-create", "memo": {"content": request.content}}
+
+    async def propose_memo_delete_by_name(self, name: str, *, actor_id: int, idempotency_key: str):
+        return {"confirmationId": "confirm-memo-delete", "memo": {"name": name}}
 
 
 class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
@@ -154,6 +161,58 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual([item.label for item in edit.children], ["Edit Memo", "Cancel"])
         self.assertEqual([item.label for item in delete.children], ["Delete Memo", "Cancel"])
+
+    async def test_memo_delete_confirm_defers_before_governor_write(self) -> None:
+        tools = FakeGovernorTools()
+        view = BrainMemoDeleteConfirmView(tools, 200, "memos/42", "# Memo")  # type: ignore[arg-type]
+        order: list[str] = []
+
+        async def defer() -> None:
+            order.append("defer")
+
+        async def propose_memo_delete_by_name(name: str, *, actor_id: int, idempotency_key: str):
+            order.append("propose")
+            return {"confirmationId": "confirm-memo-delete", "memo": {"name": name}}
+
+        tools.propose_memo_delete_by_name = propose_memo_delete_by_name  # type: ignore[method-assign]
+        interaction = SimpleNamespace(
+            id=1003,
+            user=SimpleNamespace(id=200),
+            response=SimpleNamespace(defer=AsyncMock(side_effect=defer), send_message=AsyncMock()),
+            edit_original_response=AsyncMock(),
+        )
+
+        await view.children[0].callback(interaction)  # type: ignore[arg-type,union-attr]
+
+        self.assertEqual(order, ["defer", "propose"])
+        interaction.edit_original_response.assert_awaited_once()
+        self.assertIn("Deleted at", interaction.edit_original_response.await_args.kwargs["content"])
+
+    async def test_memo_undo_delete_defers_before_governor_write(self) -> None:
+        tools = FakeGovernorTools()
+        view = BrainDeletedMemoView(tools, 200, "# Memo")  # type: ignore[arg-type]
+        order: list[str] = []
+
+        async def defer() -> None:
+            order.append("defer")
+
+        async def propose_memo_create(request, *, actor_id: int, idempotency_key: str):
+            order.append("propose")
+            return {"confirmationId": "confirm-memo-create", "memo": {"content": request.content}}
+
+        tools.propose_memo_create = propose_memo_create  # type: ignore[method-assign]
+        interaction = SimpleNamespace(
+            id=1004,
+            user=SimpleNamespace(id=200),
+            response=SimpleNamespace(defer=AsyncMock(side_effect=defer), send_message=AsyncMock()),
+            edit_original_response=AsyncMock(),
+        )
+
+        await view.children[0].callback(interaction)  # type: ignore[arg-type,union-attr]
+
+        self.assertEqual(order, ["defer", "propose"])
+        interaction.edit_original_response.assert_awaited_once()
+        self.assertEqual(interaction.edit_original_response.await_args.kwargs["content"], "# Memo")
 
     async def test_completed_task_select_sends_reopen_confirmation_message(self) -> None:
         tools = FakeGovernorTools()
