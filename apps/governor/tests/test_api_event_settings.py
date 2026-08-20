@@ -119,8 +119,38 @@ class EventPresetApiTests(unittest.TestCase):
         recurring_payload = {
             "ok": True,
             "items": [
-                {"id": "weekly-1", "enabled": True, "creationPolicy": "on_schedule"},
-                {"id": "weekly-2", "enabled": False, "creationPolicy": "on_completion"},
+                {
+                    "id": "weekly-1",
+                    "title": "인플루엔자 신고",
+                    "enabled": True,
+                    "owner": "family",
+                    "shareFamily": True,
+                    "creationPolicy": "on_schedule",
+                    "frequency": "weekly",
+                    "firstDueDate": "2026-08-03",
+                    "dueTime": "10:00",
+                    "activeUid": "KAOSGDD-REPEAT-1",
+                    "activeDueDate": "2026-08-03",
+                    "nextDueDate": "",
+                    "lastCompletedAt": "",
+                    "error": "",
+                },
+                {
+                    "id": "weekly-2",
+                    "title": "완료 후 생성",
+                    "enabled": False,
+                    "owner": "zin",
+                    "shareFamily": False,
+                    "creationPolicy": "on_completion",
+                    "frequency": "weekly",
+                    "firstDueDate": "2026-08-10",
+                    "dueTime": "10:00",
+                    "activeUid": "",
+                    "activeDueDate": "",
+                    "nextDueDate": "2026-08-17",
+                    "lastCompletedAt": "2026-08-11T00:00:00Z",
+                    "error": "temporary_failure",
+                },
             ],
         }
         presets_payload = {
@@ -152,12 +182,16 @@ class EventPresetApiTests(unittest.TestCase):
         self.assertTrue(payload["generatedCalendar"]["marketDaysEnabled"])
         self.assertFalse(payload["generatedCalendar"]["claimDayEnabled"])
         self.assertFalse(payload["generatedCalendar"]["editable"])
+        self.assertEqual(payload["generatedCalendar"]["marketDayPolicy"], "매월 5, 10, 15, 20, 25, 30일")
         self.assertEqual(payload["eventPresets"]["count"], 2)
         self.assertEqual(payload["eventPresets"]["familyCount"], 1)
         self.assertEqual(payload["recurringTasks"]["count"], 2)
         self.assertEqual(payload["recurringTasks"]["enabledCount"], 1)
         self.assertEqual(payload["recurringTasks"]["onScheduleCount"], 1)
         self.assertEqual(payload["recurringTasks"]["onCompletionCount"], 1)
+        self.assertEqual(payload["recurringTasks"]["items"][0]["title"], "인플루엔자 신고")
+        self.assertTrue(payload["recurringTasks"]["items"][0]["active"])
+        self.assertEqual(payload["recurringTasks"]["items"][1]["lastError"], "temporary_failure")
 
 
 if __name__ == "__main__":

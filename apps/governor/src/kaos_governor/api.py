@@ -388,8 +388,8 @@ def settings_status_payload(profile: str) -> dict[str, object]:
             "version": generated_version,
             "marketDaysEnabled": generated_settings.market_days_enabled,
             "claimDayEnabled": generated_settings.claim_day_enabled,
-            "marketDayPolicy": "5, 10, 15, 20, 25, and 30 of every month",
-            "claimDayPolicy": "Every Friday; market Saturday may move the claim to Saturday, public holidays move it earlier",
+            "marketDayPolicy": "매월 5, 10, 15, 20, 25, 30일",
+            "claimDayPolicy": "매주 금요일. 장날 토요일과 공휴일이면 자동 조정",
             "editable": profile == "main",
         },
         "eventPresets": {
@@ -401,6 +401,25 @@ def settings_status_payload(profile: str) -> dict[str, object]:
             "enabledCount": len(enabled_recurring),
             "onScheduleCount": len(on_schedule),
             "onCompletionCount": len(on_completion),
+            "items": [
+                {
+                    "id": item.get("id"),
+                    "title": item.get("title"),
+                    "enabled": item.get("enabled") is not False,
+                    "owner": item.get("owner"),
+                    "shareFamily": item.get("shareFamily") is True,
+                    "policy": item.get("creationPolicy"),
+                    "frequency": item.get("frequency"),
+                    "firstDueDate": item.get("firstDueDate"),
+                    "dueTime": item.get("dueTime"),
+                    "active": bool(item.get("activeUid")),
+                    "activeDueDate": item.get("activeDueDate"),
+                    "nextDueDate": item.get("nextDueDate"),
+                    "lastCompletedAt": item.get("lastCompletedAt"),
+                    "lastError": item.get("error"),
+                }
+                for item in recurring
+            ],
         },
         "authority": {
             "settings": "KaosGovernor PostgreSQL",

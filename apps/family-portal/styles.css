@@ -2972,6 +2972,70 @@ h3 {
   white-space: nowrap;
 }
 
+.settingsRecurringStatusList {
+  display: grid;
+  gap: 8px;
+}
+
+.settingsRecurringStatus {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.settingsRecurringStatus.isDisabled {
+  opacity: 0.62;
+}
+
+.settingsRecurringStatus div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.settingsRecurringStatus strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settingsRecurringStatus small,
+.settingsRecurringStatus span {
+  color: var(--dim);
+  font-size: 0.76rem;
+  font-weight: 760;
+  line-height: 1.35;
+}
+
+.settingsRecurringStatus em {
+  justify-self: start;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(143, 188, 187, 0.18);
+  color: var(--nord7);
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.settingsRecurringStatus em.isError {
+  background: rgba(191, 97, 106, 0.16);
+  color: #9a4450;
+}
+
+.settingsActionRow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .mailOrganizerForm {
   display: grid;
   gap: 10px;

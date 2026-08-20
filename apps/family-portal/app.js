@@ -236,6 +236,7 @@ const state = {
   recurringTasks: {
     checked: false,
     loading: false,
+    syncing: false,
     items: [],
     editingId: "",
     expanded: false,
@@ -267,6 +268,7 @@ const state = {
     checked: false,
     loading: false,
     saving: false,
+    syncing: false,
     expanded: false,
     error: "",
     marketDaysEnabled: true,
@@ -1006,6 +1008,27 @@ async function saveRecurringTask(id, payload) {
   }, 1200);
 }
 
+async function syncRecurringTasksNow() {
+  if (state.recurringTasks.syncing) return;
+  state.recurringTasks.syncing = true;
+  try {
+    const response = await fetch("/api/recurring-tasks/sync", {
+      method: "POST",
+      headers: { Accept: "application/json" },
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    state.recurringTasks.checked = false;
+    state.governorSettings.checked = false;
+    await loadRecurringTasks({ force: true });
+    await loadGovernorSettingsStatus({ force: true });
+    await loadRemoteCalendar();
+  } finally {
+    state.recurringTasks.syncing = false;
+    if (getRoute() === "settings") render();
+  }
+}
+
 async function deleteRecurringTask(id) {
   const response = await fetch(`/api/recurring-tasks/${encodeURIComponent(id)}`, {
     method: "DELETE",
@@ -1141,6 +1164,27 @@ async function saveCustomEvents(changes) {
     await loadRemoteCalendar();
   } finally {
     state.customEvents.saving = false;
+    if (getRoute() === "settings") render();
+  }
+}
+
+async function syncCustomEventsNow() {
+  if (state.customEvents.syncing) return;
+  state.customEvents.syncing = true;
+  try {
+    const response = await fetch("/api/custom-events/sync", {
+      method: "POST",
+      headers: { Accept: "application/json" },
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    state.customEvents.sync = payload.sync || state.customEvents.sync;
+    state.customEvents.error = "";
+    state.governorSettings.checked = false;
+    await loadGovernorSettingsStatus({ force: true });
+    await loadRemoteCalendar();
+  } finally {
+    state.customEvents.syncing = false;
     if (getRoute() === "settings") render();
   }
 }
@@ -5775,7 +5819,7 @@ function renderGovernorSettingsStatus() {
     <section class="settingsStatusPanel">
       <div class="settingsStatusHeader">
         <strong>KaosGovernor</strong>
-        <small>${escapeHtml(data.updatedAt ? `Updated ${data.updatedAt}` : uiText("settings.governorBacked", "Governor-backed"))}</small>
+        <small>${escapeHtml(settingsUpdatedLabel(data.updatedAt))}</small>
       </div>
       <div class="settingsStatusGrid">
         <div>
@@ -5784,18 +5828,75 @@ function renderGovernorSettingsStatus() {
         </div>
         <div>
           <span>${escapeHtml(uiText("settings.generatedEvents", "Generated events"))}</span>
-          <strong>${escapeHtml([generated.marketDaysEnabled === false ? "" : "Market", generated.claimDayEnabled === false ? "" : "Claim"].filter(Boolean).join(" + ") || "Off")}</strong>
+          <strong>${escapeHtml([generated.marketDaysEnabled === false ? "" : "장날", generated.claimDayEnabled === false ? "" : "청구일"].filter(Boolean).join(" + ") || "꺼짐")}</strong>
         </div>
         <div>
           <span>${escapeHtml(uiText("event.presets", "Event presets"))}</span>
-          <strong>${escapeHtml(`${Number(presets.count || 0)} total · ${Number(presets.familyCount || 0)} family`)}</strong>
+          <strong>${escapeHtml(`전체 ${Number(presets.count || 0)} · 가족 ${Number(presets.familyCount || 0)}`)}</strong>
         </div>
         <div>
           <span>${escapeHtml(uiText("recurring.title", "Repeating tasks"))}</span>
-          <strong>${escapeHtml(`${Number(recurring.enabledCount || 0)} active · ${Number(recurring.onScheduleCount || 0)} scheduled`)}</strong>
+          <strong>${escapeHtml(`활성 ${Number(recurring.enabledCount || 0)} · 예약 ${Number(recurring.onScheduleCount || 0)}`)}</strong>
         </div>
       </div>
+      ${renderRecurringStatusDetails(recurring)}
     </section>
+  `;
+}
+
+function settingsUpdatedLabel(value) {
+  if (!value) return uiText("settings.governorBacked", "Governor-backed");
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return `업데이트 ${date.toLocaleString("ko-KR", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  })}`;
+}
+
+function recurringStatusPolicyLabel(policy) {
+  return policy === "on_completion" ? "완료하면 다음 항목 생성" : "정해진 날짜에 생성";
+}
+
+function recurringStatusOwnerLabel(item) {
+  if (item.shareFamily || item.owner === "family") return "Family";
+  if (item.owner === "wife") return "Bling02";
+  return "GDD_ZiN";
+}
+
+function recurringStatusDateLabel(item) {
+  if (item.active && item.activeDueDate) return `현재 항목 ${item.activeDueDate}`;
+  if (item.nextDueDate) return `다음 생성 ${item.nextDueDate}`;
+  if (item.firstDueDate) return `첫 생성 ${item.firstDueDate}`;
+  return "날짜 없음";
+}
+
+function renderRecurringStatusDetails(recurring) {
+  const items = Array.isArray(recurring.items) ? recurring.items : [];
+  if (!items.length) {
+    return `<p class="taskMeta">반복 할 일 규칙 없음</p>`;
+  }
+  return `
+    <div class="settingsRecurringStatusList">
+      ${items.map((item) => `
+        <article class="settingsRecurringStatus ${item.enabled ? "" : "isDisabled"}">
+          <div>
+            <strong>${escapeHtml(item.title || uiText("common.untitled", "Untitled"))}</strong>
+            <small>${escapeHtml([
+              recurringStatusOwnerLabel(item),
+              recurringStatusPolicyLabel(item.policy),
+              recurringFrequencyLabel(item.frequency),
+            ].filter(Boolean).join(" · "))}</small>
+          </div>
+          <span>${escapeHtml(recurringStatusDateLabel(item))}</span>
+          ${item.active ? `<em>활성 항목 있음</em>` : ""}
+          ${item.enabled ? "" : `<em>일시 중지</em>`}
+          ${item.lastError ? `<em class="isError">${escapeHtml(item.lastError)}</em>` : ""}
+        </article>
+      `).join("")}
+    </div>
   `;
 }
 
@@ -5806,21 +5907,21 @@ function renderGeneratedCalendarPolicyStatus() {
   return `
     <details class="settingsDisclosure" data-generated-calendar-policy>
       <summary>
-        <span><strong>${escapeHtml(uiText("settings.generatedEvents", "Generated events"))}</strong><small>${escapeHtml([marketEnabled ? "Market Days" : "", claimEnabled ? "Claim Day" : ""].filter(Boolean).join(" + ") || "Disabled")}</small></span>
+        <span><strong>${escapeHtml(uiText("settings.generatedEvents", "Generated events"))}</strong><small>${escapeHtml([marketEnabled ? "장날" : "", claimEnabled ? "청구일" : ""].filter(Boolean).join(" + ") || "꺼짐")}</small></span>
       </summary>
       <div class="settingsDisclosureBody">
         <div class="settingsPolicyNote">
-          <strong>Policy</strong>
-          <span>KaosGovernor writes deterministic VEVENTs to Radicale. Family can view this policy here; editing remains in KaosGDD main settings.</span>
+          <strong>정책</strong>
+          <span>KaosGovernor가 정해진 규칙으로 Radicale 일정에 기록합니다. Family에서는 확인만 하고, 수정은 KaosGDD main 설정에서 합니다.</span>
         </div>
         <dl class="customEventPolicy">
           <div>
-            <dt>Market Day</dt>
-            <dd>${escapeHtml(generated.marketDayPolicy || "Every month on 5, 10, 15, 20, 25, and 30.")}</dd>
+            <dt>장날</dt>
+            <dd>${escapeHtml(generated.marketDayPolicy || "매월 5, 10, 15, 20, 25, 30일")}</dd>
           </div>
           <div>
-            <dt>Claim Day</dt>
-            <dd>${escapeHtml(generated.claimDayPolicy || "Every Friday, adjusted by market days and public holidays.")}</dd>
+            <dt>청구일</dt>
+            <dd>${escapeHtml(generated.claimDayPolicy || "매주 금요일. 장날과 공휴일이면 자동 조정")}</dd>
           </div>
         </dl>
       </div>
@@ -6017,6 +6118,11 @@ function renderCustomEventSettings() {
             <span><strong>Claim Day</strong><small>Friday, adjusted for Market Saturday and public holidays</small></span>
             <input type="checkbox" data-custom-event-setting="claimDayEnabled" ${custom.claimDayEnabled ? "checked" : ""} ${custom.saving ? "disabled" : ""} />
           </label>
+        </div>
+        <div class="settingsActionRow">
+          <button class="openButton" type="button" data-custom-events-sync ${custom.syncing ? "disabled" : ""}>
+            ${custom.syncing ? "동기화 중..." : "생성 일정 동기화"}
+          </button>
         </div>
       `;
   return `
@@ -6220,6 +6326,11 @@ function renderRecurringTaskSettings() {
       <div class="settingsDisclosureBody">
         ${statusBody}
         ${isEditing ? `<div class="presetInlineActions"><button class="openButton" type="button" data-recurring-new>${uiText("recurring.new", "New")}</button></div>` : ""}
+        <div class="settingsActionRow">
+          <button class="openButton" type="button" data-recurring-sync ${recurring.syncing ? "disabled" : ""}>
+            ${recurring.syncing ? "동기화 중..." : "반복 할 일 동기화"}
+          </button>
+        </div>
         ${
           taskCount
             ? `
@@ -6891,6 +7002,16 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (event.target.closest("[data-recurring-sync]")) {
+    if (!window.confirm("반복 할 일을 지금 동기화할까요?")) return;
+    try {
+      await syncRecurringTasksNow();
+    } catch (error) {
+      window.alert(`반복 할 일을 동기화할 수 없습니다: ${error.message || "unknown error"}`);
+    }
+    return;
+  }
+
   if (event.target.closest("[data-holidays-retry]")) {
     state.holidays.checked = false;
     state.holidays.error = "";
@@ -6902,6 +7023,16 @@ document.addEventListener("click", async (event) => {
     state.customEvents.checked = false;
     state.customEvents.error = "";
     loadCustomEvents({ force: true });
+    return;
+  }
+
+  if (event.target.closest("[data-custom-events-sync]")) {
+    if (!window.confirm("생성 일정을 지금 동기화할까요?")) return;
+    try {
+      await syncCustomEventsNow();
+    } catch (error) {
+      window.alert(`생성 일정을 동기화할 수 없습니다: ${error.message || "unknown error"}`);
+    }
     return;
   }
 
