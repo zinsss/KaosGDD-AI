@@ -696,7 +696,7 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
             )
         )
 
-        self.assertIn("Paperless saved. OCR processing.", content)
+        self.assertIn("***Paperless saved. OCR processing.***", content)
 
     def test_ocr_ready_message_asks_user_to_finish_or_edit(self) -> None:
         content = render_ocr_ready_message(

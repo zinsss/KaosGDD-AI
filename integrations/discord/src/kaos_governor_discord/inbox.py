@@ -987,7 +987,7 @@ def render_processing_message(filename: str) -> str:
 
 def render_submitted_message(record: InboxRecord) -> str:
     lines = ["## Documents", f"### {escape_text(record.title or Path(record.filename).stem)}"]
-    lines.append("- Paperless saved. OCR processing.")
+    lines.append("- ***Paperless saved. OCR processing.***")
     if record.title:
         lines.append(f"- title: {escape_text(record.title)}")
     if record.tags:
