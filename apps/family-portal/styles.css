@@ -3036,6 +3036,12 @@ h3 {
   gap: 8px;
 }
 
+.settingsInlineLink {
+  justify-self: start;
+  margin-top: 2px;
+  text-decoration: none;
+}
+
 .mailOrganizerForm {
   display: grid;
   gap: 10px;

@@ -130,6 +130,7 @@ class EventPresetApiTests(unittest.TestCase):
                     "firstDueDate": "2026-08-03",
                     "dueTime": "10:00",
                     "activeUid": "KAOSGDD-REPEAT-1",
+                    "activeCollectionId": "family:tasks",
                     "activeDueDate": "2026-08-03",
                     "nextDueDate": "",
                     "lastCompletedAt": "",
@@ -168,10 +169,30 @@ class EventPresetApiTests(unittest.TestCase):
                 return {"marketDaysEnabled": True, "claimDayEnabled": False}, 3
             return dict(default), 0
 
+        testcase = self
+
+        class FakeCalendarAdapter:
+            def list_tasks(self, profile: str) -> list[dict[str, object]]:
+                testcase.assertEqual(profile, "family")
+                return [
+                    {
+                        "uid": "KAOSGDD-REPEAT-1",
+                        "collection": "family:tasks",
+                        "title": "인플루엔자 표본감시 신고",
+                        "dueDate": "2026-08-03",
+                        "status": "NEEDS-ACTION",
+                    }
+                ]
+
+            def request_json(self, profile: str, method: str, path: str, payload: dict[str, object] | None = None) -> dict[str, object]:
+                testcase.assertEqual((profile, method, path), ("main", "GET", "/api/custom-events"))
+                return {"sync": {"total": 12, "created": 2, "updated": 1, "deleted": 0, "unchanged": 9}}
+
         with (
             patch.object(api, "_read_setting", side_effect=fake_read),
             patch.object(api, "list_recurring_tasks", return_value=recurring_payload),
             patch.object(api, "list_event_presets", return_value=presets_payload),
+            patch.object(api, "CalendarAdapterClient", FakeCalendarAdapter),
         ):
             payload = api.settings_status_payload("family")
 
@@ -191,6 +212,8 @@ class EventPresetApiTests(unittest.TestCase):
         self.assertEqual(payload["recurringTasks"]["onCompletionCount"], 1)
         self.assertEqual(payload["recurringTasks"]["items"][0]["title"], "인플루엔자 신고")
         self.assertTrue(payload["recurringTasks"]["items"][0]["active"])
+        self.assertEqual(payload["recurringTasks"]["items"][0]["activeTask"]["title"], "인플루엔자 표본감시 신고")
+        self.assertEqual(payload["generatedCalendar"]["sync"]["created"], 2)
         self.assertEqual(payload["recurringTasks"]["items"][1]["lastError"], "temporary_failure")
 
 

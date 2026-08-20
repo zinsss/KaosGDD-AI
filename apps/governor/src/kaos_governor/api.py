@@ -366,12 +366,86 @@ def weather_settings_payload(profile: str) -> dict[str, object]:
     }
 
 
+def _task_title(task: dict[str, object]) -> str:
+    return str(task.get("title") or task.get("summary") or task.get("name") or "").strip()
+
+
+def _recurring_adapter_profile(item: dict[str, object]) -> str:
+    adapter_profile = str(item.get("adapterProfile") or "").strip()
+    if adapter_profile:
+        return adapter_profile
+    return "family" if item.get("shareFamily") else "main"
+
+
+def _active_recurring_task_details(recurring: list[dict[str, object]]) -> tuple[dict[tuple[str, str, str], dict[str, object]], str]:
+    profiles = sorted({_recurring_adapter_profile(item) for item in recurring if item.get("activeUid")})
+    if not profiles:
+        return {}, ""
+    tasks_by_key: dict[tuple[str, str, str], dict[str, object]] = {}
+    client = CalendarAdapterClient()
+    try:
+        for adapter_profile in profiles:
+            for task in client.list_tasks(adapter_profile):
+                if not isinstance(task, dict):
+                    continue
+                uid = str(task.get("uid") or "").strip()
+                collection = str(task.get("collection") or task.get("collectionId") or "").strip()
+                if uid:
+                    tasks_by_key[(adapter_profile, collection, uid)] = task
+                    tasks_by_key[(adapter_profile, "", uid)] = task
+    except Exception as exc:
+        return {}, str(exc) or type(exc).__name__
+    return tasks_by_key, ""
+
+
+def _active_task_payload(item: dict[str, object], active_tasks: dict[tuple[str, str, str], dict[str, object]]) -> dict[str, object] | None:
+    uid = str(item.get("activeUid") or "").strip()
+    if not uid:
+        return None
+    key = (_recurring_adapter_profile(item), str(item.get("activeCollectionId") or "").strip(), uid)
+    task = active_tasks.get(key) or active_tasks.get((key[0], "", uid))
+    if not task:
+        return None
+    return {
+        "uid": task.get("uid"),
+        "collectionId": task.get("collection") or task.get("collectionId"),
+        "title": _task_title(task),
+        "dueDate": task.get("dueDate") or task.get("due"),
+        "status": task.get("status"),
+    }
+
+
+def _recurring_status_item(item: dict[str, object], active_tasks: dict[tuple[str, str, str], dict[str, object]]) -> dict[str, object]:
+    return {
+        "id": item.get("id"),
+        "title": item.get("title"),
+        "enabled": item.get("enabled") is not False,
+        "owner": item.get("owner"),
+        "shareFamily": item.get("shareFamily") is True,
+        "policy": item.get("creationPolicy"),
+        "frequency": item.get("frequency"),
+        "firstDueDate": item.get("firstDueDate"),
+        "dueTime": item.get("dueTime"),
+        "active": bool(item.get("activeUid")),
+        "activeDueDate": item.get("activeDueDate"),
+        "activeTask": _active_task_payload(item, active_tasks),
+        "nextDueDate": item.get("nextDueDate"),
+        "lastCompletedAt": item.get("lastCompletedAt"),
+        "lastError": item.get("error"),
+    }
+
+
 def settings_status_payload(profile: str) -> dict[str, object]:
     generated_payload, generated_version = _read_setting("system", "generated-calendar", GeneratedCalendarSettings().as_settings_payload())
     generated_settings = GeneratedCalendarSettings.from_mapping(generated_payload)
     weather = weather_settings_payload(profile)
     presets = list_event_presets(profile)["items"]
     recurring = list_recurring_tasks(profile)["items"]
+    active_tasks, active_task_error = _active_recurring_task_details(recurring)
+    try:
+        generated_sync = CalendarAdapterClient().request_json("main", "GET", "/api/custom-events").get("sync", {})
+    except Exception as exc:
+        generated_sync = {"error": str(exc) or type(exc).__name__}
     enabled_recurring = [item for item in recurring if item.get("enabled") is not False]
     on_schedule = [item for item in recurring if item.get("creationPolicy") == "on_schedule"]
     on_completion = [item for item in recurring if item.get("creationPolicy") == "on_completion"]
@@ -391,6 +465,7 @@ def settings_status_payload(profile: str) -> dict[str, object]:
             "marketDayPolicy": "매월 5, 10, 15, 20, 25, 30일",
             "claimDayPolicy": "매주 금요일. 장날 토요일과 공휴일이면 자동 조정",
             "editable": profile == "main",
+            "sync": generated_sync,
         },
         "eventPresets": {
             "count": len(presets),
@@ -401,25 +476,8 @@ def settings_status_payload(profile: str) -> dict[str, object]:
             "enabledCount": len(enabled_recurring),
             "onScheduleCount": len(on_schedule),
             "onCompletionCount": len(on_completion),
-            "items": [
-                {
-                    "id": item.get("id"),
-                    "title": item.get("title"),
-                    "enabled": item.get("enabled") is not False,
-                    "owner": item.get("owner"),
-                    "shareFamily": item.get("shareFamily") is True,
-                    "policy": item.get("creationPolicy"),
-                    "frequency": item.get("frequency"),
-                    "firstDueDate": item.get("firstDueDate"),
-                    "dueTime": item.get("dueTime"),
-                    "active": bool(item.get("activeUid")),
-                    "activeDueDate": item.get("activeDueDate"),
-                    "nextDueDate": item.get("nextDueDate"),
-                    "lastCompletedAt": item.get("lastCompletedAt"),
-                    "lastError": item.get("error"),
-                }
-                for item in recurring
-            ],
+            "activeTaskLookupError": active_task_error,
+            "items": [_recurring_status_item(item, active_tasks) for item in recurring],
         },
         "authority": {
             "settings": "KaosGovernor PostgreSQL",

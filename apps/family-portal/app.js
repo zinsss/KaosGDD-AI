@@ -5867,10 +5867,29 @@ function recurringStatusOwnerLabel(item) {
 }
 
 function recurringStatusDateLabel(item) {
+  if (item.activeTask?.title) {
+    return `현재 항목: ${item.activeTask.title}${item.activeTask.dueDate ? ` (${item.activeTask.dueDate})` : ""}`;
+  }
   if (item.active && item.activeDueDate) return `현재 항목 ${item.activeDueDate}`;
   if (item.nextDueDate) return `다음 생성 ${item.nextDueDate}`;
   if (item.firstDueDate) return `첫 생성 ${item.firstDueDate}`;
   return "날짜 없음";
+}
+
+function generatedSyncSummary(sync) {
+  if (!sync || typeof sync !== "object") return "동기화 결과 없음";
+  if (sync.error) return `동기화 상태 확인 실패: ${sync.error}`;
+  if (sync.lastError) return `마지막 오류: ${sync.lastError}`;
+  const result = sync.lastResult && typeof sync.lastResult === "object" ? sync.lastResult : sync;
+  const parts = [
+    Number.isFinite(Number(result.created)) ? `생성 ${Number(result.created)}` : "",
+    Number.isFinite(Number(result.updated)) ? `수정 ${Number(result.updated)}` : "",
+    Number.isFinite(Number(result.deleted)) ? `삭제 ${Number(result.deleted)}` : "",
+    Number.isFinite(Number(result.unchanged)) ? `변경 없음 ${Number(result.unchanged)}` : "",
+  ].filter(Boolean);
+  if (parts.length) return parts.join(" · ");
+  if (Number.isFinite(Number(result.total))) return `전체 ${Number(result.total)}`;
+  return "동기화 결과 없음";
 }
 
 function renderRecurringStatusDetails(recurring) {
@@ -5894,6 +5913,7 @@ function renderRecurringStatusDetails(recurring) {
           ${item.active ? `<em>활성 항목 있음</em>` : ""}
           ${item.enabled ? "" : `<em>일시 중지</em>`}
           ${item.lastError ? `<em class="isError">${escapeHtml(item.lastError)}</em>` : ""}
+          ${item.activeTask ? `<a class="openButton settingsInlineLink" href="#/tasks">현재 항목 보기</a>` : ""}
         </article>
       `).join("")}
     </div>
@@ -5924,6 +5944,10 @@ function renderGeneratedCalendarPolicyStatus() {
             <dd>${escapeHtml(generated.claimDayPolicy || "매주 금요일. 장날과 공휴일이면 자동 조정")}</dd>
           </div>
         </dl>
+        <div class="settingsPolicyNote">
+          <strong>최근 동기화</strong>
+          <span>${escapeHtml(generatedSyncSummary(generated.sync))}</span>
+        </div>
       </div>
     </details>
   `;
@@ -6109,6 +6133,10 @@ function renderCustomEventSettings() {
             <dd>${escapeHtml(syncSummary)}</dd>
           </div>
         </dl>
+        <div class="settingsPolicyNote">
+          <strong>최근 동기화</strong>
+          <span>${escapeHtml(generatedSyncSummary(custom.sync))}</span>
+        </div>
         <div class="customEventSettingList">
           <label class="customEventSettingRow">
             <span><strong>Market Days</strong><small>Blue dot on 5, 10, 15, 20, 25, and 30</small></span>
