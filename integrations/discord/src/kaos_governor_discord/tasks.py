@@ -85,6 +85,7 @@ class DiscordTasksSurface:
         await self._pace_message_refresh()
         next_message_ids: dict[str, int] = {}
         previous_message_ids = dict(self.state.message_ids)
+        tasks_by_key = {task_key(item): item for item in tasks if str(item.get("uid") or "")}
         message_order_changed = False
         for task in active:
             key = task_key(task)
@@ -104,7 +105,15 @@ class DiscordTasksSurface:
             await self._pace_message_refresh()
         for key, message_id in self.state.message_ids.items():
             if key not in next_message_ids:
-                await self._delete_message_id(channel, message_id)
+                task = tasks_by_key.get(key)
+                if task is not None and str(task.get("status") or "").upper() == "COMPLETED":
+                    if await self._mark_message_completed(message_id, task):
+                        self._record_completed_message(key, message_id)
+                    else:
+                        await self._delete_message_id(channel, message_id)
+                    await self._pace_message_refresh()
+                else:
+                    await self._delete_message_id(channel, message_id)
                 message_order_changed = True
         self.state.message_ids = next_message_ids
         if self._uses_supplies_rules():

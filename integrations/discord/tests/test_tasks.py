@@ -779,6 +779,25 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(adapter.deleted[0], ("main", "TASK-1", "zin:tasks"))
             self.assertEqual(surface.state.message_ids, {})
 
+    async def test_external_ios_completion_marks_discord_message_completed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            adapter = FakeAdapter()
+            surface = self.make_surface(Path(temporary) / "tasks.json", channel, adapter)
+
+            await surface.ensure_message()
+            task_message_id = surface.state.message_ids["zin:tasks|TASK-1"]
+            task_message = channel.messages[task_message_id]
+            adapter.tasks = [{**TASKS[0], "status": "COMPLETED", "completed": "2026-08-18"}]
+
+            await surface.ensure_message()
+
+            self.assertEqual(surface.state.message_ids, {})
+            self.assertEqual(surface.state.completed_message_ids, {"zin:tasks|TASK-1": [task_message_id]})
+            self.assertFalse(task_message.deleted)
+            self.assertIn("## ~~Buy milk~~", task_message.content)
+            self.assertIsInstance(task_message.view, CompletedTaskMessageView)
+
     async def test_notify_due_tasks_sends_once_one_hour_before_due(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             channel = FakeChannel()
