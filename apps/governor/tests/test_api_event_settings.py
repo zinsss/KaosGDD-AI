@@ -115,6 +115,50 @@ class EventPresetApiTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "invalid_weather_location"):
             api._normalize_weather_settings({"location": "seoul"})
 
+    def test_settings_status_summarizes_governor_backed_family_settings(self) -> None:
+        recurring_payload = {
+            "ok": True,
+            "items": [
+                {"id": "weekly-1", "enabled": True, "creationPolicy": "on_schedule"},
+                {"id": "weekly-2", "enabled": False, "creationPolicy": "on_completion"},
+            ],
+        }
+        presets_payload = {
+            "ok": True,
+            "items": [
+                {"id": "preset-1", "owner": "family", "name": "당직", "title": "당직"},
+                {"id": "preset-2", "owner": "zin", "name": "개인", "title": "개인"},
+            ],
+        }
+
+        def fake_read(scope: str, name: str, default: dict[str, object]) -> tuple[dict[str, object], int]:
+            if (scope, name) == ("family", "weather"):
+                return {"location": "yeongcheon"}, 7
+            if (scope, name) == ("system", "generated-calendar"):
+                return {"marketDaysEnabled": True, "claimDayEnabled": False}, 3
+            return dict(default), 0
+
+        with (
+            patch.object(api, "_read_setting", side_effect=fake_read),
+            patch.object(api, "list_recurring_tasks", return_value=recurring_payload),
+            patch.object(api, "list_event_presets", return_value=presets_payload),
+        ):
+            payload = api.settings_status_payload("family")
+
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["profile"], "family")
+        self.assertEqual(payload["weather"]["location"], "yeongcheon")
+        self.assertEqual(payload["weather"]["locationLabel"], "영천")
+        self.assertTrue(payload["generatedCalendar"]["marketDaysEnabled"])
+        self.assertFalse(payload["generatedCalendar"]["claimDayEnabled"])
+        self.assertFalse(payload["generatedCalendar"]["editable"])
+        self.assertEqual(payload["eventPresets"]["count"], 2)
+        self.assertEqual(payload["eventPresets"]["familyCount"], 1)
+        self.assertEqual(payload["recurringTasks"]["count"], 2)
+        self.assertEqual(payload["recurringTasks"]["enabledCount"], 1)
+        self.assertEqual(payload["recurringTasks"]["onScheduleCount"], 1)
+        self.assertEqual(payload["recurringTasks"]["onCompletionCount"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

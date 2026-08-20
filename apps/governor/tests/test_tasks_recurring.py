@@ -282,6 +282,54 @@ class RecurringTaskStoreAndServiceTests(unittest.TestCase):
         self.assertIsNone(plan.due_date)
         self.assertEqual(plan.next_due_date, date(2026, 8, 10))
 
+    def test_completed_occurrence_late_still_waits_for_next_scheduled_date(self) -> None:
+        item = self.definition(
+            active_uid="generated-1",
+            active_collection_id="zin:tasks",
+            active_due_date=date(2026, 8, 3),
+            next_due_date=None,
+        )
+        tasks = [{"uid": "generated-1", "collection": "zin:tasks", "status": "COMPLETED"}]
+
+        plan = recurring.plan_synchronization(item, tasks, today=date(2026, 8, 18))
+
+        self.assertTrue(plan.clear_active)
+        self.assertTrue(plan.active_completed)
+        self.assertEqual(plan.action, "none")
+        self.assertIsNone(plan.due_date)
+        self.assertEqual(plan.next_due_date, date(2026, 8, 24))
+
+    def test_on_schedule_policy_creates_only_when_scheduled_date_arrives_after_late_completion(self) -> None:
+        now = datetime(2026, 8, 18, 9, 0, tzinfo=UTC)
+        store = recurring.MemoryRecurringTaskStore()
+        definition = store.upsert_definition(
+            self.definition(
+                active_uid="generated-1",
+                active_collection_id="zin:tasks",
+                active_due_date=date(2026, 8, 3),
+                next_due_date=None,
+            ),
+            now=now,
+        )
+        adapter = FakeCalendarAdapter(tasks=[{"uid": "generated-1", "collection": "zin:tasks", "status": "COMPLETED"}])
+        service = recurring.RecurringTaskService(store, adapter)
+
+        plan = service.synchronize_definition(definition, today=date(2026, 8, 18), now=now)
+        updated = store.get_definition("repeat-1")
+
+        self.assertEqual(plan.action, "none")
+        self.assertEqual(adapter.created, [])
+        self.assertEqual(updated.active_uid, "")
+        self.assertEqual(updated.next_due_date, date(2026, 8, 24))
+
+        adapter.tasks = []
+        plan = service.synchronize_definition(updated, today=date(2026, 8, 24), now=now)
+        updated = store.get_definition("repeat-1")
+
+        self.assertEqual(plan.action, "create")
+        self.assertEqual(adapter.created[0][1]["dueDate"], "2026-08-24")
+        self.assertEqual(updated.active_due_date, date(2026, 8, 24))
+
     def test_completed_occurrence_can_create_next_task_when_policy_is_on_completion(self) -> None:
         item = self.definition(
             creation_policy="on_completion",

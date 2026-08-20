@@ -2912,6 +2912,66 @@ h3 {
   line-height: 1.45;
 }
 
+.settingsStatusPanel {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid rgba(94, 129, 172, 0.2);
+  border-radius: 8px;
+  background: rgba(236, 239, 244, 0.66);
+}
+
+.settingsStatusHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settingsStatusHeader strong {
+  color: var(--nord7);
+  font-size: 0.8rem;
+  font-weight: 900;
+}
+
+.settingsStatusHeader small {
+  color: var(--dim);
+  font-size: 0.72rem;
+  font-weight: 760;
+}
+
+.settingsStatusGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.settingsStatusGrid div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.settingsStatusGrid span {
+  color: var(--dim);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.settingsStatusGrid strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.84rem;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .mailOrganizerForm {
   display: grid;
   gap: 10px;

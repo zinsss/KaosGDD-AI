@@ -182,6 +182,12 @@ const state = {
     error: "",
     version: 0,
   },
+  governorSettings: {
+    checked: false,
+    loading: false,
+    error: "",
+    data: null,
+  },
   weatherLocationPopup: {
     open: false,
     mode: "locations",
@@ -2580,6 +2586,31 @@ async function saveWeatherLocationPreference(value) {
     state.weatherSettings.saving = false;
     if (getRoute() === "settings") render();
   }
+}
+
+async function loadGovernorSettingsStatus({ force = false } = {}) {
+  if (state.governorSettings.loading) return;
+  if (state.governorSettings.checked && !force) return;
+  state.governorSettings.loading = true;
+  try {
+    const response = await fetch("/api/settings/status", { headers: { Accept: "application/json" } });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    state.governorSettings = {
+      checked: true,
+      loading: false,
+      error: "",
+      data: payload,
+    };
+  } catch (error) {
+    state.governorSettings = {
+      ...state.governorSettings,
+      checked: true,
+      loading: false,
+      error: error.message || uiText("settings.statusUnavailable", "Governor settings status is unavailable"),
+    };
+  }
+  if (getRoute() === "settings") render();
 }
 
 function interpolateText(template, params = {}) {
@@ -5722,6 +5753,81 @@ function renderMemos() {
   `;
 }
 
+function renderGovernorSettingsStatus() {
+  const status = state.governorSettings;
+  if (!status.checked || (status.loading && !status.checked)) {
+    return `<div class="settingsPolicyNote"><strong>KaosGovernor</strong><span>${escapeHtml(uiText("settings.statusLoading", "Loading Governor settings..."))}</span></div>`;
+  }
+  if (status.error) {
+    return `
+      <div class="caregiverError">
+        <span>${escapeHtml(status.error)}</span>
+        <button class="openButton" type="button" data-governor-settings-retry>${uiText("common.retry", "다시 시도")}</button>
+      </div>
+    `;
+  }
+  const data = status.data || {};
+  const weather = data.weather || {};
+  const generated = data.generatedCalendar || {};
+  const presets = data.eventPresets || {};
+  const recurring = data.recurringTasks || {};
+  return `
+    <section class="settingsStatusPanel">
+      <div class="settingsStatusHeader">
+        <strong>KaosGovernor</strong>
+        <small>${escapeHtml(data.updatedAt ? `Updated ${data.updatedAt}` : uiText("settings.governorBacked", "Governor-backed"))}</small>
+      </div>
+      <div class="settingsStatusGrid">
+        <div>
+          <span>${escapeHtml(uiText("settings.defaultWeather", "Default weather"))}</span>
+          <strong>${escapeHtml(weather.locationLabel || weatherLocationLabel())}</strong>
+        </div>
+        <div>
+          <span>${escapeHtml(uiText("settings.generatedEvents", "Generated events"))}</span>
+          <strong>${escapeHtml([generated.marketDaysEnabled === false ? "" : "Market", generated.claimDayEnabled === false ? "" : "Claim"].filter(Boolean).join(" + ") || "Off")}</strong>
+        </div>
+        <div>
+          <span>${escapeHtml(uiText("event.presets", "Event presets"))}</span>
+          <strong>${escapeHtml(`${Number(presets.count || 0)} total · ${Number(presets.familyCount || 0)} family`)}</strong>
+        </div>
+        <div>
+          <span>${escapeHtml(uiText("recurring.title", "Repeating tasks"))}</span>
+          <strong>${escapeHtml(`${Number(recurring.enabledCount || 0)} active · ${Number(recurring.onScheduleCount || 0)} scheduled`)}</strong>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderGeneratedCalendarPolicyStatus() {
+  const generated = state.governorSettings.data?.generatedCalendar || {};
+  const marketEnabled = generated.marketDaysEnabled !== false;
+  const claimEnabled = generated.claimDayEnabled !== false;
+  return `
+    <details class="settingsDisclosure" data-generated-calendar-policy>
+      <summary>
+        <span><strong>${escapeHtml(uiText("settings.generatedEvents", "Generated events"))}</strong><small>${escapeHtml([marketEnabled ? "Market Days" : "", claimEnabled ? "Claim Day" : ""].filter(Boolean).join(" + ") || "Disabled")}</small></span>
+      </summary>
+      <div class="settingsDisclosureBody">
+        <div class="settingsPolicyNote">
+          <strong>Policy</strong>
+          <span>KaosGovernor writes deterministic VEVENTs to Radicale. Family can view this policy here; editing remains in KaosGDD main settings.</span>
+        </div>
+        <dl class="customEventPolicy">
+          <div>
+            <dt>Market Day</dt>
+            <dd>${escapeHtml(generated.marketDayPolicy || "Every month on 5, 10, 15, 20, 25, and 30.")}</dd>
+          </div>
+          <div>
+            <dt>Claim Day</dt>
+            <dd>${escapeHtml(generated.claimDayPolicy || "Every Friday, adjusted by market days and public holidays.")}</dd>
+          </div>
+        </dl>
+      </div>
+    </details>
+  `;
+}
+
 function renderSettings() {
   ensureEventPresets();
   const config = profileConfig();
@@ -5812,9 +5918,10 @@ function renderSettings() {
               `
           }
         </dl>
+        ${renderGovernorSettingsStatus()}
         ${renderHolidaySettings()}
         ${portalProfile() === "main" ? renderMailOrganizerSettings() : ""}
-        ${portalProfile() === "main" ? renderCustomEventSettings() : ""}
+        ${portalProfile() === "main" ? renderCustomEventSettings() : renderGeneratedCalendarPolicyStatus()}
         ${renderEventPresetSettings()}
         ${renderRecurringTaskSettings()}
       </div>
@@ -6391,6 +6498,7 @@ function render() {
   if (route === "documents") loadDocuments();
   if (route === "ledger") loadLedger();
   if (route === "settings") {
+    loadGovernorSettingsStatus();
     loadWeatherSettings();
     loadHolidays();
     loadCustomEvents();
@@ -6794,6 +6902,13 @@ document.addEventListener("click", async (event) => {
     state.customEvents.checked = false;
     state.customEvents.error = "";
     loadCustomEvents({ force: true });
+    return;
+  }
+
+  if (event.target.closest("[data-governor-settings-retry]")) {
+    state.governorSettings.checked = false;
+    state.governorSettings.error = "";
+    loadGovernorSettingsStatus({ force: true });
     return;
   }
 

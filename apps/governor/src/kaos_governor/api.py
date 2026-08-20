@@ -366,6 +366,51 @@ def weather_settings_payload(profile: str) -> dict[str, object]:
     }
 
 
+def settings_status_payload(profile: str) -> dict[str, object]:
+    generated_payload, generated_version = _read_setting("system", "generated-calendar", GeneratedCalendarSettings().as_settings_payload())
+    generated_settings = GeneratedCalendarSettings.from_mapping(generated_payload)
+    weather = weather_settings_payload(profile)
+    presets = list_event_presets(profile)["items"]
+    recurring = list_recurring_tasks(profile)["items"]
+    enabled_recurring = [item for item in recurring if item.get("enabled") is not False]
+    on_schedule = [item for item in recurring if item.get("creationPolicy") == "on_schedule"]
+    on_completion = [item for item in recurring if item.get("creationPolicy") == "on_completion"]
+    return {
+        "ok": True,
+        "profile": profile,
+        "updatedAt": _utc_now_iso(),
+        "weather": {
+            "version": weather["version"],
+            "location": weather["settings"]["location"],
+            "locationLabel": WEATHER_LOCATIONS[str(weather["settings"]["location"])],
+        },
+        "generatedCalendar": {
+            "version": generated_version,
+            "marketDaysEnabled": generated_settings.market_days_enabled,
+            "claimDayEnabled": generated_settings.claim_day_enabled,
+            "marketDayPolicy": "5, 10, 15, 20, 25, and 30 of every month",
+            "claimDayPolicy": "Every Friday; market Saturday may move the claim to Saturday, public holidays move it earlier",
+            "editable": profile == "main",
+        },
+        "eventPresets": {
+            "count": len(presets),
+            "familyCount": len([item for item in presets if item.get("owner") == "family"]),
+        },
+        "recurringTasks": {
+            "count": len(recurring),
+            "enabledCount": len(enabled_recurring),
+            "onScheduleCount": len(on_schedule),
+            "onCompletionCount": len(on_completion),
+        },
+        "authority": {
+            "settings": "KaosGovernor PostgreSQL",
+            "events": "Radicale VEVENT",
+            "tasks": "Radicale VTODO",
+            "weather": "KaosGovernor setting + calendar adapter fetch",
+        },
+    }
+
+
 def update_weather_settings(payload: dict[str, object], profile: str) -> dict[str, object]:
     scope = _settings_scope_for_profile(profile)
     current, _version = _read_setting(scope, "weather", {"location": "pohang"})
@@ -589,6 +634,15 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 print(f"Weather settings read failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "weather_settings_storage_unavailable"})
+            return
+        if parsed.path == "/api/settings/status":
+            try:
+                json_response(self, 200, settings_status_payload(profile_from_headers(self.headers)))
+            except (ValueError, RecurringTaskError) as exc:
+                json_response(self, recurring_status_for_error(exc), {"ok": False, "error": str(exc)})
+            except Exception as exc:
+                print(f"Settings status read failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "settings_status_unavailable"})
             return
         json_response(self, 404, {"error": "not_found"})
 
