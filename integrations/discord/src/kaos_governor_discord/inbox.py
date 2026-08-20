@@ -14,6 +14,7 @@ import urllib.parse
 import discord
 from kaos_governor.documents import (
     DocumentIntakeError,
+    PaperlessDocument,
     PaperlessDocumentService,
     PaperlessSearchPage,
     PaperlessSearchResult,
@@ -434,7 +435,16 @@ class DiscordDocumentInbox:
                     await self._edit_record_prompt(record, render_ocr_pending_message(record))
                     return
                 document = await asyncio.to_thread(self.paperless.get, task.related_document_ids[0])
-                updated = replace(record, document_id=document.document_id, title=document.title or record.title)
+                tags = merge_tags(record.tags, suggest_document_tags(document))
+                updated = replace(record, document_id=document.document_id, title=document.title or record.title, tags=tags)
+                if tags != record.tags:
+                    document = await asyncio.to_thread(
+                        self.paperless.update_metadata,
+                        document.document_id,
+                        title=updated.title,
+                        tags=tags,
+                    )
+                    updated = replace(updated, title=document.title or updated.title, document_id=document.document_id)
                 self.state.sources[source_id] = updated
                 self._save_state()
                 if not str(document.content or "").strip():
@@ -976,9 +986,8 @@ def render_processing_message(filename: str) -> str:
 
 
 def render_submitted_message(record: InboxRecord) -> str:
-    task = f" `{escape_text(record.task_id)}`" if record.task_id else ""
-    lines = ["## Documents", f"- {escape_text(record.filename)}: submitted{task}"]
-    lines.append("- Paperless accepted the file. OCR may still be running.")
+    lines = ["## Documents", f"### {escape_text(record.title or Path(record.filename).stem)}"]
+    lines.append("- Paperless saved. OCR processing.")
     if record.title:
         lines.append(f"- title: {escape_text(record.title)}")
     if record.tags:
@@ -996,9 +1005,8 @@ def render_ocr_ready_message(record: InboxRecord, document_title: str = "") -> s
         lines.append("- " + " ".join(f"#{escape_text(tag)}" for tag in record.tags))
     if record.document_id:
         lines.append(f"- document no `{record.document_id}`")
-        lines.append(f"- KaosAI tag suggestion: `문서 {record.document_id} 태그 추천`")
     lines.append("- Paperless saved. OCR ready.")
-    lines.append("- 수정할까요? Edit 또는 Done.")
+    lines.append("- 수정할까요?")
     return "\n".join(lines)[:1990]
 
 
@@ -1026,6 +1034,47 @@ def render_ocr_pending_message(record: InboxRecord) -> str:
     if record.task_id:
         lines.append(f"- task: `{escape_text(record.task_id)}`")
     return "\n".join(lines)[:1990]
+
+
+def suggest_document_tags(document: PaperlessDocument) -> tuple[str, ...]:
+    text = "\n".join(
+        str(value or "")
+        for value in (document.title, document.filename, document.correspondent, document.content)
+        if str(value or "").strip()
+    )
+    tags: list[str] = []
+    if re.search(r"이수|수료", text):
+        tags.extend(("이수증", "수료증"))
+    for year in re.findall(r"\b(20\d{2})\b", text):
+        tags.append(year)
+    name = extract_korean_name_from_document(text)
+    if name:
+        tags.append(name)
+    return tuple(dict.fromkeys(tag for tag in tags if tag))
+
+
+def extract_korean_name_from_document(text: str) -> str:
+    patterns = (
+        r"성\s*명\s*[:：]?\s*([가-힣]{2,5})",
+        r"이\s*름\s*[:：]?\s*([가-힣]{2,5})",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            return match.group(1)
+    return ""
+
+
+def merge_tags(existing: tuple[str, ...], suggested: tuple[str, ...]) -> tuple[str, ...]:
+    tags: list[str] = []
+    seen: set[str] = set()
+    for tag in (*existing, *suggested):
+        cleaned = str(tag or "").strip()
+        key = cleaned.casefold()
+        if cleaned and key not in seen:
+            seen.add(key)
+            tags.append(cleaned)
+    return tuple(tags)
 
 
 class PaperlessSearchView(discord.ui.View):

@@ -16,6 +16,7 @@ from kaos_governor.documents import (
     PaperlessResult,
     PaperlessSearchPage,
     PaperlessSearchResult,
+    PaperlessTask,
 )
 from kaos_governor_discord.access import AccessPolicy
 from kaos_governor_discord.inbox import (
@@ -39,6 +40,7 @@ from kaos_governor_discord.inbox import (
     render_paperless_opened,
     render_processing_message,
     render_submitted_message,
+    suggest_document_tags,
 )
 
 
@@ -54,6 +56,15 @@ class FakePaperless(PaperlessDocumentService):
         self.submitted = []
         self.searches = []
         self.metadata_updates = []
+        self.documents = {
+            42: PaperlessDocument(
+                42,
+                "2023 진단용방사선안전관리책임자교육-이수증",
+                "2026-08-19",
+                "2023 진단용방사선안전관리책임자교육-이수증.pdf",
+                content="2023 진단용방사선안전관리책임자교육 이수증\n성명 홍길동",
+            )
+        }
 
     def submit_pdf(self, filename, content, *, title="", tags=(), source="discord"):
         self.submitted.append((filename, content, title, tuple(tags), source))
@@ -91,6 +102,12 @@ class FakePaperless(PaperlessDocumentService):
             content="OCR body",
             tag_ids=(1, 2),
         )
+
+    def task(self, task_id):
+        return PaperlessTask(str(task_id), "success", (42,))
+
+    def get(self, document_id):
+        return self.documents[int(document_id)]
 
 
 class FakeAttachment:
@@ -679,10 +696,9 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
             )
         )
 
-        self.assertIn("submitted", content)
-        self.assertIn("OCR may still be running", content)
+        self.assertIn("Paperless saved. OCR processing.", content)
 
-    def test_ocr_ready_message_includes_kaosai_tag_prompt(self) -> None:
+    def test_ocr_ready_message_asks_user_to_finish_or_edit(self) -> None:
         content = render_ocr_ready_message(
             InboxRecord(
                 source_id="source",
@@ -699,10 +715,9 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("- #진료기록", content)
         self.assertIn("- Paperless saved. OCR ready.", content)
-        self.assertIn("- 수정할까요? Edit 또는 Done.", content)
+        self.assertIn("- 수정할까요?", content)
         self.assertIn("document no `42`", content)
-        self.assertIn("`42`", content)
-        self.assertIn("문서 42 태그 추천", content)
+        self.assertNotIn("태그 추천", content)
 
     def test_ocr_ready_view_keeps_done_as_user_action(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -753,6 +768,47 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("document no `42`", content)
         self.assertIn("Paperless saved. OCR ready. Done.", content)
         self.assertNotIn("수정할까요", content)
+
+    def test_suggest_document_tags_extracts_certificate_year_and_name(self) -> None:
+        tags = suggest_document_tags(
+            PaperlessDocument(
+                42,
+                "2023 진단용방사선안전관리책임자교육-이수증",
+                "2026-08-19",
+                "scan.pdf",
+                content="진단용방사선 안전관리책임자교육 이수증\n성명 홍길동",
+            )
+        )
+
+        self.assertEqual(tags, ("이수증", "수료증", "2023", "홍길동"))
+
+    async def test_ocr_tracker_applies_suggested_tags_before_ready_prompt(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            paperless = FakePaperless()
+            inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
+            source_id = "discord:100:300:1:10"
+            inbox.state.sources[source_id] = InboxRecord(
+                source_id=source_id,
+                sha256="hash",
+                filename="2023_-.pdf",
+                task_id="task-1",
+                message_id=1,
+                prompt_message_id=999,
+                title="2023_",
+            )
+            prompt_message = SimpleNamespace(id=999, edit=AsyncMock())
+            self.channel.fetch_message = AsyncMock(return_value=prompt_message)
+
+            await inbox._track_ocr(source_id)
+
+            self.assertEqual(
+                paperless.metadata_updates,
+                [(42, "2023 진단용방사선안전관리책임자교육-이수증", ("이수증", "수료증", "2023", "홍길동"))],
+            )
+            content = prompt_message.edit.await_args.kwargs["content"]
+            self.assertIn("### 2023 진단용방사선안전관리책임자교육-이수증", content)
+            self.assertIn("- #이수증 #수료증 #2023 #홍길동", content)
+            self.assertIn("- 수정할까요?", content)
 
     def test_ocr_pending_message_keeps_task_id_visible(self) -> None:
         content = render_ocr_pending_message(
