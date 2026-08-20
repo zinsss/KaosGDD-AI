@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import base64
 from datetime import date
+from pathlib import Path
+import tempfile
 from types import SimpleNamespace
 import unittest
 
@@ -343,6 +345,52 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status["lastModel"], "not-connected")
         self.assertNotIn("summary", str(payload))
         self.assertNotIn("contentBase64", str(payload))
+
+    async def test_imaging_second_look_status_survives_restart_from_state_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            state_path = Path(temporary) / "second-look-status.json"
+            first_server = BrainToolServer(
+                "127.0.0.1",
+                8098,
+                governor_api_token="governor-secret",
+                calendar_adapter=self.calendar,  # type: ignore[arg-type]
+                memos=self.memos,  # type: ignore[arg-type]
+                paperless=self.paperless,  # type: ignore[arg-type]
+                second_look_status_path=state_path,
+            )
+            first_client = TestClient(TestServer(first_server.application()))
+            await first_client.start_server()
+            try:
+                response = await first_client.post(
+                    "/tools/imaging/second-look",
+                    headers=self.headers(),
+                    json=_second_look_payload("kaospacs-aio-second-look-persisted"),
+                )
+                self.assertEqual(response.status, 200)
+            finally:
+                await first_client.close()
+
+            second_server = BrainToolServer(
+                "127.0.0.1",
+                8098,
+                governor_api_token="governor-secret",
+                calendar_adapter=self.calendar,  # type: ignore[arg-type]
+                memos=self.memos,  # type: ignore[arg-type]
+                paperless=self.paperless,  # type: ignore[arg-type]
+                second_look_status_path=state_path,
+            )
+            second_client = TestClient(TestServer(second_server.application()))
+            await second_client.start_server()
+            try:
+                persisted = await second_client.get("/tools/imaging/second-look/status", headers=self.headers())
+                status = (await persisted.json())["secondLook"]
+            finally:
+                await second_client.close()
+
+        self.assertEqual(status["requestCount"], 1)
+        self.assertEqual(status["completedCount"], 1)
+        self.assertEqual(status["lastStatus"], "completed")
+        self.assertEqual(status["lastModel"], "not-connected")
 
     async def test_imaging_second_look_rejects_unsafe_request(self) -> None:
         response = await self.client.post(

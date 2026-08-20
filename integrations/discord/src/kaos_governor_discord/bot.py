@@ -308,6 +308,7 @@ class GovernorBot(discord.Client):
                         timeout_seconds=settings.imaging_second_look_timeout_seconds,
                     )
                 ),
+                second_look_status_path=settings.service_status_state_path.parent / "second-look-status.json",
             )
             if settings.brain_tools_enabled
             else None

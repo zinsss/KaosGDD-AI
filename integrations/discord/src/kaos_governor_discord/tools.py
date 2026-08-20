@@ -8,7 +8,9 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 import hashlib
 import hmac
+import json
 import logging
+from pathlib import Path
 from typing import Any
 
 import aiohttp
@@ -149,6 +151,22 @@ class SecondLookStatus:
             "lastError": self.last_error,
         }
 
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> "SecondLookStatus":
+        return cls(
+            request_count=_status_int(payload, "requestCount"),
+            completed_count=_status_int(payload, "completedCount"),
+            failed_count=_status_int(payload, "failedCount"),
+            rate_limited_count=_status_int(payload, "rateLimitedCount"),
+            last_request_at=str(payload.get("lastRequestAt") or ""),
+            last_completed_at=str(payload.get("lastCompletedAt") or ""),
+            last_failed_at=str(payload.get("lastFailedAt") or ""),
+            last_job_id=str(payload.get("lastJobId") or ""),
+            last_status=str(payload.get("lastStatus") or ""),
+            last_model=str(payload.get("lastModel") or ""),
+            last_error=str(payload.get("lastError") or ""),
+        )
+
 
 @dataclass(frozen=True)
 class ImagingSecondLookConfig:
@@ -203,6 +221,7 @@ class BrainToolServer:
         today_provider: Callable[[], date] | None = None,
         durable_store: MemoryDurableGovernorStore | None = None,
         imaging_second_look: ImagingSecondLookClient | None = None,
+        second_look_status_path: Path | None = None,
     ) -> None:
         self._host = host
         self._port = port
@@ -216,7 +235,8 @@ class BrainToolServer:
         self._imaging_second_look_client = imaging_second_look or ImagingSecondLookClient(ImagingSecondLookConfig())
         self._second_look_rate: dict[str, list[datetime]] = {}
         self._second_look_response_cache: dict[str, tuple[datetime, dict[str, Any]]] = {}
-        self._second_look_status = SecondLookStatus()
+        self._second_look_status_path = second_look_status_path
+        self._second_look_status = self._load_second_look_status()
         self._pending_task_due_updates: dict[str, PendingTaskDueUpdate] = {}
         self._pending_task_creates: dict[str, PendingTaskCreate] = {}
         self._pending_task_actions: dict[str, PendingTaskAction] = {}
@@ -831,6 +851,7 @@ class BrainToolServer:
         self._second_look_status.last_request_at = _second_look_now_text()
         self._second_look_status.last_job_id = job_id
         self._second_look_status.last_status = "accepted"
+        self._save_second_look_status()
 
     def _record_second_look_completion(self, response_payload: Mapping[str, Any]) -> None:
         result = response_payload.get("result")
@@ -841,6 +862,7 @@ class BrainToolServer:
         self._second_look_status.last_status = str(response_payload.get("status") or "completed").strip() or "completed"
         self._second_look_status.last_model = model
         self._second_look_status.last_error = ""
+        self._save_second_look_status()
 
     def _record_second_look_failure(self, job_id: str, error: str, *, rate_limited: bool = False) -> None:
         self._second_look_status.failed_count += 1
@@ -850,6 +872,31 @@ class BrainToolServer:
         self._second_look_status.last_job_id = job_id
         self._second_look_status.last_status = "failed"
         self._second_look_status.last_error = error[:160]
+        self._save_second_look_status()
+
+    def _load_second_look_status(self) -> SecondLookStatus:
+        if self._second_look_status_path is None:
+            return SecondLookStatus()
+        try:
+            raw = json.loads(self._second_look_status_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return SecondLookStatus()
+        status = raw.get("secondLook") if isinstance(raw, Mapping) else None
+        if not isinstance(status, Mapping):
+            return SecondLookStatus()
+        return SecondLookStatus.from_dict(status)
+
+    def _save_second_look_status(self) -> None:
+        if self._second_look_status_path is None:
+            return
+        payload = {"secondLook": self._second_look_status.as_dict()}
+        try:
+            self._second_look_status_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = self._second_look_status_path.with_suffix(f"{self._second_look_status_path.suffix}.tmp")
+            temporary.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+            temporary.replace(self._second_look_status_path)
+        except OSError:
+            LOGGER.exception("Failed to persist second-look status")
 
     async def _propose_task_due_update(self, request: web.Request) -> web.Response:
         try:
@@ -1924,6 +1971,13 @@ def _second_look_job_id(request_id: str) -> str:
 
 def _second_look_now_text() -> str:
     return datetime.now().isoformat(timespec="seconds")
+
+
+def _status_int(payload: Mapping[str, object], key: str) -> int:
+    try:
+        return int(payload.get(key) or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _second_look_operation_parameters(body: Mapping[str, Any]) -> dict[str, Any]:
