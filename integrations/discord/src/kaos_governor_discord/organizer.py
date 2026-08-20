@@ -395,7 +395,7 @@ class MailBulkView(RestrictedView):
 
     @discord.ui.button(label="Mark Read All", style=discord.ButtonStyle.primary)
     async def mark_all(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer(ephemeral=True, thinking=True)
         digest = await asyncio.to_thread(self.coordinator.organizer.digest, self.digest_id)
         await asyncio.to_thread(self.coordinator.organizer.mark_read_all, self.digest_id)
         await self.coordinator.delete_item_messages(digest)
@@ -428,7 +428,7 @@ class MailDeleteAllConfirmationView(RestrictedView):
 
     @discord.ui.button(label="Delete Snapshot", style=discord.ButtonStyle.danger)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer(ephemeral=True, thinking=True)
         digest = await asyncio.to_thread(self.coordinator.organizer.digest, self.digest_id)
         await asyncio.to_thread(self.coordinator.organizer.delete_all, self.digest_id)
         await self.coordinator.delete_item_messages(digest)

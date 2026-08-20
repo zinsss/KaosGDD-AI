@@ -5,6 +5,8 @@ from unittest.mock import AsyncMock, Mock
 from kaos_governor.mail import MailMessage
 from kaos_governor_discord.organizer import (
     DiscordMailOrganizer,
+    MailBulkView,
+    MailDeleteAllConfirmationView,
     MailDigestView,
     MailItemActionView,
     render_digest,
@@ -98,6 +100,56 @@ class DiscordOrganizerViewTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(organizer_channel.send.await_count, 2)
         archive_channel.send.assert_awaited_once()
+
+    async def test_bulk_mark_read_acknowledges_as_thinking_before_work(self) -> None:
+        organizer = SimpleNamespace(
+            digest=Mock(return_value=digest(1)),
+            mark_read_all=Mock(),
+        )
+        coordinator = SimpleNamespace(
+            policy=SimpleNamespace(allows=Mock(return_value=True)),
+            organizer=organizer,
+            delete_item_messages=AsyncMock(),
+            refresh_digest=AsyncMock(),
+        )
+        interaction = SimpleNamespace(
+            guild_id=1,
+            channel_id=2,
+            user=SimpleNamespace(id=3),
+            response=SimpleNamespace(defer=AsyncMock()),
+            delete_original_response=AsyncMock(),
+        )
+        view = MailBulkView(coordinator, "digest-1", 3)
+
+        await view.children[0].callback(interaction)
+
+        interaction.response.defer.assert_awaited_once_with(ephemeral=True, thinking=True)
+        organizer.mark_read_all.assert_called_once_with("digest-1")
+
+    async def test_delete_snapshot_acknowledges_as_thinking_before_work(self) -> None:
+        organizer = SimpleNamespace(
+            digest=Mock(return_value=digest(1)),
+            delete_all=Mock(),
+        )
+        coordinator = SimpleNamespace(
+            policy=SimpleNamespace(allows=Mock(return_value=True)),
+            organizer=organizer,
+            delete_item_messages=AsyncMock(),
+            refresh_digest=AsyncMock(),
+        )
+        interaction = SimpleNamespace(
+            guild_id=1,
+            channel_id=2,
+            user=SimpleNamespace(id=3),
+            response=SimpleNamespace(defer=AsyncMock()),
+            delete_original_response=AsyncMock(),
+        )
+        view = MailDeleteAllConfirmationView(coordinator, "digest-1", 3)
+
+        await view.children[0].callback(interaction)
+
+        interaction.response.defer.assert_awaited_once_with(ephemeral=True, thinking=True)
+        organizer.delete_all.assert_called_once_with("digest-1")
 
 
 if __name__ == "__main__":
