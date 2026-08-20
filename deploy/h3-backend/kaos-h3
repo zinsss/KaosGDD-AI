@@ -462,6 +462,9 @@ family_portal_source_preflight() {
   require_file "${app_source}/index.html"
   require_file "${app_source}/app.js"
   require_file "${app_source}/translations.js"
+  if [ -d "${app_source}/app" ]; then
+    fail "Family portal source must not contain a nested app/ duplicate"
+  fi
   require_file "${nginx_source}"
   if grep -q 'kaosgdd-gov' "${nginx_source}"; then
     die "family portal source still references retired kaosgdd-gov upstream"

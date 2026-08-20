@@ -1,8 +1,9 @@
-# KaosGDD Mobile Shell
+# KaosGDD Family Portal
 
-Mobile-first KaosGDD app shell.
+Mobile-first KaosGDD Family portal.
 
-This is the first app-shaped version after the mobile v1 prototype. The frontend remains static and keeps mock fallback data, while production calendar/task operations go through the server-side calendar adapter.
+The frontend remains static and keeps mock fallback data, while production
+calendar/task operations go through the server-side calendar adapter.
 
 ## Routes
 
@@ -31,22 +32,16 @@ Future adapters:
 - Documents -> Paperless adapter
 - Notes and knowledge -> Memos
 
-## Deploy
+## Source Layout
 
-The production test deployment is served from the existing KaosGDD portal nginx container under:
+This directory is the canonical static web root for `family.kaosgdd.net`.
+Do not keep a second nested copy such as `apps/family-portal/app/`; nginx serves
+the files from the root of this directory.
 
-```text
-/          main app
-/app/
-```
-
-The old service launcher remains available as `/launcher.html`. The static prototype remains available as `/mobile-v1/`.
-
-Deploy without copying the private checkout permissions onto the nginx web root:
+Deploy through the H3 backend helper:
 
 ```bash
-rsync -rltp --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r apps/mobile-shell/ /srv/kaos/data/kaosgdd/portal/
-rsync -rltp --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r apps/mobile-shell/ /srv/kaos/data/kaosgdd/portal/app/
+./deploy/h3-backend/kaos-h3 family-portal-sync
 ```
 
 ## Localization
