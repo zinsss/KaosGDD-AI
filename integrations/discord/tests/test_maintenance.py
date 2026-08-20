@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 import subprocess
 import tempfile
 import unittest
@@ -10,9 +11,11 @@ from kaos_governor_discord.maintenance import (
     MaintenanceTarget,
     collect_maintenance_reports,
     collect_maintenance_report,
+    due_openclaw_renewal_reminders,
     load_stored_maintenance_reports,
     maintenance_targets,
     parse_probe_output,
+    render_openclaw_renewal_reminder,
     render_maintenance_reports,
 )
 
@@ -91,7 +94,6 @@ class MaintenanceTests(unittest.IsolatedAsyncioTestCase):
                         "openclaw_primary_model": "openai/gpt-5.6-sol",
                         "openclaw_gateway": "active",
                         "openclaw_reauth_agent": "active",
-                        "openclaw_chatgpt_expires": "unknown",
                         "openclaw_last_touched": "2026-08-19T13:40:10.649Z",
                     },
                 )
@@ -101,9 +103,32 @@ class MaintenanceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("OS 12, Docker packages 2", text)
         self.assertIn("Docker version 27.5.1", text)
         self.assertIn("OpenClaw: model openai/gpt-5.6-sol", text)
-        self.assertIn("ChatGPT expires unknown", text)
+        self.assertIn("ChatGPT expires 2026-08-29, remind 2026-08-28", text)
         self.assertIn("OpenClaw config updated: 2026-08-19T13:40:10.649Z", text)
         self.assertIn("Docker image updates are not checked automatically", text)
+
+    def test_openclaw_renewal_reminder_is_due_on_day_nine(self) -> None:
+        reports = [
+            MaintenanceReport(
+                MaintenanceTarget("kaosbrain", "ssh", "zin@kaosbrain", "/repo"),
+                True,
+                {
+                    "openclaw_configured": "yes",
+                    "openclaw_primary_model": "openai/gpt-5.6-sol",
+                    "openclaw_last_touched": "2026-08-19T13:40:10.649Z",
+                },
+            )
+        ]
+
+        self.assertEqual(due_openclaw_renewal_reminders(reports, today=date(2026, 8, 27)), [])
+        reminders = due_openclaw_renewal_reminders(reports, today=date(2026, 8, 28))
+
+        self.assertEqual(len(reminders), 1)
+        self.assertEqual(reminders[0].reminder_on, date(2026, 8, 28))
+        self.assertEqual(reminders[0].expires_on, date(2026, 8, 29))
+        text = render_openclaw_renewal_reminder(reminders[0])
+        self.assertIn("KaosAI ChatGPT renewal", text)
+        self.assertIn("expires on: `2026-08-29`", text)
 
     def test_render_failed_report(self) -> None:
         text = render_maintenance_reports(

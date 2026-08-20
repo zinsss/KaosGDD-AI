@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import suppress
+import json
 import io
 import logging
+from pathlib import Path
 import time
 
 import discord
@@ -31,7 +33,12 @@ from .fax import DiscordFaxTransport, rejection_message
 from .governor_api import GovernorApiClient, GovernorApiConfig
 from .mail import render_mail_summary, safe_attachment_filename
 from .markdown import MarkdownField, MarkdownMessage, NO_MENTIONS
-from .maintenance import collect_maintenance_reports, render_maintenance_reports
+from .maintenance import (
+    collect_maintenance_reports,
+    due_openclaw_renewal_reminders,
+    render_maintenance_reports,
+    render_openclaw_renewal_reminder,
+)
 from .memos import DiscordMemosCapture
 from .organizer import DiscordMailOrganizer
 from .system_status import DiscordServiceStatusSurface
@@ -39,6 +46,21 @@ from .tasks import DiscordTasksSurface
 from .tools import BrainToolServer, ImagingSecondLookClient, ImagingSecondLookConfig
 
 LOGGER = logging.getLogger(__name__)
+
+
+def load_maintenance_reminder_state(path: Path) -> set[str]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        return set()
+    return {str(item) for item in payload.get("sent", []) if str(item)}
+
+
+def save_maintenance_reminder_state(path: Path, sent_keys: set[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.tmp")
+    temporary.write_text(json.dumps({"sent": sorted(sent_keys)}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(path)
 
 
 async def _deny(interaction: discord.Interaction) -> None:
@@ -147,6 +169,7 @@ class GovernorBot(discord.Client):
         self._tasks_midnight_task: asyncio.Task | None = None
         self._tasks_due_task: asyncio.Task | None = None
         self._tasks_refresh_task: asyncio.Task | None = None
+        self._maintenance_reminder_task: asyncio.Task | None = None
         self.calendar_adapter = CalendarAdapterClient(CalendarAdapterConfig(settings.calendar_adapter_url))
         self.governor_api = (
             GovernorApiClient(GovernorApiConfig(settings.governor_api_url, settings.governor_api_token))
@@ -563,6 +586,11 @@ class GovernorBot(discord.Client):
                     )
             except Exception:
                 LOGGER.exception("Failed to ensure Discord service status message")
+        if self.settings.system_channel_id and self._maintenance_reminder_task is None:
+            self._maintenance_reminder_task = asyncio.create_task(
+                self._maintenance_reminder_loop(),
+                name="governor-maintenance-reminder",
+            )
         if self.settings.startup_notification and not self._startup_announced and self.settings.system_channel_id:
             self._startup_announced = True
             try:
@@ -637,6 +665,11 @@ class GovernorBot(discord.Client):
             with suppress(asyncio.CancelledError):
                 await self._tasks_due_task
             self._tasks_due_task = None
+        if self._maintenance_reminder_task is not None:
+            self._maintenance_reminder_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._maintenance_reminder_task
+            self._maintenance_reminder_task = None
         await self._health.stop()
         if self._brain_tools is not None:
             await self._brain_tools.stop()
@@ -795,6 +828,37 @@ class GovernorBot(discord.Client):
                 await self._refresh_service_status_surface()
             except Exception:
                 LOGGER.exception("Failed to refresh Discord service status message")
+
+    async def _maintenance_reminder_loop(self) -> None:
+        while not self.is_closed():
+            try:
+                await self._send_due_maintenance_reminders()
+            except Exception:
+                LOGGER.exception("Failed to send maintenance reminders")
+            await asyncio.sleep(3600)
+
+    async def _send_due_maintenance_reminders(self) -> int:
+        if not self.settings.system_channel_id:
+            return 0
+        reports = await collect_maintenance_reports()
+        reminders = due_openclaw_renewal_reminders(reports)
+        if not reminders:
+            return 0
+        state_path = self.settings.service_status_state_path.parent / "maintenance-reminders.json"
+        sent_keys = load_maintenance_reminder_state(state_path)
+        pending = [reminder for reminder in reminders if reminder.key not in sent_keys]
+        if not pending:
+            return 0
+        channel = self.get_channel(self.settings.system_channel_id) or await self.fetch_channel(
+            self.settings.system_channel_id
+        )
+        if not isinstance(channel, discord.abc.Messageable) and not hasattr(channel, "send"):
+            raise TypeError("configured system channel is not messageable")
+        for reminder in pending:
+            await channel.send(render_openclaw_renewal_reminder(reminder), allowed_mentions=NO_MENTIONS)
+            sent_keys.add(reminder.key)
+        save_maintenance_reminder_state(state_path, sent_keys)
+        return len(pending)
 
     async def _mail_channel(self) -> discord.abc.Messageable:
         channel_id = self.settings.mail_archive_channel_id

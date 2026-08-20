@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from datetime import date, datetime, timedelta, timezone
 import json
 import os
 from pathlib import Path
@@ -32,6 +33,16 @@ class MaintenanceReport:
     facts: Mapping[str, str]
     error: str = ""
     collected_at: str = ""
+
+
+@dataclass(frozen=True)
+class OpenClawRenewalReminder:
+    key: str
+    target: str
+    model: str
+    last_touched_at: str
+    reminder_on: date
+    expires_on: date
 
 
 Runner = Callable[[MaintenanceTarget, str, float], subprocess.CompletedProcess[str]]
@@ -192,7 +203,6 @@ if [ -f "$openclaw_config" ]; then
     kv openclaw_primary_model unknown
     kv openclaw_last_touched unknown
   fi
-  kv openclaw_chatgpt_expires unknown
 else
   kv openclaw_configured no
 fi
@@ -280,15 +290,82 @@ def render_maintenance_report(report: MaintenanceReport) -> str:
         f"- repo: {escape_text(facts.get('repo', 'not-configured'))}; dirty {escape_text(facts.get('repo_dirty', 'unknown'))}",
     ]
     if facts.get("openclaw_configured") == "yes":
+        renewal = openclaw_renewal_from_report(report)
+        expires = renewal.expires_on.isoformat() if renewal else "unknown"
+        remind = renewal.reminder_on.isoformat() if renewal else "unknown"
         lines.append(
             "- OpenClaw: "
             f"model {escape_text(facts.get('openclaw_primary_model', 'unknown'))}, "
             f"gateway {escape_text(facts.get('openclaw_gateway', 'unknown'))}, "
             f"reauth {escape_text(facts.get('openclaw_reauth_agent', 'unknown'))}, "
-            f"ChatGPT expires {escape_text(facts.get('openclaw_chatgpt_expires', 'unknown'))}"
+            f"ChatGPT expires {escape_text(expires)}, remind {escape_text(remind)}"
         )
         lines.append(f"- OpenClaw config updated: {escape_text(facts.get('openclaw_last_touched', 'unknown'))}")
     return "\n".join(lines)
+
+
+def due_openclaw_renewal_reminders(
+    reports: list[MaintenanceReport],
+    *,
+    today: date | None = None,
+) -> list[OpenClawRenewalReminder]:
+    current = today or datetime.now(timezone(timedelta(hours=9), "KST")).date()
+    reminders: list[OpenClawRenewalReminder] = []
+    for report in reports:
+        reminder = openclaw_renewal_from_report(report)
+        if reminder is not None and current >= reminder.reminder_on:
+            reminders.append(reminder)
+    return reminders
+
+
+def openclaw_renewal_from_report(report: MaintenanceReport) -> OpenClawRenewalReminder | None:
+    facts = report.facts
+    if not report.ok or facts.get("openclaw_configured") != "yes":
+        return None
+    last_touched = str(facts.get("openclaw_last_touched") or "").strip()
+    last_touched_date = parse_openclaw_timestamp_date(last_touched)
+    if last_touched_date is None:
+        return None
+    expires_on = last_touched_date + timedelta(days=10)
+    reminder_on = last_touched_date + timedelta(days=9)
+    model = str(facts.get("openclaw_primary_model") or "unknown")
+    key = f"openclaw-chatgpt:{report.target.name}:{last_touched_date.isoformat()}:{reminder_on.isoformat()}"
+    return OpenClawRenewalReminder(
+        key=key,
+        target=report.target.name,
+        model=model,
+        last_touched_at=last_touched,
+        reminder_on=reminder_on,
+        expires_on=expires_on,
+    )
+
+
+def parse_openclaw_timestamp_date(value: str) -> date | None:
+    text = value.strip()
+    if not text or text == "unknown":
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone(timedelta(hours=9), "KST"))
+    return parsed.date()
+
+
+def render_openclaw_renewal_reminder(reminder: OpenClawRenewalReminder) -> str:
+    return "\n".join(
+        [
+            "## KaosAI ChatGPT renewal",
+            f"- target: {escape_text(reminder.target)}",
+            f"- model: {escape_text(reminder.model)}",
+            f"- renew on: `{reminder.reminder_on.isoformat()}`",
+            f"- expires on: `{reminder.expires_on.isoformat()}`",
+            "- Renew ChatGPT login, then run the maintenance report again.",
+        ]
+    )
 
 
 def stable_error(exc: BaseException) -> str:
