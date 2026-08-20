@@ -23,6 +23,9 @@ from .tasks import TASK_PRIORITIES, is_supplies_collection, normalize_supplies_d
 
 
 LOGGER = logging.getLogger(__name__)
+SECOND_LOOK_RATE_LIMIT_WINDOW = timedelta(minutes=10)
+SECOND_LOOK_RATE_LIMIT_COUNT = 6
+SECOND_LOOK_RESPONSE_CACHE_TTL = timedelta(minutes=30)
 
 
 @dataclass(frozen=True)
@@ -181,6 +184,8 @@ class BrainToolServer:
         self._today_provider = today_provider or date.today
         self._durable = durable_store or MemoryDurableGovernorStore()
         self._imaging_second_look_client = imaging_second_look or ImagingSecondLookClient(ImagingSecondLookConfig())
+        self._second_look_rate: dict[str, list[datetime]] = {}
+        self._second_look_response_cache: dict[str, tuple[datetime, dict[str, Any]]] = {}
         self._pending_task_due_updates: dict[str, PendingTaskDueUpdate] = {}
         self._pending_task_creates: dict[str, PendingTaskCreate] = {}
         self._pending_task_actions: dict[str, PendingTaskAction] = {}
@@ -672,35 +677,114 @@ class BrainToolServer:
 
         request_id = str(body["requestId"]).strip()
         job_id = _second_look_job_id(request_id)
+        source = str(body.get("source") or "").strip()
+        parameters = _second_look_operation_parameters(body)
+        try:
+            operation, created = self._durable.start_operation(
+                OperationRequest(
+                    actor=Actor(actor_type="service", actor_id=source, scope="clinic"),
+                    idempotency_key=request_id,
+                    tool_name="imaging.second-look",
+                    operation_type="temporary-review",
+                    parameters=parameters,
+                )
+            )
+        except DurableGovernorError as exc:
+            if str(exc) == "idempotency_key_conflict":
+                return web.json_response({"jobId": job_id, "error": "idempotency_key_conflict"}, status=409)
+            return web.json_response({"jobId": job_id, "error": str(exc)}, status=400)
+
+        if not created:
+            if operation.status == "completed":
+                cached = self._second_look_cached_response(operation.operation_id)
+                if cached is not None:
+                    return web.json_response(cached)
+                return web.json_response(
+                    {"jobId": job_id, "error": "imaging_second_look_result_expired"},
+                    status=409,
+                )
+            return web.json_response(
+                {"jobId": job_id, "error": f"imaging_second_look_operation_{operation.status}"},
+                status=409,
+            )
+
+        self._durable.record_audit(
+            actor=operation.actor,
+            event_type="imaging.second-look.request",
+            outcome="accepted",
+            operation_id=operation.operation_id,
+            tool_name=operation.tool_name,
+            idempotency_key=operation.idempotency_key,
+            request_hash=operation.request_hash,
+            payload=parameters,
+        )
+        if self._second_look_rate_limited(source):
+            self._durable.fail_operation(operation.operation_id, error_code="rate_limited")
+            return web.json_response({"jobId": job_id, "error": "imaging_second_look_rate_limited"}, status=429)
+
         if self._imaging_second_look_client.config.enabled:
             try:
                 provider_payload = await self._imaging_second_look_client.second_look(body)
             except RuntimeError as exc:
+                self._durable.fail_operation(
+                    operation.operation_id,
+                    error_code=_second_look_error_code(str(exc)),
+                )
                 return web.json_response({"error": str(exc)}, status=502)
-            return web.json_response({"jobId": job_id, **provider_payload})
+            response_payload = {"jobId": job_id, **provider_payload}
+            self._complete_second_look_operation(operation.operation_id, response_payload)
+            return web.json_response(response_payload)
         modality = str(body.get("modality") or "").strip().upper()
         ai_domain = str(body.get("aiDomain") or "").strip().lower()
         question = " ".join(str(body.get("question") or "").split())
-        return web.json_response(
-            {
-                "jobId": job_id,
-                "status": "completed",
-                "result": {
-                    "summary": "AI second-look model is not connected yet. No clinical image opinion was generated.",
-                    "checklist": [
-                        f"Request accepted from KaosAIO for temporary review only.",
-                        f"Modality: {modality or 'unknown'}; domain: {ai_domain or 'unknown'}.",
-                        "Rendered preview image was received and discarded after request validation.",
-                    ],
-                    "cautions": [
-                        "No DICOM, Orthanc, PACS, or AIO report data was modified.",
-                        "This placeholder is not a diagnostic interpretation.",
-                    ],
-                    "recommendation": question or "Connect the approved KaosAI imaging model before using second-look output.",
-                    "disclaimer": "AI 보조 검토입니다. 최종 판단은 진료자가 합니다.",
-                    "model": "not-connected",
-                },
-            }
+        response_payload = {
+            "jobId": job_id,
+            "status": "completed",
+            "result": {
+                "summary": "AI second-look model is not connected yet. No clinical image opinion was generated.",
+                "checklist": [
+                    "Request accepted from KaosAIO for temporary review only.",
+                    f"Modality: {modality or 'unknown'}; domain: {ai_domain or 'unknown'}.",
+                    "Rendered preview image was received and discarded after request validation.",
+                ],
+                "cautions": [
+                    "No DICOM, Orthanc, PACS, or AIO report data was modified.",
+                    "This placeholder is not a diagnostic interpretation.",
+                ],
+                "recommendation": question or "Connect the approved KaosAI imaging model before using second-look output.",
+                "disclaimer": "AI 보조 검토입니다. 최종 판단은 진료자가 합니다.",
+                "model": "not-connected",
+            },
+        }
+        self._complete_second_look_operation(operation.operation_id, response_payload)
+        return web.json_response(response_payload)
+
+    def _second_look_rate_limited(self, source: str) -> bool:
+        now = datetime.now()
+        cutoff = now - SECOND_LOOK_RATE_LIMIT_WINDOW
+        recent = [timestamp for timestamp in self._second_look_rate.get(source, []) if timestamp >= cutoff]
+        if len(recent) >= SECOND_LOOK_RATE_LIMIT_COUNT:
+            self._second_look_rate[source] = recent
+            return True
+        recent.append(now)
+        self._second_look_rate[source] = recent
+        return False
+
+    def _second_look_cached_response(self, operation_id: str) -> dict[str, Any] | None:
+        cached = self._second_look_response_cache.get(operation_id)
+        if cached is None:
+            return None
+        created_at, payload = cached
+        if datetime.now() - created_at > SECOND_LOOK_RESPONSE_CACHE_TTL:
+            self._second_look_response_cache.pop(operation_id, None)
+            return None
+        return dict(payload)
+
+    def _complete_second_look_operation(self, operation_id: str, response_payload: Mapping[str, Any]) -> None:
+        self._second_look_response_cache[operation_id] = (datetime.now(), dict(response_payload))
+        self._durable.complete_operation(
+            operation_id,
+            result=_second_look_result_audit_payload(response_payload),
         )
 
     async def _propose_task_due_update(self, request: web.Request) -> web.Response:
@@ -1772,6 +1856,78 @@ def _validate_second_look_request(body: Mapping[str, Any]) -> str:
 
 def _second_look_job_id(request_id: str) -> str:
     return "imaging_" + hashlib.sha256(request_id.encode("utf-8")).hexdigest()[:24]
+
+
+def _second_look_operation_parameters(body: Mapping[str, Any]) -> dict[str, Any]:
+    images = [image for image in body.get("images", []) if isinstance(image, Mapping)]
+    safety = body.get("safety") if isinstance(body.get("safety"), Mapping) else {}
+    return {
+        "source": str(body.get("source") or "").strip(),
+        "requestId": str(body.get("requestId") or "").strip(),
+        "studyInstanceUidHash": _second_look_optional_hash(body.get("studyInstanceUid")),
+        "seriesInstanceUidHash": _second_look_optional_hash(body.get("seriesInstanceUid")),
+        "sopInstanceUidHash": _second_look_optional_hash(body.get("sopInstanceUid")),
+        "modality": str(body.get("modality") or "").strip().upper(),
+        "bodyPart": str(body.get("bodyPart") or "").strip().upper(),
+        "viewPosition": str(body.get("viewPosition") or "").strip().upper(),
+        "aiDomain": str(body.get("aiDomain") or "").strip().lower(),
+        "questionHash": _second_look_optional_hash(body.get("question")),
+        "imageCount": len(images),
+        "imageFormats": [str(image.get("format") or "").strip().lower() for image in images],
+        "imageHashes": [_second_look_image_hash(image) for image in images],
+        "safety": {
+            name: bool(safety.get(name))
+            for name in (
+                "temporary",
+                "storedInAioReports",
+                "dicomMetadataSent",
+                "orthancReadOnly",
+                "dicomModified",
+                "pacsFinalReport",
+                "renderedPreview",
+                "burnedInAnnotationsPossible",
+            )
+        },
+    }
+
+
+def _second_look_optional_hash(value: object) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _second_look_image_hash(image: Mapping[str, Any]) -> str:
+    content = str(image.get("contentBase64") or "").strip()
+    try:
+        decoded = base64.b64decode(content, validate=True)
+    except (binascii.Error, ValueError):
+        return ""
+    return hashlib.sha256(decoded).hexdigest()
+
+
+def _second_look_result_audit_payload(response_payload: Mapping[str, Any]) -> dict[str, Any]:
+    result = response_payload.get("result")
+    if not isinstance(result, Mapping):
+        return {"status": str(response_payload.get("status") or "").strip()}
+    return {
+        "status": str(response_payload.get("status") or "").strip(),
+        "model": str(result.get("model") or "").strip(),
+        "checklistCount": len(result.get("checklist", [])) if isinstance(result.get("checklist"), list) else 0,
+        "cautionCount": len(result.get("cautions", [])) if isinstance(result.get("cautions"), list) else 0,
+        "hasRecommendation": bool(str(result.get("recommendation") or "").strip()),
+    }
+
+
+def _second_look_error_code(value: str) -> str:
+    text = "".join(character if character.isalnum() or character in "._:@/-" else "_" for character in value.strip())
+    text = text.strip("._:@/-")
+    if not text:
+        return "imaging_second_look_failed"
+    if not text[0].isalnum():
+        text = f"imaging_{text}"
+    return text[:128]
 
 
 def _normalize_second_look_provider_response(payload: Mapping[str, Any]) -> dict[str, Any]:

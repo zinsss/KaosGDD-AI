@@ -7,6 +7,7 @@ import unittest
 
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
+from kaos_governor import MemoryDurableGovernorStore
 from kaos_governor.documents import PaperlessDocument, PaperlessSearchPage, PaperlessSearchResult, PaperlessTag
 from kaos_governor.memos import Memo, MemoSearchPage, MemoSearchResult
 from kaos_governor_discord.tools import BrainToolServer, ImagingSecondLookClient, ImagingSecondLookConfig
@@ -404,6 +405,134 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
                 await client.close()
         finally:
             await runner.cleanup()
+
+    async def test_imaging_second_look_records_audit_without_image_payload(self) -> None:
+        durable = MemoryDurableGovernorStore()
+        server = BrainToolServer(
+            "127.0.0.1",
+            8098,
+            governor_api_token="governor-secret",
+            calendar_adapter=self.calendar,  # type: ignore[arg-type]
+            memos=self.memos,  # type: ignore[arg-type]
+            paperless=self.paperless,  # type: ignore[arg-type]
+            durable_store=durable,
+        )
+        client = TestClient(TestServer(server.application()))
+        await client.start_server()
+        try:
+            response = await client.post(
+                "/tools/imaging/second-look",
+                headers=self.headers(),
+                json=_second_look_payload("kaospacs-aio-second-look-audit"),
+            )
+
+            self.assertEqual(response.status, 200)
+            operation = next(
+                record
+                for record in durable.audit_records()
+                if record.event_type == "imaging.second-look.request"
+            )
+            self.assertEqual(operation.actor.actor_type, "service")
+            self.assertEqual(operation.actor.actor_id, "kaospacs-aio")
+            self.assertEqual(operation.actor.scope, "clinic")
+            self.assertEqual(operation.payload["imageCount"], 1)
+            self.assertNotIn("images", operation.payload)
+            self.assertNotIn("contentBase64", str(operation.payload))
+            self.assertEqual(len(str(operation.payload["sopInstanceUidHash"])), 64)
+            self.assertEqual(len(str(operation.payload["imageHashes"][0])), 64)
+        finally:
+            await client.close()
+
+    async def test_imaging_second_look_replays_duplicate_without_provider_second_call(self) -> None:
+        provider_calls = 0
+
+        async def provider(request):
+            nonlocal provider_calls
+            provider_calls += 1
+            return web.json_response(
+                {
+                    "status": "completed",
+                    "result": {
+                        "summary": f"검토 완료 {provider_calls}",
+                        "checklist": ["확인"],
+                        "cautions": [],
+                        "recommendation": "대조",
+                        "model": "qwen2.5vl",
+                    },
+                }
+            )
+
+        app = web.Application()
+        app.router.add_post("/imaging/second-look", provider)
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, "127.0.0.1", 0)
+        await site.start()
+        port = site._server.sockets[0].getsockname()[1]
+        try:
+            server = BrainToolServer(
+                "127.0.0.1",
+                8098,
+                governor_api_token="governor-secret",
+                calendar_adapter=self.calendar,  # type: ignore[arg-type]
+                memos=self.memos,  # type: ignore[arg-type]
+                paperless=self.paperless,  # type: ignore[arg-type]
+                imaging_second_look=ImagingSecondLookClient(
+                    ImagingSecondLookConfig(
+                        url=f"http://127.0.0.1:{port}/imaging/second-look",
+                        token="imaging-token",
+                    )
+                ),
+            )
+            client = TestClient(TestServer(server.application()))
+            await client.start_server()
+            try:
+                payload = _second_look_payload("kaospacs-aio-second-look-replay")
+                first = await client.post("/tools/imaging/second-look", headers=self.headers(), json=payload)
+                second = await client.post("/tools/imaging/second-look", headers=self.headers(), json=payload)
+
+                self.assertEqual(first.status, 200)
+                self.assertEqual(second.status, 200)
+                self.assertEqual(await first.json(), await second.json())
+                self.assertEqual(provider_calls, 1)
+            finally:
+                await client.close()
+        finally:
+            await runner.cleanup()
+
+    async def test_imaging_second_look_rejects_idempotency_conflict(self) -> None:
+        request_id = "kaospacs-aio-second-look-conflict"
+        first = await self.client.post(
+            "/tools/imaging/second-look",
+            headers=self.headers(),
+            json=_second_look_payload(request_id),
+        )
+        payload = _second_look_payload(request_id)
+        payload["aiDomain"] = "xray"
+
+        second = await self.client.post(
+            "/tools/imaging/second-look",
+            headers=self.headers(),
+            json=payload,
+        )
+
+        self.assertEqual(first.status, 200)
+        self.assertEqual(second.status, 409)
+        self.assertEqual((await second.json())["error"], "idempotency_key_conflict")
+
+    async def test_imaging_second_look_rate_limits_new_requests(self) -> None:
+        statuses = []
+        for index in range(7):
+            response = await self.client.post(
+                "/tools/imaging/second-look",
+                headers=self.headers(),
+                json=_second_look_payload(f"kaospacs-aio-second-look-rate-{index}"),
+            )
+            statuses.append(response.status)
+
+        self.assertEqual(statuses[:6], [200, 200, 200, 200, 200, 200])
+        self.assertEqual(statuses[6], 429)
+        self.assertEqual((await response.json())["error"], "imaging_second_look_rate_limited")
 
     async def test_today_returns_events_due_tasks_and_weather(self) -> None:
         response = await self.client.get("/tools/today?profile=main", headers=self.headers())
