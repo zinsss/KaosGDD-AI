@@ -26,8 +26,10 @@ from kaos_governor_discord.system_status import (
     render_service_message,
     render_summary_embed,
     restart_service_sync,
+    service_status_secret,
     second_look_health_detail,
     second_look_health_url,
+    second_look_status_detail,
 )
 
 
@@ -408,6 +410,43 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("provider=kaosai", detail)
         self.assertIn("model=openai/gpt-5.6-sol", detail)
+
+    def test_second_look_status_detail_summarizes_last_result(self) -> None:
+        detail = second_look_status_detail(
+            json.dumps(
+                {
+                    "secondLook": {
+                        "requestCount": 3,
+                        "completedCount": 2,
+                        "failedCount": 1,
+                        "rateLimitedCount": 1,
+                        "lastCompletedAt": "2026-08-20T19:05:00",
+                        "lastStatus": "completed",
+                        "lastModel": "openai/gpt-5.6-sol",
+                    }
+                }
+            ).encode("utf-8")
+        )
+
+        self.assertIn("last completed 2026-08-20T19:05:00", detail)
+        self.assertIn("model openai/gpt-5.6-sol", detail)
+        self.assertIn("requests 3", detail)
+        self.assertIn("rate-limited 1", detail)
+
+    def test_second_look_status_detail_reports_empty_state(self) -> None:
+        detail = second_look_status_detail(json.dumps({"secondLook": {"requestCount": 0}}).encode("utf-8"))
+
+        self.assertEqual(detail, "no second-look requests yet")
+
+    def test_service_status_secret_reads_file_backed_token(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            token_path = Path(temporary) / "token"
+            token_path.write_text("secret-value\n", encoding="utf-8")
+
+            self.assertEqual(
+                service_status_secret({"GOVERNOR_API_TOKEN_FILE": str(token_path)}, "GOVERNOR_API_TOKEN"),
+                "secret-value",
+            )
 
     def test_planned_service_renders_as_planned_without_probe(self) -> None:
         result = check_service(

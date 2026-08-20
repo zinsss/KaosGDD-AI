@@ -318,6 +318,32 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["result"]["model"], "not-connected")
         self.assertIn("AI 보조 검토", payload["result"]["disclaimer"])
 
+    async def test_imaging_second_look_status_reports_operational_metadata_only(self) -> None:
+        before = await self.client.get("/tools/imaging/second-look/status", headers=self.headers())
+        self.assertEqual(before.status, 200)
+        self.assertEqual((await before.json())["secondLook"]["requestCount"], 0)
+
+        response = await self.client.post(
+            "/tools/imaging/second-look",
+            headers=self.headers(),
+            json=_second_look_payload("kaospacs-aio-second-look-status"),
+        )
+        self.assertEqual(response.status, 200)
+        job_id = (await response.json())["jobId"]
+
+        after = await self.client.get("/tools/imaging/second-look/status", headers=self.headers())
+        self.assertEqual(after.status, 200)
+        payload = await after.json()
+        status = payload["secondLook"]
+        self.assertEqual(status["requestCount"], 1)
+        self.assertEqual(status["completedCount"], 1)
+        self.assertEqual(status["failedCount"], 0)
+        self.assertEqual(status["lastJobId"], job_id)
+        self.assertEqual(status["lastStatus"], "completed")
+        self.assertEqual(status["lastModel"], "not-connected")
+        self.assertNotIn("summary", str(payload))
+        self.assertNotIn("contentBase64", str(payload))
+
     async def test_imaging_second_look_rejects_unsafe_request(self) -> None:
         response = await self.client.post(
             "/tools/imaging/second-look",
@@ -533,6 +559,10 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(statuses[:6], [200, 200, 200, 200, 200, 200])
         self.assertEqual(statuses[6], 429)
         self.assertEqual((await response.json())["error"], "imaging_second_look_rate_limited")
+        status_response = await self.client.get("/tools/imaging/second-look/status", headers=self.headers())
+        status = (await status_response.json())["secondLook"]
+        self.assertEqual(status["rateLimitedCount"], 1)
+        self.assertEqual(status["lastError"], "imaging_second_look_rate_limited")
 
     async def test_today_returns_events_due_tasks_and_weather(self) -> None:
         response = await self.client.get("/tools/today?profile=main", headers=self.headers())

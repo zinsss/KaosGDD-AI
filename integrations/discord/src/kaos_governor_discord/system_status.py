@@ -611,9 +611,57 @@ def check_second_look_status(env: Mapping[str, str], timeout_seconds: float) -> 
     state, detail = check_second_look_provider_http(provider_url, timeout_seconds)
     if state != "healthy":
         return state, detail
+    status_detail = check_second_look_governor_status(env, timeout_seconds)
+    if status_detail:
+        detail = f"{detail}; {status_detail}"
     if governor_url:
         return state, f"{detail}; Governor route configured"
     return state, detail
+
+
+def check_second_look_governor_status(env: Mapping[str, str], timeout_seconds: float) -> str:
+    url = env.get("SERVICE_STATUS_KAOSAI_SECOND_LOOK_STATUS_URL", "").strip()
+    if not url:
+        port = env.get("GOVERNOR_BRAIN_TOOLS_PORT", "8098").strip() or "8098"
+        url = f"http://127.0.0.1:{port}/tools/imaging/second-look/status"
+    token = service_status_secret(env, "SERVICE_STATUS_KAOSAI_SECOND_LOOK_STATUS_TOKEN") or service_status_secret(
+        env,
+        "GOVERNOR_API_TOKEN",
+    )
+    if not token:
+        return "last unavailable: missing status token"
+    request = urllib.request.Request(
+        url,
+        method="GET",
+        headers={
+            "User-Agent": "KaosGovernor/service-status",
+            "Authorization": f"Bearer {token}",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            status = int(response.status)
+            body = response.read(8192)
+    except urllib.error.HTTPError as exc:
+        return f"last unavailable: HTTP {int(exc.code)}"
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        return f"last unavailable: {stable_error(exc)}"
+    if not 200 <= status < 400:
+        return f"last unavailable: HTTP {status}"
+    return second_look_status_detail(body)
+
+
+def service_status_secret(env: Mapping[str, str], name: str) -> str:
+    value = env.get(name, "").strip()
+    if value:
+        return value
+    path = env.get(f"{name}_FILE", "").strip()
+    if not path:
+        return ""
+    try:
+        return Path(path).read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
 
 
 def check_second_look_provider_http(url: str, timeout_seconds: float) -> tuple[str, str]:
@@ -659,6 +707,48 @@ def second_look_health_detail(status: int, body: bytes) -> str:
     if imaging_model:
         parts.append(f"model={imaging_model}")
     return "; ".join(parts)
+
+
+def second_look_status_detail(body: bytes) -> str:
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return "last unavailable: invalid status"
+    if not isinstance(payload, dict):
+        return "last unavailable: invalid status"
+    status = payload.get("secondLook")
+    if not isinstance(status, dict):
+        return "last unavailable: missing status"
+    request_count = second_look_status_count(status, "requestCount")
+    completed_count = second_look_status_count(status, "completedCount")
+    failed_count = second_look_status_count(status, "failedCount")
+    rate_limited_count = second_look_status_count(status, "rateLimitedCount")
+    if request_count == 0:
+        return "no second-look requests yet"
+    last_status = str(status.get("lastStatus") or "unknown").strip() or "unknown"
+    last_model = str(status.get("lastModel") or "").strip()
+    last_completed = str(status.get("lastCompletedAt") or "").strip()
+    last_failed = str(status.get("lastFailedAt") or "").strip()
+    last_error = str(status.get("lastError") or "").strip()
+    if last_status == "completed":
+        detail = f"last completed {last_completed or 'unknown'}"
+        if last_model:
+            detail = f"{detail}, model {last_model}"
+    elif last_error:
+        detail = f"last failed {last_failed or 'unknown'}: {last_error}"
+    else:
+        detail = f"last {last_status}"
+    detail = f"{detail}; requests {request_count}, completed {completed_count}, failed {failed_count}"
+    if rate_limited_count:
+        detail = f"{detail}, rate-limited {rate_limited_count}"
+    return detail
+
+
+def second_look_status_count(status: Mapping[str, object], key: str) -> int:
+    try:
+        return int(status.get(key) or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def check_tcp(target: str, timeout_seconds: float) -> tuple[str, str]:

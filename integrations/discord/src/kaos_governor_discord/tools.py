@@ -120,6 +120,36 @@ class PendingDocumentMetadata:
     payload: dict[str, Any]
 
 
+@dataclass
+class SecondLookStatus:
+    request_count: int = 0
+    completed_count: int = 0
+    failed_count: int = 0
+    rate_limited_count: int = 0
+    last_request_at: str = ""
+    last_completed_at: str = ""
+    last_failed_at: str = ""
+    last_job_id: str = ""
+    last_status: str = ""
+    last_model: str = ""
+    last_error: str = ""
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "requestCount": self.request_count,
+            "completedCount": self.completed_count,
+            "failedCount": self.failed_count,
+            "rateLimitedCount": self.rate_limited_count,
+            "lastRequestAt": self.last_request_at,
+            "lastCompletedAt": self.last_completed_at,
+            "lastFailedAt": self.last_failed_at,
+            "lastJobId": self.last_job_id,
+            "lastStatus": self.last_status,
+            "lastModel": self.last_model,
+            "lastError": self.last_error,
+        }
+
+
 @dataclass(frozen=True)
 class ImagingSecondLookConfig:
     url: str = ""
@@ -186,6 +216,7 @@ class BrainToolServer:
         self._imaging_second_look_client = imaging_second_look or ImagingSecondLookClient(ImagingSecondLookConfig())
         self._second_look_rate: dict[str, list[datetime]] = {}
         self._second_look_response_cache: dict[str, tuple[datetime, dict[str, Any]]] = {}
+        self._second_look_status = SecondLookStatus()
         self._pending_task_due_updates: dict[str, PendingTaskDueUpdate] = {}
         self._pending_task_creates: dict[str, PendingTaskCreate] = {}
         self._pending_task_actions: dict[str, PendingTaskAction] = {}
@@ -219,6 +250,7 @@ class BrainToolServer:
         app.router.add_post("/tools/tasks/update-due/proposals", self._propose_task_due_update)
         app.router.add_post("/tools/events/create/proposals", self._propose_event_create)
         app.router.add_post("/tools/imaging/second-look", self._imaging_second_look)
+        app.router.add_get("/tools/imaging/second-look/status", self._imaging_second_look_status)
         app.router.add_post("/tools/confirmations/{confirmation_id}/approve", self._approve_confirmation)
         return app
 
@@ -708,6 +740,7 @@ class BrainToolServer:
                 status=409,
             )
 
+        self._record_second_look_request(job_id)
         self._durable.record_audit(
             actor=operation.actor,
             event_type="imaging.second-look.request",
@@ -720,6 +753,7 @@ class BrainToolServer:
         )
         if self._second_look_rate_limited(source):
             self._durable.fail_operation(operation.operation_id, error_code="rate_limited")
+            self._record_second_look_failure(job_id, "imaging_second_look_rate_limited", rate_limited=True)
             return web.json_response({"jobId": job_id, "error": "imaging_second_look_rate_limited"}, status=429)
 
         if self._imaging_second_look_client.config.enabled:
@@ -730,6 +764,7 @@ class BrainToolServer:
                     operation.operation_id,
                     error_code=_second_look_error_code(str(exc)),
                 )
+                self._record_second_look_failure(job_id, str(exc))
                 return web.json_response({"error": str(exc)}, status=502)
             response_payload = {"jobId": job_id, **provider_payload}
             self._complete_second_look_operation(operation.operation_id, response_payload)
@@ -786,6 +821,35 @@ class BrainToolServer:
             operation_id,
             result=_second_look_result_audit_payload(response_payload),
         )
+        self._record_second_look_completion(response_payload)
+
+    async def _imaging_second_look_status(self, request: web.Request) -> web.Response:
+        return web.json_response({"secondLook": self._second_look_status.as_dict()})
+
+    def _record_second_look_request(self, job_id: str) -> None:
+        self._second_look_status.request_count += 1
+        self._second_look_status.last_request_at = _second_look_now_text()
+        self._second_look_status.last_job_id = job_id
+        self._second_look_status.last_status = "accepted"
+
+    def _record_second_look_completion(self, response_payload: Mapping[str, Any]) -> None:
+        result = response_payload.get("result")
+        model = str(result.get("model") or "").strip() if isinstance(result, Mapping) else ""
+        self._second_look_status.completed_count += 1
+        self._second_look_status.last_completed_at = _second_look_now_text()
+        self._second_look_status.last_job_id = str(response_payload.get("jobId") or "").strip()
+        self._second_look_status.last_status = str(response_payload.get("status") or "completed").strip() or "completed"
+        self._second_look_status.last_model = model
+        self._second_look_status.last_error = ""
+
+    def _record_second_look_failure(self, job_id: str, error: str, *, rate_limited: bool = False) -> None:
+        self._second_look_status.failed_count += 1
+        if rate_limited:
+            self._second_look_status.rate_limited_count += 1
+        self._second_look_status.last_failed_at = _second_look_now_text()
+        self._second_look_status.last_job_id = job_id
+        self._second_look_status.last_status = "failed"
+        self._second_look_status.last_error = error[:160]
 
     async def _propose_task_due_update(self, request: web.Request) -> web.Response:
         try:
@@ -1856,6 +1920,10 @@ def _validate_second_look_request(body: Mapping[str, Any]) -> str:
 
 def _second_look_job_id(request_id: str) -> str:
     return "imaging_" + hashlib.sha256(request_id.encode("utf-8")).hexdigest()[:24]
+
+
+def _second_look_now_text() -> str:
+    return datetime.now().isoformat(timespec="seconds")
 
 
 def _second_look_operation_parameters(body: Mapping[str, Any]) -> dict[str, Any]:
