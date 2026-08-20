@@ -12,8 +12,11 @@ from .kaos_ai import KaosAIConfig, KaosAIError, OpenClawKaosAIPlanner
 from .ollama import OllamaClient, OllamaConfig, OllamaError
 
 
+SECOND_LOOK_ALLOWED_SOURCES = {"kaospacs-aio", "kaosaio"}
+
+
 def validate_second_look_request(body: Mapping[str, Any]) -> str:
-    if str(body.get("source") or "").strip() != "kaosaio":
+    if str(body.get("source") or "").strip() not in SECOND_LOOK_ALLOWED_SOURCES:
         return "imaging_second_look_invalid_source"
     for name in ("requestId", "modality", "aiDomain", "question"):
         if not str(body.get(name) or "").strip():

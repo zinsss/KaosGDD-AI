@@ -78,6 +78,18 @@ narrow `/tools/...` endpoints for Brain. Allow TCP 8098 only from H4 in the
 host firewall. Do not publish Governor tools through Caddy, cloudflared, or the
 public Internet.
 
+KaosPACS-AIO temporary image second-look calls the same internal tool API:
+
+```text
+POST http://<kaosgovernor-tailscale-ip>:8098/tools/imaging/second-look
+Authorization: Bearer <GOVERNOR_API_TOKEN>
+```
+
+The request must send rendered PNG/JPEG previews only with `source` set to
+`kaospacs-aio`. Governor validates the safety flags and, when configured with
+`IMAGING_SECOND_LOOK_URL`, forwards the request to KaosBrain/KaosAI. It must
+not write to Orthanc, PACS, DICOM, or AIO reports.
+
 Memos and Radicale default to loopback. Their native clients require a
 separate, intentional Caddy/Tailscale or CalDAV routing design.
 

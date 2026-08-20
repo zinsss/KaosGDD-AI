@@ -48,8 +48,8 @@ class FailingKaosAI:
 
 def second_look_payload(*, stored: bool = False) -> dict:
     return {
-        "source": "kaosaio",
-        "requestId": "kaosaio-second-look-1",
+        "source": "kaospacs-aio",
+        "requestId": "kaospacs-aio-second-look-1",
         "modality": "DX",
         "bodyPart": "CHEST",
         "viewPosition": "PA",
@@ -136,6 +136,12 @@ class BrainImagingTests(unittest.IsolatedAsyncioTestCase):
 class BrainImagingValidationTests(unittest.TestCase):
     def test_validate_accepts_expected_payload(self) -> None:
         self.assertEqual(validate_second_look_request(second_look_payload()), "")
+
+    def test_validate_accepts_legacy_source_name(self) -> None:
+        payload = second_look_payload()
+        payload["source"] = "kaosaio"
+
+        self.assertEqual(validate_second_look_request(payload), "")
 
 
 if __name__ == "__main__":

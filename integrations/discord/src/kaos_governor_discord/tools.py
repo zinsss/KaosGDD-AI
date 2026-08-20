@@ -1724,8 +1724,11 @@ def _document_tag_context_document_payload(document: Mapping[str, object]) -> di
     return payload
 
 
+SECOND_LOOK_ALLOWED_SOURCES = {"kaospacs-aio", "kaosaio"}
+
+
 def _validate_second_look_request(body: Mapping[str, Any]) -> str:
-    if str(body.get("source") or "").strip() != "kaosaio":
+    if str(body.get("source") or "").strip() not in SECOND_LOOK_ALLOWED_SOURCES:
         return "imaging_second_look_invalid_source"
     for name in ("requestId", "modality", "aiDomain", "question"):
         if not str(body.get(name) or "").strip():

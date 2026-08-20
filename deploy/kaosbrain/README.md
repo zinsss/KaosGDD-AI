@@ -78,6 +78,7 @@ KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL=http://<kaosgovernor-tailscale-ip>:8098
 KAOSBRAIN_GOVERNOR_HEALTH_URL=http://<kaosgovernor-tailscale-ip>:8097/health
 KAOSBRAIN_GOVERNOR_TOOLS_PROFILE=main
 KAOSBRAIN_IMAGING_ENABLED=false
+KAOSBRAIN_IMAGING_PROVIDER=kaosai
 KAOSBRAIN_IMAGING_API_TOKEN_FILE=/run/secrets/governor_api_token
 GOVERNOR_API_TOKEN_FILE=/run/secrets/governor_api_token
 ```
@@ -89,6 +90,19 @@ enabled.
 Use `KAOSAI_DRY_RUN_ENABLED=true` only with `KAOSAI_ENABLED=true`. In dry-run
 mode, ordinary Brain chat renders the guarded KaosAI plan preview and skips all
 Governor calls, confirmations, and writes.
+
+For KaosPACS-AIO second-look, AIO calls Governor on H3 and Governor forwards to
+KaosBrain:
+
+```text
+IMAGING_SECOND_LOOK_URL=http://<kaosbrain-tailscale-ip>:8097/imaging/second-look
+IMAGING_SECOND_LOOK_TOKEN_FILE=/run/secrets/governor_api_token
+KAOSBRAIN_IMAGING_ENABLED=true
+KAOSBRAIN_IMAGING_PROVIDER=kaosai
+```
+
+The payload contains rendered previews only. KaosBrain/KaosAI returns a
+temporary second-look checklist, not a diagnosis or clinical report.
 
 Use the deploy helper to switch KaosAI modes without hand-editing the env file:
 

@@ -220,7 +220,7 @@ class FakePaperless:
 
 def _second_look_payload(request_id: str) -> dict:
     return {
-        "source": "kaosaio",
+        "source": "kaospacs-aio",
         "requestId": request_id,
         "studyInstanceUid": "1.2.3",
         "seriesInstanceUid": "1.2.3.4",
@@ -285,7 +285,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
             "/tools/imaging/second-look",
             headers=self.headers(),
             json={
-                "source": "kaosaio",
+                "source": "kaospacs-aio",
                 "requestId": "kaosaio-second-look-1",
                 "studyInstanceUid": "1.2.3",
                 "seriesInstanceUid": "1.2.3.4",
@@ -305,7 +305,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
                     "pacsFinalReport": False,
                     "renderedPreview": True,
                     "burnedInAnnotationsPossible": True,
-                    "disclaimer": "KaosAIO Opinion...",
+                    "disclaimer": "KaosPACS-aio Opinion...",
                 },
             },
         )
@@ -322,7 +322,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
             "/tools/imaging/second-look",
             headers=self.headers(),
             json={
-                "source": "kaosaio",
+                "source": "kaospacs-aio",
                 "requestId": "kaosaio-second-look-2",
                 "modality": "DX",
                 "aiDomain": "cxr",

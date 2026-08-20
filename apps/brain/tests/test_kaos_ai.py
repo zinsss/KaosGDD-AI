@@ -277,7 +277,7 @@ class KaosAITests(unittest.IsolatedAsyncioTestCase):
 
             result = await planner.second_look(
                 {
-                    "source": "kaosaio",
+                    "source": "kaospacs-aio",
                     "requestId": "request-1",
                     "modality": "DX",
                     "bodyPart": "CHEST",
@@ -293,7 +293,10 @@ class KaosAITests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["model"], "openai/gpt-5")
             self.assertEqual(requests[1]["params"]["provider"], "openai")
             self.assertEqual(requests[1]["params"]["model"], "gpt-5")
-            self.assertEqual(requests[1]["params"]["attachments"], [{"mimeType": "image/png", "content": "cG5n", "name": "kaosaio-second-look-1.png"}])
+            self.assertEqual(
+                requests[1]["params"]["attachments"],
+                [{"mimeType": "image/png", "content": "cG5n", "name": "kaospacs-aio-second-look-1.png"}],
+            )
             self.assertIn("temporary", requests[1]["params"]["message"])
         finally:
             await runner.cleanup()

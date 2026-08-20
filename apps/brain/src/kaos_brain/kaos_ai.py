@@ -180,6 +180,8 @@ Allowed schema:
 Rules:
 - Review only the attached rendered preview image.
 - Focus on visible image-quality issues and easy-to-miss review checklist points.
+- Use second-look wording such as possible, consider, visible concern, and needs physician review.
+- Avoid final diagnosis language and never phrase the output as a clinical report.
 - Mention that final judgment belongs to the clinician.
 - Do not infer hidden DICOM metadata.
 - Do not suggest that PACS, Orthanc, or medical records were modified."""
@@ -462,7 +464,7 @@ def _render_second_look_attachments(request: Mapping[str, Any]) -> list[Mapping[
             {
                 "mimeType": f"image/{image_format}",
                 "content": content,
-                "name": f"kaosaio-second-look-{index}.{image_format}",
+                "name": f"kaospacs-aio-second-look-{index}.{image_format}",
             }
         )
     return attachments

@@ -144,6 +144,8 @@ Allowed schema:
 
 Rules:
 - Focus on visible, general image-quality and review-checklist observations.
+- Use second-look wording such as possible, consider, visible concern, and needs physician review.
+- Avoid final diagnosis language and never phrase the output as a clinical report.
 - Mention that the final judgment belongs to the clinician.
 - Do not infer hidden DICOM metadata.
 - Do not suggest that PACS, Orthanc, or medical records were modified."""
