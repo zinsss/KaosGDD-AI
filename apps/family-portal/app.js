@@ -175,6 +175,13 @@ const state = {
     error: "",
     items: [],
   },
+  weatherSettings: {
+    checked: false,
+    loading: false,
+    saving: false,
+    error: "",
+    version: 0,
+  },
   weatherLocationPopup: {
     open: false,
     mode: "locations",
@@ -1305,11 +1312,11 @@ function visibleMonthRange(monthValue = state.selectedDate.slice(0, 7)) {
   return { start: cells[0]?.value || state.selectedDate, end: cells[cells.length - 1]?.value || state.selectedDate };
 }
 
-async function loadRemoteWeatherForSelectedMonth() {
+async function loadRemoteWeatherForSelectedMonth({ force = false } = {}) {
   const month = state.selectedDate.slice(0, 7);
   const range = visibleMonthRange(month);
   const key = `${state.weatherLocation}:${range.start}:${range.end}`;
-  if (state.remoteWeather.key === key || state.remoteWeather.loadingKey === key) return;
+  if (!force && (state.remoteWeather.key === key || state.remoteWeather.loadingKey === key)) return;
   state.remoteWeather.loadingKey = key;
   try {
     const params = new URLSearchParams({
@@ -2499,18 +2506,80 @@ function weatherLocationLabel(locationId = state.weatherLocation) {
   return uiText(location.translationKey, location.label);
 }
 
-function setWeatherLocationPreference(value) {
+function applyWeatherLocationPreference(value) {
   const normalized = WEATHER_LOCATION_IDS.has(value) ? value : "pohang";
   window.localStorage.setItem(WEATHER_LOCATION_STORAGE_KEY, normalized);
+  const changed = state.weatherLocation !== normalized;
   state.weatherLocation = normalized;
-  state.remoteWeather = {
-    checked: false,
-    live: false,
-    key: "",
-    loadingKey: "",
-    error: "",
-    items: [],
-  };
+  if (changed) {
+    state.remoteWeather = {
+      checked: false,
+      live: false,
+      key: "",
+      loadingKey: "",
+      error: "",
+      items: [],
+    };
+  }
+  return changed;
+}
+
+async function loadWeatherSettings({ force = false } = {}) {
+  if (state.weatherSettings.loading) return;
+  if (state.weatherSettings.checked && !force) return;
+  state.weatherSettings.loading = true;
+  try {
+    const response = await fetch("/api/weather/settings", { headers: { Accept: "application/json" } });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    const location = String(payload.settings?.location || "");
+    const changed = applyWeatherLocationPreference(location);
+    state.weatherSettings = {
+      checked: true,
+      loading: false,
+      saving: false,
+      error: "",
+      version: Number(payload.version || 0),
+    };
+    if (changed) loadRemoteWeatherForSelectedMonth({ force: true });
+  } catch (error) {
+    state.weatherSettings = {
+      ...state.weatherSettings,
+      checked: true,
+      loading: false,
+      error: error.message || uiText("settings.weatherUnavailable", "날씨 설정을 불러올 수 없습니다"),
+    };
+  }
+  if (getRoute() === "settings") render();
+}
+
+async function saveWeatherLocationPreference(value) {
+  if (state.weatherSettings.saving) return;
+  const previous = state.weatherLocation;
+  applyWeatherLocationPreference(value);
+  state.weatherSettings.saving = true;
+  state.weatherSettings.error = "";
+  render();
+  try {
+    const response = await fetch("/api/weather/settings", {
+      method: "PUT",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ location: state.weatherLocation }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    applyWeatherLocationPreference(String(payload.settings?.location || state.weatherLocation));
+    state.weatherSettings.version = Number(payload.version || state.weatherSettings.version);
+    state.weatherSettings.checked = true;
+    loadRemoteWeatherForSelectedMonth({ force: true });
+  } catch (error) {
+    applyWeatherLocationPreference(previous);
+    state.weatherSettings.error = error.message || uiText("settings.weatherSaveFailed", "날씨 설정을 저장할 수 없습니다");
+    window.alert(state.weatherSettings.error);
+  } finally {
+    state.weatherSettings.saving = false;
+    if (getRoute() === "settings") render();
+  }
 }
 
 function interpolateText(template, params = {}) {
@@ -5697,12 +5766,21 @@ function renderSettings() {
               <select data-weather-location-setting aria-label="${uiText("settings.defaultWeather", "Default weather")}">
                 ${WEATHER_LOCATION_OPTIONS.map(
                   (location) => `
-                    <option value="${location.id}" ${state.weatherLocation === location.id ? "selected" : ""}>
+                    <option value="${location.id}" ${state.weatherLocation === location.id ? "selected" : ""} ${state.weatherSettings.saving ? "disabled" : ""}>
                       ${uiText(location.translationKey, location.label)}
                     </option>
                   `,
                 ).join("")}
               </select>
+              ${
+                state.weatherSettings.saving
+                  ? `<small>${uiText("settings.saving", "Saving...")}</small>`
+                  : state.weatherSettings.error
+                    ? `<small>${escapeHtml(state.weatherSettings.error)}</small>`
+                    : state.weatherSettings.checked
+                      ? `<small>${uiText("settings.governorBacked", "Governor-backed")}</small>`
+                      : ""
+              }
             </dd>
           </div>
           ${
@@ -6313,6 +6391,7 @@ function render() {
   if (route === "documents") loadDocuments();
   if (route === "ledger") loadLedger();
   if (route === "settings") {
+    loadWeatherSettings();
     loadHolidays();
     loadCustomEvents();
     loadMailOrganizerSettings();
@@ -7551,7 +7630,7 @@ document.addEventListener("keydown", (event) => {
   weatherTrigger.click();
 });
 
-document.addEventListener("change", (event) => {
+document.addEventListener("change", async (event) => {
   const organizerFrequency = event.target.closest('[data-mail-organizer-form] [name="runsPerDay"]');
   if (organizerFrequency) {
     const form = organizerFrequency.closest("[data-mail-organizer-form]");
@@ -7640,8 +7719,7 @@ document.addEventListener("change", (event) => {
 
   const weatherLocation = event.target.closest("[data-weather-location-setting]");
   if (weatherLocation) {
-    setWeatherLocationPreference(weatherLocation.value);
-    render();
+    await saveWeatherLocationPreference(weatherLocation.value);
     return;
   }
 
@@ -7726,6 +7804,7 @@ window.addEventListener("hashchange", () => {
 });
 
 restoreComposerRecovery();
+loadWeatherSettings();
 
 if (isAgendaSuppliesEmbed()) {
   document.documentElement.classList.add("isAgendaSuppliesEmbed");

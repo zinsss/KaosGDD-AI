@@ -82,6 +82,39 @@ class EventPresetApiTests(unittest.TestCase):
         self.assertEqual(payload["sync"], {"ok": True, "total": 2, "unchanged": 2})
         self.assertEqual(mirrored, [{"marketDaysEnabled": True, "claimDayEnabled": False}])
 
+    def test_weather_settings_are_profile_scoped(self) -> None:
+        reads: list[tuple[str, str]] = []
+        writes: list[tuple[str, str, dict[str, object]]] = []
+
+        def fake_read(scope: str, name: str, default: dict[str, object]) -> tuple[dict[str, object], int]:
+            reads.append((scope, name))
+            return ({"location": "daegu"} if scope == "family" else dict(default), 3)
+
+        def fake_write(scope: str, name: str, payload: dict[str, object]) -> tuple[dict[str, object], int]:
+            writes.append((scope, name, payload))
+            return payload, 4
+
+        with patch.object(api, "_read_setting", side_effect=fake_read):
+            family_payload = api.weather_settings_payload("family")
+            main_payload = api.weather_settings_payload("main")
+
+        self.assertEqual(family_payload["settings"], {"location": "daegu"})
+        self.assertEqual(main_payload["settings"], {"location": "pohang"})
+        self.assertEqual(reads, [("family", "weather"), ("personal", "weather")])
+
+        with (
+            patch.object(api, "_read_setting", return_value=({"location": "pohang"}, 1)),
+            patch.object(api, "_write_setting", side_effect=fake_write),
+        ):
+            saved = api.update_weather_settings({"location": "yeonghae"}, "family")
+
+        self.assertEqual(saved["settings"], {"location": "yeonghae"})
+        self.assertEqual(writes, [("family", "weather", {"location": "yeonghae"})])
+
+    def test_weather_settings_reject_invalid_location(self) -> None:
+        with self.assertRaisesRegex(ValueError, "invalid_weather_location"):
+            api._normalize_weather_settings({"location": "seoul"})
+
 
 if __name__ == "__main__":
     unittest.main()

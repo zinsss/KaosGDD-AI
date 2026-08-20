@@ -22,6 +22,12 @@ MIGRATIONS = Path(os.environ.get("GOVERNOR_MIGRATIONS_DIR", "/usr/local/share/ka
 MAX_REQUEST_BYTES = 500_000
 CALENDAR_ADAPTER_INTERNAL_URL = os.environ.get("CALENDAR_ADAPTER_INTERNAL_URL", "http://calendar-adapter:8091").rstrip("/")
 CALENDAR_ADAPTER_TIMEOUT_SECONDS = float(os.environ.get("CALENDAR_ADAPTER_TIMEOUT_SECONDS", "20"))
+WEATHER_LOCATIONS = {
+    "pohang": "포항",
+    "daegu": "대구",
+    "yeongcheon": "영천",
+    "yeonghae": "영해",
+}
 
 
 def json_response(handler: BaseHTTPRequestHandler, status: int, payload: dict[str, object]) -> None:
@@ -336,6 +342,44 @@ def _write_setting(scope: str, name: str, payload: dict[str, object]) -> tuple[d
     return dict(row[0]), int(row[1])
 
 
+def _settings_scope_for_profile(profile: str) -> str:
+    return "family" if profile == "family" else "personal"
+
+
+def _normalize_weather_settings(payload: dict[str, object]) -> dict[str, object]:
+    location = str(payload.get("location") or "pohang").strip().lower()
+    if location not in WEATHER_LOCATIONS:
+        raise ValueError("invalid_weather_location")
+    return {"location": location}
+
+
+def weather_settings_payload(profile: str) -> dict[str, object]:
+    scope = _settings_scope_for_profile(profile)
+    settings, version = _read_setting(scope, "weather", {"location": "pohang"})
+    normalized = _normalize_weather_settings(settings)
+    return {
+        "ok": True,
+        "profile": profile,
+        "version": version,
+        "settings": normalized,
+        "locations": [{"id": key, "label": label} for key, label in WEATHER_LOCATIONS.items()],
+    }
+
+
+def update_weather_settings(payload: dict[str, object], profile: str) -> dict[str, object]:
+    scope = _settings_scope_for_profile(profile)
+    current, _version = _read_setting(scope, "weather", {"location": "pohang"})
+    normalized = _normalize_weather_settings({**current, **payload})
+    saved, version = _write_setting(scope, "weather", normalized)
+    return {
+        "ok": True,
+        "profile": profile,
+        "version": version,
+        "settings": _normalize_weather_settings(saved),
+        "locations": [{"id": key, "label": label} for key, label in WEATHER_LOCATIONS.items()],
+    }
+
+
 def _event_owner(profile: str, payload: dict[str, object] | None = None, existing: dict[str, object] | None = None) -> str:
     if existing and existing.get("owner"):
         return str(existing["owner"])
@@ -537,6 +581,15 @@ class Handler(BaseHTTPRequestHandler):
                 print(f"Custom event read failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "custom_event_storage_unavailable"})
             return
+        if parsed.path == "/api/weather/settings":
+            try:
+                json_response(self, 200, weather_settings_payload(profile_from_headers(self.headers)))
+            except ValueError as exc:
+                json_response(self, 400, {"ok": False, "error": str(exc)})
+            except Exception as exc:
+                print(f"Weather settings read failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "weather_settings_storage_unavailable"})
+            return
         json_response(self, 404, {"error": "not_found"})
 
     def do_POST(self) -> None:
@@ -665,6 +718,15 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 print(f"Custom event update failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "custom_event_storage_unavailable"})
+            return
+        if path == "/api/weather/settings":
+            try:
+                json_response(self, 200, update_weather_settings(json_request(self), profile_from_headers(self.headers)))
+            except ValueError as exc:
+                json_response(self, 400, {"ok": False, "error": str(exc)})
+            except Exception as exc:
+                print(f"Weather settings update failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "weather_settings_storage_unavailable"})
             return
         target_id = ledger_entry_id(path)
         if target_id:
