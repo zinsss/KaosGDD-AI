@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 from datetime import date
 from pathlib import Path
@@ -391,6 +392,35 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status["completedCount"], 1)
         self.assertEqual(status["lastStatus"], "completed")
         self.assertEqual(status["lastModel"], "not-connected")
+
+    async def test_imaging_second_look_completion_schedules_status_refresh(self) -> None:
+        refreshed = asyncio.Event()
+
+        async def refresh_status() -> None:
+            refreshed.set()
+
+        server = BrainToolServer(
+            "127.0.0.1",
+            8098,
+            governor_api_token="governor-secret",
+            calendar_adapter=self.calendar,  # type: ignore[arg-type]
+            memos=self.memos,  # type: ignore[arg-type]
+            paperless=self.paperless,  # type: ignore[arg-type]
+            second_look_status_callback=refresh_status,
+        )
+        client = TestClient(TestServer(server.application()))
+        await client.start_server()
+        try:
+            response = await client.post(
+                "/tools/imaging/second-look",
+                headers=self.headers(),
+                json=_second_look_payload("kaospacs-aio-second-look-refresh"),
+            )
+            self.assertEqual(response.status, 200)
+            await asyncio.wait_for(refreshed.wait(), timeout=1)
+        finally:
+            await client.close()
+            await server.stop()
 
     async def test_imaging_second_look_rejects_unsafe_request(self) -> None:
         response = await self.client.post(

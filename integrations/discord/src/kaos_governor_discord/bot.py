@@ -309,6 +309,7 @@ class GovernorBot(discord.Client):
                     )
                 ),
                 second_look_status_path=settings.service_status_state_path.parent / "second-look-status.json",
+                second_look_status_callback=self._refresh_service_status_surface,
             )
             if settings.brain_tools_enabled
             else None

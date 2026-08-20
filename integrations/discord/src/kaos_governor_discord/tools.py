@@ -222,6 +222,7 @@ class BrainToolServer:
         durable_store: MemoryDurableGovernorStore | None = None,
         imaging_second_look: ImagingSecondLookClient | None = None,
         second_look_status_path: Path | None = None,
+        second_look_status_callback: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         self._host = host
         self._port = port
@@ -236,6 +237,8 @@ class BrainToolServer:
         self._second_look_rate: dict[str, list[datetime]] = {}
         self._second_look_response_cache: dict[str, tuple[datetime, dict[str, Any]]] = {}
         self._second_look_status_path = second_look_status_path
+        self._second_look_status_callback = second_look_status_callback
+        self._second_look_status_refresh_task: asyncio.Task | None = None
         self._second_look_status = self._load_second_look_status()
         self._pending_task_due_updates: dict[str, PendingTaskDueUpdate] = {}
         self._pending_task_creates: dict[str, PendingTaskCreate] = {}
@@ -280,6 +283,13 @@ class BrainToolServer:
         await web.TCPSite(self._runner, self._host, self._port).start()
 
     async def stop(self) -> None:
+        if self._second_look_status_refresh_task is not None:
+            self._second_look_status_refresh_task.cancel()
+            try:
+                await self._second_look_status_refresh_task
+            except asyncio.CancelledError:
+                pass
+            self._second_look_status_refresh_task = None
         if self._runner:
             await self._runner.cleanup()
             self._runner = None
@@ -774,6 +784,7 @@ class BrainToolServer:
         if self._second_look_rate_limited(source):
             self._durable.fail_operation(operation.operation_id, error_code="rate_limited")
             self._record_second_look_failure(job_id, "imaging_second_look_rate_limited", rate_limited=True)
+            self._schedule_second_look_status_refresh()
             return web.json_response({"jobId": job_id, "error": "imaging_second_look_rate_limited"}, status=429)
 
         if self._imaging_second_look_client.config.enabled:
@@ -785,9 +796,11 @@ class BrainToolServer:
                     error_code=_second_look_error_code(str(exc)),
                 )
                 self._record_second_look_failure(job_id, str(exc))
+                self._schedule_second_look_status_refresh()
                 return web.json_response({"error": str(exc)}, status=502)
             response_payload = {"jobId": job_id, **provider_payload}
             self._complete_second_look_operation(operation.operation_id, response_payload)
+            self._schedule_second_look_status_refresh()
             return web.json_response(response_payload)
         modality = str(body.get("modality") or "").strip().upper()
         ai_domain = str(body.get("aiDomain") or "").strip().lower()
@@ -812,6 +825,7 @@ class BrainToolServer:
             },
         }
         self._complete_second_look_operation(operation.operation_id, response_payload)
+        self._schedule_second_look_status_refresh()
         return web.json_response(response_payload)
 
     def _second_look_rate_limited(self, source: str) -> bool:
@@ -897,6 +911,24 @@ class BrainToolServer:
             temporary.replace(self._second_look_status_path)
         except OSError:
             LOGGER.exception("Failed to persist second-look status")
+
+    def _schedule_second_look_status_refresh(self) -> None:
+        if self._second_look_status_callback is None:
+            return
+        if self._second_look_status_refresh_task is not None and not self._second_look_status_refresh_task.done():
+            return
+        self._second_look_status_refresh_task = asyncio.create_task(
+            self._run_second_look_status_refresh(),
+            name="governor-second-look-status-refresh",
+        )
+
+    async def _run_second_look_status_refresh(self) -> None:
+        if self._second_look_status_callback is None:
+            return
+        try:
+            await self._second_look_status_callback()
+        except Exception:
+            LOGGER.exception("Failed to refresh second-look service status")
 
     async def _propose_task_due_update(self, request: web.Request) -> web.Response:
         try:
