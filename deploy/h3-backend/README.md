@@ -155,6 +155,20 @@ database currently shared with migrated Governor modules. The PostgreSQL
 service is named `governor-postgres` and stores data under
 `/srv/kaosgdd/kaosgovernor/postgres`.
 
+The Family portal static app is now repository-owned under
+`apps/family-portal`, with its nginx config under
+`deploy/h3-backend/family-portal/nginx.conf`. After changing those files, sync
+the live H3 service path with:
+
+```bash
+./deploy/h3-backend/kaos-h3 family-portal-sync
+```
+
+The sync command copies the repository assets to
+`/srv/kaos/data/family-portal`, installs the nginx config to
+`/srv/kaos/config/family-portal/nginx.conf`, validates the migrated services,
+and reloads the running `family-portal` container when present.
+
 See [the H3 service migration prep note](../../docs/migration/h3-service-migration-prep.md).
 
 ## Rollback
