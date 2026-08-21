@@ -202,7 +202,8 @@ class GovernorToolRenderingTests(unittest.TestCase):
             },
         )
         self.assertIn("Searched..\n## rustdesk\n1 results in 12 documents", context)
-        self.assertIn("### Rustdesk setup\n- 2026-08-14 · Clinic", context)
+        self.assertIn("Page 1 / 1", context)
+        self.assertIn("- Rustdesk setup", context)
         self.assertNotIn("rustdesk.pdf", context)
 
     def test_render_opened_document_uses_title_as_header(self) -> None:
@@ -255,6 +256,7 @@ class GovernorToolRenderingTests(unittest.TestCase):
                         "created": "2026-08-14T12:00:00Z",
                         "filename": "receipt.pdf",
                         "correspondent": "Clinic",
+                        "url": "https://paperless.example/documents/42/details",
                     },
                     {
                         "id": 43,
@@ -267,7 +269,9 @@ class GovernorToolRenderingTests(unittest.TestCase):
             },
         )
         self.assertIn("Searched..\n## insurance\n13 results in 213 documents", context)
-        self.assertIn("- Showing first 2 results.", context)
+        self.assertIn("Page 1 / 7", context)
+        self.assertIn("- Insurance receipt · [open](https://paperless.example/documents/42/details)", context)
+        self.assertIn("- Insurance form", context)
         self.assertNotIn("### Insurance receipt", context)
         self.assertNotIn("Document search:", context)
 
@@ -556,7 +560,7 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
             },
         )
 
-    async def test_fetch_single_document_search_gets_detail(self) -> None:
+    async def test_fetch_document_search_keeps_search_rows(self) -> None:
         from kaos_brain.governor_tools import GovernorToolClient, GovernorToolConfig
 
         class FakeClient(GovernorToolClient):
@@ -582,12 +586,11 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             client.calls,
             [
-                ("/tools/documents/search", {"query": "rustdesk", "limit": "5"}),
-                ("/tools/documents/42", {}),
+                ("/tools/documents/search", {"query": "rustdesk", "limit": "25"}),
             ],
         )
-        self.assertEqual(payload["results"][0]["title"], "Rustdesk setup")
-        self.assertTrue(payload["results"][0]["full"])
+        self.assertEqual(payload["results"][0]["title"], "Rustdesk")
+        self.assertNotIn("full", payload["results"][0])
 
     async def test_fetch_multi_document_search_keeps_search_rows(self) -> None:
         from kaos_brain.governor_tools import GovernorToolClient, GovernorToolConfig
@@ -610,7 +613,7 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         payload = await client.fetch(ToolRequest(ToolKind.DOCUMENT_SEARCH, "rustdesk"))
-        self.assertEqual(client.calls, [("/tools/documents/search", {"query": "rustdesk", "limit": "5"})])
+        self.assertEqual(client.calls, [("/tools/documents/search", {"query": "rustdesk", "limit": "25"})])
         self.assertNotIn("full", payload["results"][0])
 
     async def test_propose_document_tags_posts_contract(self) -> None:

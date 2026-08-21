@@ -758,8 +758,8 @@ class BrainBot(discord.Client):
         except GovernorToolError as exc:
             LOGGER.warning("Governor tool failed kind=%s: %s", tool_request.kind.value, exc)
             return _tool_failed("조회"), None
-        context = render_tool_context(tool_request, payload)
         if tool_request.kind is ToolKind.MEMO_SEARCH:
+            context = render_tool_context(tool_request, payload)
             results = search_results(payload)
             if len(results) == 1:
                 item = results[0]
@@ -780,23 +780,18 @@ class BrainBot(discord.Client):
             return context, view
         if tool_request.kind is ToolKind.DOCUMENT_SEARCH:
             results = search_results(payload)
-            if len(results) == 1:
-                item = results[0]
-                content = render_document_opened(tool_request.query, item)
-                view = BrainOpenedDocumentView(actor_id, document_public_url(self.settings.paperless_public_url, item.get("id")))
-                return content, view
-            view = (
-                BrainDocumentSearchView(
-                    self.governor_tools,
-                    actor_id,
-                    tool_request.query,
-                    results,
-                    paperless_public_url=self.settings.paperless_public_url,
-                )
-                if len(results) > 1
-                else None
-            )
+            linked_results = [
+                {
+                    **item,
+                    "url": item.get("url") or item.get("publicUrl") or document_public_url(self.settings.paperless_public_url, item.get("id")),
+                }
+                for item in results
+            ]
+            payload = {**payload, "results": linked_results}
+            context = render_tool_context(tool_request, payload)
+            view = BrainTemporarySearchView(tool_request.query) if linked_results else None
             return context, view
+        context = render_tool_context(tool_request, payload)
         if tool_request.kind is ToolKind.COMPLETED_TASKS:
             tasks = _task_results(payload)
             view = BrainCompletedTasksView(self.governor_tools, actor_id, tool_request, tasks) if tasks else None

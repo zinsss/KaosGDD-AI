@@ -64,8 +64,7 @@ class GovernorToolClient:
             payload = await self._get("/tools/memos/search", {"query": request.query, "limit": "5"})
             return await self._with_single_memo_body(payload)
         if request.kind is ToolKind.DOCUMENT_SEARCH:
-            payload = await self._get("/tools/documents/search", {"query": request.query, "limit": "5"})
-            return await self._with_single_document_detail(payload)
+            return await self._get("/tools/documents/search", {"query": request.query, "limit": "25"})
         raise GovernorToolError("unsupported Governor tool")
 
     async def _with_single_memo_body(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -761,20 +760,20 @@ def _render_documents(query: str, payload: dict[str, Any]) -> str:
     results = _items(payload.get("results"))
     result_count = _count(payload, "resultCount", "count", fallback=len(results))
     total_count = _count(payload, "totalCount", "total", fallback=result_count)
+    page = _count(payload, "page", fallback=1)
+    page_size = _count(payload, "pageSize", "page_size", fallback=max(1, len(results) or 25))
+    page_total = max(1, (result_count + page_size - 1) // page_size)
     lines = [
         "Searched..",
         f"## {query or '..'}",
         f"{result_count} results in {total_count} documents",
+        f"Page {page} / {page_total}",
     ]
     if not results:
         lines.append("- No matching documents.")
         return "\n".join(lines)
-    if result_count > len(results):
-        lines.append(f"- Showing first {len(results)} results.")
-    if len(results) > 1:
-        return "\n".join(lines)
-    lines.extend(_document_line(item) for item in results[:5])
-    return "\n".join(lines)
+    lines.extend(_document_link_line(item) for item in results[:25])
+    return "\n".join(lines)[:1900]
 
 
 def _items(value: object) -> list[dict[str, Any]]:
@@ -890,6 +889,13 @@ def _document_line(item: dict[str, Any]) -> str:
     if details:
         return f"### {title}\n- {_truncate(' · '.join(details), 180)}"
     return f"### {title}"
+
+
+def _document_link_line(item: dict[str, Any]) -> str:
+    title = document_display_title(item, 120)
+    url = str(item.get("url") or item.get("publicUrl") or "").strip()
+    suffix = f" · [open]({url})" if url else ""
+    return f"- {title}{suffix}"
 
 
 def _memo_id(name: str) -> str:
