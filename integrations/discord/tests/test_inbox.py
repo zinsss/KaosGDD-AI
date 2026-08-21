@@ -38,6 +38,7 @@ from kaos_governor_discord.inbox import (
     render_ocr_pending_message,
     render_ocr_ready_message,
     render_paperless_opened,
+    render_paperless_search_summary,
     render_processing_message,
     render_submitted_message,
     suggest_document_tags,
@@ -641,11 +642,12 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("Searched..", self.channel.sent[0][0])
             self.assertIn("## clinic", self.channel.sent[0][0])
             self.assertIn("13 results in 213 documents", self.channel.sent[0][0])
+            self.assertIn("- Clinic bill", self.channel.sent[0][0])
             self.assertIn("view", self.channel.sent[0][1])
             self.assertEqual(self.channel.sent[0][1]["view"]._message.id, 998)
             self.assertEqual(message.replies, [])
 
-    async def test_paperless_search_view_clears_dropdown_on_timeout(self) -> None:
+    async def test_paperless_search_view_expires_on_timeout(self) -> None:
         page = FakePaperless().search_page("clinic", limit=25)
         view = PaperlessSearchView(None, page, AccessPolicy(100, frozenset({200}), frozenset({300})))
         message = SimpleNamespace(id=123, edit=AsyncMock())
@@ -655,12 +657,13 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
 
         message.edit.assert_awaited_once()
         self.assertIsNone(message.edit.await_args.kwargs["view"])
+        self.assertIn("Search result of clinic expired.", message.edit.await_args.kwargs["content"])
 
-    async def test_dotdot_only_browses_all_paperless_documents(self) -> None:
+    async def test_dotdot_all_browses_all_paperless_documents(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             paperless = FakePaperless()
             inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
-            message = self.make_message([], content="..")
+            message = self.make_message([], content="..ALL")
 
             self.assertTrue(await inbox.handle_message(message))  # type: ignore[arg-type]
 
@@ -668,7 +671,20 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("## All documents", self.channel.sent[0][0])
             self.assertIn("52 documents", self.channel.sent[0][0])
             self.assertIn("Page 1 / 3", self.channel.sent[0][0])
+            self.assertIn("- Clinic bill", self.channel.sent[0][0])
             self.assertIn("view", self.channel.sent[0][1])
+
+    async def test_dotdot_without_all_does_not_browse_documents(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            paperless = FakePaperless()
+            inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
+            message = self.make_message([], content="..")
+
+            self.assertTrue(await inbox.handle_message(message))  # type: ignore[arg-type]
+
+            self.assertEqual(paperless.searches, [])
+            message.delete.assert_awaited_once()
+            self.assertEqual(self.channel.sent[0][0], "Use `..ALL` to browse all documents.")
 
     async def test_paperless_browse_view_can_page_forward(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -684,7 +700,7 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
                 response=SimpleNamespace(edit_message=AsyncMock(), send_message=AsyncMock()),
             )
 
-            await view.children[2].callback(interaction)  # type: ignore[misc]
+            await view.children[1].callback(interaction)  # type: ignore[misc]
 
             self.assertEqual(paperless.searches[-1], ("", 25, 2))
             self.assertIn("Page 2 / 3", interaction.response.edit_message.await_args.kwargs["content"])
@@ -714,6 +730,14 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("2026-08-13", content)
         self.assertIn("Clinic", content)
         self.assertIn("bill.pdf", content)
+
+    def test_paperless_summary_renders_open_links_per_result(self) -> None:
+        page = FakePaperless().search_page("clinic", limit=25)
+
+        content = render_paperless_search_summary(page, public_url="https://paperless.example")
+
+        self.assertIn("- Clinic bill · [open](https://paperless.example/documents/42/details)", content)
+        self.assertIn("- Clinic receipt · [open](https://paperless.example/documents/43/details)", content)
 
     def test_processing_document_message_mentions_paperless_work(self) -> None:
         content = render_processing_message("처방전.pdf")
