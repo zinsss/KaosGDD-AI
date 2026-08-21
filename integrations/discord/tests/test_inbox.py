@@ -854,6 +854,19 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(tags, ("이수증", "수료증", "2023", "홍길동"))
 
+    def test_suggest_document_tags_extracts_known_document_keywords(self) -> None:
+        tags = suggest_document_tags(
+            PaperlessDocument(
+                42,
+                "의료폐기물 배출자 교육 이수증",
+                "2026-08-19",
+                "scan.pdf",
+                content="의료폐기물 배출자 교육 수료\n성명 김영희",
+            )
+        )
+
+        self.assertEqual(tags, ("이수증", "수료증", "의료폐기물", "2026", "김영희"))
+
     async def test_ocr_tracker_applies_suggested_tags_before_ready_prompt(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             paperless = FakePaperless()

@@ -254,9 +254,12 @@ def document_tag_rule_suggestions(context: Mapping[str, Any]) -> tuple[str, ...]
         add("이수증")
     if "수료" in text:
         add("수료증")
+    for tag in _document_keyword_tags(text):
+        add(tag)
     for name in _document_person_names(text):
         add(name)
-    for year in re.findall(r"(?<!\d)(19\d{2}|20\d{2}|21\d{2})(?!\d)", text):
+    years = _document_years(context)
+    for year in years:
         add(year)
     return tuple(selected)
 
@@ -335,10 +338,28 @@ def _document_tag_text(context: Mapping[str, Any]) -> str:
         document.get("title"),
         document.get("filename"),
         document.get("correspondent"),
-        document.get("created"),
         document.get("contentExcerpt"),
     ]
     return "\n".join(str(part or "") for part in parts)
+
+
+def _document_years(context: Mapping[str, Any]) -> tuple[str, ...]:
+    document = context.get("document") if isinstance(context.get("document"), Mapping) else {}
+    if not isinstance(document, Mapping):
+        document = {}
+    semantic_text = "\n".join(
+        str(part or "")
+        for part in (
+            document.get("title"),
+            document.get("filename"),
+            document.get("correspondent"),
+            document.get("contentExcerpt"),
+        )
+    )
+    years = re.findall(r"(?<!\d)(19\d{2}|20\d{2}|21\d{2})(?!\d)", semantic_text)
+    if not years:
+        years = re.findall(r"(?<!\d)(19\d{2}|20\d{2}|21\d{2})(?!\d)", str(document.get("created") or ""))
+    return tuple(dict.fromkeys(years))
 
 
 def _document_person_names(text: str) -> tuple[str, ...]:
@@ -348,6 +369,20 @@ def _document_person_names(text: str) -> tuple[str, ...]:
         if name not in names:
             names.append(name)
     return tuple(names)
+
+
+def _document_keyword_tags(text: str) -> tuple[str, ...]:
+    rules = (
+        ("의료폐기물", "의료폐기물"),
+        ("진료기록", "진료기록"),
+        ("처방전", "처방전"),
+        ("프린트", "프린트"),
+    )
+    tags: list[str] = []
+    for needle, tag in rules:
+        if needle in text and tag not in tags:
+            tags.append(tag)
+    return tuple(tags)
 
 
 FAMILY_SCOPE_MARKERS = frozenset(

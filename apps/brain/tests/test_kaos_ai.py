@@ -102,6 +102,26 @@ class KaosAITests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(tags, ("#수료증", "김영희"))
 
+    def test_document_tag_rules_detect_known_document_keywords(self) -> None:
+        tags = document_tag_rule_suggestions(
+            {
+                "document": {
+                    "title": "의료폐기물 배출자 교육 이수증",
+                    "created": "2026-08-19",
+                    "contentExcerpt": "의료폐기물 배출자 교육 수료\n성명 김영희",
+                },
+                "availableTags": [
+                    {"id": 1, "name": "이수증"},
+                    {"id": 2, "name": "수료증"},
+                    {"id": 3, "name": "의료폐기물"},
+                    {"id": 4, "name": "2026"},
+                    {"id": 5, "name": "김영희"},
+                ],
+            }
+        )
+
+        self.assertEqual(tags, ("이수증", "수료증", "의료폐기물", "김영희", "2026"))
+
     def test_document_tag_rules_never_invent_missing_tags_and_merge_before_ai(self) -> None:
         context = {
             "document": {"title": "2024 교육 이수증", "contentExcerpt": "성명 없는사람"},

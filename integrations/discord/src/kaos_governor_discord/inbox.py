@@ -1051,12 +1051,30 @@ def suggest_document_tags(document: PaperlessDocument) -> tuple[str, ...]:
     tags: list[str] = []
     if re.search(r"이수|수료", text):
         tags.extend(("이수증", "수료증"))
-    for year in re.findall(r"\b(20\d{2})\b", text):
+    tags.extend(keyword_document_tags(text))
+    years = re.findall(r"\b(20\d{2})\b", text)
+    if not years:
+        years = re.findall(r"\b(20\d{2})\b", str(document.created or ""))
+    for year in years:
         tags.append(year)
     name = extract_korean_name_from_document(text)
     if name:
         tags.append(name)
     return tuple(dict.fromkeys(tag for tag in tags if tag))
+
+
+def keyword_document_tags(text: str) -> tuple[str, ...]:
+    rules = (
+        ("의료폐기물", "의료폐기물"),
+        ("진료기록", "진료기록"),
+        ("처방전", "처방전"),
+        ("프린트", "프린트"),
+    )
+    tags: list[str] = []
+    for needle, tag in rules:
+        if needle in text and tag not in tags:
+            tags.append(tag)
+    return tuple(tags)
 
 
 def extract_korean_name_from_document(text: str) -> str:
