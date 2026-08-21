@@ -92,6 +92,20 @@ class FakePaperless(PaperlessDocumentService):
             213,
         )
 
+    def list_page(self, *, limit=25, page=1):
+        self.searches.append(("", limit, page))
+        return PaperlessSearchPage(
+            "",
+            (
+                PaperlessSearchResult(42, "Clinic bill", "2026-08-13", "bill.pdf", "Clinic"),
+                PaperlessSearchResult(43, "Clinic receipt", "2026-08-12", "receipt.pdf", "Clinic"),
+            ),
+            52,
+            52,
+            page,
+            limit,
+        )
+
     def update_metadata(self, document_id, *, title, tags=()):
         self.metadata_updates.append((document_id, title, tuple(tags)))
         return PaperlessDocument(
@@ -633,7 +647,7 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_paperless_search_view_clears_dropdown_on_timeout(self) -> None:
         page = FakePaperless().search_page("clinic", limit=25)
-        view = PaperlessSearchView(page, AccessPolicy(100, frozenset({200}), frozenset({300})))
+        view = PaperlessSearchView(None, page, AccessPolicy(100, frozenset({200}), frozenset({300})))
         message = SimpleNamespace(id=123, edit=AsyncMock())
         view.bind_message(message)
 
@@ -641,6 +655,40 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
 
         message.edit.assert_awaited_once()
         self.assertIsNone(message.edit.await_args.kwargs["view"])
+
+    async def test_dotdot_only_browses_all_paperless_documents(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            paperless = FakePaperless()
+            inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
+            message = self.make_message([], content="..")
+
+            self.assertTrue(await inbox.handle_message(message))  # type: ignore[arg-type]
+
+            self.assertEqual(paperless.searches, [("", 25, 1)])
+            self.assertIn("## All documents", self.channel.sent[0][0])
+            self.assertIn("52 documents", self.channel.sent[0][0])
+            self.assertIn("Page 1 / 3", self.channel.sent[0][0])
+            self.assertIn("view", self.channel.sent[0][1])
+
+    async def test_paperless_browse_view_can_page_forward(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            paperless = FakePaperless()
+            inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
+            page = paperless.list_page(limit=25)
+            view = PaperlessSearchView(inbox, page, AccessPolicy(100, frozenset({200}), frozenset({300})))
+            interaction = SimpleNamespace(
+                guild_id=100,
+                channel_id=300,
+                user=SimpleNamespace(id=200),
+                message=SimpleNamespace(id=123),
+                response=SimpleNamespace(edit_message=AsyncMock(), send_message=AsyncMock()),
+            )
+
+            await view.children[2].callback(interaction)  # type: ignore[misc]
+
+            self.assertEqual(paperless.searches[-1], ("", 25, 2))
+            self.assertIn("Page 2 / 3", interaction.response.edit_message.await_args.kwargs["content"])
+            self.assertIsInstance(interaction.response.edit_message.await_args.kwargs["view"], PaperlessSearchView)
 
     async def test_dotdot_message_normalizes_multi_term_paperless_search(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

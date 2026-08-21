@@ -144,6 +144,8 @@ class PaperlessSearchPage:
     results: tuple[PaperlessSearchResult, ...]
     result_count: int
     total_count: int
+    page: int = 1
+    page_size: int = 25
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -151,6 +153,8 @@ class PaperlessSearchPage:
             "results": [result.as_dict() for result in self.results],
             "resultCount": self.result_count,
             "totalCount": self.total_count,
+            "page": self.page,
+            "pageSize": self.page_size,
         }
 
 
@@ -266,7 +270,29 @@ class PaperlessDocumentService:
             },
         }
 
-    def search_page(self, query: object, *, limit: int = 5) -> PaperlessSearchPage:
+    def list_page(self, *, limit: int = 25, page: int = 1) -> PaperlessSearchPage:
+        if not self.config.enabled:
+            raise DocumentIntakeError("paperless_not_configured")
+        if limit <= 0 or limit > 25:
+            raise DocumentIntakeError("paperless_limit_invalid")
+        if page <= 0:
+            raise DocumentIntakeError("paperless_page_invalid")
+        try:
+            payload = self._request_documents({"page_size": str(limit), "page": str(page), "ordering": "-created"})
+            results = tuple(paperless_search_result(item) for item in decode_results_payload(payload))[:limit]
+            total_count = result_count_from_payload(payload, len(results))
+        except urllib.error.HTTPError as exc:
+            self.last_error = f"paperless_http_{exc.code}"
+            raise DocumentIntakeError(self.last_error) from exc
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            self.last_error = "paperless_request_failed"
+            raise DocumentIntakeError(self.last_error) from exc
+        self.last_search_at = _now()
+        self.last_result_count = total_count
+        self.last_error = ""
+        return PaperlessSearchPage("", results, total_count, total_count, page, limit)
+
+    def search_page(self, query: object, *, limit: int = 5, page: int = 1) -> PaperlessSearchPage:
         if not self.config.enabled:
             raise DocumentIntakeError("paperless_not_configured")
         normalized = normalize_search_query(query)
@@ -274,8 +300,10 @@ class PaperlessDocumentService:
             raise DocumentIntakeError("paperless_query_required")
         if limit <= 0 or limit > 25:
             raise DocumentIntakeError("paperless_limit_invalid")
+        if page <= 0:
+            raise DocumentIntakeError("paperless_page_invalid")
         try:
-            payload = self._request_documents({"query": normalized, "page_size": str(limit), "ordering": "-created"})
+            payload = self._request_documents({"query": normalized, "page_size": str(limit), "page": str(page), "ordering": "-created"})
             results = tuple(paperless_search_result(item) for item in decode_results_payload(payload))[:limit]
             result_count = result_count_from_payload(payload, len(results))
             total_payload = self._request_documents({"page_size": "1"})
@@ -289,7 +317,7 @@ class PaperlessDocumentService:
         self.last_search_at = _now()
         self.last_result_count = result_count
         self.last_error = ""
-        return PaperlessSearchPage(normalized, results, result_count, total_count)
+        return PaperlessSearchPage(normalized, results, result_count, total_count, page, limit)
 
     def submit_pdf(
         self,

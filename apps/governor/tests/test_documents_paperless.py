@@ -161,6 +161,30 @@ class PaperlessDocumentServiceTests(unittest.TestCase):
         self.assertEqual(len(page.results), 2)
         self.assertEqual(service.status()["lastResultCount"], 13)
 
+    def test_list_page_browses_recent_documents_without_query(self) -> None:
+        urlopen = mock.Mock(
+            return_value=FakeResponse(
+                body=(
+                    b'{"count":52,"results":['
+                    b'{"id":42,"title":"Clinic bill","created":"2026-08-13",'
+                    b'"original_file_name":"bill.pdf","correspondent":{"name":"Clinic"}}]}'
+                )
+            )
+        )
+        service = PaperlessDocumentService(self.config(), urlopen=urlopen)
+
+        page = service.list_page(limit=25, page=2)
+
+        request = urlopen.call_args.args[0]
+        self.assertIn("page_size=25", request.full_url)
+        self.assertIn("page=2", request.full_url)
+        self.assertNotIn("query=", request.full_url)
+        self.assertEqual(page.query, "")
+        self.assertEqual(page.page, 2)
+        self.assertEqual(page.result_count, 52)
+        self.assertEqual(page.total_count, 52)
+        self.assertEqual(page.results[0].title, "Clinic bill")
+
     def test_get_document_uses_paperless_detail_endpoint(self) -> None:
         urlopen = mock.Mock(
             return_value=FakeResponse(

@@ -312,7 +312,10 @@ class DiscordDocumentInbox:
     async def _handle_search(self, message: discord.Message, query: str) -> None:
         normalized_query = normalize_dotdot_query(query)
         try:
-            page = await asyncio.to_thread(self.paperless.search_page, normalized_query, limit=25)
+            if normalized_query:
+                page = await asyncio.to_thread(self.paperless.search_page, normalized_query, limit=25)
+            else:
+                page = await asyncio.to_thread(self.paperless.list_page, limit=25)
         except DocumentIntakeError as exc:
             self.rejected_count += 1
             self.last_error = exc.code
@@ -335,7 +338,7 @@ class DiscordDocumentInbox:
         await self._delete_message(message)
         content = render_paperless_search_summary(page)
         view = (
-            PaperlessSearchView(page, self.policy, public_url=self.paperless.config.public_url)
+            PaperlessSearchView(self, page, self.policy, public_url=self.paperless.config.public_url)
             if len(page.results) > 1
             else None
         )
@@ -1078,13 +1081,40 @@ def merge_tags(existing: tuple[str, ...], suggested: tuple[str, ...]) -> tuple[s
 
 
 class PaperlessSearchView(discord.ui.View):
-    def __init__(self, page: PaperlessSearchPage, policy: AccessPolicy, *, public_url: str = "") -> None:
+    def __init__(self, inbox: DiscordDocumentInbox | None, page: PaperlessSearchPage, policy: AccessPolicy, *, public_url: str = "") -> None:
         super().__init__(timeout=600)
+        self.inbox = inbox
         self.page = page
         self.policy = policy
         self.public_url = public_url
         self._message: discord.Message | None = None
         self.add_item(PaperlessSearchSelect(page, public_url=public_url))
+        previous_button = discord.ui.Button(
+            label="Prev",
+            style=discord.ButtonStyle.secondary,
+            disabled=not inbox or page.page <= 1,
+            custom_id="paperless-search:prev",
+            row=1,
+        )
+        next_button = discord.ui.Button(
+            label="Next",
+            style=discord.ButtonStyle.secondary,
+            disabled=not inbox or page.page * page.page_size >= page.result_count,
+            custom_id="paperless-search:next",
+            row=1,
+        )
+        close_button = discord.ui.Button(
+            label="Close",
+            style=discord.ButtonStyle.secondary,
+            custom_id="paperless-search:close",
+            row=1,
+        )
+        previous_button.callback = self._page_callback(-1)
+        next_button.callback = self._page_callback(1)
+        close_button.callback = self._close_callback
+        self.add_item(previous_button)
+        self.add_item(next_button)
+        self.add_item(close_button)
 
     def bind_message(self, message: discord.Message) -> None:
         self._message = message
@@ -1093,7 +1123,11 @@ class PaperlessSearchView(discord.ui.View):
         if self._message is None:
             return
         try:
-            await self._message.edit(view=None, allowed_mentions=NO_MENTIONS)
+            await self._message.edit(
+                content=render_paperless_search_expired(self.page),
+                view=None,
+                allowed_mentions=NO_MENTIONS,
+            )
         except discord.HTTPException:
             LOGGER.info("Could not clear expired Paperless search view %s", getattr(self._message, "id", ""))
 
@@ -1102,6 +1136,42 @@ class PaperlessSearchView(discord.ui.View):
             return True
         await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
         return False
+
+    def _page_callback(self, direction: int):
+        async def callback(interaction: discord.Interaction) -> None:
+            if self.inbox is None:
+                await interaction.response.send_message("Document list expired.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+                return
+            next_page = max(1, self.page.page + direction)
+            try:
+                if self.page.query:
+                    page = await asyncio.to_thread(self.inbox.paperless.search_page, self.page.query, limit=self.page.page_size, page=next_page)
+                else:
+                    page = await asyncio.to_thread(self.inbox.paperless.list_page, limit=self.page.page_size, page=next_page)
+            except DocumentIntakeError as exc:
+                await interaction.response.send_message(
+                    f"Documents page failed: {escape_text(rejection_message(exc))}",
+                    ephemeral=True,
+                    allowed_mentions=NO_MENTIONS,
+                )
+                return
+            view = PaperlessSearchView(self.inbox, page, self.policy, public_url=self.public_url) if len(page.results) > 1 else None
+            await interaction.response.edit_message(
+                content=render_paperless_search_summary(page),
+                view=view,
+                allowed_mentions=NO_MENTIONS,
+            )
+            if view is not None:
+                view.bind_message(getattr(interaction, "message", None))
+
+        return callback
+
+    async def _close_callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.edit_message(
+            content=render_paperless_search_expired(self.page),
+            view=None,
+            allowed_mentions=NO_MENTIONS,
+        )
 
 
 class PaperlessSearchSelect(discord.ui.Select):
@@ -1143,20 +1213,22 @@ class PaperlessSearchSelect(discord.ui.Select):
 
 
 def render_paperless_search_summary(page: PaperlessSearchPage) -> str:
+    if not page.query:
+        return render_paperless_browse_summary(page)
+    page_total = max(1, (page.result_count + page.page_size - 1) // page.page_size)
     lines = [
         "Searched..",
         f"## {escape_text(page.query or '..')}",
         f"{page.result_count} results in {page.total_count} documents",
+        f"Page {page.page} / {page_total}",
     ]
     if not page.results:
         lines.append("- No matching documents.")
-    elif page.result_count > len(page.results):
-        lines.append(f"- Showing first {len(page.results)} results.")
     return "\n".join(lines)[:1990]
 
 
 def render_paperless_opened(query: str, result: PaperlessSearchResult, *, public_url: str = "") -> str:
-    lines = [f"## Documents search · {escape_text(query or '..')}"]
+    lines = [f"## {'Documents search' if query else 'Documents'} · {escape_text(query or 'all')}"]
     title = escape_text(result.title or "Untitled document")
     lines.append(f"### {title}")
     link = paperless_document_link(result, public_url)
@@ -1175,6 +1247,24 @@ def render_paperless_opened(query: str, result: PaperlessSearchResult, *, public
     if details:
         lines.append("- " + " · ".join(details))
     return "\n".join(lines)[:1990]
+
+
+def render_paperless_browse_summary(page: PaperlessSearchPage) -> str:
+    page_total = max(1, (page.result_count + page.page_size - 1) // page.page_size)
+    lines = [
+        "Documents..",
+        "## All documents",
+        f"{page.total_count} documents",
+        f"Page {page.page} / {page_total}",
+    ]
+    if not page.results:
+        lines.append("- No documents.")
+    return "\n".join(lines)[:1990]
+
+
+def render_paperless_search_expired(page: PaperlessSearchPage) -> str:
+    title = page.query or "all documents"
+    return f"Search result of {escape_text(title)} expired."
 
 
 def render_paperless_search(query: str, results: object, *, public_url: str = "") -> str:
