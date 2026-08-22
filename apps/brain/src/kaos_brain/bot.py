@@ -87,7 +87,6 @@ ACTIVE_CONTROL_HISTORY_LIMIT = 20
 ACTIVE_TASKS_LABEL = "𝓐𝓬𝓽𝓲𝓿𝓮 𝓣𝓪𝓼𝓴𝓼"
 CALENDAR_LABEL = "𝓒𝓪𝓵𝓮𝓷𝓭𝓪𝓻"
 SUPPLIES_LABEL = "𝓢𝓾𝓹𝓹𝓵𝓲𝓮𝓼"
-SUPPLIES_SERVICE_TITLE = "𝓢𝓾𝓹𝓹𝓵𝓲𝓮𝓼 𝓢𝓱𝓸𝓹𝓹𝓲𝓷𝓰 𝓛𝓲𝓼𝓽"
 UPCOMING_EVENTS_LABEL = "𝓤𝓹𝓬𝓸𝓶𝓲𝓷𝓰 𝓔𝓿𝓮𝓷𝓽𝓼"
 PAPERLESS_LABEL = "𝓟𝓪𝓹𝓮𝓻𝓵𝓮𝓼𝓼"
 MEMOS_LABEL = "𝓜𝓮𝓶𝓸𝓼"
@@ -2123,7 +2122,7 @@ class BrainServiceMenuView(discord.ui.View):
             return
         supplies = _task_results(payload)
         await interaction.followup.send(
-            _render_active_service_message(SUPPLIES_SERVICE_TITLE, supplies, supplies=True),
+            _render_active_service_message(SUPPLIES_LABEL, supplies, supplies=True),
             view=BrainActiveTasksView(self.governor_tools, int(interaction.user.id), request, supplies) if supplies else None,
             allowed_mentions=NO_MENTIONS,
         )

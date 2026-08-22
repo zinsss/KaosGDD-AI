@@ -36,7 +36,6 @@ from kaos_brain.bot import (
     MEMOS_LABEL,
     PAPERLESS_LABEL,
     SUPPLIES_LABEL,
-    SUPPLIES_SERVICE_TITLE,
     TaskCreateConfirmationView,
     UPCOMING_EVENTS_LABEL,
     _read_active_control_message_id,
@@ -372,7 +371,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
 
         interaction.response.defer.assert_awaited_once()
         content = interaction.followup.send.await_args.args[0]
-        self.assertIn(f"## {SUPPLIES_SERVICE_TITLE}", content)
+        self.assertIn(f"## {SUPPLIES_LABEL}", content)
         self.assertIn("- active: 1", content)
         self.assertIn("- 토프라민", content)
         self.assertNotIn("2026-", content)
