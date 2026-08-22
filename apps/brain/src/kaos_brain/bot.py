@@ -84,13 +84,18 @@ ACTIVE_CONTROL_MARKER = "# "
 SERVICE_MENU_MARKER = "\u200b"
 ACTIVE_CONTROL_LIMIT = 25
 ACTIVE_CONTROL_HISTORY_LIMIT = 20
-ACTIVE_TASKS_LABEL = "𝓐𝓬𝓽𝓲𝓿𝓮 𝓣𝓪𝓼𝓴𝓼"
-CALENDAR_LABEL = "𝓒𝓪𝓵𝓮𝓷𝓭𝓪𝓻"
-SUPPLIES_LABEL = "𝓢𝓾𝓹𝓹𝓵𝓲𝓮𝓼"
-UPCOMING_EVENTS_LABEL = "𝓤𝓹𝓬𝓸𝓶𝓲𝓷𝓰 𝓔𝓿𝓮𝓷𝓽𝓼"
-PAPERLESS_LABEL = "𝓟𝓪𝓹𝓮𝓻𝓵𝓮𝓼𝓼"
-MEMOS_LABEL = "𝓜𝓮𝓶𝓸𝓼"
-FAX_MAIL_LABEL = "𝓕𝓪𝔁 𝓜𝓪𝓲𝓵"
+ACTIVE_TASKS_LABEL = "Active Tasks"
+CALENDAR_LABEL = "Calendar"
+SUPPLIES_LABEL = "Supplies"
+UPCOMING_EVENTS_LABEL = "Upcoming Events"
+PAPERLESS_LABEL = "Paperless"
+MEMOS_LABEL = "Memos"
+FAX_MAIL_LABEL = "Fax Mail"
+ACTIVE_TASKS_TITLE = "𝓐𝓬𝓽𝓲𝓿𝓮 𝓣𝓪𝓼𝓴𝓼"
+CALENDAR_TITLE = "𝓒𝓪𝓵𝓮𝓷𝓭𝓪𝓻"
+SUPPLIES_TITLE = "𝓢𝓾𝓹𝓹𝓵𝓲𝓮𝓼"
+PAPERLESS_TITLE = "𝓟𝓪𝓹𝓮𝓻𝓵𝓮𝓼𝓼"
+MEMOS_TITLE = "𝓜𝓮𝓶𝓸𝓼"
 
 
 def _bind_view_message(view: discord.ui.View | None, message: discord.Message) -> None:
@@ -2094,7 +2099,7 @@ class BrainServiceMenuView(discord.ui.View):
             return
         tasks = _task_results(payload)
         await interaction.followup.send(
-            _render_active_service_message(ACTIVE_TASKS_LABEL, tasks),
+            _render_active_service_message(ACTIVE_TASKS_TITLE, tasks),
             view=BrainActiveTasksView(
                 self.governor_tools,
                 int(interaction.user.id),
@@ -2122,7 +2127,7 @@ class BrainServiceMenuView(discord.ui.View):
             return
         supplies = _task_results(payload)
         await interaction.followup.send(
-            _render_active_service_message(SUPPLIES_LABEL, supplies, supplies=True),
+            _render_active_service_message(SUPPLIES_TITLE, supplies, supplies=True),
             view=BrainActiveTasksView(self.governor_tools, int(interaction.user.id), request, supplies) if supplies else None,
             allowed_mentions=NO_MENTIONS,
         )
@@ -2130,7 +2135,7 @@ class BrainServiceMenuView(discord.ui.View):
     @discord.ui.button(label=PAPERLESS_LABEL, style=discord.ButtonStyle.secondary)
     async def paperless_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_message(
-            f"## {PAPERLESS_LABEL}\n- use `..keyword` to search documents\n- use `..ALL` to browse documents",
+            f"## {PAPERLESS_TITLE}\n- use `..keyword` to search documents\n- use `..ALL` to browse documents",
             ephemeral=True,
             allowed_mentions=NO_MENTIONS,
         )
@@ -2138,7 +2143,7 @@ class BrainServiceMenuView(discord.ui.View):
     @discord.ui.button(label=MEMOS_LABEL, style=discord.ButtonStyle.secondary)
     async def memos_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_message(
-            f"## {MEMOS_LABEL}\n- use `..keyword` to search memos",
+            f"## {MEMOS_TITLE}\n- use `..keyword` to search memos",
             ephemeral=True,
             allowed_mentions=NO_MENTIONS,
         )
@@ -2174,7 +2179,7 @@ class BrainCalendarMonthView(discord.ui.View):
         return False
 
     def content(self) -> str:
-        return f"## {CALENDAR_LABEL} · {self.year}.{self.month:02d}"
+        return f"## {CALENDAR_TITLE} · {self.year}.{self.month:02d}"
 
     async def weekly_content(self) -> str:
         return await _render_calendar_weekly(
@@ -2991,7 +2996,7 @@ async def _render_calendar_weekly(governor_tools: GovernorToolClient, *, profile
     raw_items = payload.get("items")
     items = [dict(item) for item in raw_items if isinstance(item, dict)] if isinstance(raw_items, list) else []
     payloads = {str(item.get("date") or ""): item for item in items}
-    lines = [f"## {CALENDAR_LABEL} · Weekly", f"- {days[0]:%Y.%m.%d} - {days[-1]:%Y.%m.%d}"]
+    lines = [f"## {CALENDAR_TITLE} · Weekly", f"- {days[0]:%Y.%m.%d} - {days[-1]:%Y.%m.%d}"]
     for value in days:
         day_payload = payloads.get(value.isoformat())
         if day_payload is None:

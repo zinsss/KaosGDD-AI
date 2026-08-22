@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock
 from kaos_brain.bot import (
     ACTIVE_CONTROL_HISTORY_LIMIT,
     ACTIVE_TASKS_LABEL,
+    ACTIVE_TASKS_TITLE,
     BrainActiveControlSelect,
     BrainActiveControlView,
     BrainActiveTaskActionsView,
@@ -32,10 +33,14 @@ from kaos_brain.bot import (
     BrainMemoSearchSelect,
     BrainMemoSearchView,
     CALENDAR_LABEL,
+    CALENDAR_TITLE,
     FAX_MAIL_LABEL,
     MEMOS_LABEL,
+    MEMOS_TITLE,
     PAPERLESS_LABEL,
+    PAPERLESS_TITLE,
     SUPPLIES_LABEL,
+    SUPPLIES_TITLE,
     TaskCreateConfirmationView,
     UPCOMING_EVENTS_LABEL,
     _read_active_control_message_id,
@@ -275,7 +280,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
 
         interaction.response.defer.assert_awaited_once()
         content = interaction.followup.send.await_args.args[0]
-        self.assertIn(f"## {ACTIVE_TASKS_LABEL}", content)
+        self.assertIn(f"## {ACTIVE_TASKS_TITLE}", content)
         self.assertIn("- active: 1", content)
         self.assertIn("- 로운이 제로이드", content)
         self.assertIsInstance(interaction.followup.send.await_args.kwargs["view"], BrainActiveTasksView)
@@ -298,7 +303,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         await button.callback(interaction)  # type: ignore[arg-type,union-attr]
 
         interaction.response.defer.assert_awaited_once()
-        self.assertIn(f"## {CALENDAR_LABEL} ·", interaction.followup.send.await_args.kwargs["content"])
+        self.assertIn(f"## {CALENDAR_TITLE} ·", interaction.followup.send.await_args.kwargs["content"])
         service_view = interaction.followup.send.await_args.kwargs["view"]
         self.assertIsInstance(service_view, BrainCalendarMonthView)
         self.assertEqual([getattr(item, "label", "") for item in service_view.children], ["Month", "Weekly", "Close", "<", "Today", ">"])
@@ -324,7 +329,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
 
         interaction.response.defer.assert_awaited_once()
         kwargs = interaction.edit_original_response.await_args.kwargs
-        self.assertIn(f"## {CALENDAR_LABEL} · Weekly", kwargs["content"])
+        self.assertIn(f"## {CALENDAR_TITLE} · Weekly", kwargs["content"])
         self.assertIn("⛅️ 23-28℃", kwargs["content"])
         self.assertIn("Clinic  • 𝘎𝘋𝘋𝙕𝘪𝙉", kwargs["content"])
         self.assertIn("School  • 𝘧𝘢𝘮𝘪𝘭𝘺", kwargs["content"])
@@ -349,8 +354,8 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         await memos.callback(interaction)  # type: ignore[arg-type,union-attr]
 
         calls = interaction.response.send_message.await_args_list
-        self.assertIn(f"## {PAPERLESS_LABEL}", calls[0].args[0])
-        self.assertIn(f"## {MEMOS_LABEL}", calls[1].args[0])
+        self.assertIn(f"## {PAPERLESS_TITLE}", calls[0].args[0])
+        self.assertIn(f"## {MEMOS_TITLE}", calls[1].args[0])
 
     async def test_supplies_button_calls_up_named_shopping_list_without_dates(self) -> None:
         view = BrainServiceMenuView(
@@ -371,7 +376,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
 
         interaction.response.defer.assert_awaited_once()
         content = interaction.followup.send.await_args.args[0]
-        self.assertIn(f"## {SUPPLIES_LABEL}", content)
+        self.assertIn(f"## {SUPPLIES_TITLE}", content)
         self.assertIn("- active: 1", content)
         self.assertIn("- 토프라민", content)
         self.assertNotIn("2026-", content)
