@@ -5,6 +5,8 @@ import unittest
 from unittest.mock import AsyncMock
 
 from kaos_brain.bot import (
+    BrainActiveControlSelect,
+    BrainActiveControlView,
     BrainActiveTaskActionsView,
     BrainActiveTasksSelect,
     BrainActiveTasksView,
@@ -20,6 +22,7 @@ from kaos_brain.bot import (
     BrainMemoSearchSelect,
     BrainMemoSearchView,
     TaskCreateConfirmationView,
+    render_active_control_message,
 )
 from kaos_brain.tool_intent import ToolKind, ToolRequest
 
@@ -73,6 +76,11 @@ class FakeGovernorTools:
         self.approve_calls.append((confirmation_id, actor_id))
         return {"task": {"title": "오도리 문고리", "due": "", "dueTime": ""}}
 
+    async def fetch(self, request):
+        if request.profile == "supplies":
+            return {"tasks": [{"title": "토프라민"}]}
+        return {"tasks": [{"title": "로운이 제로이드", "due": "2026-08-22", "dueTime": "10:00"}]}
+
     async def propose_memo_create(self, request, *, actor_id: int, idempotency_key: str):
         return {"confirmationId": "confirm-memo-create", "memo": {"content": request.content}}
 
@@ -81,6 +89,83 @@ class FakeGovernorTools:
 
 
 class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
+    def active_control_settings(self):
+        return SimpleNamespace(
+            guild_id=100,
+            brain_channel_id=300,
+            allowed_user_ids=frozenset({200}),
+            governor_tools_profile="main",
+            governor_tools_supplies_collection_id="supplies:abc",
+        )
+
+    def test_active_control_message_summarizes_tasks_and_supplies(self) -> None:
+        content = render_active_control_message(
+            [{"title": "Task"}],
+            [{"title": "Supply"}],
+        )
+
+        self.assertEqual(content, "## Active\n- Tasks: 1 active\n- Supplies: 1 active")
+
+    async def test_active_control_select_opens_existing_action_view(self) -> None:
+        view = BrainActiveControlView(
+            FakeGovernorTools(),  # type: ignore[arg-type]
+            self.active_control_settings(),
+            [{"title": "로운이 제로이드", "due": "2026-08-22", "dueTime": "10:00"}],
+            [{"title": "토프라민"}],
+        )
+        task_select = next(
+            child
+            for child in view.children
+            if isinstance(child, BrainActiveControlSelect) and child.kind == "tasks"
+        )
+        task_select._values = ["0"]
+        interaction = SimpleNamespace(
+            id=700,
+            guild_id=100,
+            channel_id=300,
+            user=SimpleNamespace(id=200),
+            response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+            followup=SimpleNamespace(send=AsyncMock()),
+        )
+
+        await task_select.callback(interaction)  # type: ignore[arg-type]
+
+        interaction.response.defer.assert_awaited_once()
+        content = interaction.followup.send.await_args.args[0]
+        self.assertIn("## 로운이 제로이드", content)
+        self.assertIn("- due: 2026-08-22 10:00", content)
+        action_view = interaction.followup.send.await_args.kwargs["view"]
+        self.assertIsInstance(action_view, BrainActiveTaskActionsView)
+        self.assertEqual([item.label for item in action_view.children], ["Complete", "Edit", "Delete", "Close"])
+
+    async def test_active_control_refresh_rebuilds_dropdowns(self) -> None:
+        view = BrainActiveControlView(
+            FakeGovernorTools(),  # type: ignore[arg-type]
+            self.active_control_settings(),
+            [],
+            [],
+        )
+        refresh = next(child for child in view.children if getattr(child, "label", "") == "Refresh")
+        interaction = SimpleNamespace(
+            guild_id=100,
+            channel_id=300,
+            user=SimpleNamespace(id=200),
+            response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+            edit_original_response=AsyncMock(),
+            followup=SimpleNamespace(send=AsyncMock()),
+        )
+
+        await refresh.callback(interaction)  # type: ignore[arg-type,union-attr]
+
+        interaction.response.defer.assert_awaited_once()
+        interaction.edit_original_response.assert_awaited_once()
+        self.assertIn("Tasks: 1 active", interaction.edit_original_response.await_args.kwargs["content"])
+        refreshed = interaction.edit_original_response.await_args.kwargs["view"]
+        self.assertEqual(
+            [child.placeholder for child in refreshed.children if isinstance(child, BrainActiveControlSelect)],
+            ["Active tasks", "Active supplies"],
+        )
+
     async def test_memo_search_select_opens_selected_memo_as_new_message(self) -> None:
         view = BrainMemoSearchView(
             FakeGovernorTools(),  # type: ignore[arg-type]

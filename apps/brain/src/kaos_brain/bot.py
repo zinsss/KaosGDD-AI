@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 import logging
 import re
@@ -70,6 +71,8 @@ DOCUMENT_TAG_SUGGESTION_PATTERN = re.compile(r"\b(?:document|doc|문서)?\s*(\d{
 BRAIN_SEARCH_WINDOW_SECONDS = 600
 OPENAI_CALLBACK_PREFIX = "http://localhost:1455/auth/callback?"
 OPENAI_CODE_PATTERN = re.compile(r"^ac_[A-Za-z0-9_.-]+$")
+ACTIVE_CONTROL_MARKER = "## Active"
+ACTIVE_CONTROL_LIMIT = 25
 
 
 def _bind_view_message(view: discord.ui.View | None, message: discord.Message) -> None:
@@ -328,9 +331,15 @@ class BrainBot(discord.Client):
             if settings.governor_tools_enabled
             else None
         )
+        self._active_control_message_id = 0
+        self._active_control_refresh_task: asyncio.Task[None] | None = None
 
     async def on_ready(self) -> None:
         LOGGER.info("KaosBrain connected as %s", self.user)
+        if self.governor_tools is not None and (
+            self._active_control_refresh_task is None or self._active_control_refresh_task.done()
+        ):
+            self._active_control_refresh_task = asyncio.create_task(self._ensure_active_control_message())
 
     def _allowed(self, message: discord.Message) -> bool:
         return (
@@ -806,6 +815,49 @@ class BrainBot(discord.Client):
             return await self.ollama.summarize_tool_result(user_text, context), None
         except OllamaError:
             return context, None
+
+    async def _ensure_active_control_message(self) -> None:
+        if self.governor_tools is None or self.user is None:
+            return
+        try:
+            channel = self.get_channel(self.settings.brain_channel_id) or await self.fetch_channel(self.settings.brain_channel_id)
+            if not isinstance(channel, discord.TextChannel | discord.Thread):
+                return
+            tasks, supplies = await self._active_control_items()
+            content = render_active_control_message(tasks, supplies)
+            view = BrainActiveControlView(self.governor_tools, self.settings, tasks, supplies)
+            message = await self._find_active_control_message(channel)
+            if message is None:
+                message = await channel.send(content=content, view=view, allowed_mentions=NO_MENTIONS)
+            else:
+                await message.edit(content=content, view=view, allowed_mentions=NO_MENTIONS)
+            self._active_control_message_id = int(message.id)
+        except Exception as exc:
+            LOGGER.warning("Active control message refresh failed: %s", exc)
+
+    async def _find_active_control_message(self, channel: discord.TextChannel | discord.Thread) -> discord.Message | None:
+        if self._active_control_message_id:
+            try:
+                return await channel.fetch_message(self._active_control_message_id)
+            except discord.HTTPException:
+                self._active_control_message_id = 0
+        async for message in channel.history(limit=50):
+            if message.author.id == self.user.id and str(message.content or "").startswith(ACTIVE_CONTROL_MARKER):
+                return message
+        return None
+
+    async def _active_control_items(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        if self.governor_tools is None:
+            return [], []
+        tasks_payload = await self.governor_tools.fetch(ToolRequest(ToolKind.ACTIVE_TASKS, profile=self.settings.governor_tools_profile))
+        supplies_payload = await self.governor_tools.fetch(
+            ToolRequest(
+                ToolKind.ACTIVE_TASKS,
+                profile="supplies",
+                collection_id=self.settings.governor_tools_supplies_collection_id,
+            )
+        )
+        return _task_results(tasks_payload), _task_results(supplies_payload)
 
     async def _propose_task_due_update(self, message: discord.Message, request: TaskDueUpdateRequest) -> None:
         if self.governor_tools is None:
@@ -1534,6 +1586,125 @@ class BrainCompletedTasksSelect(discord.ui.Select):
         )
 
 
+def render_active_control_message(tasks: list[dict[str, Any]], supplies: list[dict[str, Any]]) -> str:
+    lines = [
+        ACTIVE_CONTROL_MARKER,
+        f"- Tasks: {len(tasks)} active",
+        f"- Supplies: {len(supplies)} active",
+    ]
+    if len(tasks) > ACTIVE_CONTROL_LIMIT:
+        lines.append(f"- Tasks dropdown shows first {ACTIVE_CONTROL_LIMIT}.")
+    if len(supplies) > ACTIVE_CONTROL_LIMIT:
+        lines.append(f"- Supplies dropdown shows first {ACTIVE_CONTROL_LIMIT}.")
+    return "\n".join(lines)
+
+
+class BrainActiveControlView(discord.ui.View):
+    def __init__(
+        self,
+        governor_tools: GovernorToolClient,
+        settings: Settings,
+        tasks: list[dict[str, Any]],
+        supplies: list[dict[str, Any]],
+    ) -> None:
+        super().__init__(timeout=None)
+        self.governor_tools = governor_tools
+        self.settings = settings
+        self.tasks = tasks[:ACTIVE_CONTROL_LIMIT]
+        self.supplies = supplies[:ACTIVE_CONTROL_LIMIT]
+        if self.tasks:
+            self.add_item(BrainActiveControlSelect(self, "tasks", self.tasks))
+        if self.supplies:
+            self.add_item(BrainActiveControlSelect(self, "supplies", self.supplies))
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if (
+            interaction.guild_id == self.settings.guild_id
+            and interaction.channel_id == self.settings.brain_channel_id
+            and int(interaction.user.id) in self.settings.allowed_user_ids
+        ):
+            return True
+        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+    def request_for_kind(self, kind: str) -> ToolRequest:
+        if kind == "supplies":
+            return ToolRequest(
+                ToolKind.ACTIVE_TASKS,
+                profile="supplies",
+                collection_id=self.settings.governor_tools_supplies_collection_id,
+            )
+        return ToolRequest(ToolKind.ACTIVE_TASKS, profile=self.settings.governor_tools_profile)
+
+    async def refresh_items(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        tasks_payload = await self.governor_tools.fetch(
+            ToolRequest(ToolKind.ACTIVE_TASKS, profile=self.settings.governor_tools_profile)
+        )
+        supplies_payload = await self.governor_tools.fetch(
+            ToolRequest(
+                ToolKind.ACTIVE_TASKS,
+                profile="supplies",
+                collection_id=self.settings.governor_tools_supplies_collection_id,
+            )
+        )
+        return _task_results(tasks_payload), _task_results(supplies_payload)
+
+    @discord.ui.button(label="Refresh", style=discord.ButtonStyle.secondary, row=2)
+    async def refresh(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer()
+        try:
+            tasks, supplies = await self.refresh_items()
+        except GovernorToolError as exc:
+            LOGGER.warning("Active control refresh failed: %s", exc)
+            await interaction.followup.send(_tool_failed("Active 갱신"), ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.edit_original_response(
+            content=render_active_control_message(tasks, supplies),
+            view=BrainActiveControlView(self.governor_tools, self.settings, tasks, supplies),
+            allowed_mentions=NO_MENTIONS,
+        )
+
+
+class BrainActiveControlSelect(discord.ui.Select):
+    def __init__(self, parent: BrainActiveControlView, kind: str, tasks: list[dict[str, Any]]) -> None:
+        self.parent_view = parent
+        self.kind = kind
+        options = [
+            discord.SelectOption(
+                label=_task_option_label(task),
+                description=_task_option_description(task) or None,
+                value=str(index),
+            )
+            for index, task in enumerate(tasks[:ACTIVE_CONTROL_LIMIT])
+        ]
+        placeholder = "Active supplies" if kind == "supplies" else "Active tasks"
+        row = 1 if kind == "supplies" else 0
+        super().__init__(placeholder=placeholder, min_values=1, max_values=1, options=options, row=row)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        try:
+            items = self.parent_view.supplies if self.kind == "supplies" else self.parent_view.tasks
+            task = items[int(self.values[0])]
+            title = str(task.get("title") or task.get("summary") or "").strip()
+            if not title:
+                raise ValueError("missing task title")
+        except (IndexError, TypeError, ValueError) as exc:
+            LOGGER.warning("Active control selection failed: %s", exc)
+            await interaction.response.send_message(_tool_failed("항목 선택"), ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.response.defer()
+        await interaction.followup.send(
+            _render_active_task_selection(title, task, supplies=self.kind == "supplies"),
+            view=BrainActiveTaskActionsView(
+                self.parent_view.governor_tools,
+                int(interaction.user.id),
+                self.parent_view.request_for_kind(self.kind),
+                task,
+            ),
+            allowed_mentions=NO_MENTIONS,
+        )
+
+
 class BrainActiveTasksView(discord.ui.View):
     def __init__(self, governor_tools: GovernorToolClient, actor_id: int, request: ToolRequest, tasks: list[dict[str, Any]]) -> None:
         super().__init__(timeout=600)
@@ -2048,6 +2219,22 @@ def _task_results(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _uses_supplies_request(request: ToolRequest) -> bool:
     return request.profile == "supplies" or "supplies" in request.collection_id.lower()
+
+
+def _render_active_task_selection(title: str, task: dict[str, Any], *, supplies: bool) -> str:
+    lines = [f"## {title}"]
+    if not supplies:
+        due = " ".join(
+            part
+            for part in (
+                str(task.get("due") or task.get("dueDate") or "").strip(),
+                str(task.get("dueTime") or "").strip(),
+            )
+            if part
+        )
+        if due:
+            lines.append(f"- due: {due}")
+    return "\n".join(lines)
 
 
 def _task_option_label(task: dict[str, Any]) -> str:
