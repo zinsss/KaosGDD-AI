@@ -326,7 +326,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         kwargs = interaction.edit_original_response.await_args.kwargs
         self.assertIn("## Calendar · Weekly", kwargs["content"])
         self.assertIn("⛅️ 23-28℃", kwargs["content"])
-        self.assertIn("Clinic", kwargs["content"])
+        self.assertIn("Clinic  • 𝘎𝘋𝘋𝙕𝘪𝙉", kwargs["content"])
         self.assertIn("School  • 𝘧𝘢𝘮𝘪𝘭𝘺", kwargs["content"])
         self.assertNotIn("GDD_ZiN", kwargs["content"])
         self.assertEqual(kwargs["attachments"], [])
@@ -407,7 +407,24 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
 
         interaction.response.defer.assert_awaited_once()
         content = interaction.followup.send.await_args.args[0]
-        self.assertEqual(content, "## Clinic\n- 2026-08-22 · 10:50 · Family")
+        self.assertEqual(content, "## Clinic\n- 2026-08-22 · 10:50 · 𝘧𝘢𝘮𝘪𝘭𝘺")
+
+    async def test_upcoming_event_select_descriptions_use_display_owner_markers(self) -> None:
+        view = BrainActiveControlView(
+            FakeGovernorTools(),  # type: ignore[arg-type]
+            self.active_control_settings(),
+            [
+                {"title": "Market Day", "date": "2026-08-25", "ownerLabel": "GDD_ZiN"},
+                {"title": "School", "date": "2026-08-26", "ownerLabel": "Family"},
+            ],
+            [],
+            [],
+            [],
+        )
+        event_select = next(child for child in view.children if isinstance(child, BrainUpcomingEventsSelect))
+
+        self.assertEqual(event_select.options[0].description, "2026-08-25 · 𝘎𝘋𝘋𝙕𝘪𝙉")
+        self.assertEqual(event_select.options[1].description, "2026-08-26 · 𝘧𝘢𝘮𝘪𝘭𝘺")
 
     async def test_memo_search_select_opens_selected_memo_as_new_message(self) -> None:
         view = BrainMemoSearchView(

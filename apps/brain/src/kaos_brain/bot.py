@@ -19,10 +19,12 @@ from .config import Settings
 from .event_intent import EventCreateRequest, parse_event_create
 from .governor_tools import (
     DocumentTagRequest,
+    FAMILY_EVENT_MARKER,
     FAMILY_EVENT_SUFFIX,
     GovernorToolClient,
     GovernorToolConfig,
     GovernorToolError,
+    PERSONAL_EVENT_MARKER,
     TaskEditRequest as GovernorTaskEditRequest,
     document_public_url,
     document_option_description,
@@ -2927,7 +2929,7 @@ def _render_event_selection(event: dict[str, Any]) -> str:
     title = str(event.get("title") or event.get("summary") or "Untitled event").strip()
     date_text = str(event.get("date") or event.get("startDate") or "").strip()
     time_text = str(event.get("time") or event.get("startTime") or "").strip()
-    owner = str(event.get("ownerLabel") or event.get("owner") or "").strip()
+    owner = _event_owner_display(event)
     lines = [f"## {title}"]
     details = [part for part in (date_text, time_text, owner) if part]
     if details:
@@ -3018,8 +3020,22 @@ def _calendar_weekly_event_line(event: dict[str, Any]) -> str:
 
 
 def _calendar_event_owner_suffix(event: dict[str, Any]) -> str:
-    owner = str(event.get("owner") or event.get("ownerLabel") or "").strip().lower()
-    return FAMILY_EVENT_SUFFIX if owner == "family" else ""
+    owner = _event_owner_display(event)
+    if owner == FAMILY_EVENT_MARKER:
+        return FAMILY_EVENT_SUFFIX
+    if owner == PERSONAL_EVENT_MARKER:
+        return f"  • {PERSONAL_EVENT_MARKER}"
+    return ""
+
+
+def _event_owner_display(event: dict[str, Any]) -> str:
+    owner = str(event.get("ownerLabel") or event.get("owner") or "").strip()
+    normalized = owner.lower().replace("_", "").replace(" ", "")
+    if normalized == "family":
+        return FAMILY_EVENT_MARKER
+    if normalized in {"gddzin", "personal", "main"}:
+        return PERSONAL_EVENT_MARKER
+    return owner
 
 
 def _shift_month(year: int, month: int, delta: int) -> tuple[int, int]:
@@ -3039,7 +3055,7 @@ def _event_option_label(event: dict[str, Any]) -> str:
 def _event_option_description(event: dict[str, Any]) -> str:
     date_text = str(event.get("date") or event.get("startDate") or "").strip()
     time_text = str(event.get("time") or event.get("startTime") or "").strip()
-    owner = str(event.get("ownerLabel") or event.get("owner") or "").strip()
+    owner = _event_owner_display(event)
     return _compact_select_text(" · ".join(part for part in (date_text, time_text, owner) if part), 100)
 
 
