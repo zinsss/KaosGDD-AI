@@ -4,7 +4,13 @@ import unittest
 
 from PIL import Image
 
-from kaos_governor.calendar.render import MonthDayMarkers, MonthRenderTheme, _day_number_color, render_month_png
+from kaos_governor.calendar.render import (
+    MonthDayMarkers,
+    MonthRenderTheme,
+    _day_number_color,
+    render_month_png,
+    weather_glyph,
+)
 
 
 class CalendarRenderTests(unittest.TestCase):
@@ -82,14 +88,22 @@ class CalendarRenderTests(unittest.TestCase):
             august_4_x = 62 + 2 * 154
             august_4_y = 120 + 1 * 121
 
-            self.assertEqual(image.getpixel((august_13_x + 126, august_13_y + 28)), (136, 192, 208))
-            self.assertNotEqual(image.getpixel((august_13_x + 58, august_13_y + 29)), (136, 192, 208))
+            self.assertEqual(image.getpixel((august_13_x + 16, august_13_y + 48)), (136, 192, 208))
+            self.assertNotEqual(image.getpixel((august_13_x + 126, august_13_y + 28)), (136, 192, 208))
             self.assertEqual(
                 image.getpixel((august_4_x + 126, august_4_y + 28)),
                 image.getpixel((august_4_x + 95, august_4_y + 28)),
             )
             self.assertEqual(image.getpixel((72, 830)), (52, 59, 73))
             self.assertEqual(image.getpixel((72, 860)), (59, 66, 82))
+
+    def test_weather_glyph_uses_nerd_font_weather_symbols(self) -> None:
+        self.assertEqual(weather_glyph("☀️"), "\ue30d")
+        self.assertEqual(weather_glyph("⛅️"), "\ue302")
+        self.assertEqual(weather_glyph("🌧️"), "\ue318")
+        self.assertEqual(weather_glyph("❄️"), "\ue31a")
+        self.assertEqual(weather_glyph("⚡️"), "\ue31d")
+        self.assertEqual(weather_glyph("🌫️"), "\ue313")
 
 
 if __name__ == "__main__":

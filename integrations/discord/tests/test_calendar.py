@@ -162,7 +162,7 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(markers[date(2026, 8, 13)].family_events, 1)
         self.assertEqual(markers[date(2026, 8, 13)].zin_events, 1)
         self.assertEqual(markers[date(2026, 8, 13)].tasks, 1)
-        self.assertEqual(markers[date(2026, 8, 13)].weather, "")
+        self.assertEqual(markers[date(2026, 8, 13)].weather, "🌧️")
         self.assertTrue(markers[date(2026, 8, 15)].public_holiday)
 
     def test_weather_marker_uses_emoji_or_simple_condition_symbol(self) -> None:
@@ -268,7 +268,7 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("Agenda", channel.sent[1]["content"])
             self.assertTrue(state_path.exists())
 
-    async def test_ensure_messages_fetches_weather_for_agenda_days(self) -> None:
+    async def test_ensure_messages_fetches_weather_for_visible_month_grid(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             adapter = FakeAdapter()
             surface = DiscordCalendarSurface(
@@ -285,7 +285,7 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(
                 adapter.weather_calls,
-                [{"profile": "main", "start": "2026-08-13", "end": "2026-08-19", "city": "pohang"}],
+                [{"profile": "main", "start": "2026-07-26", "end": "2026-09-05", "city": "pohang"}],
             )
 
     async def test_month_navigation_updates_month_and_reuses_messages(self) -> None:

@@ -62,7 +62,8 @@ class DiscordCalendarSurface:
             self.state = DiscordCalendarState(reset_idle_state(today=current))
         bootstrap = await asyncio.to_thread(self.adapter.bootstrap, self.profile)
         agenda_days = self._agenda_days(current)
-        bootstrap = await asyncio.to_thread(self._with_agenda_weather, bootstrap, agenda_days)
+        weather_days = self._weather_days(current, agenda_days)
+        bootstrap = await asyncio.to_thread(self._with_agenda_weather, bootstrap, weather_days)
         channel = await self.channel()
         month_content, month_file = await asyncio.to_thread(self._month_payload, bootstrap, current)
         agenda_content = await asyncio.to_thread(self._agenda_content, bootstrap, agenda_days)
@@ -235,6 +236,12 @@ class DiscordCalendarSurface:
             return [self.state.view.agenda_date]
         return [today + timedelta(days=offset) for offset in range(7)]
 
+    def _weather_days(self, today: date, agenda_days: list[date]) -> list[date]:
+        start, end = visible_month_grid_range(self.state.view.visible_year, self.state.view.visible_month)
+        values = {start + timedelta(days=offset) for offset in range((end - start).days + 1)}
+        values.update(agenda_days)
+        return sorted(values)
+
     def _agenda_content(self, bootstrap: Mapping[str, Any], days: list[date]) -> str:
         if self.state.view.agenda_mode == "day" and self.state.view.agenda_date is not None:
             title = f"Agenda · {self.state.view.agenda_date:%Y.%m.%d}"
@@ -343,6 +350,7 @@ def visible_month_grid_range(year: int, month: int) -> tuple[date, date]:
 
 def month_markers(bootstrap: Mapping[str, Any]) -> list[MonthDayMarkers]:
     collections = _collections_by_id(bootstrap)
+    weather_items = weather_by_date(bootstrap)
     values: dict[date, dict[str, Any]] = defaultdict(
         lambda: {
             "public_holiday": False,
@@ -377,6 +385,8 @@ def month_markers(bootstrap: Mapping[str, Any]) -> list[MonthDayMarkers]:
         if value is None or str(task.get("status") or "").upper() == "COMPLETED":
             continue
         values[value]["tasks"] += 1
+    for value, marker in weather_items.items():
+        values[value]["weather"] = marker
     return [
         MonthDayMarkers(
             value=value,

@@ -14,6 +14,7 @@ RUN apt-get update \
     && useradd --uid 10001 --gid kaos --no-create-home --shell /usr/sbin/nologin kaos
 COPY --from=build /install /usr/local
 COPY apps/governor/migrations /usr/local/share/kaos-governor/migrations
+COPY apps/family-portal/fonts/SymbolsNerdFontMono-Regular.ttf /usr/local/share/kaos-governor/fonts/SymbolsNerdFontMono-Regular.ttf
 RUN chmod -R a=rX /usr/local/share/kaos-governor/migrations
 USER 10001:10001
 EXPOSE 8097

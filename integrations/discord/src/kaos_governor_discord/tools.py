@@ -20,7 +20,7 @@ from kaos_governor.calendar import CalendarAdapterClient, CalendarAdapterError, 
 from kaos_governor.documents import DocumentIntakeError, PaperlessDocumentService
 from kaos_governor.memos import MemosError, MemosService
 
-from .calendar import month_markers, weather_agenda_summary, weather_items_by_date
+from .calendar import month_markers, visible_month_grid_range, weather_agenda_summary, weather_items_by_date
 from .tasks import TASK_PRIORITIES, is_supplies_collection, normalize_supplies_due, validate_edit_due
 
 
@@ -375,6 +375,9 @@ class BrainToolServer:
             raise web.HTTPBadRequest(text='{"error": "invalid_month"}', content_type="application/json") from exc
         try:
             bootstrap = await asyncio.to_thread(self._calendar_adapter.bootstrap, profile)
+            start, end = visible_month_grid_range(visible_month.year, visible_month.month)
+            day_values = [start + timedelta(days=offset) for offset in range((end - start).days + 1)]
+            bootstrap = await asyncio.to_thread(self._with_weather, profile, bootstrap, day_values)
             png = await asyncio.to_thread(
                 render_month_png,
                 year=visible_month.year,

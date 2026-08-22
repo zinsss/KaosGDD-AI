@@ -64,6 +64,7 @@ def render_month_png(
     width: int = 1200,
     height: int = 900,
     font_dir: Path | str = "/usr/share/fonts/truetype/dejavu",
+    weather_font_path: Path | str | None = None,
     theme: MonthRenderTheme = MonthRenderTheme(),
 ) -> bytes:
     try:
@@ -82,7 +83,7 @@ def render_month_png(
     day_font = _load_font(ImageFont, bold, 34)
     small_font = _load_font(ImageFont, bold, 22)
     marker_font = _load_font(ImageFont, bold, 28)
-    weather_font = _load_font(ImageFont, regular, 22)
+    weather_font = _load_font(ImageFont, _weather_font_path(weather_font_path), 46)
 
     def rounded(box, radius=8, fill=theme.surface, outline=theme.line, line_width=1):
         draw.rounded_rectangle(box, radius=radius, fill=fill, outline=outline, width=line_width)
@@ -127,10 +128,19 @@ def render_month_png(
             )
 
             text_at(x + 12, y + 10, value.day, _day_number_color(value, in_month, item, theme), day_font)
+            day_bbox = draw.textbbox((x + 12, y + 10), str(value.day), font=day_font)
             if in_month and item.market_day:
-                dot(x + cell_width - 22, y + 28, theme.market, 7)
+                draw.rounded_rectangle(
+                    (day_bbox[0] + 2, day_bbox[3] + 5, day_bbox[2] - 2, day_bbox[3] + 8),
+                    radius=2,
+                    fill=theme.market,
+                )
             if in_month and item.weather:
-                text_at(x + 76, y + 12, item.weather, theme.weather, weather_font)
+                weather = weather_glyph(item.weather)
+                if weather:
+                    weather_bbox = draw.textbbox((0, 0), weather, font=weather_font)
+                    weather_width = weather_bbox[2] - weather_bbox[0]
+                    text_at(x + cell_width - 15 - weather_width, y + 9, weather, theme.weather, weather_font)
 
             markers_to_draw: list[tuple[str, str]] = []
             if in_month and item.family_events:
@@ -174,3 +184,37 @@ def _load_font(image_font, path: Path, size: int):
             return image_font.load_default(size=size)
         except TypeError:
             return image_font.load_default()
+
+
+def _weather_font_path(path: Path | str | None) -> Path:
+    if path:
+        return Path(path)
+    candidates = [
+        Path("/usr/local/share/kaos-governor/fonts/SymbolsNerdFontMono-Regular.ttf"),
+        Path(__file__).resolve().parents[5] / "apps" / "family-portal" / "fonts" / "SymbolsNerdFontMono-Regular.ttf",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
+
+
+def weather_glyph(value: str) -> str:
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return ""
+    if any(token in raw for token in ("⛈", "⚡", "thunder", "storm", "lightning", "번개", "천둥")):
+        return "\ue31d"
+    if any(token in raw for token in ("❄", "snow", "sleet", "ice", "눈")):
+        return "\ue31a"
+    if any(token in raw for token in ("🌧", "☔", "rain", "shower", "drizzle", "비")):
+        return "\ue318"
+    if any(token in raw for token in ("☁", "overcast", "cloud", "흐림", "구름")):
+        return "\ue312"
+    if any(token in raw for token in ("🌤", "⛅", "part", "few")):
+        return "\ue302"
+    if any(token in raw for token in ("🌫", "fog", "mist", "haze", "smoke", "안개")):
+        return "\ue313"
+    if any(token in raw for token in ("☀", "clear", "sun", "맑음", "sunny")):
+        return "\ue30d"
+    return "\ue371"
