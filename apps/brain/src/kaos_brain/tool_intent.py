@@ -8,6 +8,7 @@ import re
 
 class ToolKind(StrEnum):
     TODAY = "today"
+    UPCOMING_EVENTS = "upcoming_events"
     ACTIVE_TASKS = "active_tasks"
     COMPLETED_TASKS = "completed_tasks"
     MEMO_SEARCH = "memo_search"

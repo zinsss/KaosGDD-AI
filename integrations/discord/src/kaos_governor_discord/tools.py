@@ -255,6 +255,7 @@ class BrainToolServer:
         app = web.Application(client_max_size=32 * 1024 * 1024)
         app.middlewares.append(self._auth_middleware)
         app.router.add_get("/tools/today", self._today)
+        app.router.add_get("/tools/events/upcoming", self._upcoming_events)
         app.router.add_get("/tools/tasks/active", self._active_tasks)
         app.router.add_get("/tools/tasks/completed", self._completed_tasks)
         app.router.add_get("/tools/memos/search", self._search_memos)
@@ -317,6 +318,30 @@ class BrainToolServer:
         except CalendarAdapterError as exc:
             return web.json_response({"error": str(exc)}, status=502)
         return web.json_response(today_payload(bootstrap, profile=profile, current=current))
+
+    async def _upcoming_events(self, request: web.Request) -> web.Response:
+        profile = _profile(request)
+        current = _request_date(request, default=self._today_provider())
+        try:
+            days = int(request.query.get("days", "3").strip() or "3")
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text='{"error": "invalid_days"}', content_type="application/json") from exc
+        days = min(max(days, 1), 14)
+        try:
+            bootstrap = await asyncio.to_thread(self._calendar_adapter.bootstrap, profile)
+        except CalendarAdapterError as exc:
+            return web.json_response({"error": str(exc)}, status=502)
+        events = upcoming_event_payloads(bootstrap, profile=profile, current=current, days=days)
+        return web.json_response(
+            {
+                "date": current.isoformat(),
+                "profile": profile,
+                "days": days,
+                "count": len(events),
+                "events": events,
+                "source": "calendar-adapter-live",
+            }
+        )
 
     async def _active_tasks(self, request: web.Request) -> web.Response:
         profile = _profile(request)
@@ -1630,6 +1655,31 @@ def today_payload(bootstrap: Mapping[str, Any], *, profile: str, current: date) 
         "weather": weather_payload(weather),
         "source": "calendar-adapter-live",
     }
+
+
+def upcoming_event_payloads(
+    bootstrap: Mapping[str, Any],
+    *,
+    profile: str,
+    current: date,
+    days: int,
+) -> list[dict[str, object]]:
+    collections = collections_by_id(bootstrap)
+    end = current + timedelta(days=days - 1)
+    upcoming = [
+        event_payload(item, collections)
+        for item in items(bootstrap, "events")
+        if _within_optional_range(item_date(item, "startDate"), current, end)
+    ]
+    return sorted(
+        upcoming,
+        key=lambda item: (
+            str(item.get("date") or ""),
+            str(item.get("time") or ""),
+            str(item.get("title") or ""),
+            str(item.get("uid") or ""),
+        ),
+    )
 
 
 def active_task_payloads(tasks: list[Mapping[str, Any]], *, collection_id: str = "") -> list[dict[str, object]]:

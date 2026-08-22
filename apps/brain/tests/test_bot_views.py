@@ -25,6 +25,7 @@ from kaos_brain.bot import (
     BrainMemoDeleteConfirmView,
     BrainMemoEditConfirmView,
     BrainOpenedDocumentView,
+    BrainUpcomingEventsSelect,
     BrainMemoSearchSelect,
     BrainMemoSearchView,
     TaskCreateConfirmationView,
@@ -85,6 +86,8 @@ class FakeGovernorTools:
         return {"task": {"title": "오도리 문고리", "due": "", "dueTime": ""}}
 
     async def fetch(self, request):
+        if request.kind is ToolKind.UPCOMING_EVENTS:
+            return {"events": [{"title": "Clinic", "date": "2026-08-22", "time": "10:50", "ownerLabel": "Family"}]}
         if request.profile == "supplies":
             return {"tasks": [{"title": "토프라민"}]}
         return {"tasks": [{"title": "로운이 제로이드", "due": "2026-08-22", "dueTime": "10:00"}]}
@@ -108,6 +111,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
 
     def test_active_control_message_uses_compact_date_header(self) -> None:
         content = render_active_control_message(
+            [{"title": "Clinic"}],
             [{"title": "Task"}],
             [{"title": "Supply"}],
             now=datetime(2026, 9, 12),
@@ -129,6 +133,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         view = BrainActiveControlView(
             FakeGovernorTools(),  # type: ignore[arg-type]
             self.active_control_settings(),
+            [],
             [{"title": "로운이 제로이드", "due": "2026-08-22", "dueTime": "10:00"}],
             [{"title": "토프라민"}],
         )
@@ -161,6 +166,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         view = BrainActiveControlView(
             FakeGovernorTools(),  # type: ignore[arg-type]
             self.active_control_settings(),
+            [{"title": "Clinic", "date": "2026-08-22", "time": "10:50", "ownerLabel": "Family"}],
             [],
             [],
         )
@@ -181,9 +187,35 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Upcoming Events - 3 days", interaction.edit_original_response.await_args.kwargs["content"])
         refreshed = interaction.edit_original_response.await_args.kwargs["view"]
         self.assertEqual(
-            [child.placeholder for child in refreshed.children if isinstance(child, BrainActiveControlSelect)],
-            ["Active Tasks: 1", "Active Supplies: 1"],
+            [
+                child.placeholder
+                for child in refreshed.children
+                if isinstance(child, BrainActiveControlSelect | BrainUpcomingEventsSelect)
+            ],
+            ["Upcoming Events: 1", "Active Tasks: 1", "Supplies Shopping List: 1"],
         )
+
+    async def test_upcoming_event_select_opens_detail_message(self) -> None:
+        view = BrainActiveControlView(
+            FakeGovernorTools(),  # type: ignore[arg-type]
+            self.active_control_settings(),
+            [{"title": "Clinic", "date": "2026-08-22", "time": "10:50", "ownerLabel": "Family"}],
+            [],
+            [],
+        )
+        event_select = next(child for child in view.children if isinstance(child, BrainUpcomingEventsSelect))
+        event_select._values = ["0"]
+        interaction = SimpleNamespace(
+            user=SimpleNamespace(id=200),
+            response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+            followup=SimpleNamespace(send=AsyncMock()),
+        )
+
+        await event_select.callback(interaction)  # type: ignore[arg-type]
+
+        interaction.response.defer.assert_awaited_once()
+        content = interaction.followup.send.await_args.args[0]
+        self.assertEqual(content, "## Clinic\n- 2026-08-22 · 10:50 · Family")
 
     async def test_memo_search_select_opens_selected_memo_as_new_message(self) -> None:
         view = BrainMemoSearchView(
