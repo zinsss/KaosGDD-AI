@@ -403,6 +403,10 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["path"], "/tools/today")
         self.assertEqual(payload["params"], {"profile": "main"})
 
+        target_day = await client.today(day="2026-08-22")
+        self.assertEqual(target_day["path"], "/tools/today")
+        self.assertEqual(target_day["params"], {"profile": "main", "date": "2026-08-22"})
+
         upcoming = await client.fetch(ToolRequest(ToolKind.UPCOMING_EVENTS))
         self.assertEqual(upcoming["path"], "/tools/events/upcoming")
         self.assertEqual(upcoming["params"], {"profile": "main", "days": "7"})

@@ -14,6 +14,7 @@ from kaos_brain.bot import (
     BrainActiveTaskActionsView,
     BrainActiveTasksSelect,
     BrainActiveTasksView,
+    BrainCalendarMonthView,
     BrainDeletedMemoView,
     BrainTaskEditModal,
     BrainCompletedTasksSelect,
@@ -93,6 +94,16 @@ class FakeGovernorTools:
         if request.profile == "supplies":
             return {"tasks": [{"title": "토프라민"}]}
         return {"tasks": [{"title": "로운이 제로이드", "due": "2026-08-22", "dueTime": "10:00"}]}
+
+    async def calendar_month_image(self, *, profile: str = "", year: int | None = None, month: int | None = None):
+        return {"contentType": "text/plain", "contentBase64": "", "filename": "calendar.txt"}
+
+    async def today(self, *, profile: str = "", day: object | None = None):
+        return {
+            "date": str(day or "2026-08-22"),
+            "weather": {"summary": "⛅️ 23-28℃"},
+            "events": [{"title": "Clinic", "date": str(day or "2026-08-22"), "time": "10:50", "ownerLabel": "GDD_ZiN"}],
+        }
 
     async def propose_memo_create(self, request, *, actor_id: int, idempotency_key: str):
         return {"confirmationId": "confirm-memo-create", "memo": {"content": request.content}}
@@ -211,6 +222,59 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("- active: 1", content)
         self.assertIn("- 로운이 제로이드", content)
         self.assertIsInstance(interaction.followup.send.await_args.kwargs["view"], BrainActiveTasksView)
+
+    async def test_calendar_button_calls_up_closable_month_message(self) -> None:
+        view = BrainActiveControlView(
+            FakeGovernorTools(),  # type: ignore[arg-type]
+            self.active_control_settings(),
+            [],
+            [],
+            [],
+            [],
+        )
+        button = next(child for child in view.children if getattr(child, "label", "") == "Calendar")
+        interaction = SimpleNamespace(
+            id=702,
+            guild_id=100,
+            channel_id=300,
+            user=SimpleNamespace(id=200),
+            response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+            followup=SimpleNamespace(send=AsyncMock()),
+        )
+
+        await button.callback(interaction)  # type: ignore[arg-type,union-attr]
+
+        interaction.response.defer.assert_awaited_once()
+        self.assertIn("## Calendar ·", interaction.followup.send.await_args.kwargs["content"])
+        service_view = interaction.followup.send.await_args.kwargs["view"]
+        self.assertIsInstance(service_view, BrainCalendarMonthView)
+        self.assertEqual([getattr(item, "label", "") for item in service_view.children], ["Month", "Weekly", "Close", "<", "Today", ">"])
+
+    async def test_calendar_weekly_view_edits_to_weather_event_list(self) -> None:
+        view = BrainCalendarMonthView(
+            FakeGovernorTools(),  # type: ignore[arg-type]
+            self.active_control_settings(),
+            anchor_date=datetime(2026, 8, 22).date(),
+            year=2026,
+            month=8,
+        )
+        button = next(child for child in view.children if getattr(child, "label", "") == "Weekly")
+        interaction = SimpleNamespace(
+            guild_id=100,
+            channel_id=300,
+            user=SimpleNamespace(id=200),
+            response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+            edit_original_response=AsyncMock(),
+        )
+
+        await button.callback(interaction)  # type: ignore[arg-type,union-attr]
+
+        interaction.response.defer.assert_awaited_once()
+        kwargs = interaction.edit_original_response.await_args.kwargs
+        self.assertIn("## Calendar · Weekly", kwargs["content"])
+        self.assertIn("⛅️ 23-28℃", kwargs["content"])
+        self.assertIn("Clinic · ***GDD_ZiN***", kwargs["content"])
+        self.assertEqual(kwargs["attachments"], [])
 
     async def test_active_control_refresh_rebuilds_dropdowns(self) -> None:
         view = BrainActiveControlView(

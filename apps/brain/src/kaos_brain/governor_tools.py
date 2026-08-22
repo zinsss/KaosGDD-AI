@@ -48,7 +48,7 @@ class GovernorToolClient:
 
     async def fetch(self, request: ToolRequest) -> dict[str, Any]:
         if request.kind is ToolKind.TODAY:
-            return await self._get("/tools/today", {"profile": self._profile(request.profile)})
+            return await self.today(profile=request.profile)
         if request.kind is ToolKind.UPCOMING_EVENTS:
             return await self._get("/tools/events/upcoming", {"profile": self._profile(request.profile), "days": "7"})
         if request.kind is ToolKind.CALENDAR_MONTH_IMAGE:
@@ -80,6 +80,12 @@ class GovernorToolClient:
         if month is not None:
             params["month"] = str(month)
         return await self._get("/tools/calendar/month-image", params)
+
+    async def today(self, *, profile: str = "", day: object | None = None) -> dict[str, Any]:
+        params = {"profile": self._profile(profile)}
+        if day is not None:
+            params["date"] = str(day)
+        return await self._get("/tools/today", params)
 
     async def _with_single_memo_body(self, payload: dict[str, Any]) -> dict[str, Any]:
         results = payload.get("results")

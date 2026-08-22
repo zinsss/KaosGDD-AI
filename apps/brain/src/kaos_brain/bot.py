@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
-from datetime import datetime
+from datetime import date, datetime, timedelta
 import io
 import json
 import logging
@@ -1974,6 +1974,7 @@ class BrainActiveControlView(discord.ui.View):
         view = BrainCalendarMonthView(
             self.governor_tools,
             self.settings,
+            anchor_date=current,
             year=current.year,
             month=current.month,
         )
@@ -2061,12 +2062,23 @@ class BrainActiveControlView(discord.ui.View):
 
 
 class BrainCalendarMonthView(discord.ui.View):
-    def __init__(self, governor_tools: GovernorToolClient, settings: Settings, *, year: int, month: int) -> None:
+    def __init__(
+        self,
+        governor_tools: GovernorToolClient,
+        settings: Settings,
+        *,
+        anchor_date: date,
+        year: int,
+        month: int,
+        mode: str = "month",
+    ) -> None:
         super().__init__(timeout=600)
         self.governor_tools = governor_tools
         self.settings = settings
+        self.anchor_date = anchor_date
         self.year = year
         self.month = month
+        self.mode = mode
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if (
@@ -2081,6 +2093,13 @@ class BrainCalendarMonthView(discord.ui.View):
     def content(self) -> str:
         return f"## Calendar · {self.year}.{self.month:02d}"
 
+    async def weekly_content(self) -> str:
+        return await _render_calendar_weekly(
+            self.governor_tools,
+            profile=self.settings.governor_tools_profile,
+            start=self.anchor_date,
+        )
+
     async def month_file(self) -> discord.File | None:
         return await _active_control_month_file_for(
             self.governor_tools,
@@ -2089,34 +2108,66 @@ class BrainCalendarMonthView(discord.ui.View):
             month=self.month,
         )
 
-    async def _edit_month(self, interaction: discord.Interaction) -> None:
+    async def _edit_current(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
-        file = await self.month_file()
-        kwargs: dict[str, Any] = {
-            "content": self.content(),
-            "view": self,
-            "allowed_mentions": NO_MENTIONS,
-        }
-        if file is not None:
-            kwargs["attachments"] = [file]
+        if self.mode == "weekly":
+            kwargs: dict[str, Any] = {
+                "content": await self.weekly_content(),
+                "view": self,
+                "attachments": [],
+                "allowed_mentions": NO_MENTIONS,
+            }
+        else:
+            file = await self.month_file()
+            kwargs = {
+                "content": self.content(),
+                "view": self,
+                "allowed_mentions": NO_MENTIONS,
+            }
+            if file is not None:
+                kwargs["attachments"] = [file]
         await interaction.edit_original_response(**kwargs)
 
-    @discord.ui.button(label="<", style=discord.ButtonStyle.secondary)
-    async def previous_month(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        self.year, self.month = _shift_month(self.year, self.month, -1)
-        await self._edit_month(interaction)
+    @discord.ui.button(label="Month", style=discord.ButtonStyle.secondary, row=0)
+    async def month_view(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.mode = "month"
+        await self._edit_current(interaction)
 
-    @discord.ui.button(label="Today", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="Weekly", style=discord.ButtonStyle.secondary, row=0)
+    async def weekly_view(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.mode = "weekly"
+        await self._edit_current(interaction)
+
+    @discord.ui.button(label="Close", style=discord.ButtonStyle.secondary, row=0)
+    async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if interaction.message is None:
+            await interaction.response.send_message("Closed.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.message.delete()
+
+    @discord.ui.button(label="<", style=discord.ButtonStyle.secondary, row=1)
+    async def previous_month(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.mode == "weekly":
+            self.anchor_date -= timedelta(days=7)
+        else:
+            self.year, self.month = _shift_month(self.year, self.month, -1)
+        await self._edit_current(interaction)
+
+    @discord.ui.button(label="Today", style=discord.ButtonStyle.primary, row=1)
     async def today_month(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         current = datetime.now(KST).date()
+        self.anchor_date = current
         self.year = current.year
         self.month = current.month
-        await self._edit_month(interaction)
+        await self._edit_current(interaction)
 
-    @discord.ui.button(label=">", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label=">", style=discord.ButtonStyle.secondary, row=1)
     async def next_month(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        self.year, self.month = _shift_month(self.year, self.month, 1)
-        await self._edit_month(interaction)
+        if self.mode == "weekly":
+            self.anchor_date += timedelta(days=7)
+        else:
+            self.year, self.month = _shift_month(self.year, self.month, 1)
+        await self._edit_current(interaction)
 
 
 class BrainUpcomingEventsSelect(discord.ui.Select):
@@ -2838,6 +2889,41 @@ def _render_active_service_message(title: str, tasks: list[dict[str, Any]]) -> s
     if not tasks:
         lines.append("- none")
     return "\n".join(lines)
+
+
+async def _render_calendar_weekly(governor_tools: GovernorToolClient, *, profile: str, start: date) -> str:
+    days = [start + timedelta(days=offset) for offset in range(7)]
+    payloads = await asyncio.gather(
+        *(governor_tools.today(profile=profile, day=value.isoformat()) for value in days),
+        return_exceptions=True,
+    )
+    lines = [f"## Calendar · Weekly", f"- {days[0]:%Y.%m.%d} - {days[-1]:%Y.%m.%d}"]
+    for value, payload in zip(days, payloads, strict=True):
+        if isinstance(payload, Exception):
+            lines.append("")
+            lines.append(f"### {value:%Y.%m.%d %a}")
+            lines.append("- calendar unavailable")
+            continue
+        weather = payload.get("weather")
+        weather_summary = str(weather.get("summary") or "").strip() if isinstance(weather, dict) else ""
+        suffix = f" • {weather_summary}" if weather_summary else ""
+        events = _event_results(payload)
+        lines.append("")
+        lines.append(f"### {value:%Y.%m.%d %a}{suffix}")
+        if events:
+            lines.extend(_calendar_weekly_event_line(item) for item in events[:8])
+        else:
+            lines.append("- 일정 없음")
+    return "\n".join(lines)[:1990]
+
+
+def _calendar_weekly_event_line(event: dict[str, Any]) -> str:
+    time_text = str(event.get("time") or event.get("startTime") or "").strip()
+    title = discord.utils.escape_markdown(str(event.get("title") or event.get("summary") or "Untitled event").strip())
+    owner = str(event.get("ownerLabel") or event.get("owner") or "").strip()
+    owner_suffix = " · ***GDD_ZiN***" if owner == "GDD_ZiN" else ""
+    prefix = f"{time_text} " if time_text else ""
+    return f"- {prefix}{title}{owner_suffix}"
 
 
 def _shift_month(year: int, month: int, delta: int) -> tuple[int, int]:
