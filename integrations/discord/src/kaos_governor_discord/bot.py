@@ -301,6 +301,7 @@ class GovernorBot(discord.Client):
                 memos=self.memos,
                 paperless=self.paperless,
                 calendar_refresh_callback=self._refresh_calendar_surfaces,
+                import_status_provider=self._import_status,
                 imaging_second_look=ImagingSecondLookClient(
                     ImagingSecondLookConfig(
                         url=settings.imaging_second_look_url,
@@ -315,6 +316,14 @@ class GovernorBot(discord.Client):
             else None
         )
         self._register_commands()
+
+    def _import_status(self) -> dict[str, object]:
+        return {
+            "naverMail": self.mail_poller.status(),
+            "naverMailOrganizer": self.mail_organizer.status(),
+            "fax": self.fax_service.status(),
+            "documentInbox": self.discord_inbox.status() if self.discord_inbox is not None else {"enabled": False},
+        }
 
     def _register_commands(self) -> None:
         @self.tree.command(name="status", description="Show KaosGovernor bot transport status")

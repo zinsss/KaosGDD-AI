@@ -88,6 +88,8 @@ class FakeGovernorTools:
     async def fetch(self, request):
         if request.kind is ToolKind.UPCOMING_EVENTS:
             return {"events": [{"title": "Clinic", "date": "2026-08-22", "time": "10:50", "ownerLabel": "Family"}]}
+        if request.kind is ToolKind.RECENT_IMPORTS:
+            return {"imports": [{"kind": "fax", "title": "Fax jobs tracked: 1", "detail": "2026-08-22T10:00:00Z"}]}
         if request.profile == "supplies":
             return {"tasks": [{"title": "토프라민"}]}
         return {"tasks": [{"title": "로운이 제로이드", "due": "2026-08-22", "dueTime": "10:00"}]}
@@ -117,7 +119,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             now=datetime(2026, 9, 12),
         )
 
-        self.assertEqual(content, "# 2026.09.12(Sat)\nUpcoming Events - 3 days")
+        self.assertEqual(content, "# 2026.09.12(Sat)")
         self.assertEqual(ACTIVE_CONTROL_HISTORY_LIMIT, 20)
 
     def test_active_control_message_id_state_round_trips(self) -> None:
@@ -136,6 +138,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             [],
             [{"title": "로운이 제로이드", "due": "2026-08-22", "dueTime": "10:00"}],
             [{"title": "토프라민"}],
+            [],
         )
         task_select = next(
             child
@@ -169,8 +172,9 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             [{"title": "Clinic", "date": "2026-08-22", "time": "10:50", "ownerLabel": "Family"}],
             [],
             [],
+            [],
         )
-        refresh = next(child for child in view.children if getattr(child, "label", "") == "Refresh")
+        refresh = next(child for child in view.children if getattr(child, "label", "") == "Reload")
         interaction = SimpleNamespace(
             guild_id=100,
             channel_id=300,
@@ -184,7 +188,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
 
         interaction.response.defer.assert_awaited_once()
         interaction.edit_original_response.assert_awaited_once()
-        self.assertIn("Upcoming Events - 3 days", interaction.edit_original_response.await_args.kwargs["content"])
+        self.assertTrue(interaction.edit_original_response.await_args.kwargs["content"].startswith("# "))
         refreshed = interaction.edit_original_response.await_args.kwargs["view"]
         self.assertEqual(
             [
@@ -200,6 +204,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             FakeGovernorTools(),  # type: ignore[arg-type]
             self.active_control_settings(),
             [{"title": "Clinic", "date": "2026-08-22", "time": "10:50", "ownerLabel": "Family"}],
+            [],
             [],
             [],
         )

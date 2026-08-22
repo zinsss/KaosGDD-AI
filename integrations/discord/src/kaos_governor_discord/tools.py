@@ -218,6 +218,7 @@ class BrainToolServer:
         paperless: PaperlessDocumentService,
         task_refresh_callback: Callable[[], Awaitable[None]] | None = None,
         calendar_refresh_callback: Callable[[], Awaitable[None]] | None = None,
+        import_status_provider: Callable[[], Mapping[str, object]] | None = None,
         today_provider: Callable[[], date] | None = None,
         durable_store: MemoryDurableGovernorStore | None = None,
         imaging_second_look: ImagingSecondLookClient | None = None,
@@ -231,6 +232,7 @@ class BrainToolServer:
         self._memos = memos
         self._paperless = paperless
         self._calendar_refresh_callback = calendar_refresh_callback or task_refresh_callback
+        self._import_status_provider = import_status_provider
         self._today_provider = today_provider or date.today
         self._durable = durable_store or MemoryDurableGovernorStore()
         self._imaging_second_look_client = imaging_second_look or ImagingSecondLookClient(ImagingSecondLookConfig())
@@ -257,6 +259,7 @@ class BrainToolServer:
         app.router.add_get("/tools/today", self._today)
         app.router.add_get("/tools/events/upcoming", self._upcoming_events)
         app.router.add_get("/tools/calendar/month-image", self._calendar_month_image)
+        app.router.add_get("/tools/imports/recent", self._recent_imports)
         app.router.add_get("/tools/tasks/active", self._active_tasks)
         app.router.add_get("/tools/tasks/completed", self._completed_tasks)
         app.router.add_get("/tools/memos/search", self._search_memos)
@@ -374,6 +377,21 @@ class BrainToolServer:
                 "contentType": "image/png",
                 "contentBase64": base64.b64encode(png).decode("ascii"),
                 "source": "calendar-render-live",
+            }
+        )
+
+    async def _recent_imports(self, request: web.Request) -> web.Response:
+        profile = _profile(request)
+        current = _request_date(request, default=self._today_provider())
+        status = self._import_status_provider() if self._import_status_provider is not None else {}
+        imports = _recent_import_payloads(status)
+        return web.json_response(
+            {
+                "date": current.isoformat(),
+                "profile": profile,
+                "count": len(imports),
+                "imports": imports,
+                "source": "governor-runtime-status",
             }
         )
 
@@ -2275,6 +2293,73 @@ def _optional_int_query(request: web.Request, name: str, default: int) -> int:
         return int(raw)
     except ValueError as exc:
         raise web.HTTPBadRequest(text=f'{{"error": "invalid_{name}"}}', content_type="application/json") from exc
+
+
+def _recent_import_payloads(status: Mapping[str, object]) -> list[dict[str, object]]:
+    imports: list[dict[str, object]] = []
+    mail = _mapping_value(status, "naverMail")
+    organizer = _mapping_value(status, "naverMailOrganizer")
+    fax = _mapping_value(status, "fax")
+    documents = _mapping_value(status, "documentInbox")
+    archived = _int_value(mail, "archivedCount")
+    if archived:
+        imports.append(
+            {
+                "kind": "mail",
+                "title": f"Naver mail archived: {archived}",
+                "detail": _status_detail(mail, "lastArchiveAt", "lastScanAt"),
+            }
+        )
+    digest_count = _int_value(organizer, "digestCount")
+    if digest_count:
+        imports.append(
+            {
+                "kind": "mail",
+                "title": f"Naver organizer digests: {digest_count}",
+                "detail": _status_detail(organizer, "lastDigestAt", "lastCheckAt"),
+            }
+        )
+    tracked_jobs = _int_value(fax, "trackedJobs")
+    if tracked_jobs:
+        imports.append(
+            {
+                "kind": "fax",
+                "title": f"Fax jobs tracked: {tracked_jobs}",
+                "detail": _status_detail(fax, "lastScanAt"),
+            }
+        )
+    accepted_documents = _int_value(documents, "acceptedCount")
+    ocr_ready = _int_value(documents, "ocrReadyCount")
+    if accepted_documents or ocr_ready:
+        imports.append(
+            {
+                "kind": "documents",
+                "title": f"Documents accepted: {accepted_documents}",
+                "detail": f"OCR ready: {ocr_ready}",
+            }
+        )
+    return imports[:25]
+
+
+def _mapping_value(payload: Mapping[str, object], key: str) -> Mapping[str, object]:
+    value = payload.get(key)
+    return value if isinstance(value, Mapping) else {}
+
+
+def _int_value(payload: Mapping[str, object], key: str) -> int:
+    try:
+        return max(0, int(payload.get(key, 0)))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _status_detail(payload: Mapping[str, object], *keys: str) -> str:
+    for key in keys:
+        value = str(payload.get(key) or "").strip()
+        if value:
+            return value
+    error = str(payload.get("lastError") or "").strip()
+    return f"error: {error}" if error else "No recent timestamp"
 
 
 def _normalized_tags(values: object) -> tuple[str, ...]:

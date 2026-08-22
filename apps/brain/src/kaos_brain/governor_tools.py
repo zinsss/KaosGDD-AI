@@ -50,9 +50,11 @@ class GovernorToolClient:
         if request.kind is ToolKind.TODAY:
             return await self._get("/tools/today", {"profile": self._profile(request.profile)})
         if request.kind is ToolKind.UPCOMING_EVENTS:
-            return await self._get("/tools/events/upcoming", {"profile": self._profile(request.profile), "days": "3"})
+            return await self._get("/tools/events/upcoming", {"profile": self._profile(request.profile), "days": "7"})
         if request.kind is ToolKind.CALENDAR_MONTH_IMAGE:
             return await self._get("/tools/calendar/month-image", {"profile": self._profile(request.profile)})
+        if request.kind is ToolKind.RECENT_IMPORTS:
+            return await self._get("/tools/imports/recent", {"profile": self._profile(request.profile)})
         if request.kind is ToolKind.ACTIVE_TASKS:
             return await self._get("/tools/tasks/active", self._task_params(request.profile, request.collection_id))
         if request.kind is ToolKind.COMPLETED_TASKS:

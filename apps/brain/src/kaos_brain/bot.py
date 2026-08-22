@@ -78,7 +78,6 @@ BRAIN_SEARCH_WINDOW_SECONDS = 600
 OPENAI_CALLBACK_PREFIX = "http://localhost:1455/auth/callback?"
 OPENAI_CODE_PATTERN = re.compile(r"^ac_[A-Za-z0-9_.-]+$")
 ACTIVE_CONTROL_MARKER = "# "
-ACTIVE_CONTROL_SUBTITLE = "Upcoming Events - 3 days"
 ACTIVE_CONTROL_LIMIT = 25
 ACTIVE_CONTROL_HISTORY_LIMIT = 20
 
@@ -904,10 +903,10 @@ class BrainBot(discord.Client):
             channel = self.get_channel(self.settings.brain_channel_id) or await self.fetch_channel(self.settings.brain_channel_id)
             if not isinstance(channel, discord.TextChannel | discord.Thread):
                 return
-            events, tasks, supplies = await self._active_control_items()
+            events, tasks, supplies, imports = await self._active_control_items()
             month_file = await self._active_control_month_file()
             content = render_active_control_message(events, tasks, supplies)
-            view = BrainActiveControlView(self.governor_tools, self.settings, events, tasks, supplies)
+            view = BrainActiveControlView(self.governor_tools, self.settings, events, tasks, supplies, imports)
             message = await self._find_active_control_message(channel)
             if message is None:
                 kwargs: dict[str, Any] = {"content": content, "view": view, "allowed_mentions": NO_MENTIONS}
@@ -938,14 +937,13 @@ class BrainBot(discord.Client):
             if (
                 message.author.id == self.user.id
                 and content.startswith(ACTIVE_CONTROL_MARKER)
-                and content.splitlines()[1:2] == [ACTIVE_CONTROL_SUBTITLE]
             ):
                 return message
         return None
 
-    async def _active_control_items(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    async def _active_control_items(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
         if self.governor_tools is None:
-            return [], [], []
+            return [], [], [], []
         events_payload = await self.governor_tools.fetch(
             ToolRequest(ToolKind.UPCOMING_EVENTS, profile=self.settings.governor_tools_profile)
         )
@@ -957,7 +955,10 @@ class BrainBot(discord.Client):
                 collection_id=self.settings.governor_tools_supplies_collection_id,
             )
         )
-        return _event_results(events_payload), _task_results(tasks_payload), _task_results(supplies_payload)
+        imports_payload = await self.governor_tools.fetch(
+            ToolRequest(ToolKind.RECENT_IMPORTS, profile=self.settings.governor_tools_profile)
+        )
+        return _event_results(events_payload), _task_results(tasks_payload), _task_results(supplies_payload), _import_results(imports_payload)
 
     async def _active_control_month_file(self) -> discord.File | None:
         return await _active_control_month_file_for(
@@ -1903,12 +1904,7 @@ def render_active_control_message(
     now: datetime | None = None,
 ) -> str:
     current = now or datetime.now(KST)
-    return "\n".join(
-        [
-            f"# {current:%Y.%m.%d}({current:%a})",
-            ACTIVE_CONTROL_SUBTITLE,
-        ]
-    )
+    return f"# {current:%Y.%m.%d}({current:%a})"
 
 
 class BrainActiveControlView(discord.ui.View):
@@ -1919,6 +1915,7 @@ class BrainActiveControlView(discord.ui.View):
         events: list[dict[str, Any]],
         tasks: list[dict[str, Any]],
         supplies: list[dict[str, Any]],
+        imports: list[dict[str, Any]],
     ) -> None:
         super().__init__(timeout=None)
         self.governor_tools = governor_tools
@@ -1926,12 +1923,11 @@ class BrainActiveControlView(discord.ui.View):
         self.events = events[:ACTIVE_CONTROL_LIMIT]
         self.tasks = tasks[:ACTIVE_CONTROL_LIMIT]
         self.supplies = supplies[:ACTIVE_CONTROL_LIMIT]
-        if self.events:
-            self.add_item(BrainUpcomingEventsSelect(self, self.events))
-        if self.tasks:
-            self.add_item(BrainActiveControlSelect(self, "tasks", self.tasks))
-        if self.supplies:
-            self.add_item(BrainActiveControlSelect(self, "supplies", self.supplies))
+        self.imports = imports[:ACTIVE_CONTROL_LIMIT]
+        self.add_item(BrainUpcomingEventsSelect(self, self.events))
+        self.add_item(BrainActiveControlSelect(self, "tasks", self.tasks))
+        self.add_item(BrainActiveControlSelect(self, "supplies", self.supplies))
+        self.add_item(BrainImportSelect(self, self.imports))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if (
@@ -1952,7 +1948,7 @@ class BrainActiveControlView(discord.ui.View):
             )
         return ToolRequest(ToolKind.ACTIVE_TASKS, profile=self.settings.governor_tools_profile)
 
-    async def refresh_items(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    async def refresh_items(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
         events_payload = await self.governor_tools.fetch(
             ToolRequest(ToolKind.UPCOMING_EVENTS, profile=self.settings.governor_tools_profile)
         )
@@ -1966,20 +1962,39 @@ class BrainActiveControlView(discord.ui.View):
                 collection_id=self.settings.governor_tools_supplies_collection_id,
             )
         )
-        return _event_results(events_payload), _task_results(tasks_payload), _task_results(supplies_payload)
+        imports_payload = await self.governor_tools.fetch(
+            ToolRequest(ToolKind.RECENT_IMPORTS, profile=self.settings.governor_tools_profile)
+        )
+        return _event_results(events_payload), _task_results(tasks_payload), _task_results(supplies_payload), _import_results(imports_payload)
 
-    @discord.ui.button(label="Refresh", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Calendar", style=discord.ButtonStyle.secondary, row=4)
+    async def calendar_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_message("Calendar image is attached to this message.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+
+    @discord.ui.button(label="Tasks", style=discord.ButtonStyle.secondary, row=4)
+    async def tasks_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_message("Use the Active Tasks dropdown above.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+
+    @discord.ui.button(label="Supplies", style=discord.ButtonStyle.secondary, row=4)
+    async def supplies_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_message("Use the Supplies Shopping List dropdown above.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+
+    @discord.ui.button(label="Paperless/Memos", style=discord.ButtonStyle.secondary, row=4)
+    async def knowledge_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_message("Search with `..keyword`. Use `..ALL` in Documents for document browse.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+
+    @discord.ui.button(label="Reload", style=discord.ButtonStyle.primary, row=4)
     async def refresh(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
         try:
-            events, tasks, supplies = await self.refresh_items()
+            events, tasks, supplies, imports = await self.refresh_items()
         except GovernorToolError as exc:
             LOGGER.warning("Active control refresh failed: %s", exc)
             await interaction.followup.send(_tool_failed("Active 갱신"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         kwargs: dict[str, Any] = {
             "content": render_active_control_message(events, tasks, supplies),
-            "view": BrainActiveControlView(self.governor_tools, self.settings, events, tasks, supplies),
+            "view": BrainActiveControlView(self.governor_tools, self.settings, events, tasks, supplies, imports),
             "allowed_mentions": NO_MENTIONS,
         }
         month_file = await _active_control_month_file_for(
@@ -2003,7 +2018,10 @@ class BrainUpcomingEventsSelect(discord.ui.Select):
             )
             for index, event in enumerate(events[:ACTIVE_CONTROL_LIMIT])
         ]
-        super().__init__(placeholder=f"Upcoming Events: {len(events)}", min_values=1, max_values=1, options=options, row=0)
+        disabled = not options
+        if disabled:
+            options = [discord.SelectOption(label="No upcoming events", value="empty")]
+        super().__init__(placeholder=f"Upcoming Events: {len(events)}", min_values=1, max_values=1, options=options, row=0, disabled=disabled)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         try:
@@ -2030,7 +2048,11 @@ class BrainActiveControlSelect(discord.ui.Select):
         ]
         placeholder = f"Supplies Shopping List: {len(tasks)}" if kind == "supplies" else f"Active Tasks: {len(tasks)}"
         row = 2 if kind == "supplies" else 1
-        super().__init__(placeholder=placeholder, min_values=1, max_values=1, options=options, row=row)
+        disabled = not options
+        if disabled:
+            label = "No active supplies" if kind == "supplies" else "No active tasks"
+            options = [discord.SelectOption(label=label, value="empty")]
+        super().__init__(placeholder=placeholder, min_values=1, max_values=1, options=options, row=row, disabled=disabled)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         try:
@@ -2054,6 +2076,33 @@ class BrainActiveControlSelect(discord.ui.Select):
             ),
             allowed_mentions=NO_MENTIONS,
         )
+
+
+class BrainImportSelect(discord.ui.Select):
+    def __init__(self, parent: BrainActiveControlView, imports: list[dict[str, Any]]) -> None:
+        self.parent_view = parent
+        self.imports = imports
+        options = [
+            discord.SelectOption(
+                label=_import_option_label(item),
+                description=_import_option_description(item) or None,
+                value=str(index),
+            )
+            for index, item in enumerate(imports[:ACTIVE_CONTROL_LIMIT])
+        ]
+        disabled = not options
+        if disabled:
+            options = [discord.SelectOption(label="No new fax/mail imports", value="empty")]
+        super().__init__(placeholder=f"Fax/Mail Imports: {len(imports)}", min_values=1, max_values=1, options=options, row=3, disabled=disabled)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        try:
+            item = self.imports[int(self.values[0])]
+        except (IndexError, TypeError, ValueError) as exc:
+            LOGGER.warning("Import selection failed: %s", exc)
+            await interaction.response.send_message(_tool_failed("Import 선택"), ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.response.send_message(_render_import_selection(item), ephemeral=True, allowed_mentions=NO_MENTIONS)
 
 
 class BrainActiveTasksView(discord.ui.View):
@@ -2575,6 +2624,11 @@ def _event_results(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return [dict(item) for item in value if isinstance(item, dict)] if isinstance(value, list) else []
 
 
+def _import_results(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    value = payload.get("imports")
+    return [dict(item) for item in value if isinstance(item, dict)] if isinstance(value, list) else []
+
+
 async def _active_control_month_file_for(
     governor_tools: GovernorToolClient | None,
     *,
@@ -2620,6 +2674,17 @@ def _render_event_selection(event: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _render_import_selection(item: dict[str, Any]) -> str:
+    title = str(item.get("title") or "Import").strip()
+    kind = str(item.get("kind") or "").strip()
+    detail = str(item.get("detail") or "").strip()
+    lines = [f"## {title}"]
+    details = [part for part in (kind, detail) if part]
+    if details:
+        lines.append(f"- {' · '.join(details)}")
+    return "\n".join(lines)
+
+
 def _render_active_task_selection(title: str, task: dict[str, Any], *, supplies: bool) -> str:
     lines = [f"## {title}"]
     if not supplies:
@@ -2650,6 +2715,16 @@ def _event_option_description(event: dict[str, Any]) -> str:
     time_text = str(event.get("time") or event.get("startTime") or "").strip()
     owner = str(event.get("ownerLabel") or event.get("owner") or "").strip()
     return _compact_select_text(" · ".join(part for part in (date_text, time_text, owner) if part), 100)
+
+
+def _import_option_label(item: dict[str, Any]) -> str:
+    return _compact_select_text(str(item.get("title") or "Import"), 100)
+
+
+def _import_option_description(item: dict[str, Any]) -> str:
+    kind = str(item.get("kind") or "").strip()
+    detail = str(item.get("detail") or "").strip()
+    return _compact_select_text(" · ".join(part for part in (kind, detail) if part), 100)
 
 
 def _task_option_description(task: dict[str, Any]) -> str:

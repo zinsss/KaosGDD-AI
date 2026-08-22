@@ -675,6 +675,35 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["filename"], "calendar-2026-08.png")
         self.assertTrue(base64.b64decode(payload["contentBase64"]).startswith(b"\x89PNG\r\n\x1a\n"))
 
+    async def test_recent_imports_summarizes_mail_fax_and_documents_status(self) -> None:
+        server = BrainToolServer(
+            "127.0.0.1",
+            8098,
+            governor_api_token="governor-secret",
+            calendar_adapter=self.calendar,  # type: ignore[arg-type]
+            memos=self.memos,  # type: ignore[arg-type]
+            paperless=self.paperless,  # type: ignore[arg-type]
+            import_status_provider=lambda: {
+                "naverMail": {"archivedCount": 2, "lastArchiveAt": "2026-08-22T10:00:00Z"},
+                "naverMailOrganizer": {"digestCount": 1, "lastDigestAt": "2026-08-22T09:00:00Z"},
+                "fax": {"trackedJobs": 3, "lastScanAt": "2026-08-22T08:00:00Z"},
+                "documentInbox": {"acceptedCount": 4, "ocrReadyCount": 2},
+            },
+            today_provider=lambda: date(2026, 8, 14),
+        )
+        client = TestClient(TestServer(server.application()))
+        await client.start_server()
+        try:
+            response = await client.get("/tools/imports/recent?profile=main", headers=self.headers())
+            self.assertEqual(response.status, 200)
+            payload = await response.json()
+            self.assertEqual(payload["date"], "2026-08-14")
+            self.assertEqual(payload["count"], 4)
+            self.assertEqual([item["kind"] for item in payload["imports"]], ["mail", "mail", "fax", "documents"])
+            self.assertEqual(payload["imports"][0]["title"], "Naver mail archived: 2")
+        finally:
+            await client.close()
+
     async def test_active_tasks_returns_sorted_non_completed_tasks(self) -> None:
         response = await self.client.get("/tools/tasks/active?profile=main", headers=self.headers())
 
