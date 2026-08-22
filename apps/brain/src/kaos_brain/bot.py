@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 from datetime import datetime
+import io
 import json
 import logging
 from pathlib import Path
@@ -902,13 +905,20 @@ class BrainBot(discord.Client):
             if not isinstance(channel, discord.TextChannel | discord.Thread):
                 return
             events, tasks, supplies = await self._active_control_items()
+            month_file = await self._active_control_month_file()
             content = render_active_control_message(events, tasks, supplies)
             view = BrainActiveControlView(self.governor_tools, self.settings, events, tasks, supplies)
             message = await self._find_active_control_message(channel)
             if message is None:
-                message = await channel.send(content=content, view=view, allowed_mentions=NO_MENTIONS)
+                kwargs: dict[str, Any] = {"content": content, "view": view, "allowed_mentions": NO_MENTIONS}
+                if month_file is not None:
+                    kwargs["file"] = month_file
+                message = await channel.send(**kwargs)
             else:
-                await message.edit(content=content, view=view, allowed_mentions=NO_MENTIONS)
+                kwargs = {"content": content, "view": view, "allowed_mentions": NO_MENTIONS}
+                if month_file is not None:
+                    kwargs["attachments"] = [month_file]
+                await message.edit(**kwargs)
             self._active_control_message_id = int(message.id)
             try:
                 _write_active_control_message_id(self.settings.active_control_state_path, self._active_control_message_id)
@@ -948,6 +958,12 @@ class BrainBot(discord.Client):
             )
         )
         return _event_results(events_payload), _task_results(tasks_payload), _task_results(supplies_payload)
+
+    async def _active_control_month_file(self) -> discord.File | None:
+        return await _active_control_month_file_for(
+            self.governor_tools,
+            profile=self.settings.governor_tools_profile,
+        )
 
     async def _propose_task_due_update(self, message: discord.Message, request: TaskDueUpdateRequest) -> None:
         if self.governor_tools is None:
@@ -1961,11 +1977,18 @@ class BrainActiveControlView(discord.ui.View):
             LOGGER.warning("Active control refresh failed: %s", exc)
             await interaction.followup.send(_tool_failed("Active 갱신"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
-        await interaction.edit_original_response(
-            content=render_active_control_message(events, tasks, supplies),
-            view=BrainActiveControlView(self.governor_tools, self.settings, events, tasks, supplies),
-            allowed_mentions=NO_MENTIONS,
+        kwargs: dict[str, Any] = {
+            "content": render_active_control_message(events, tasks, supplies),
+            "view": BrainActiveControlView(self.governor_tools, self.settings, events, tasks, supplies),
+            "allowed_mentions": NO_MENTIONS,
+        }
+        month_file = await _active_control_month_file_for(
+            self.governor_tools,
+            profile=self.settings.governor_tools_profile,
         )
+        if month_file is not None:
+            kwargs["attachments"] = [month_file]
+        await interaction.edit_original_response(**kwargs)
 
 
 class BrainUpcomingEventsSelect(discord.ui.Select):
@@ -2550,6 +2573,35 @@ def _task_results(payload: dict[str, Any]) -> list[dict[str, Any]]:
 def _event_results(payload: dict[str, Any]) -> list[dict[str, Any]]:
     value = payload.get("events")
     return [dict(item) for item in value if isinstance(item, dict)] if isinstance(value, list) else []
+
+
+async def _active_control_month_file_for(
+    governor_tools: GovernorToolClient | None,
+    *,
+    profile: str,
+) -> discord.File | None:
+    if governor_tools is None:
+        return None
+    try:
+        payload = await governor_tools.fetch(ToolRequest(ToolKind.CALENDAR_MONTH_IMAGE, profile=profile))
+        return _month_image_file(payload)
+    except (GovernorToolError, ValueError, binascii.Error) as exc:
+        LOGGER.warning("Active control month image unavailable: %s", exc)
+        return None
+
+
+def _month_image_file(payload: dict[str, Any]) -> discord.File:
+    content_type = str(payload.get("contentType") or "")
+    if content_type != "image/png":
+        raise ValueError("calendar month image response was not image/png")
+    encoded = str(payload.get("contentBase64") or "")
+    if not encoded:
+        raise ValueError("calendar month image response was empty")
+    raw = base64.b64decode(encoded, validate=True)
+    if not raw.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValueError("calendar month image response was not a PNG")
+    filename = str(payload.get("filename") or "calendar.png").strip() or "calendar.png"
+    return discord.File(io.BytesIO(raw), filename=filename)
 
 
 def _uses_supplies_request(request: ToolRequest) -> bool:

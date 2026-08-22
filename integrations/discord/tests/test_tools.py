@@ -663,6 +663,18 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([item["title"] for item in payload["events"]], ["Clinic", "Tomorrow"])
         self.assertEqual(payload["events"][0]["ownerLabel"], "Family")
 
+    async def test_calendar_month_image_returns_png_payload(self) -> None:
+        response = await self.client.get("/tools/calendar/month-image?profile=main", headers=self.headers())
+
+        self.assertEqual(response.status, 200)
+        payload = await response.json()
+        self.assertEqual(payload["date"], "2026-08-14")
+        self.assertEqual(payload["year"], 2026)
+        self.assertEqual(payload["month"], 8)
+        self.assertEqual(payload["contentType"], "image/png")
+        self.assertEqual(payload["filename"], "calendar-2026-08.png")
+        self.assertTrue(base64.b64decode(payload["contentBase64"]).startswith(b"\x89PNG\r\n\x1a\n"))
+
     async def test_active_tasks_returns_sorted_non_completed_tasks(self) -> None:
         response = await self.client.get("/tools/tasks/active?profile=main", headers=self.headers())
 

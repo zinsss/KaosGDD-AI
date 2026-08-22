@@ -16,11 +16,11 @@ from typing import Any
 import aiohttp
 from aiohttp import web
 from kaos_governor import Actor, DurableGovernorError, MemoryDurableGovernorStore, OperationRequest
-from kaos_governor.calendar import CalendarAdapterClient, CalendarAdapterError, profile_host
+from kaos_governor.calendar import CalendarAdapterClient, CalendarAdapterError, profile_host, render_month_png
 from kaos_governor.documents import DocumentIntakeError, PaperlessDocumentService
 from kaos_governor.memos import MemosError, MemosService
 
-from .calendar import weather_agenda_summary, weather_items_by_date
+from .calendar import month_markers, weather_agenda_summary, weather_items_by_date
 from .tasks import TASK_PRIORITIES, is_supplies_collection, normalize_supplies_due, validate_edit_due
 
 
@@ -256,6 +256,7 @@ class BrainToolServer:
         app.middlewares.append(self._auth_middleware)
         app.router.add_get("/tools/today", self._today)
         app.router.add_get("/tools/events/upcoming", self._upcoming_events)
+        app.router.add_get("/tools/calendar/month-image", self._calendar_month_image)
         app.router.add_get("/tools/tasks/active", self._active_tasks)
         app.router.add_get("/tools/tasks/completed", self._completed_tasks)
         app.router.add_get("/tools/memos/search", self._search_memos)
@@ -340,6 +341,39 @@ class BrainToolServer:
                 "count": len(events),
                 "events": events,
                 "source": "calendar-adapter-live",
+            }
+        )
+
+    async def _calendar_month_image(self, request: web.Request) -> web.Response:
+        profile = _profile(request)
+        current = _request_date(request, default=self._today_provider())
+        year = _optional_int_query(request, "year", current.year)
+        month = _optional_int_query(request, "month", current.month)
+        try:
+            visible_month = date(year, month, 1)
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text='{"error": "invalid_month"}', content_type="application/json") from exc
+        try:
+            bootstrap = await asyncio.to_thread(self._calendar_adapter.bootstrap, profile)
+            png = await asyncio.to_thread(
+                render_month_png,
+                year=visible_month.year,
+                month=visible_month.month,
+                today=current,
+                markers=month_markers(bootstrap),
+            )
+        except CalendarAdapterError as exc:
+            return web.json_response({"error": str(exc)}, status=502)
+        return web.json_response(
+            {
+                "date": current.isoformat(),
+                "profile": profile,
+                "year": visible_month.year,
+                "month": visible_month.month,
+                "filename": f"calendar-{visible_month.year}-{visible_month.month:02d}.png",
+                "contentType": "image/png",
+                "contentBase64": base64.b64encode(png).decode("ascii"),
+                "source": "calendar-render-live",
             }
         )
 
@@ -2231,6 +2265,16 @@ def _limit(request: web.Request, *, default: int) -> int:
     except ValueError as exc:
         raise web.HTTPBadRequest(text='{"error": "invalid_limit"}', content_type="application/json") from exc
     return value
+
+
+def _optional_int_query(request: web.Request, name: str, default: int) -> int:
+    raw = request.query.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise web.HTTPBadRequest(text=f'{{"error": "invalid_{name}"}}', content_type="application/json") from exc
 
 
 def _normalized_tags(values: object) -> tuple[str, ...]:

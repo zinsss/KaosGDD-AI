@@ -407,6 +407,10 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(upcoming["path"], "/tools/events/upcoming")
         self.assertEqual(upcoming["params"], {"profile": "main", "days": "3"})
 
+        month = await client.fetch(ToolRequest(ToolKind.CALENDAR_MONTH_IMAGE))
+        self.assertEqual(month["path"], "/tools/calendar/month-image")
+        self.assertEqual(month["params"], {"profile": "main"})
+
     async def test_fetch_single_memo_search_gets_full_body(self) -> None:
         from kaos_brain.governor_tools import GovernorToolClient, GovernorToolConfig
 
