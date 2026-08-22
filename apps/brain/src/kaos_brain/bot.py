@@ -2286,7 +2286,12 @@ class BrainActiveControlSelect(discord.ui.Select):
         options = [
             discord.SelectOption(
                 label=_task_option_label(task),
-                description=_task_option_description(task) or None,
+                description=_task_option_description(
+                    task,
+                    include_completed=False,
+                    supplies=kind == "supplies",
+                )
+                or None,
                 value=str(index),
             )
             for index, task in enumerate(tasks[:ACTIVE_CONTROL_LIMIT])
@@ -2373,7 +2378,12 @@ class BrainActiveTasksSelect(discord.ui.Select):
         options = [
             discord.SelectOption(
                 label=_task_option_label(task),
-                description=_task_option_description(task) or None,
+                description=_task_option_description(
+                    task,
+                    include_completed=False,
+                    supplies=_uses_supplies_request(parent.request),
+                )
+                or None,
                 value=str(index),
             )
             for index, task in enumerate(parent.tasks)
@@ -3043,10 +3053,23 @@ def _import_option_description(item: dict[str, Any]) -> str:
     return _compact_select_text(" · ".join(part for part in (kind, detail) if part), 100)
 
 
-def _task_option_description(task: dict[str, Any]) -> str:
-    completed = str(task.get("completedDate") or task.get("completed") or task.get("completedAt") or "").strip()[:10]
+def _task_option_description(
+    task: dict[str, Any],
+    *,
+    include_completed: bool = True,
+    supplies: bool = False,
+) -> str:
+    if supplies:
+        return ""
+    completed = (
+        str(task.get("completedDate") or task.get("completed") or task.get("completedAt") or "").strip()[:10]
+        if include_completed
+        else ""
+    )
     due = str(task.get("due") or task.get("dueDate") or "").strip()
-    parts = [part for part in (completed, due) if part]
+    due_time = str(task.get("dueTime") or "").strip()
+    due_text = " ".join(part for part in (due, due_time) if part)
+    parts = [part for part in (completed, due_text) if part]
     return _compact_select_text(" · ".join(parts), 100)
 
 

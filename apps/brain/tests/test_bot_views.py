@@ -229,6 +229,33 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             ["Reload"],
         )
 
+    async def test_active_control_dropdown_descriptions_only_show_task_due_dates(self) -> None:
+        view = BrainActiveControlView(
+            FakeGovernorTools(),  # type: ignore[arg-type]
+            self.active_control_settings(),
+            [],
+            [
+                {"title": "No due task", "date": "2026-08-21"},
+                {"title": "Due task", "dueDate": "2026-08-22", "dueTime": "10:00"},
+            ],
+            [{"title": "실프포어", "date": "2026-08-21", "dueDate": "2026-08-21"}],
+            [],
+        )
+        task_select = next(
+            child
+            for child in view.children
+            if isinstance(child, BrainActiveControlSelect) and child.kind == "tasks"
+        )
+        supplies_select = next(
+            child
+            for child in view.children
+            if isinstance(child, BrainActiveControlSelect) and child.kind == "supplies"
+        )
+
+        self.assertIsNone(task_select.options[0].description)
+        self.assertEqual(task_select.options[1].description, "2026-08-22 10:00")
+        self.assertIsNone(supplies_select.options[0].description)
+
     async def test_tasks_button_calls_up_active_tasks_message(self) -> None:
         view = BrainServiceMenuView(
             FakeGovernorTools(),  # type: ignore[arg-type]
