@@ -613,6 +613,38 @@ def render_tool_context(request: ToolRequest, payload: dict[str, Any]) -> str:
     return "No usable Governor data."
 
 
+def render_combined_search_context(
+    query: str,
+    memo_payload: dict[str, Any],
+    document_payload: dict[str, Any],
+) -> str:
+    memo_results = _items(memo_payload.get("results"))
+    document_results = _items(document_payload.get("results"))
+    memo_count = _count(memo_payload, "resultCount", "count", fallback=len(memo_results))
+    memo_total = _count(memo_payload, "totalCount", fallback=memo_count)
+    document_count = _count(document_payload, "resultCount", "count", fallback=len(document_results))
+    document_total = _count(document_payload, "totalCount", "total", fallback=document_count)
+    lines = [
+        "Searched..",
+        f"## {query or '..'}",
+        f"### Memos · {memo_count} results in {memo_total}",
+    ]
+    if memo_results:
+        lines.extend(_memo_line(item) for item in memo_results[:3])
+        if memo_count > len(memo_results[:3]):
+            lines.append(f"- Showing first {len(memo_results[:3])} memos.")
+    else:
+        lines.append("- No matching memos.")
+    lines.append(f"### Documents · {document_count} results in {document_total}")
+    if document_results:
+        lines.extend(_document_link_line(item) for item in document_results[:8])
+        if document_count > len(document_results[:8]):
+            lines.append(f"- Showing first {len(document_results[:8])} documents.")
+    else:
+        lines.append("- No matching documents.")
+    return "\n".join(lines)[:1900]
+
+
 def render_memo_opened(query: str, item: dict[str, Any]) -> str:
     content = _escape_mentions(str(item.get("content") or item.get("snippet") or "")).strip()
     if content:

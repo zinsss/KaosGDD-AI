@@ -41,6 +41,25 @@ class DocumentGovernorTools:
         }
 
 
+class CombinedGovernorTools:
+    async def fetch(self, request: ToolRequest):
+        if request.kind is ToolKind.MEMO_SEARCH:
+            return {
+                "query": request.query,
+                "resultCount": 1,
+                "totalCount": 1,
+                "results": [{"name": "memos/42", "content": "# Rustdesk\nUse Tailscale.", "full": True}],
+            }
+        if request.kind is ToolKind.DOCUMENT_SEARCH:
+            return {
+                "query": request.query,
+                "resultCount": 1,
+                "totalCount": 1,
+                "results": [{"id": 42, "title": "Rustdesk setup"}],
+            }
+        raise AssertionError(f"unexpected request: {request.kind}")
+
+
 class BrainToolResponseTests(unittest.IsolatedAsyncioTestCase):
     async def test_missing_governor_tools_uses_short_korean_message(self) -> None:
         brain = SimpleNamespace(governor_tools=None)
@@ -109,6 +128,29 @@ class BrainToolResponseTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(view)
         assert view is not None
         self.assertEqual([item.label for item in view.children], [])
+
+    async def test_combined_search_returns_memos_and_documents(self) -> None:
+        brain = SimpleNamespace(
+            governor_tools=CombinedGovernorTools(),
+            settings=SimpleNamespace(
+                paperless_public_url="https://paperless.example",
+                memos_public_url="https://memos.example",
+            ),
+        )
+
+        reply, view = await BrainBot._answer_with_governor_tool(  # type: ignore[arg-type]
+            brain,
+            "..rustdesk",
+            ToolRequest(ToolKind.SEARCH_ALL, "rustdesk"),
+            actor_id=200,
+        )
+
+        self.assertIn("Searched..\n## rustdesk", reply)
+        self.assertIn("### Memos · 1 results in 1", reply)
+        self.assertIn("# Rustdesk", reply)
+        self.assertIn("### Documents · 1 results in 1", reply)
+        self.assertIn("- Rustdesk setup · [open](https://paperless.example/documents/42/details)", reply)
+        self.assertIsNotNone(view)
 
 
 if __name__ == "__main__":

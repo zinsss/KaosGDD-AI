@@ -12,6 +12,7 @@ class ToolKind(StrEnum):
     COMPLETED_TASKS = "completed_tasks"
     MEMO_SEARCH = "memo_search"
     DOCUMENT_SEARCH = "document_search"
+    SEARCH_ALL = "search_all"
 
 
 @dataclass(frozen=True)
@@ -65,7 +66,7 @@ def _dotdot_request(text: str) -> ToolRequest | None:
         return ToolRequest(ToolKind.DOCUMENT_SEARCH, _strip_search_nouns(query, document_nouns) or query)
     if any(marker in lowered for marker in memo_nouns):
         return ToolRequest(ToolKind.MEMO_SEARCH, _strip_search_nouns(query, memo_nouns) or query)
-    return ToolRequest(ToolKind.MEMO_SEARCH, query)
+    return ToolRequest(ToolKind.SEARCH_ALL, query)
 
 
 def _asks_today(lowered: str) -> bool:

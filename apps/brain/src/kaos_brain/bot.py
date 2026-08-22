@@ -36,6 +36,7 @@ from .governor_tools import (
     render_event_create_completed,
     render_event_create_proposal,
     render_memo_opened,
+    render_combined_search_context,
     render_task_action_completed,
     render_task_action_proposal,
     render_task_create_completed,
@@ -762,6 +763,36 @@ class BrainBot(discord.Client):
     ) -> tuple[str, discord.ui.View | None]:
         if self.governor_tools is None:
             return _tool_unavailable(), None
+        if tool_request.kind is ToolKind.SEARCH_ALL:
+            try:
+                memo_payload, document_payload = await asyncio.gather(
+                    self.governor_tools.fetch(ToolRequest(ToolKind.MEMO_SEARCH, tool_request.query)),
+                    self.governor_tools.fetch(ToolRequest(ToolKind.DOCUMENT_SEARCH, tool_request.query)),
+                )
+            except GovernorToolError as exc:
+                LOGGER.warning("Governor combined search failed: %s", exc)
+                return _tool_failed("조회"), None
+            document_results = [
+                {
+                    **item,
+                    "url": item.get("url") or item.get("publicUrl") or document_public_url(self.settings.paperless_public_url, item.get("id")),
+                }
+                for item in search_results(document_payload)
+            ]
+            document_payload = {**document_payload, "results": document_results}
+            memo_results = search_results(memo_payload)
+            view = (
+                BrainMemoSearchView(
+                    self.governor_tools,
+                    actor_id,
+                    tool_request.query,
+                    memo_results,
+                    memos_public_url=self.settings.memos_public_url,
+                )
+                if len(memo_results) > 1
+                else BrainTemporarySearchView(tool_request.query)
+            )
+            return render_combined_search_context(tool_request.query, memo_payload, document_payload), view
         try:
             payload = await self.governor_tools.fetch(tool_request)
         except GovernorToolError as exc:

@@ -119,7 +119,7 @@ class ToolIntentTests(unittest.TestCase):
     def test_dotdot_defaults_to_memo_search(self) -> None:
         request = parse_tool_request("..rust   desk setup")
         assert request is not None
-        self.assertEqual(request.kind, ToolKind.MEMO_SEARCH)
+        self.assertEqual(request.kind, ToolKind.SEARCH_ALL)
         self.assertEqual(request.query, "rust desk setup")
 
     def test_dotdot_can_target_document_search(self) -> None:
