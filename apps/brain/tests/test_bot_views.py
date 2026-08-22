@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 
 from kaos_brain.bot import (
     ACTIVE_CONTROL_HISTORY_LIMIT,
+    ACTIVE_TASKS_LABEL,
     BrainActiveControlSelect,
     BrainActiveControlView,
     BrainActiveTaskActionsView,
@@ -29,7 +30,12 @@ from kaos_brain.bot import (
     BrainUpcomingEventsSelect,
     BrainMemoSearchSelect,
     BrainMemoSearchView,
+    CALENDAR_LABEL,
+    FAX_MAIL_LABEL,
+    KNOWLEDGE_LABEL,
+    SUPPLIES_SHOPPING_LIST_LABEL,
     TaskCreateConfirmationView,
+    UPCOMING_EVENTS_LABEL,
     _read_active_control_message_id,
     _write_active_control_message_id,
     render_active_control_message,
@@ -206,11 +212,16 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             [getattr(child, "placeholder", "") for child in view.children if getattr(child, "placeholder", "")],
-            ["Upcoming Events: 1", "Active Tasks: 1", "Supplies Shopping List: 1", "Fax/Mail Imports: 1"],
+            [
+                f"{UPCOMING_EVENTS_LABEL}: 1",
+                f"{ACTIVE_TASKS_LABEL}: 1",
+                f"{SUPPLIES_SHOPPING_LIST_LABEL}: 1",
+                f"{FAX_MAIL_LABEL}: 1",
+            ],
         )
         self.assertEqual(
             [getattr(child, "label", "") for child in view.children if getattr(child, "label", "")],
-            ["Calendar", "Tasks", "Supplies", "Paperless/Memos", "Reload"],
+            [CALENDAR_LABEL, ACTIVE_TASKS_LABEL, SUPPLIES_SHOPPING_LIST_LABEL, KNOWLEDGE_LABEL, "Reload"],
         )
 
     async def test_tasks_button_calls_up_active_tasks_message(self) -> None:
@@ -222,7 +233,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             [],
             [],
         )
-        button = next(child for child in view.children if getattr(child, "label", "") == "Tasks")
+        button = next(child for child in view.children if getattr(child, "label", "") == ACTIVE_TASKS_LABEL)
         interaction = SimpleNamespace(
             id=701,
             guild_id=100,
@@ -250,7 +261,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             [],
             [],
         )
-        button = next(child for child in view.children if getattr(child, "label", "") == "Calendar")
+        button = next(child for child in view.children if getattr(child, "label", "") == CALENDAR_LABEL)
         interaction = SimpleNamespace(
             id=702,
             guild_id=100,
@@ -327,7 +338,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
                 for child in refreshed.children
                 if isinstance(child, BrainActiveControlSelect | BrainUpcomingEventsSelect)
             ],
-            ["Upcoming Events: 1", "Active Tasks: 1", "Supplies Shopping List: 1"],
+            [f"{UPCOMING_EVENTS_LABEL}: 1", f"{ACTIVE_TASKS_LABEL}: 1", f"{SUPPLIES_SHOPPING_LIST_LABEL}: 1"],
         )
 
     async def test_upcoming_event_select_opens_detail_message(self) -> None:

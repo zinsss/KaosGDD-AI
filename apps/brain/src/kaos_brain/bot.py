@@ -81,6 +81,14 @@ OPENAI_CODE_PATTERN = re.compile(r"^ac_[A-Za-z0-9_.-]+$")
 ACTIVE_CONTROL_MARKER = "# "
 ACTIVE_CONTROL_LIMIT = 25
 ACTIVE_CONTROL_HISTORY_LIMIT = 20
+ACTIVE_TASKS_LABEL = "𝓐𝓬𝓽𝓲𝓿𝓮 𝓣𝓪𝓼𝓴𝓼"
+CALENDAR_LABEL = "𝓒𝓪𝓵𝓮𝓷𝓭𝓪𝓻"
+SUPPLIES_SHOPPING_LIST_LABEL = "𝓢𝓾𝓹𝓹𝓵𝓲𝓮𝓼 𝓢𝓱𝓸𝓹𝓹𝓲𝓷𝓰 𝓛𝓲𝓼𝓽"
+UPCOMING_EVENTS_LABEL = "𝓤𝓹𝓬𝓸𝓶𝓲𝓷𝓰 𝓔𝓿𝓮𝓷𝓽𝓼"
+PAPERLESS_LABEL = "𝓟𝓪𝓹𝓮𝓻𝓵𝓮𝓼𝓼"
+MEMOS_LABEL = "𝓜𝓮𝓶𝓸𝓼"
+FAX_MAIL_LABEL = "𝓕𝓪𝔁 𝓜𝓪𝓲𝓵"
+KNOWLEDGE_LABEL = f"{PAPERLESS_LABEL} / {MEMOS_LABEL}"
 
 
 def _bind_view_message(view: discord.ui.View | None, message: discord.Message) -> None:
@@ -1968,7 +1976,7 @@ class BrainActiveControlView(discord.ui.View):
         )
         return _event_results(events_payload), _task_results(tasks_payload), _task_results(supplies_payload), _import_results(imports_payload)
 
-    @discord.ui.button(label="Calendar", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label=CALENDAR_LABEL, style=discord.ButtonStyle.secondary, row=4)
     async def calendar_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
         current = datetime.now(KST).date()
@@ -1989,7 +1997,7 @@ class BrainActiveControlView(discord.ui.View):
             kwargs["file"] = file
         await interaction.followup.send(**kwargs)
 
-    @discord.ui.button(label="Tasks", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label=ACTIVE_TASKS_LABEL, style=discord.ButtonStyle.secondary, row=4)
     async def tasks_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
         try:
@@ -2014,7 +2022,7 @@ class BrainActiveControlView(discord.ui.View):
             allowed_mentions=NO_MENTIONS,
         )
 
-    @discord.ui.button(label="Supplies", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label=SUPPLIES_SHOPPING_LIST_LABEL, style=discord.ButtonStyle.secondary, row=4)
     async def supplies_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
         request = ToolRequest(
@@ -2035,7 +2043,7 @@ class BrainActiveControlView(discord.ui.View):
             allowed_mentions=NO_MENTIONS,
         )
 
-    @discord.ui.button(label="Paperless/Memos", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label=KNOWLEDGE_LABEL, style=discord.ButtonStyle.secondary, row=4)
     async def knowledge_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_message("Search with `..keyword`. Use `..ALL` in Documents for document browse.", ephemeral=True, allowed_mentions=NO_MENTIONS)
 
@@ -2186,7 +2194,7 @@ class BrainUpcomingEventsSelect(discord.ui.Select):
         disabled = not options
         if disabled:
             options = [discord.SelectOption(label="No upcoming events", value="empty")]
-        super().__init__(placeholder=f"Upcoming Events: {len(events)}", min_values=1, max_values=1, options=options, row=0, disabled=disabled)
+        super().__init__(placeholder=f"{UPCOMING_EVENTS_LABEL}: {len(events)}", min_values=1, max_values=1, options=options, row=0, disabled=disabled)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         try:
@@ -2211,7 +2219,8 @@ class BrainActiveControlSelect(discord.ui.Select):
             )
             for index, task in enumerate(tasks[:ACTIVE_CONTROL_LIMIT])
         ]
-        placeholder = f"Supplies Shopping List: {len(tasks)}" if kind == "supplies" else f"Active Tasks: {len(tasks)}"
+        label = SUPPLIES_SHOPPING_LIST_LABEL if kind == "supplies" else ACTIVE_TASKS_LABEL
+        placeholder = f"{label}: {len(tasks)}"
         row = 2 if kind == "supplies" else 1
         disabled = not options
         if disabled:
@@ -2258,7 +2267,7 @@ class BrainImportSelect(discord.ui.Select):
         disabled = not options
         if disabled:
             options = [discord.SelectOption(label="No new fax/mail imports", value="empty")]
-        super().__init__(placeholder=f"Fax/Mail Imports: {len(imports)}", min_values=1, max_values=1, options=options, row=3, disabled=disabled)
+        super().__init__(placeholder=f"{FAX_MAIL_LABEL}: {len(imports)}", min_values=1, max_values=1, options=options, row=3, disabled=disabled)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         try:
