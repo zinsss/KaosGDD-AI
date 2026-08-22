@@ -2,6 +2,9 @@ import unittest
 
 from kaos_brain.governor_tools import (
     DocumentTagRequest,
+    FAMILY_EVENT_MARKER,
+    FAMILY_EVENT_SUFFIX,
+    PERSONAL_EVENT_MARKER,
     document_display_title,
     document_public_url,
     memo_option_label,
@@ -33,6 +36,11 @@ from kaos_brain.tool_intent import ToolKind, ToolRequest
 
 
 class GovernorToolRenderingTests(unittest.TestCase):
+    def test_event_markers_are_saved(self) -> None:
+        self.assertEqual(PERSONAL_EVENT_MARKER, "𝘎𝘋𝘋𝙕𝘪𝙉")
+        self.assertEqual(FAMILY_EVENT_MARKER, "𝘧𝘢𝘮𝘪𝘭𝘺")
+        self.assertEqual(FAMILY_EVENT_SUFFIX, "  • 𝘧𝘢𝘮𝘪𝘭𝘺")
+
     def test_render_today_context(self) -> None:
         context = render_tool_context(
             ToolRequest(ToolKind.TODAY),

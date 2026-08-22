@@ -28,6 +28,9 @@ from .markdown import NO_MENTIONS, escape_text
 
 
 LOGGER = logging.getLogger(__name__)
+PERSONAL_EVENT_MARKER = "𝘎𝘋𝘋𝙕𝘪𝙉"
+FAMILY_EVENT_MARKER = "𝘧𝘢𝘮𝘪𝘭𝘺"
+FAMILY_EVENT_SUFFIX = f"  • {FAMILY_EVENT_MARKER}"
 
 
 @dataclass(frozen=True)
@@ -443,7 +446,7 @@ def _collections_by_id(bootstrap: Mapping[str, Any]) -> dict[str, Mapping[str, A
 
 def agenda_owner_suffix(collection: Mapping[str, Any]) -> str:
     if str(collection.get("owner") or "").lower() == "family":
-        return "  • 𝘧𝘢𝘮𝘪𝘭𝘺"
+        return FAMILY_EVENT_SUFFIX
     return ""
 
 

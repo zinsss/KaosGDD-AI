@@ -13,6 +13,9 @@ from kaos_governor_discord.calendar import (
     CalendarNavigationView,
     DiscordCalendarState,
     DiscordCalendarSurface,
+    FAMILY_EVENT_MARKER,
+    FAMILY_EVENT_SUFFIX,
+    PERSONAL_EVENT_MARKER,
     agenda_owner_suffix,
     add_months,
     month_markers,
@@ -208,6 +211,11 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
     def test_agenda_owner_suffix_marks_family_and_hides_personal(self) -> None:
         self.assertEqual(agenda_owner_suffix({"owner": "zin", "ownerLabel": "GDD_ZiN"}), "")
         self.assertEqual(agenda_owner_suffix({"owner": "family", "ownerLabel": "Family"}), "  • 𝘧𝘢𝘮𝘪𝘭𝘺")
+
+    def test_event_markers_are_saved(self) -> None:
+        self.assertEqual(PERSONAL_EVENT_MARKER, "𝘎𝘋𝘋𝙕𝘪𝙉")
+        self.assertEqual(FAMILY_EVENT_MARKER, "𝘧𝘢𝘮𝘪𝘭𝘺")
+        self.assertEqual(FAMILY_EVENT_SUFFIX, "  • 𝘧𝘢𝘮𝘪𝘭𝘺")
 
     def test_agenda_keeps_days_without_events(self) -> None:
         content = render_agenda(

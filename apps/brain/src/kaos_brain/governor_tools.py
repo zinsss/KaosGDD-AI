@@ -10,6 +10,11 @@ from .task_update_intent import TaskActionRequest, TaskCreateRequest, TaskDueUpd
 from .tool_intent import ToolKind, ToolRequest
 
 
+PERSONAL_EVENT_MARKER = "𝘎𝘋𝘋𝙕𝘪𝙉"
+FAMILY_EVENT_MARKER = "𝘧𝘢𝘮𝘪𝘭𝘺"
+FAMILY_EVENT_SUFFIX = f"  • {FAMILY_EVENT_MARKER}"
+
+
 class GovernorToolError(RuntimeError):
     """Raised when KaosGovernor's Brain tool API cannot return a result."""
 
@@ -862,7 +867,7 @@ def _event_line(item: dict[str, Any]) -> str:
 
 def _event_owner_suffix(item: dict[str, Any]) -> str:
     owner = str(item.get("owner") or item.get("ownerLabel") or "").strip().lower()
-    return "  • 𝘧𝘢𝘮𝘪𝘭𝘺" if owner == "family" else ""
+    return FAMILY_EVENT_SUFFIX if owner == "family" else ""
 
 
 def _task_line(item: dict[str, Any]) -> str:

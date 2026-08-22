@@ -19,6 +19,7 @@ from .config import Settings
 from .event_intent import EventCreateRequest, parse_event_create
 from .governor_tools import (
     DocumentTagRequest,
+    FAMILY_EVENT_SUFFIX,
     GovernorToolClient,
     GovernorToolConfig,
     GovernorToolError,
@@ -2927,7 +2928,7 @@ def _calendar_weekly_event_line(event: dict[str, Any]) -> str:
 
 def _calendar_event_owner_suffix(event: dict[str, Any]) -> str:
     owner = str(event.get("owner") or event.get("ownerLabel") or "").strip().lower()
-    return "  • 𝘧𝘢𝘮𝘪𝘭𝘺" if owner == "family" else ""
+    return FAMILY_EVENT_SUFFIX if owner == "family" else ""
 
 
 def _shift_month(year: int, month: int, delta: int) -> tuple[int, int]:
