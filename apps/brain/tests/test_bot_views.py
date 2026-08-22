@@ -292,7 +292,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("## Calendar · Weekly", kwargs["content"])
         self.assertIn("⛅️ 23-28℃", kwargs["content"])
         self.assertIn("Clinic", kwargs["content"])
-        self.assertIn("School •𝘧𝘢𝘮𝘪𝘭𝘺", kwargs["content"])
+        self.assertIn("School  • 𝘧𝘢𝘮𝘪𝘭𝘺", kwargs["content"])
         self.assertNotIn("GDD_ZiN", kwargs["content"])
         self.assertEqual(kwargs["attachments"], [])
 

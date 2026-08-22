@@ -2927,7 +2927,7 @@ def _calendar_weekly_event_line(event: dict[str, Any]) -> str:
 
 def _calendar_event_owner_suffix(event: dict[str, Any]) -> str:
     owner = str(event.get("owner") or event.get("ownerLabel") or "").strip().lower()
-    return " •𝘧𝘢𝘮𝘪𝘭𝘺" if owner == "family" else ""
+    return "  • 𝘧𝘢𝘮𝘪𝘭𝘺" if owner == "family" else ""
 
 
 def _shift_month(year: int, month: int, delta: int) -> tuple[int, int]:

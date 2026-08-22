@@ -443,7 +443,7 @@ def _collections_by_id(bootstrap: Mapping[str, Any]) -> dict[str, Mapping[str, A
 
 def agenda_owner_suffix(collection: Mapping[str, Any]) -> str:
     if str(collection.get("owner") or "").lower() == "family":
-        return " •𝘧𝘢𝘮𝘪𝘭𝘺"
+        return "  • 𝘧𝘢𝘮𝘪𝘭𝘺"
     return ""
 
 

@@ -862,7 +862,7 @@ def _event_line(item: dict[str, Any]) -> str:
 
 def _event_owner_suffix(item: dict[str, Any]) -> str:
     owner = str(item.get("owner") or item.get("ownerLabel") or "").strip().lower()
-    return " •𝘧𝘢𝘮𝘪𝘭𝘺" if owner == "family" else ""
+    return "  • 𝘧𝘢𝘮𝘪𝘭𝘺" if owner == "family" else ""
 
 
 def _task_line(item: dict[str, Any]) -> str:
