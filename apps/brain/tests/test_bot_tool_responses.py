@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 import unittest
 
-from kaos_brain.bot import BrainBot
+from kaos_brain.bot import BrainBot, BrainCombinedSearchView
 from kaos_brain.governor_tools import GovernorToolError
 from kaos_brain.tool_intent import ToolKind, ToolRequest
 
@@ -46,16 +46,16 @@ class CombinedGovernorTools:
         if request.kind is ToolKind.MEMO_SEARCH:
             return {
                 "query": request.query,
-                "resultCount": 1,
-                "totalCount": 1,
-                "results": [{"name": "memos/42", "content": "# Rustdesk\nUse Tailscale.", "full": True}],
+                "resultCount": 30,
+                "totalCount": 30,
+                "results": [{"name": f"memos/{index}", "content": f"# Rustdesk {index}", "full": True} for index in range(25)],
             }
         if request.kind is ToolKind.DOCUMENT_SEARCH:
             return {
                 "query": request.query,
-                "resultCount": 1,
-                "totalCount": 1,
-                "results": [{"id": 42, "title": "Rustdesk setup"}],
+                "resultCount": 30,
+                "totalCount": 30,
+                "results": [{"id": index + 1, "title": f"Rustdesk setup {index + 1}"} for index in range(25)],
             }
         raise AssertionError(f"unexpected request: {request.kind}")
 
@@ -146,11 +146,22 @@ class BrainToolResponseTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertIn("Searched..\n## rustdesk", reply)
-        self.assertIn("### Memos · 1 results in 1", reply)
-        self.assertIn("# Rustdesk", reply)
-        self.assertIn("### Documents · 1 results in 1", reply)
-        self.assertIn("- Rustdesk setup · [open](https://paperless.example/documents/42/details)", reply)
+        self.assertIn("- Memos: 30 results in 30 memos", reply)
+        self.assertIn("- Paperless: 30 results in 30 documents", reply)
+        self.assertIn("- Memos: more than 25 found. First 25 shown.", reply)
+        self.assertIn("- Paperless: more than 25 found. First 25 shown.", reply)
+        self.assertNotIn("Rustdesk setup 1 · [open]", reply)
         self.assertIsNotNone(view)
+        self.assertIsInstance(view, BrainCombinedSearchView)
+        assert isinstance(view, BrainCombinedSearchView)
+        self.assertEqual(
+            [getattr(item, "placeholder", "") for item in view.children if getattr(item, "placeholder", "")],
+            ["Open memo", "Open document"],
+        )
+        self.assertEqual(
+            [getattr(item, "label", "") for item in view.children if getattr(item, "label", "")],
+            ["Paperless", "Memos"],
+        )
 
 
 if __name__ == "__main__":

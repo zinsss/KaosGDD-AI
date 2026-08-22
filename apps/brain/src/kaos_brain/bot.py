@@ -124,6 +124,18 @@ def _tool_cancelled(action: str) -> str:
     return f"{action} 취소했어요."
 
 
+def _payload_count(payload: dict[str, Any], *keys: str, fallback: int) -> int:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, bool):
+            continue
+        try:
+            return max(0, int(value))
+        except (TypeError, ValueError):
+            continue
+    return fallback
+
+
 def _is_openai_callback(text: str) -> bool:
     stripped = text.strip()
     return stripped.startswith(OPENAI_CALLBACK_PREFIX) or bool(OPENAI_CODE_PATTERN.match(stripped))
@@ -781,16 +793,23 @@ class BrainBot(discord.Client):
             ]
             document_payload = {**document_payload, "results": document_results}
             memo_results = search_results(memo_payload)
+            memo_results = search_results(memo_payload)
             view = (
-                BrainMemoSearchView(
+                BrainCombinedSearchView(
                     self.governor_tools,
                     actor_id,
                     tool_request.query,
                     memo_results,
+                    document_results,
+                    memo_count=_payload_count(memo_payload, "resultCount", "count", fallback=len(memo_results)),
+                    memo_total=_payload_count(memo_payload, "totalCount", fallback=len(memo_results)),
+                    document_count=_payload_count(document_payload, "resultCount", "count", fallback=len(document_results)),
+                    document_total=_payload_count(document_payload, "totalCount", "total", fallback=len(document_results)),
+                    paperless_public_url=self.settings.paperless_public_url,
                     memos_public_url=self.settings.memos_public_url,
                 )
-                if len(memo_results) > 1
-                else BrainTemporarySearchView(tool_request.query)
+                if memo_results or document_results
+                else None
             )
             return render_combined_search_context(tool_request.query, memo_payload, document_payload), view
         try:
@@ -1241,6 +1260,165 @@ class BrainMemoSearchSelect(discord.ui.Select):
         await interaction.followup.send(content, view=view, allowed_mentions=NO_MENTIONS)
         await self.parent_view.delete_message()
         self.parent_view.stop()
+
+
+class BrainCombinedSearchView(BrainTemporarySearchView):
+    def __init__(
+        self,
+        governor_tools: GovernorToolClient,
+        actor_id: int,
+        query: str,
+        memo_results: list[dict[str, Any]],
+        document_results: list[dict[str, Any]],
+        *,
+        memo_count: int = 0,
+        memo_total: int = 0,
+        document_count: int = 0,
+        document_total: int = 0,
+        paperless_public_url: str = "",
+        memos_public_url: str = "",
+    ) -> None:
+        super().__init__(query)
+        self.governor_tools = governor_tools
+        self.actor_id = actor_id
+        self.query = query
+        self.memo_results = memo_results[:25]
+        self.document_results = document_results[:25]
+        self.memo_count = memo_count or len(memo_results)
+        self.memo_total = memo_total or self.memo_count
+        self.document_count = document_count or len(document_results)
+        self.document_total = document_total or self.document_count
+        self.paperless_public_url = paperless_public_url
+        self.memos_public_url = memos_public_url
+        if self.memo_results:
+            self.add_item(BrainCombinedMemoSearchSelect(self))
+        if self.document_results:
+            self.add_item(BrainCombinedDocumentSearchSelect(self))
+        if self.document_results:
+            self.add_item(BrainCombinedSearchFullButton("Paperless", "documents"))
+        if self.memo_results:
+            self.add_item(BrainCombinedSearchFullButton("Memos", "memos"))
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if int(interaction.user.id) == self.actor_id:
+            return True
+        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+
+class BrainCombinedMemoSearchSelect(discord.ui.Select):
+    def __init__(self, parent: BrainCombinedSearchView) -> None:
+        self.parent_view = parent
+        options = [
+            discord.SelectOption(
+                label=memo_option_label(item),
+                description=memo_option_description(item) or None,
+                value=str(index),
+            )
+            for index, item in enumerate(parent.memo_results)
+        ]
+        super().__init__(placeholder="Open memo", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        try:
+            item = self.parent_view.memo_results[int(self.values[0])]
+            payload = await self.parent_view.governor_tools.get_memo(str(item.get("name") or ""))
+            memo = payload.get("memo")
+            if isinstance(memo, dict):
+                item = {**item, **memo, "full": True}
+            content = render_memo_opened(self.parent_view.query, item)
+        except (GovernorToolError, IndexError, TypeError, ValueError) as exc:
+            LOGGER.warning("Memo open failed: %s", exc)
+            await interaction.response.send_message(_tool_failed("메모 열기"), ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        view = BrainOpenedMemoView(self.parent_view.governor_tools, self.parent_view.actor_id, str(item.get("name") or ""), content)
+        await interaction.response.defer()
+        await interaction.followup.send(content, view=view, allowed_mentions=NO_MENTIONS)
+        await self.parent_view.delete_message()
+        self.parent_view.stop()
+
+
+class BrainCombinedDocumentSearchSelect(discord.ui.Select):
+    def __init__(self, parent: BrainCombinedSearchView) -> None:
+        self.parent_view = parent
+        options = [
+            discord.SelectOption(
+                label=document_option_label(item),
+                description=document_option_description(item) or None,
+                value=str(index),
+            )
+            for index, item in enumerate(parent.document_results)
+        ]
+        super().__init__(placeholder="Open document", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        try:
+            item = self.parent_view.document_results[int(self.values[0])]
+            payload = await self.parent_view.governor_tools.get_document(item.get("id"))
+            document = payload.get("document")
+            if isinstance(document, dict):
+                item = {**item, **document, "full": True}
+            content = render_document_opened(self.parent_view.query, item)
+        except (GovernorToolError, IndexError, TypeError, ValueError) as exc:
+            LOGGER.warning("Document open failed: %s", exc)
+            content = _tool_failed("문서 열기")
+        await interaction.response.defer()
+        await interaction.followup.send(
+            content,
+            view=BrainOpenedDocumentView(
+                self.parent_view.actor_id,
+                item if "item" in locals() else {},
+                paperless_public_url=self.parent_view.paperless_public_url,
+            ),
+            allowed_mentions=NO_MENTIONS,
+        )
+        await self.parent_view.delete_message()
+        self.parent_view.stop()
+
+
+class BrainCombinedSearchFullButton(discord.ui.Button):
+    def __init__(self, label: str, target: str) -> None:
+        super().__init__(label=label, style=discord.ButtonStyle.secondary)
+        self.target = target
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        parent = self.view
+        if not isinstance(parent, BrainCombinedSearchView):
+            await interaction.response.send_message(_tool_failed("조회"), ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        if self.target == "documents":
+            payload = {
+                "query": parent.query,
+                "results": parent.document_results,
+                "resultCount": parent.document_count,
+                "totalCount": parent.document_total,
+            }
+            content = render_tool_context(ToolRequest(ToolKind.DOCUMENT_SEARCH, parent.query), payload)
+            view: discord.ui.View = BrainDocumentSearchView(
+                parent.governor_tools,
+                parent.actor_id,
+                parent.query,
+                parent.document_results,
+                paperless_public_url=parent.paperless_public_url,
+            )
+        else:
+            payload = {
+                "query": parent.query,
+                "results": parent.memo_results,
+                "resultCount": parent.memo_count,
+                "totalCount": parent.memo_total,
+            }
+            content = render_tool_context(ToolRequest(ToolKind.MEMO_SEARCH, parent.query), payload)
+            view = BrainMemoSearchView(
+                parent.governor_tools,
+                parent.actor_id,
+                parent.query,
+                parent.memo_results,
+                memos_public_url=parent.memos_public_url,
+            )
+        view.bind_message(interaction.message)  # type: ignore[arg-type]
+        await interaction.response.edit_message(content=content, view=view, allowed_mentions=NO_MENTIONS)
+        parent.stop()
 
 
 class BrainOpenedMemoView(discord.ui.View):

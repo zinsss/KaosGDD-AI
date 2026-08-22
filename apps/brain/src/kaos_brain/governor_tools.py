@@ -61,7 +61,7 @@ class GovernorToolClient:
                 params["to"] = request.end
             return await self._get("/tools/tasks/completed", params)
         if request.kind is ToolKind.MEMO_SEARCH:
-            payload = await self._get("/tools/memos/search", {"query": request.query, "limit": "5"})
+            payload = await self._get("/tools/memos/search", {"query": request.query, "limit": "25"})
             return await self._with_single_memo_body(payload)
         if request.kind is ToolKind.DOCUMENT_SEARCH:
             return await self._get("/tools/documents/search", {"query": request.query, "limit": "25"})
@@ -627,20 +627,16 @@ def render_combined_search_context(
     lines = [
         "Searched..",
         f"## {query or '..'}",
-        f"### Memos · {memo_count} results in {memo_total}",
+        f"- Memos: {memo_count} results in {memo_total} memos",
+        f"- Paperless: {document_count} results in {document_total} documents",
     ]
-    if memo_results:
-        lines.extend(_memo_line(item) for item in memo_results[:3])
-        if memo_count > len(memo_results[:3]):
-            lines.append(f"- Showing first {len(memo_results[:3])} memos.")
-    else:
+    if memo_count > 25:
+        lines.append("- Memos: more than 25 found. First 25 shown.")
+    if document_count > 25:
+        lines.append("- Paperless: more than 25 found. First 25 shown.")
+    if not memo_results:
         lines.append("- No matching memos.")
-    lines.append(f"### Documents · {document_count} results in {document_total}")
-    if document_results:
-        lines.extend(_document_link_line(item) for item in document_results[:8])
-        if document_count > len(document_results[:8]):
-            lines.append(f"- Showing first {len(document_results[:8])} documents.")
-    else:
+    if not document_results:
         lines.append("- No matching documents.")
     return "\n".join(lines)[:1900]
 

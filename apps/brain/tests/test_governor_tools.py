@@ -429,7 +429,7 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             client.calls,
             [
-                ("/tools/memos/search", {"query": "rustdesk", "limit": "5"}),
+                ("/tools/memos/search", {"query": "rustdesk", "limit": "25"}),
                 ("/tools/memos/42", {}),
             ],
         )
@@ -511,7 +511,7 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         payload = await client.fetch(ToolRequest(ToolKind.MEMO_SEARCH, "rustdesk"))
-        self.assertEqual(client.calls, [("/tools/memos/search", {"query": "rustdesk", "limit": "5"})])
+        self.assertEqual(client.calls, [("/tools/memos/search", {"query": "rustdesk", "limit": "25"})])
         self.assertNotIn("content", payload["results"][0])
 
     async def test_event_create_uses_request_profile(self) -> None:
