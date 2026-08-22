@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
@@ -105,13 +106,14 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             governor_tools_supplies_collection_id="supplies:abc",
         )
 
-    def test_active_control_message_summarizes_tasks_and_supplies(self) -> None:
+    def test_active_control_message_uses_compact_date_header(self) -> None:
         content = render_active_control_message(
             [{"title": "Task"}],
             [{"title": "Supply"}],
+            now=datetime(2026, 9, 12),
         )
 
-        self.assertEqual(content, "## Active\n- Tasks: 1 active\n- Supplies: 1 active")
+        self.assertEqual(content, "# 2026.09.12(Sat)\nUpcoming Events - 3 days")
         self.assertEqual(ACTIVE_CONTROL_HISTORY_LIMIT, 20)
 
     def test_active_control_message_id_state_round_trips(self) -> None:
@@ -176,7 +178,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
 
         interaction.response.defer.assert_awaited_once()
         interaction.edit_original_response.assert_awaited_once()
-        self.assertIn("Tasks: 1 active", interaction.edit_original_response.await_args.kwargs["content"])
+        self.assertIn("Upcoming Events - 3 days", interaction.edit_original_response.await_args.kwargs["content"])
         refreshed = interaction.edit_original_response.await_args.kwargs["view"]
         self.assertEqual(
             [child.placeholder for child in refreshed.children if isinstance(child, BrainActiveControlSelect)],

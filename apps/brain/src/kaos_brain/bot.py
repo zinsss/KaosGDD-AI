@@ -74,7 +74,8 @@ DOCUMENT_TAG_SUGGESTION_PATTERN = re.compile(r"\b(?:document|doc|문서)?\s*(\d{
 BRAIN_SEARCH_WINDOW_SECONDS = 600
 OPENAI_CALLBACK_PREFIX = "http://localhost:1455/auth/callback?"
 OPENAI_CODE_PATTERN = re.compile(r"^ac_[A-Za-z0-9_.-]+$")
-ACTIVE_CONTROL_MARKER = "## Active"
+ACTIVE_CONTROL_MARKER = "# "
+ACTIVE_CONTROL_SUBTITLE = "Upcoming Events - 3 days"
 ACTIVE_CONTROL_LIMIT = 25
 ACTIVE_CONTROL_HISTORY_LIMIT = 20
 
@@ -923,7 +924,12 @@ class BrainBot(discord.Client):
             except discord.HTTPException:
                 self._active_control_message_id = 0
         async for message in channel.history(limit=ACTIVE_CONTROL_HISTORY_LIMIT):
-            if message.author.id == self.user.id and str(message.content or "").startswith(ACTIVE_CONTROL_MARKER):
+            content = str(message.content or "")
+            if (
+                message.author.id == self.user.id
+                and content.startswith(ACTIVE_CONTROL_MARKER)
+                and content.splitlines()[1:2] == [ACTIVE_CONTROL_SUBTITLE]
+            ):
                 return message
         return None
 
@@ -1870,17 +1876,19 @@ class BrainCompletedTasksSelect(discord.ui.Select):
         )
 
 
-def render_active_control_message(tasks: list[dict[str, Any]], supplies: list[dict[str, Any]]) -> str:
-    lines = [
-        ACTIVE_CONTROL_MARKER,
-        f"- Tasks: {len(tasks)} active",
-        f"- Supplies: {len(supplies)} active",
-    ]
-    if len(tasks) > ACTIVE_CONTROL_LIMIT:
-        lines.append(f"- Tasks dropdown shows first {ACTIVE_CONTROL_LIMIT}.")
-    if len(supplies) > ACTIVE_CONTROL_LIMIT:
-        lines.append(f"- Supplies dropdown shows first {ACTIVE_CONTROL_LIMIT}.")
-    return "\n".join(lines)
+def render_active_control_message(
+    tasks: list[dict[str, Any]],
+    supplies: list[dict[str, Any]],
+    *,
+    now: datetime | None = None,
+) -> str:
+    current = now or datetime.now(KST)
+    return "\n".join(
+        [
+            f"# {current:%Y.%m.%d}({current:%a})",
+            ACTIVE_CONTROL_SUBTITLE,
+        ]
+    )
 
 
 class BrainActiveControlView(discord.ui.View):
