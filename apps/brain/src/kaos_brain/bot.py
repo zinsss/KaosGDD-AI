@@ -79,6 +79,7 @@ BRAIN_SEARCH_WINDOW_SECONDS = 600
 OPENAI_CALLBACK_PREFIX = "http://localhost:1455/auth/callback?"
 OPENAI_CODE_PATTERN = re.compile(r"^ac_[A-Za-z0-9_.-]+$")
 ACTIVE_CONTROL_MARKER = "# "
+SERVICE_MENU_MARKER = "\u200b"
 ACTIVE_CONTROL_LIMIT = 25
 ACTIVE_CONTROL_HISTORY_LIMIT = 20
 ACTIVE_TASKS_LABEL = "𝓐𝓬𝓽𝓲𝓿𝓮 𝓣𝓪𝓼𝓴𝓼"
@@ -135,6 +136,14 @@ def _tool_failed(action: str) -> str:
 
 
 def _read_active_control_message_id(path: str) -> int:
+    return _read_active_control_state_value(path, "messageId")
+
+
+def _read_active_control_service_message_id(path: str) -> int:
+    return _read_active_control_state_value(path, "serviceMessageId")
+
+
+def _read_active_control_state_value(path: str, key: str) -> int:
     if not path:
         return 0
     try:
@@ -142,19 +151,30 @@ def _read_active_control_message_id(path: str) -> int:
     except (OSError, json.JSONDecodeError):
         return 0
     try:
-        message_id = int(payload.get("messageId", 0))
+        message_id = int(payload.get(key, 0))
     except (TypeError, ValueError):
         return 0
     return message_id if message_id > 0 else 0
 
 
-def _write_active_control_message_id(path: str, message_id: int) -> None:
-    if not path or message_id <= 0:
+def _write_active_control_message_id(path: str, message_id: int, service_message_id: int = 0) -> None:
+    if not path or (message_id <= 0 and service_message_id <= 0):
         return
     state_path = Path(path)
     state_path.parent.mkdir(parents=True, exist_ok=True)
+    payload: dict[str, int] = {}
+    try:
+        existing = json.loads(state_path.read_text(encoding="utf-8"))
+        if isinstance(existing, dict):
+            payload.update({key: int(value) for key, value in existing.items() if key in {"messageId", "serviceMessageId"}})
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        payload = {}
+    if message_id > 0:
+        payload["messageId"] = message_id
+    if service_message_id > 0:
+        payload["serviceMessageId"] = service_message_id
     tmp_path = state_path.with_suffix(f"{state_path.suffix}.tmp")
-    tmp_path.write_text(json.dumps({"messageId": message_id}, separators=(",", ":")), encoding="utf-8")
+    tmp_path.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
     tmp_path.replace(state_path)
 
 
@@ -383,6 +403,7 @@ class BrainBot(discord.Client):
             else None
         )
         self._active_control_message_id = _read_active_control_message_id(settings.active_control_state_path)
+        self._active_control_service_message_id = _read_active_control_service_message_id(settings.active_control_state_path)
         self._active_control_refresh_task: asyncio.Task[None] | None = None
 
     async def on_ready(self) -> None:
@@ -927,8 +948,19 @@ class BrainBot(discord.Client):
                     kwargs["attachments"] = [month_file]
                 await message.edit(**kwargs)
             self._active_control_message_id = int(message.id)
+            service_message = await self._find_active_control_service_message(channel)
+            service_view = BrainServiceMenuView(self.governor_tools, self.settings)
+            if service_message is None:
+                service_message = await channel.send(SERVICE_MENU_MARKER, view=service_view, allowed_mentions=NO_MENTIONS)
+            else:
+                await service_message.edit(content=SERVICE_MENU_MARKER, view=service_view, allowed_mentions=NO_MENTIONS)
+            self._active_control_service_message_id = int(service_message.id)
             try:
-                _write_active_control_message_id(self.settings.active_control_state_path, self._active_control_message_id)
+                _write_active_control_message_id(
+                    self.settings.active_control_state_path,
+                    self._active_control_message_id,
+                    self._active_control_service_message_id,
+                )
             except OSError as exc:
                 LOGGER.warning("Active control message state write failed: %s", exc)
         except Exception as exc:
@@ -946,6 +978,18 @@ class BrainBot(discord.Client):
                 message.author.id == self.user.id
                 and content.startswith(ACTIVE_CONTROL_MARKER)
             ):
+                return message
+        return None
+
+    async def _find_active_control_service_message(self, channel: discord.TextChannel | discord.Thread) -> discord.Message | None:
+        if self._active_control_service_message_id:
+            try:
+                return await channel.fetch_message(self._active_control_service_message_id)
+            except discord.HTTPException:
+                self._active_control_service_message_id = 0
+        async for message in channel.history(limit=ACTIVE_CONTROL_HISTORY_LIMIT):
+            content = str(message.content or "")
+            if message.author.id == self.user.id and content == SERVICE_MENU_MARKER:
                 return message
         return None
 
@@ -1956,7 +2000,65 @@ class BrainActiveControlView(discord.ui.View):
             )
         return ToolRequest(ToolKind.ACTIVE_TASKS, profile=self.settings.governor_tools_profile)
 
-    @discord.ui.button(label=CALENDAR_LABEL, style=discord.ButtonStyle.secondary, row=4)
+    async def refresh_items(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+        events_payload = await self.governor_tools.fetch(
+            ToolRequest(ToolKind.UPCOMING_EVENTS, profile=self.settings.governor_tools_profile)
+        )
+        tasks_payload = await self.governor_tools.fetch(
+            ToolRequest(ToolKind.ACTIVE_TASKS, profile=self.settings.governor_tools_profile)
+        )
+        supplies_payload = await self.governor_tools.fetch(
+            ToolRequest(
+                ToolKind.ACTIVE_TASKS,
+                profile="supplies",
+                collection_id=self.settings.governor_tools_supplies_collection_id,
+            )
+        )
+        imports_payload = await self.governor_tools.fetch(
+            ToolRequest(ToolKind.RECENT_IMPORTS, profile=self.settings.governor_tools_profile)
+        )
+        return _event_results(events_payload), _task_results(tasks_payload), _task_results(supplies_payload), _import_results(imports_payload)
+
+    @discord.ui.button(label="Reload", style=discord.ButtonStyle.primary, row=4)
+    async def refresh(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer()
+        try:
+            events, tasks, supplies, imports = await self.refresh_items()
+        except GovernorToolError as exc:
+            LOGGER.warning("Active control refresh failed: %s", exc)
+            await interaction.followup.send(_tool_failed("Active 갱신"), ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        kwargs: dict[str, Any] = {
+            "content": render_active_control_message(events, tasks, supplies),
+            "view": BrainActiveControlView(self.governor_tools, self.settings, events, tasks, supplies, imports),
+            "allowed_mentions": NO_MENTIONS,
+        }
+        month_file = await _active_control_month_file_for(
+            self.governor_tools,
+            profile=self.settings.governor_tools_profile,
+        )
+        if month_file is not None:
+            kwargs["attachments"] = [month_file]
+        await interaction.edit_original_response(**kwargs)
+
+
+class BrainServiceMenuView(discord.ui.View):
+    def __init__(self, governor_tools: GovernorToolClient, settings: Settings) -> None:
+        super().__init__(timeout=None)
+        self.governor_tools = governor_tools
+        self.settings = settings
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if (
+            interaction.guild_id == self.settings.guild_id
+            and interaction.channel_id == self.settings.brain_channel_id
+            and int(interaction.user.id) in self.settings.allowed_user_ids
+        ):
+            return True
+        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+    @discord.ui.button(label=CALENDAR_LABEL, style=discord.ButtonStyle.secondary)
     async def calendar_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
         current = datetime.now(KST).date()
@@ -1977,7 +2079,7 @@ class BrainActiveControlView(discord.ui.View):
             kwargs["file"] = file
         await interaction.followup.send(**kwargs)
 
-    @discord.ui.button(label=ACTIVE_TASKS_LABEL, style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label=ACTIVE_TASKS_LABEL, style=discord.ButtonStyle.secondary)
     async def tasks_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
         try:
@@ -2002,7 +2104,7 @@ class BrainActiveControlView(discord.ui.View):
             allowed_mentions=NO_MENTIONS,
         )
 
-    @discord.ui.button(label=SUPPLIES_SHOPPING_LIST_LABEL, style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label=SUPPLIES_SHOPPING_LIST_LABEL, style=discord.ButtonStyle.secondary)
     async def supplies_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
         request = ToolRequest(
@@ -2023,7 +2125,7 @@ class BrainActiveControlView(discord.ui.View):
             allowed_mentions=NO_MENTIONS,
         )
 
-    @discord.ui.button(label=PAPERLESS_LABEL, style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label=PAPERLESS_LABEL, style=discord.ButtonStyle.secondary)
     async def paperless_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_message(
             "Paperless: use `..keyword` to search documents, or `..ALL` to browse documents.",
@@ -2031,7 +2133,7 @@ class BrainActiveControlView(discord.ui.View):
             allowed_mentions=NO_MENTIONS,
         )
 
-    @discord.ui.button(label=MEMOS_LABEL, style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label=MEMOS_LABEL, style=discord.ButtonStyle.secondary)
     async def memos_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_message(
             "Memos: use `..keyword` to search memos.",
