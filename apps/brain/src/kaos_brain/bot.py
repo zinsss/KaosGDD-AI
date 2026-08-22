@@ -88,7 +88,6 @@ UPCOMING_EVENTS_LABEL = "𝓤𝓹𝓬𝓸𝓶𝓲𝓷𝓰 𝓔𝓿𝓮𝓷𝓽�
 PAPERLESS_LABEL = "𝓟𝓪𝓹𝓮𝓻𝓵𝓮𝓼𝓼"
 MEMOS_LABEL = "𝓜𝓮𝓶𝓸𝓼"
 FAX_MAIL_LABEL = "𝓕𝓪𝔁 𝓜𝓪𝓲𝓵"
-KNOWLEDGE_LABEL = f"{PAPERLESS_LABEL} / {MEMOS_LABEL}"
 
 
 def _bind_view_message(view: discord.ui.View | None, message: discord.Message) -> None:
@@ -1957,25 +1956,6 @@ class BrainActiveControlView(discord.ui.View):
             )
         return ToolRequest(ToolKind.ACTIVE_TASKS, profile=self.settings.governor_tools_profile)
 
-    async def refresh_items(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
-        events_payload = await self.governor_tools.fetch(
-            ToolRequest(ToolKind.UPCOMING_EVENTS, profile=self.settings.governor_tools_profile)
-        )
-        tasks_payload = await self.governor_tools.fetch(
-            ToolRequest(ToolKind.ACTIVE_TASKS, profile=self.settings.governor_tools_profile)
-        )
-        supplies_payload = await self.governor_tools.fetch(
-            ToolRequest(
-                ToolKind.ACTIVE_TASKS,
-                profile="supplies",
-                collection_id=self.settings.governor_tools_supplies_collection_id,
-            )
-        )
-        imports_payload = await self.governor_tools.fetch(
-            ToolRequest(ToolKind.RECENT_IMPORTS, profile=self.settings.governor_tools_profile)
-        )
-        return _event_results(events_payload), _task_results(tasks_payload), _task_results(supplies_payload), _import_results(imports_payload)
-
     @discord.ui.button(label=CALENDAR_LABEL, style=discord.ButtonStyle.secondary, row=4)
     async def calendar_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
@@ -2043,31 +2023,21 @@ class BrainActiveControlView(discord.ui.View):
             allowed_mentions=NO_MENTIONS,
         )
 
-    @discord.ui.button(label=KNOWLEDGE_LABEL, style=discord.ButtonStyle.secondary, row=4)
-    async def knowledge_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_message("Search with `..keyword`. Use `..ALL` in Documents for document browse.", ephemeral=True, allowed_mentions=NO_MENTIONS)
-
-    @discord.ui.button(label="Reload", style=discord.ButtonStyle.primary, row=4)
-    async def refresh(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.defer()
-        try:
-            events, tasks, supplies, imports = await self.refresh_items()
-        except GovernorToolError as exc:
-            LOGGER.warning("Active control refresh failed: %s", exc)
-            await interaction.followup.send(_tool_failed("Active 갱신"), ephemeral=True, allowed_mentions=NO_MENTIONS)
-            return
-        kwargs: dict[str, Any] = {
-            "content": render_active_control_message(events, tasks, supplies),
-            "view": BrainActiveControlView(self.governor_tools, self.settings, events, tasks, supplies, imports),
-            "allowed_mentions": NO_MENTIONS,
-        }
-        month_file = await _active_control_month_file_for(
-            self.governor_tools,
-            profile=self.settings.governor_tools_profile,
+    @discord.ui.button(label=PAPERLESS_LABEL, style=discord.ButtonStyle.secondary, row=4)
+    async def paperless_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_message(
+            "Paperless: use `..keyword` to search documents, or `..ALL` to browse documents.",
+            ephemeral=True,
+            allowed_mentions=NO_MENTIONS,
         )
-        if month_file is not None:
-            kwargs["attachments"] = [month_file]
-        await interaction.edit_original_response(**kwargs)
+
+    @discord.ui.button(label=MEMOS_LABEL, style=discord.ButtonStyle.secondary, row=4)
+    async def memos_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_message(
+            "Memos: use `..keyword` to search memos.",
+            ephemeral=True,
+            allowed_mentions=NO_MENTIONS,
+        )
 
 
 class BrainCalendarMonthView(discord.ui.View):

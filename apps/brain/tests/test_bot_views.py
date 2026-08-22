@@ -32,7 +32,8 @@ from kaos_brain.bot import (
     BrainMemoSearchView,
     CALENDAR_LABEL,
     FAX_MAIL_LABEL,
-    KNOWLEDGE_LABEL,
+    MEMOS_LABEL,
+    PAPERLESS_LABEL,
     SUPPLIES_SHOPPING_LIST_LABEL,
     TaskCreateConfirmationView,
     UPCOMING_EVENTS_LABEL,
@@ -221,7 +222,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(
             [getattr(child, "label", "") for child in view.children if getattr(child, "label", "")],
-            [CALENDAR_LABEL, ACTIVE_TASKS_LABEL, SUPPLIES_SHOPPING_LIST_LABEL, KNOWLEDGE_LABEL, "Reload"],
+            [CALENDAR_LABEL, ACTIVE_TASKS_LABEL, SUPPLIES_SHOPPING_LIST_LABEL, PAPERLESS_LABEL, MEMOS_LABEL],
         )
 
     async def test_tasks_button_calls_up_active_tasks_message(self) -> None:
@@ -307,39 +308,30 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("GDD_ZiN", kwargs["content"])
         self.assertEqual(kwargs["attachments"], [])
 
-    async def test_active_control_refresh_rebuilds_dropdowns(self) -> None:
+    async def test_paperless_and_memos_buttons_are_separate(self) -> None:
         view = BrainActiveControlView(
             FakeGovernorTools(),  # type: ignore[arg-type]
             self.active_control_settings(),
-            [{"title": "Clinic", "date": "2026-08-22", "time": "10:50", "ownerLabel": "Family"}],
+            [],
             [],
             [],
             [],
         )
-        refresh = next(child for child in view.children if getattr(child, "label", "") == "Reload")
+        paperless = next(child for child in view.children if getattr(child, "label", "") == PAPERLESS_LABEL)
+        memos = next(child for child in view.children if getattr(child, "label", "") == MEMOS_LABEL)
         interaction = SimpleNamespace(
             guild_id=100,
             channel_id=300,
             user=SimpleNamespace(id=200),
-            response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
-            edit_original_response=AsyncMock(),
-            followup=SimpleNamespace(send=AsyncMock()),
+            response=SimpleNamespace(send_message=AsyncMock()),
         )
 
-        await refresh.callback(interaction)  # type: ignore[arg-type,union-attr]
+        await paperless.callback(interaction)  # type: ignore[arg-type,union-attr]
+        await memos.callback(interaction)  # type: ignore[arg-type,union-attr]
 
-        interaction.response.defer.assert_awaited_once()
-        interaction.edit_original_response.assert_awaited_once()
-        self.assertTrue(interaction.edit_original_response.await_args.kwargs["content"].startswith("# "))
-        refreshed = interaction.edit_original_response.await_args.kwargs["view"]
-        self.assertEqual(
-            [
-                child.placeholder
-                for child in refreshed.children
-                if isinstance(child, BrainActiveControlSelect | BrainUpcomingEventsSelect)
-            ],
-            [f"{UPCOMING_EVENTS_LABEL}: 1", f"{ACTIVE_TASKS_LABEL}: 1", f"{SUPPLIES_SHOPPING_LIST_LABEL}: 1"],
-        )
+        calls = interaction.response.send_message.await_args_list
+        self.assertIn("Paperless", calls[0].args[0])
+        self.assertIn("Memos", calls[1].args[0])
 
     async def test_upcoming_event_select_opens_detail_message(self) -> None:
         view = BrainActiveControlView(
