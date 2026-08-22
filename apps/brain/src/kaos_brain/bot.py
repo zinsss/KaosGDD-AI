@@ -84,6 +84,8 @@ ACTIVE_CONTROL_MARKER = "# "
 SERVICE_MENU_MARKER = "\u200b"
 ACTIVE_CONTROL_LIMIT = 25
 ACTIVE_CONTROL_HISTORY_LIMIT = 20
+TASK_SERVICE_PAGE_SIZE = 25
+TASK_SERVICE_HISTORY_LIMIT = 250
 TASKS_SERVICE_BUTTON_LABEL = "Tasks"
 ACTIVE_TASKS_LABEL = "Active Tasks"
 CALENDAR_LABEL = "Calendar"
@@ -2099,16 +2101,15 @@ class BrainServiceMenuView(discord.ui.View):
             await interaction.followup.send(_tool_failed("할 일 불러오기"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         tasks = _task_results(payload)
+        view = BrainActiveTasksView(
+            self.governor_tools,
+            int(interaction.user.id),
+            ToolRequest(ToolKind.ACTIVE_TASKS, profile=self.settings.governor_tools_profile),
+            tasks,
+        )
         await interaction.followup.send(
-            _render_active_service_message(ACTIVE_TASKS_TITLE, tasks),
-            view=BrainActiveTasksView(
-                self.governor_tools,
-                int(interaction.user.id),
-                ToolRequest(ToolKind.ACTIVE_TASKS, profile=self.settings.governor_tools_profile),
-                tasks,
-            )
-            if tasks
-            else None,
+            view.content(),
+            view=view,
             allowed_mentions=NO_MENTIONS,
         )
 
@@ -2127,9 +2128,10 @@ class BrainServiceMenuView(discord.ui.View):
             await interaction.followup.send(_tool_failed("비품 불러오기"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         supplies = _task_results(payload)
+        view = BrainActiveTasksView(self.governor_tools, int(interaction.user.id), request, supplies)
         await interaction.followup.send(
-            _render_active_service_message(SUPPLIES_TITLE, supplies, supplies=True),
-            view=BrainActiveTasksView(self.governor_tools, int(interaction.user.id), request, supplies) if supplies else None,
+            view.content(),
+            view=view,
             allowed_mentions=NO_MENTIONS,
         )
 
@@ -2365,19 +2367,113 @@ class BrainImportSelect(discord.ui.Select):
 
 
 class BrainActiveTasksView(discord.ui.View):
-    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, request: ToolRequest, tasks: list[dict[str, Any]]) -> None:
+    def __init__(
+        self,
+        governor_tools: GovernorToolClient,
+        actor_id: int,
+        request: ToolRequest,
+        tasks: list[dict[str, Any]],
+        *,
+        mode: str = "active",
+        page: int = 0,
+        month: date | None = None,
+    ) -> None:
         super().__init__(timeout=600)
         self.governor_tools = governor_tools
         self.actor_id = actor_id
         self.request = request
-        self.tasks = tasks[:25]
-        self.add_item(BrainActiveTasksSelect(self))
+        self.tasks = tasks
+        self.mode = "history" if mode == "history" else "active"
+        self.page = max(0, page)
+        self.month = (month or datetime.now(KST).date()).replace(day=1)
+        self._rebuild_items()
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if int(interaction.user.id) == self.actor_id:
             return True
         await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
         return False
+
+    @property
+    def supplies(self) -> bool:
+        return _uses_supplies_request(self.request)
+
+    @property
+    def title(self) -> str:
+        if self.mode == "history":
+            return f"{SUPPLIES_TITLE if self.supplies else ACTIVE_TASKS_TITLE} History · {self.month:%Y.%m}"
+        return SUPPLIES_TITLE if self.supplies else ACTIVE_TASKS_TITLE
+
+    @property
+    def page_tasks(self) -> list[dict[str, Any]]:
+        start = self.page * TASK_SERVICE_PAGE_SIZE
+        return self.tasks[start : start + TASK_SERVICE_PAGE_SIZE]
+
+    @property
+    def max_page(self) -> int:
+        if not self.tasks:
+            return 0
+        return (len(self.tasks) - 1) // TASK_SERVICE_PAGE_SIZE
+
+    def content(self) -> str:
+        return _render_task_service_message(
+            self.title,
+            self.tasks,
+            page=self.page,
+            history=self.mode == "history",
+            supplies=self.supplies,
+        )
+
+    def _rebuild_items(self) -> None:
+        self.clear_items()
+        if self.page > self.max_page:
+            self.page = self.max_page
+        if self.mode == "history":
+            if self.page_tasks:
+                self.add_item(BrainTaskHistorySelect(self))
+            self.add_item(BrainTaskServiceMonthButton("<<", -1))
+            self.add_item(BrainTaskServicePageButton("←", -1, disabled=self.page <= 0))
+            self.add_item(BrainTaskServicePageButton("→", 1, disabled=self.page >= self.max_page))
+            self.add_item(BrainTaskServiceMonthButton(">>", 1))
+            self.add_item(BrainTaskServiceModeButton("Active"))
+            self.add_item(BrainTaskServiceCloseButton())
+            return
+        if self.page_tasks:
+            self.add_item(BrainActiveTasksSelect(self))
+        self.add_item(BrainTaskServicePageButton("←", -1, disabled=self.page <= 0))
+        self.add_item(BrainTaskServicePageButton("→", 1, disabled=self.page >= self.max_page))
+        self.add_item(BrainTaskServiceModeButton("History"))
+        self.add_item(BrainTaskServiceCloseButton())
+
+    async def edit_message(self, interaction: discord.Interaction) -> None:
+        self._rebuild_items()
+        await interaction.edit_original_response(content=self.content(), view=self)
+
+    async def fetch_history(self, *, month: date | None = None, page: int = 0) -> "BrainActiveTasksView":
+        month_start = (month or self.month).replace(day=1)
+        month_end = _month_end(month_start)
+        request = ToolRequest(
+            ToolKind.COMPLETED_TASKS,
+            profile=self.request.profile,
+            collection_id=self.request.collection_id,
+            start=month_start.isoformat(),
+            end=month_end.isoformat(),
+        )
+        payload = await self.governor_tools.completed_tasks(request, limit=TASK_SERVICE_HISTORY_LIMIT)
+        return BrainActiveTasksView(
+            self.governor_tools,
+            self.actor_id,
+            request,
+            _task_results(payload),
+            mode="history",
+            page=page,
+            month=month_start,
+        )
+
+    async def fetch_active(self) -> "BrainActiveTasksView":
+        request = ToolRequest(ToolKind.ACTIVE_TASKS, profile=self.request.profile, collection_id=self.request.collection_id)
+        payload = await self.governor_tools.fetch(request)
+        return BrainActiveTasksView(self.governor_tools, self.actor_id, request, _task_results(payload), mode="active")
 
 
 class BrainActiveTasksSelect(discord.ui.Select):
@@ -2394,14 +2490,16 @@ class BrainActiveTasksSelect(discord.ui.Select):
                 or None,
                 value=str(index),
             )
-            for index, task in enumerate(parent.tasks)
+            for index, task in enumerate(parent.page_tasks)
         ]
-        label = "Active Supplies" if _uses_supplies_request(parent.request) else "Active Tasks"
-        super().__init__(placeholder=f"{label}: {len(parent.tasks)}", min_values=1, max_values=1, options=options)
+        start = parent.page * TASK_SERVICE_PAGE_SIZE + 1
+        end = start + len(parent.page_tasks) - 1
+        label = "Supplies" if parent.supplies else "Active Tasks"
+        super().__init__(placeholder=f"{label} {start}-{end}", min_values=1, max_values=1, options=options, row=0)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         try:
-            task = self.parent_view.tasks[int(self.values[0])]
+            task = self.parent_view.page_tasks[int(self.values[0])]
             title = str(task.get("title") or task.get("summary") or "").strip()
             if not title:
                 raise ValueError("missing task title")
@@ -2420,6 +2518,110 @@ class BrainActiveTasksSelect(discord.ui.Select):
             ),
             allowed_mentions=NO_MENTIONS,
         )
+
+
+class BrainTaskHistorySelect(discord.ui.Select):
+    def __init__(self, parent: BrainActiveTasksView) -> None:
+        self.parent_view = parent
+        options = [
+            discord.SelectOption(
+                label=_task_option_label(task),
+                description=_task_option_description(task, supplies=parent.supplies) or None,
+                value=str(index),
+            )
+            for index, task in enumerate(parent.page_tasks)
+        ]
+        start = parent.page * TASK_SERVICE_PAGE_SIZE + 1
+        end = start + len(parent.page_tasks) - 1
+        label = "Completed Supplies" if parent.supplies else "Completed Tasks"
+        super().__init__(placeholder=f"{label} {start}-{end}", min_values=1, max_values=1, options=options, row=0)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        try:
+            task = self.parent_view.page_tasks[int(self.values[0])]
+            title = str(task.get("title") or task.get("summary") or "").strip()
+            if not title:
+                raise ValueError("missing task title")
+        except (IndexError, TypeError, ValueError) as exc:
+            LOGGER.warning("Completed task selection failed: %s", exc)
+            await interaction.response.send_message(_tool_failed("완료 할 일 선택"), ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.response.defer()
+        await interaction.followup.send(
+            _render_completed_task_selection(title, task, supplies=self.parent_view.supplies),
+            view=BrainCompletedTaskActionsView(
+                self.parent_view.governor_tools,
+                self.parent_view.actor_id,
+                self.parent_view.request,
+                task,
+            ),
+            allowed_mentions=NO_MENTIONS,
+        )
+
+
+class BrainTaskServicePageButton(discord.ui.Button):
+    def __init__(self, label: str, delta: int, *, disabled: bool = False) -> None:
+        super().__init__(label=label, style=discord.ButtonStyle.secondary, row=1, disabled=disabled)
+        self.delta = delta
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        if not isinstance(view, BrainActiveTasksView):
+            await interaction.response.send_message("View unavailable.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.response.defer()
+        view.page = min(max(view.page + self.delta, 0), view.max_page)
+        await view.edit_message(interaction)
+
+
+class BrainTaskServiceMonthButton(discord.ui.Button):
+    def __init__(self, label: str, delta: int) -> None:
+        super().__init__(label=label, style=discord.ButtonStyle.secondary, row=1)
+        self.delta = delta
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        if not isinstance(view, BrainActiveTasksView):
+            await interaction.response.send_message("View unavailable.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.response.defer()
+        try:
+            next_view = await view.fetch_history(month=_shift_date_month(view.month, self.delta), page=0)
+        except GovernorToolError as exc:
+            LOGGER.warning("Task history month failed: %s", exc)
+            await interaction.followup.send(_tool_failed("완료 목록 불러오기"), ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.edit_original_response(content=next_view.content(), view=next_view)
+
+
+class BrainTaskServiceModeButton(discord.ui.Button):
+    def __init__(self, label: str) -> None:
+        super().__init__(label=label, style=discord.ButtonStyle.primary if label == "Active" else discord.ButtonStyle.secondary, row=2)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        if not isinstance(view, BrainActiveTasksView):
+            await interaction.response.send_message("View unavailable.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.response.defer()
+        try:
+            next_view = await view.fetch_active() if self.label == "Active" else await view.fetch_history(page=0)
+        except GovernorToolError as exc:
+            LOGGER.warning("Task service mode switch failed: %s", exc)
+            await interaction.followup.send(_tool_failed("할 일 목록 불러오기"), ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.edit_original_response(content=next_view.content(), view=next_view)
+
+
+class BrainTaskServiceCloseButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label="Close", style=discord.ButtonStyle.secondary, row=2)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.message is None:
+            await interaction.response.send_message("Closed.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.message.delete()
 
 
 class BrainActiveTaskActionsView(discord.ui.View):
@@ -2472,6 +2674,86 @@ class BrainActiveTaskActionsView(discord.ui.View):
         except GovernorToolError as exc:
             LOGGER.warning("Task action failed action=%s: %s", action, exc)
             await interaction.response.send_message(_tool_failed("할 일 변경"), ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.response.edit_message(
+            content=render_task_action_proposal(payload),
+            view=TaskActionConfirmationView(self.governor_tools, self.actor_id, str(payload.get("confirmationId") or "")),
+            allowed_mentions=NO_MENTIONS,
+        )
+        self.stop()
+
+
+class BrainCompletedTaskActionsView(discord.ui.View):
+    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, request: ToolRequest, task: dict[str, Any]) -> None:
+        super().__init__(timeout=600)
+        self.governor_tools = governor_tools
+        self.actor_id = actor_id
+        self.request = request
+        self.task = task
+        self.title = str(task.get("title") or task.get("summary") or "").strip()
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if int(interaction.user.id) == self.actor_id:
+            return True
+        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+    @discord.ui.button(label="Undo", style=discord.ButtonStyle.success)
+    async def undo(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await self._propose_action(interaction, "reopen")
+
+    @discord.ui.button(label="Make New", style=discord.ButtonStyle.primary)
+    async def make_new(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        try:
+            payload = await self.governor_tools.propose_task_create(
+                TaskCreateRequest(
+                    self.title,
+                    "",
+                    "",
+                    profile=self.request.profile,
+                    collection_id=self.request.collection_id,
+                ),
+                actor_id=self.actor_id,
+                idempotency_key=f"brain-task-make-new-{interaction.id}",
+            )
+        except GovernorToolError as exc:
+            LOGGER.warning("Completed task make-new failed: %s", exc)
+            await interaction.response.send_message(_tool_failed("할 일 다시 만들기"), ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.response.edit_message(
+            content=render_task_create_proposal(payload),
+            view=TaskCreateConfirmationView(self.governor_tools, self.actor_id, str(payload.get("confirmationId") or "")),
+            allowed_mentions=NO_MENTIONS,
+        )
+        self.stop()
+
+    @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger)
+    async def delete(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await self._propose_action(interaction, "delete")
+
+    @discord.ui.button(label="Close", style=discord.ButtonStyle.secondary)
+    async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if interaction.message is None:
+            await interaction.response.send_message("Closed.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.message.delete()
+
+    async def _propose_action(self, interaction: discord.Interaction, action: str) -> None:
+        try:
+            payload = await self.governor_tools.propose_task_action(
+                TaskActionRequest(
+                    self.title,
+                    action,
+                    profile=self.request.profile,
+                    collection_id=self.request.collection_id,
+                    uid=str(self.task.get("uid") or ""),
+                ),
+                actor_id=self.actor_id,
+                idempotency_key=f"brain-task-{action}-{interaction.id}",
+            )
+        except GovernorToolError as exc:
+            LOGGER.warning("Completed task action failed action=%s: %s", action, exc)
+            await interaction.response.send_message(_tool_failed("완료 할 일 변경"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         await interaction.response.edit_message(
             content=render_task_action_proposal(payload),
@@ -2970,6 +3252,60 @@ def _render_active_task_selection(title: str, task: dict[str, Any], *, supplies:
     return "\n".join(lines)
 
 
+def _render_completed_task_selection(title: str, task: dict[str, Any], *, supplies: bool) -> str:
+    display = f"~~{title}~~"
+    lines = [f"## {display}"]
+    if not supplies:
+        completed = str(task.get("completedDate") or task.get("completed") or task.get("completedAt") or "").strip()[:10]
+        if completed:
+            lines.append(f"- completed: {completed}")
+    return "\n".join(lines)
+
+
+def _render_task_service_message(
+    title: str,
+    tasks: list[dict[str, Any]],
+    *,
+    page: int,
+    history: bool,
+    supplies: bool,
+) -> str:
+    start = page * TASK_SERVICE_PAGE_SIZE
+    page_tasks = tasks[start : start + TASK_SERVICE_PAGE_SIZE]
+    showing_start = start + 1 if page_tasks else 0
+    showing_end = start + len(page_tasks)
+    count_label = "completed" if history else "active"
+    lines = [f"## {title}", f"- {count_label}: {len(tasks)}"]
+    if page_tasks:
+        lines.append(f"- showing: {showing_start}-{showing_end}")
+    for task in page_tasks:
+        item_title = str(task.get("title") or task.get("summary") or "Untitled task").strip()
+        if history:
+            prefix = "~~"
+            suffix_marker = "~~"
+        else:
+            prefix = ""
+            suffix_marker = ""
+        due = " ".join(
+            part
+            for part in (
+                str(task.get("due") or task.get("dueDate") or "").strip(),
+                str(task.get("dueTime") or "").strip(),
+            )
+            if part
+        )
+        completed = str(task.get("completedDate") or task.get("completed") or task.get("completedAt") or "").strip()[:10]
+        detail = ""
+        if due and not supplies and not history:
+            detail = f" · {due}"
+        elif completed and not supplies and history:
+            detail = f" · {completed}"
+        lines.append(f"- {prefix}{discord.utils.escape_markdown(item_title)}{suffix_marker}{detail}")
+    if not page_tasks:
+        lines.append("- none")
+    return "\n".join(lines)
+
+
 def _render_active_service_message(title: str, tasks: list[dict[str, Any]], *, supplies: bool = False) -> str:
     lines = [f"## {title}", f"- active: {len(tasks)}"]
     for task in tasks[:25]:
@@ -3047,6 +3383,15 @@ def _event_owner_display(event: dict[str, Any]) -> str:
 def _shift_month(year: int, month: int, delta: int) -> tuple[int, int]:
     index = year * 12 + (month - 1) + delta
     return index // 12, index % 12 + 1
+
+
+def _shift_date_month(value: date, delta: int) -> date:
+    year, month = _shift_month(value.year, value.month, delta)
+    return date(year, month, 1)
+
+
+def _month_end(value: date) -> date:
+    return _shift_date_month(value, 1) - timedelta(days=1)
 
 
 def _task_option_label(task: dict[str, Any]) -> str:

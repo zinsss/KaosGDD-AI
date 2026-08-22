@@ -63,20 +63,23 @@ class GovernorToolClient:
         if request.kind is ToolKind.ACTIVE_TASKS:
             return await self._get("/tools/tasks/active", self._task_params(request.profile, request.collection_id))
         if request.kind is ToolKind.COMPLETED_TASKS:
-            params = {**self._task_params(request.profile, request.collection_id), "limit": "25"}
-            if request.query:
-                params["query"] = request.query
-            if request.start:
-                params["from"] = request.start
-            if request.end:
-                params["to"] = request.end
-            return await self._get("/tools/tasks/completed", params)
+            return await self.completed_tasks(request, limit=25)
         if request.kind is ToolKind.MEMO_SEARCH:
             payload = await self._get("/tools/memos/search", {"query": request.query, "limit": "25"})
             return await self._with_single_memo_body(payload)
         if request.kind is ToolKind.DOCUMENT_SEARCH:
             return await self._get("/tools/documents/search", {"query": request.query, "limit": "25"})
         raise GovernorToolError("unsupported Governor tool")
+
+    async def completed_tasks(self, request: ToolRequest, *, limit: int = 25) -> dict[str, Any]:
+        params = {**self._task_params(request.profile, request.collection_id), "limit": str(limit)}
+        if request.query:
+            params["query"] = request.query
+        if request.start:
+            params["from"] = request.start
+        if request.end:
+            params["to"] = request.end
+        return await self._get("/tools/tasks/completed", params)
 
     async def calendar_month_image(self, *, profile: str = "", year: int | None = None, month: int | None = None) -> dict[str, Any]:
         params = {"profile": self._profile(profile)}

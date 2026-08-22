@@ -18,9 +18,11 @@ from kaos_brain.bot import (
     BrainActiveTasksView,
     BrainCalendarMonthView,
     BrainDeletedMemoView,
+    BrainCompletedTaskActionsView,
     BrainTaskEditModal,
     BrainCompletedTasksSelect,
     BrainCompletedTasksView,
+    BrainTaskHistorySelect,
     BrainCombinedSearchFullButton,
     BrainCombinedSearchView,
     BrainDocumentSearchSelect,
@@ -55,6 +57,7 @@ from kaos_brain.tool_intent import ToolKind, ToolRequest
 class FakeGovernorTools:
     def __init__(self) -> None:
         self.task_action_calls = []
+        self.task_create_calls = []
         self.task_edit_calls = []
         self.approve_calls = []
 
@@ -80,6 +83,18 @@ class FakeGovernorTools:
                 "action": request.action,
                 "due": "",
                 "dueTime": "",
+            },
+        }
+
+    async def propose_task_create(self, request, *, actor_id: int, idempotency_key: str):
+        self.task_create_calls.append((request, actor_id, idempotency_key))
+        return {
+            "confirmationId": "confirm-create-1",
+            "task": {
+                "title": request.title,
+                "profile": request.profile,
+                "due": request.due_date,
+                "dueTime": request.due_time,
             },
         }
 
@@ -109,6 +124,14 @@ class FakeGovernorTools:
         if request.profile == "supplies":
             return {"tasks": [{"title": "토프라민", "date": "2026-08-21", "due": "2026-08-21"}]}
         return {"tasks": [{"title": "로운이 제로이드", "due": "2026-08-22", "dueTime": "10:00"}]}
+
+    async def completed_tasks(self, request, *, limit: int = 25):
+        return {
+            "tasks": [
+                {"uid": f"done-{index}", "title": f"Done {index:02d}", "completedDate": "2026-08-15"}
+                for index in range(1, min(limit, 30) + 1)
+            ]
+        }
 
     async def calendar_month_image(self, *, profile: str = "", year: int | None = None, month: int | None = None):
         return {"contentType": "text/plain", "contentBase64": "", "filename": "calendar.txt"}
@@ -672,6 +695,123 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         action_view = interaction.followup.send.await_args.kwargs["view"]
         self.assertIsInstance(action_view, BrainActiveTaskActionsView)
         self.assertEqual([item.label for item in action_view.children], ["Complete", "Edit", "Delete", "Close"])
+
+    async def test_active_task_service_paginates_25_items(self) -> None:
+        tasks = [{"title": f"Task {index:02d}"} for index in range(1, 28)]
+        view = BrainActiveTasksView(
+            FakeGovernorTools(),  # type: ignore[arg-type]
+            200,
+            ToolRequest(ToolKind.ACTIVE_TASKS),
+            tasks,
+        )
+        select = next(child for child in view.children if isinstance(child, BrainActiveTasksSelect))
+
+        self.assertIn("- active: 27", view.content())
+        self.assertIn("- showing: 1-25", view.content())
+        self.assertEqual(len(select.options), 25)
+        self.assertEqual(select.placeholder, "Active Tasks 1-25")
+
+    async def test_active_task_service_next_page_edits_same_message(self) -> None:
+        tasks = [{"title": f"Task {index:02d}"} for index in range(1, 28)]
+        view = BrainActiveTasksView(
+            FakeGovernorTools(),  # type: ignore[arg-type]
+            200,
+            ToolRequest(ToolKind.ACTIVE_TASKS),
+            tasks,
+        )
+        next_button = next(child for child in view.children if getattr(child, "label", "") == "→")
+        interaction = SimpleNamespace(
+            user=SimpleNamespace(id=200),
+            response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+            edit_original_response=AsyncMock(),
+        )
+
+        await next_button.callback(interaction)  # type: ignore[arg-type,union-attr]
+
+        interaction.response.defer.assert_awaited_once()
+        kwargs = interaction.edit_original_response.await_args.kwargs
+        self.assertIn("- showing: 26-27", kwargs["content"])
+        refreshed = kwargs["view"]
+        select = next(child for child in refreshed.children if isinstance(child, BrainActiveTasksSelect))
+        self.assertEqual(len(select.options), 2)
+        self.assertEqual(select.placeholder, "Active Tasks 26-27")
+
+    async def test_task_service_history_button_loads_month_archive(self) -> None:
+        tools = FakeGovernorTools()
+        view = BrainActiveTasksView(
+            tools,  # type: ignore[arg-type]
+            200,
+            ToolRequest(ToolKind.ACTIVE_TASKS),
+            [{"title": "Active"}],
+        )
+        history = next(child for child in view.children if getattr(child, "label", "") == "History")
+        interaction = SimpleNamespace(
+            user=SimpleNamespace(id=200),
+            response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+            edit_original_response=AsyncMock(),
+            followup=SimpleNamespace(send=AsyncMock()),
+        )
+
+        await history.callback(interaction)  # type: ignore[arg-type,union-attr]
+
+        interaction.response.defer.assert_awaited_once()
+        kwargs = interaction.edit_original_response.await_args.kwargs
+        self.assertIn("History ·", kwargs["content"])
+        self.assertIn("- completed: 30", kwargs["content"])
+        self.assertIn("- showing: 1-25", kwargs["content"])
+        refreshed = kwargs["view"]
+        self.assertTrue(any(isinstance(child, BrainTaskHistorySelect) for child in refreshed.children))
+        self.assertEqual([getattr(child, "label", "") for child in refreshed.children if getattr(child, "label", "")][-2:], ["Active", "Close"])
+
+    async def test_task_history_select_sends_history_action_buttons(self) -> None:
+        view = BrainActiveTasksView(
+            FakeGovernorTools(),  # type: ignore[arg-type]
+            200,
+            ToolRequest(ToolKind.COMPLETED_TASKS),
+            [{"uid": "DONE-1", "title": "Done task", "completedDate": "2026-08-15"}],
+            mode="history",
+        )
+        select = next(child for child in view.children if isinstance(child, BrainTaskHistorySelect))
+        select._values = ["0"]
+        interaction = SimpleNamespace(
+            id=889,
+            user=SimpleNamespace(id=200),
+            response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+            followup=SimpleNamespace(send=AsyncMock()),
+        )
+
+        await select.callback(interaction)  # type: ignore[arg-type]
+
+        interaction.response.defer.assert_awaited_once()
+        self.assertEqual(interaction.followup.send.await_args.args[0], "## ~~Done task~~\n- completed: 2026-08-15")
+        action_view = interaction.followup.send.await_args.kwargs["view"]
+        self.assertIsInstance(action_view, BrainCompletedTaskActionsView)
+        self.assertEqual([item.label for item in action_view.children], ["Undo", "Make New", "Delete", "Close"])
+
+    async def test_completed_task_make_new_button_sends_create_confirmation(self) -> None:
+        tools = FakeGovernorTools()
+        view = BrainCompletedTaskActionsView(
+            tools,  # type: ignore[arg-type]
+            200,
+            ToolRequest(ToolKind.COMPLETED_TASKS, profile="supplies"),
+            {"uid": "SUPPLY-DONE-1", "title": "Soap"},
+        )
+        interaction = SimpleNamespace(
+            id=890,
+            user=SimpleNamespace(id=200),
+            response=SimpleNamespace(edit_message=AsyncMock(), send_message=AsyncMock()),
+        )
+
+        await view.children[1].callback(interaction)  # type: ignore[arg-type,union-attr]
+
+        request, actor_id, idempotency_key = tools.task_create_calls[0]
+        self.assertEqual(request.title, "Soap")
+        self.assertEqual(request.profile, "supplies")
+        self.assertEqual(actor_id, 200)
+        self.assertEqual(idempotency_key, "brain-task-make-new-890")
+        content = interaction.response.edit_message.await_args.kwargs["content"]
+        self.assertIn("Confirm New Supply", content)
+        self.assertIn("## Soap", content)
 
     async def test_active_task_complete_button_sends_confirmation(self) -> None:
         tools = FakeGovernorTools()

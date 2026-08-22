@@ -518,6 +518,27 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
             },
         )
 
+    async def test_completed_tasks_accepts_custom_limit(self) -> None:
+        from kaos_brain.governor_tools import GovernorToolClient, GovernorToolConfig
+
+        class FakeClient(GovernorToolClient):
+            async def _get(self, path: str, params: dict[str, str]):
+                return {"path": path, "params": params}
+
+        client = FakeClient(
+            GovernorToolConfig(
+                base_url="http://127.0.0.1:8098",
+                api_token="token",
+                profile="main",
+                timeout_seconds=1,
+            )
+        )
+        payload = await client.completed_tasks(ToolRequest(ToolKind.COMPLETED_TASKS, start="2026-08-01"), limit=250)
+
+        self.assertEqual(payload["path"], "/tools/tasks/completed")
+        self.assertEqual(payload["params"]["limit"], "250")
+        self.assertEqual(payload["params"]["from"], "2026-08-01")
+
     async def test_fetch_supplies_active_tasks_adds_collection(self) -> None:
         from kaos_brain.governor_tools import GovernorToolClient, GovernorToolConfig
 
