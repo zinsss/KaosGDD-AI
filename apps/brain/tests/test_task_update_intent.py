@@ -93,6 +93,13 @@ class TaskUpdateIntentTests(unittest.TestCase):
         self.assertEqual(request.due_date, "")
         self.assertEqual(request.due_time, "")
 
+    def test_semicolon_task_create_without_due(self) -> None:
+        request = parse_task_create("할일; 엄마 전화", today=date(2026, 8, 14))
+        assert request is not None
+        self.assertEqual(request.title, "엄마 전화")
+        self.assertEqual(request.due_date, "")
+        self.assertEqual(request.due_time, "")
+
     def test_comma_task_create_accepts_natural_due_date(self) -> None:
         request = parse_task_create("할일, 내일까지 엄마한테 전화", today=date(2026, 8, 14))
         assert request is not None
@@ -129,6 +136,14 @@ class TaskUpdateIntentTests(unittest.TestCase):
 
     def test_comma_supplies_create_without_due_date(self) -> None:
         request = parse_task_create("비품, 토프라민", today=date(2026, 8, 14))
+        assert request is not None
+        self.assertEqual(request.title, "토프라민")
+        self.assertEqual(request.due_date, "")
+        self.assertEqual(request.due_time, "")
+        self.assertEqual(request.profile, "supplies")
+
+    def test_semicolon_supplies_create_without_due_date(self) -> None:
+        request = parse_task_create("비품; 토프라민", today=date(2026, 8, 14))
         assert request is not None
         self.assertEqual(request.title, "토프라민")
         self.assertEqual(request.due_date, "")
@@ -231,6 +246,22 @@ class TaskUpdateIntentTests(unittest.TestCase):
         self.assertTrue(request.all_day)
         self.assertEqual(request.profile, "family")
         self.assertEqual(request.memo, "포항 조사리")
+
+    def test_prefixed_event_create_without_extra_event_words(self) -> None:
+        request = parse_event_create("일정, 08/15 엔소쿠료칸 종일 가족 메모: 포항 조사리", today=date(2026, 8, 15))
+        assert request is not None
+        self.assertEqual(request.title, "엔소쿠료칸")
+        self.assertEqual(request.start_date, "2026-08-15")
+        self.assertEqual(request.end_date, "2026-08-15")
+        self.assertTrue(request.all_day)
+        self.assertEqual(request.profile, "family")
+        self.assertEqual(request.memo, "포항 조사리")
+
+    def test_semicolon_event_create(self) -> None:
+        request = parse_event_create("일정; 2026/08/15 엔소쿠료칸", today=date(2026, 8, 15))
+        assert request is not None
+        self.assertEqual(request.title, "엔소쿠료칸")
+        self.assertEqual(request.start_date, "2026-08-15")
 
     def test_event_create_rejects_invalid_date(self) -> None:
         self.assertIsNone(parse_event_create("13-40 이상한 일정으로 가족에 추가", today=date(2026, 8, 15)))

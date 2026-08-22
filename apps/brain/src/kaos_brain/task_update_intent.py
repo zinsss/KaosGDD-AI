@@ -308,7 +308,7 @@ def _parse_supplies_create(text: str) -> TaskCreateRequest | None:
 
 
 def _parse_prefixed_create(text: str, *, today: date) -> TaskCreateRequest | None:
-    match = re.match(r"^(할\s*일|할일|task|태스크|비품|준비물|용품|supplies|supply)\s*[,，:：]\s*(.+)$", text, flags=re.IGNORECASE)
+    match = re.match(r"^(할\s*일|할일|task|태스크|비품|준비물|용품|supplies|supply)\s*[,，;；:：]\s*(.+)$", text, flags=re.IGNORECASE)
     if match is None:
         return None
     prefix = match.group(1)

@@ -34,6 +34,9 @@ def parse_memo_create(content: str) -> MemoCreateRequest | None:
         return None
     if not text:
         return None
+    prefixed = _prefixed_memo_body(text)
+    if prefixed:
+        return MemoCreateRequest(prefixed)
     for marker in CREATE_MARKERS:
         parsed = _content_after_prefix(text, marker)
         if parsed:
@@ -78,6 +81,13 @@ def parse_memo_edit(content: str) -> MemoEditRequest | None:
         if query and new_content:
             return MemoEditRequest(query=query, content=new_content)
     return None
+
+
+def _prefixed_memo_body(text: str) -> str:
+    match = re.match(r"^(?:메모|memo)\s*[,，;；:：]\s*(?P<body>.+)$", text, flags=re.IGNORECASE | re.DOTALL)
+    if match is None:
+        return ""
+    return match.group("body").strip()
 
 
 def _content_after_prefix(text: str, marker: str) -> str:

@@ -17,9 +17,12 @@ class EventCreateRequest:
 
 def parse_event_create(content: str, *, today: date) -> EventCreateRequest | None:
     text = " ".join(content.strip().split())
-    if not text or "일정" not in text or "추가" not in text:
+    prefixed_body = _prefixed_event_body(text)
+    if prefixed_body:
+        text = prefixed_body
+    elif not text or "일정" not in text or "추가" not in text:
         return None
-    date_match = re.search(r"(?<!\d)(?:(?P<year>\d{4})[-.])?(?P<month>\d{1,2})[-.](?P<day>\d{1,2})(?!\d)", text)
+    date_match = re.search(r"(?<!\d)(?:(?P<year>\d{4})[-./])?(?P<month>\d{1,2})[-./](?P<day>\d{1,2})(?!\d)", text)
     if date_match is None:
         return None
     year = int(date_match.group("year") or today.year)
@@ -40,6 +43,7 @@ def parse_event_create(content: str, *, today: date) -> EventCreateRequest | Non
     title = rest
     title = re.sub(r"(?:을|를)?\s*종일\s*일정으로", " ", title)
     title = re.sub(r"(?:을|를)?\s*일정으로", " ", title)
+    title = re.sub(r"\b종일\b", " ", title)
     title = re.sub(r"가족(?:에|으로)?", " ", title)
     title = re.sub(r"추가(?:해줘|해|해라|좀)?", " ", title)
     title = " ".join(title.split()).strip(" .,")
@@ -53,3 +57,10 @@ def parse_event_create(content: str, *, today: date) -> EventCreateRequest | Non
         memo=memo,
         profile=profile,
     )
+
+
+def _prefixed_event_body(text: str) -> str:
+    match = re.match(r"^(?:일정|event)\s*[,，;；:：]\s*(?P<body>.+)$", text, flags=re.IGNORECASE)
+    if match is None:
+        return ""
+    return match.group("body").strip()

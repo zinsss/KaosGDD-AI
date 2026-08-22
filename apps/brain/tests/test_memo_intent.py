@@ -14,6 +14,16 @@ class MemoIntentTests(unittest.TestCase):
         assert request is not None
         self.assertEqual(request.content, "병원 와이파이 비밀번호 확인")
 
+    def test_explicit_comma_memo_create(self) -> None:
+        request = parse_memo_create("메모, 병원 와이파이 비밀번호 확인")
+        assert request is not None
+        self.assertEqual(request.content, "병원 와이파이 비밀번호 확인")
+
+    def test_explicit_semicolon_memo_create(self) -> None:
+        request = parse_memo_create("메모; # 병원\n와이파이 비밀번호 확인")
+        assert request is not None
+        self.assertEqual(request.content, "# 병원\n와이파이 비밀번호 확인")
+
     def test_suffix_create(self) -> None:
         request = parse_memo_create("러스트데스크 설정은 100.94.208.16 메모에 저장해줘")
         assert request is not None
