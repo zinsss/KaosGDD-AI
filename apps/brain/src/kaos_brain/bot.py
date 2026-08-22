@@ -1387,13 +1387,6 @@ class BrainCombinedSearchFullButton(discord.ui.Button):
             await interaction.response.send_message(_tool_failed("조회"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         if self.target == "documents":
-            payload = {
-                "query": parent.query,
-                "results": parent.document_results,
-                "resultCount": parent.document_count,
-                "totalCount": parent.document_total,
-            }
-            content = render_tool_context(ToolRequest(ToolKind.DOCUMENT_SEARCH, parent.query), payload)
             view: discord.ui.View = BrainDocumentSearchView(
                 parent.governor_tools,
                 parent.actor_id,
@@ -1401,6 +1394,21 @@ class BrainCombinedSearchFullButton(discord.ui.Button):
                 parent.document_results,
                 paperless_public_url=parent.paperless_public_url,
             )
+            view.bind_message(interaction.message)  # type: ignore[arg-type]
+            await interaction.response.edit_message(
+                content="",
+                embed=_document_search_embed(
+                    parent.query,
+                    parent.document_results,
+                    result_count=parent.document_count,
+                    total_count=parent.document_total,
+                    paperless_public_url=parent.paperless_public_url,
+                ),
+                view=view,
+                allowed_mentions=NO_MENTIONS,
+            )
+            parent.stop()
+            return
         else:
             payload = {
                 "query": parent.query,
@@ -1419,6 +1427,41 @@ class BrainCombinedSearchFullButton(discord.ui.Button):
         view.bind_message(interaction.message)  # type: ignore[arg-type]
         await interaction.response.edit_message(content=content, view=view, allowed_mentions=NO_MENTIONS)
         parent.stop()
+
+
+def _document_search_embed(
+    query: str,
+    results: list[dict[str, Any]],
+    *,
+    result_count: int,
+    total_count: int,
+    paperless_public_url: str,
+) -> discord.Embed:
+    title = f"Paperless · {query or '..'}"
+    embed = discord.Embed(
+        title=title[:256],
+        description=f"{result_count} results in {total_count} documents",
+        color=0x88C0D0,
+    )
+    lines: list[str] = []
+    for index, item in enumerate(results[:25], start=1):
+        label = document_option_label(item)
+        url = str(item.get("url") or item.get("publicUrl") or document_public_url(paperless_public_url, item.get("id"))).strip()
+        line = f"{index}. {label}"
+        if url:
+            line = f"{line} · [open]({url})"
+        lines.append(_discord_embed_line(line, 180))
+    if result_count > len(results[:25]):
+        lines.append(f"Showing first {len(results[:25])}. Press search in Paperless for the full backend result set.")
+    embed.add_field(name="Documents", value="\n".join(lines)[:1024] if lines else "No matching documents.", inline=False)
+    return embed
+
+
+def _discord_embed_line(value: str, limit: int) -> str:
+    stripped = " ".join(value.split())
+    if len(stripped) <= limit:
+        return stripped
+    return f"{stripped[: max(0, limit - 3)].rstrip()}..."
 
 
 class BrainOpenedMemoView(discord.ui.View):

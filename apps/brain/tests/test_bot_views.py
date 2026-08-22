@@ -14,6 +14,8 @@ from kaos_brain.bot import (
     BrainTaskEditModal,
     BrainCompletedTasksSelect,
     BrainCompletedTasksView,
+    BrainCombinedSearchFullButton,
+    BrainCombinedSearchView,
     BrainDocumentSearchSelect,
     BrainDocumentSearchView,
     BrainMemoDeleteConfirmView,
@@ -220,6 +222,35 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(opened_view, BrainOpenedDocumentView)
         self.assertEqual([item.label for item in opened_view.children], ["Close", "Open document"])
         search_message.delete.assert_awaited_once()
+
+    async def test_combined_paperless_button_switches_to_embed_list(self) -> None:
+        view = BrainCombinedSearchView(
+            FakeGovernorTools(),  # type: ignore[arg-type]
+            200,
+            "보험",
+            [{"name": "memos/42", "snippet": "Memo"}],
+            [{"id": index + 1, "title": f"Document {index + 1}"} for index in range(25)],
+            document_count=30,
+            document_total=30,
+            paperless_public_url="https://paperless.example",
+        )
+        button = next(child for child in view.children if isinstance(child, BrainCombinedSearchFullButton) and child.label == "Paperless")
+        source_message = SimpleNamespace(id=903)
+        interaction = SimpleNamespace(
+            user=SimpleNamespace(id=200),
+            message=source_message,
+            response=SimpleNamespace(edit_message=AsyncMock(), send_message=AsyncMock()),
+        )
+
+        await button.callback(interaction)  # type: ignore[arg-type,union-attr]
+
+        interaction.response.edit_message.assert_awaited_once()
+        kwargs = interaction.response.edit_message.await_args.kwargs
+        self.assertEqual(kwargs["content"], "")
+        self.assertEqual(kwargs["embed"].title, "Paperless · 보험")
+        self.assertIn("30 results in 30 documents", kwargs["embed"].description)
+        self.assertIn("[open](https://paperless.example/documents/1/details)", kwargs["embed"].fields[0].value)
+        self.assertIsInstance(kwargs["view"], BrainDocumentSearchView)
 
     async def test_brain_search_window_shows_expired_notice_on_timeout(self) -> None:
         view = BrainMemoSearchView(
