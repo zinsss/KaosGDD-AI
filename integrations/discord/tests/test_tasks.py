@@ -219,6 +219,27 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual([item["summary"] for item in completed], ["Soap"])
 
+    def test_completed_supplies_archive_omits_dates(self) -> None:
+        content = render_completed_archive_message(
+            [
+                {
+                    **TASKS[1],
+                    "uid": "SUPPLY-1",
+                    "collection": "zin:supplies",
+                    "summary": "Soap",
+                    "completed": "2026-08-15",
+                    "due": "2026-08-20",
+                }
+            ],
+            collection_id="zin:supplies",
+            month=date(2026, 8, 15),
+        )
+
+        self.assertIn("## Completed · 2026.08", content)
+        self.assertIn("- Soap", content)
+        self.assertNotIn("15.토", content)
+        self.assertNotIn("2026-08-20", content)
+
     def test_completed_archive_limits_restore_dropdown_to_25_items(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             channel = FakeChannel()

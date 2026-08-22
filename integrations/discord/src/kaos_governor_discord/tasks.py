@@ -1020,7 +1020,8 @@ def render_completed_archive_message(
     if not completed:
         lines.append("- none")
     else:
-        lines.extend(_completed_archive_line(item) for item in completed)
+        show_date = not _collection_is_supplies(collection_id)
+        lines.extend(_completed_archive_line(item, show_date=show_date) for item in completed)
     return "\n".join(lines)[:1990]
 
 
@@ -1193,11 +1194,13 @@ def task_key(task: Mapping[str, Any]) -> str:
     return f"{task.get('collection') or ''}|{task.get('uid') or ''}"
 
 
-def _completed_archive_line(task: Mapping[str, Any]) -> str:
+def _completed_archive_line(task: Mapping[str, Any], *, show_date: bool = True) -> str:
     completed = _task_month_date(task)
     date_text = _completed_archive_date_text(completed)
     title = escape_text(task.get("summary") or "Untitled task")
     scope = _completed_archive_scope_suffix(task)
+    if not show_date:
+        return f"- {title}{scope}"
     return f"- {date_text} - {title}{scope}"
 
 
@@ -1213,6 +1216,10 @@ def _completed_archive_scope_suffix(task: Mapping[str, Any]) -> str:
     if collection.startswith("family:"):
         return " **<family>**"
     return ""
+
+
+def _collection_is_supplies(collection_id: str) -> bool:
+    return "supplies" in collection_id.lower()
 
 
 def _task_month_date(task: Mapping[str, Any]) -> date | None:

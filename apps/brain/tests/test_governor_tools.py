@@ -83,6 +83,21 @@ class GovernorToolRenderingTests(unittest.TestCase):
         )
         self.assertEqual(context, "## 완료한 비품 · 2026-08-02 ~ 2026-08-15\n- 없음")
 
+    def test_render_completed_supplies_context_omits_dates(self) -> None:
+        context = render_tool_context(
+            ToolRequest(ToolKind.COMPLETED_TASKS, profile="supplies", start="2026-08-02", end="2026-08-15"),
+            {
+                "profile": "supplies",
+                "from": "2026-08-02",
+                "to": "2026-08-15",
+                "tasks": [{"title": "Soap", "completedDate": "2026-08-15"}],
+            },
+        )
+
+        self.assertIn("## 완료한 비품 · 2026-08-02 ~ 2026-08-15", context)
+        self.assertIn("- Soap", context)
+        self.assertNotIn("- 2026-08-15", context)
+
     def test_render_family_tasks_context_uses_scope_title(self) -> None:
         context = render_tool_context(
             ToolRequest(ToolKind.ACTIVE_TASKS, profile="family"),

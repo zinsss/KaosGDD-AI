@@ -778,17 +778,23 @@ def _render_completed_tasks(payload: dict[str, Any]) -> str:
         title = f"{title} · {start or '..'} ~ {end or '..'}"
     if not tasks:
         return f"## {title}\n- 없음"
-    return "\n".join([f"## {title}", *(_completed_task_line(item) for item in tasks[:25])])
+    show_completed_date = not _task_list_is_supplies(payload)
+    return "\n".join([f"## {title}", *(_completed_task_line(item, show_date=show_completed_date) for item in tasks[:25])])
 
 
 def _task_list_title(payload: dict[str, Any], *, completed: bool) -> str:
-    profile = str(payload.get("profile") or "").strip().lower()
-    collection_id = str(payload.get("collectionId") or "").strip().lower()
-    if profile == "supplies" or "supplies" in collection_id:
+    if _task_list_is_supplies(payload):
         return "완료한 비품" if completed else "비품"
+    profile = str(payload.get("profile") or "").strip().lower()
     if profile == "family":
         return "완료한 가족 할 일" if completed else "가족 할 일"
     return "완료한 할 일" if completed else "할 일"
+
+
+def _task_list_is_supplies(payload: dict[str, Any]) -> bool:
+    profile = str(payload.get("profile") or "").strip().lower()
+    collection_id = str(payload.get("collectionId") or "").strip().lower()
+    return profile == "supplies" or "supplies" in collection_id
 
 
 def _render_memos(query: str, payload: dict[str, Any]) -> str:
@@ -863,8 +869,10 @@ def _task_line(item: dict[str, Any]) -> str:
     return f"- {title} - {due_text}" if due_text else f"- {title}"
 
 
-def _completed_task_line(item: dict[str, Any]) -> str:
+def _completed_task_line(item: dict[str, Any], *, show_date: bool = True) -> str:
     title = str(item.get("title") or "Untitled task").strip()
+    if not show_date:
+        return f"- {title}"
     completed = str(item.get("completedDate") or item.get("due") or "").strip()
     return f"- {title} - {completed}" if completed else f"- {title}"
 
