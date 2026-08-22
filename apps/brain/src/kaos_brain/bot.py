@@ -87,6 +87,7 @@ ACTIVE_CONTROL_HISTORY_LIMIT = 20
 ACTIVE_TASKS_LABEL = "𝓐𝓬𝓽𝓲𝓿𝓮 𝓣𝓪𝓼𝓴𝓼"
 CALENDAR_LABEL = "𝓒𝓪𝓵𝓮𝓷𝓭𝓪𝓻"
 SUPPLIES_LABEL = "𝓢𝓾𝓹𝓹𝓵𝓲𝓮𝓼"
+SUPPLIES_SERVICE_TITLE = "𝓢𝓾𝓹𝓹𝓵𝓲𝓮𝓼 𝓢𝓱𝓸𝓹𝓹𝓲𝓷𝓰 𝓛𝓲𝓼𝓽"
 UPCOMING_EVENTS_LABEL = "𝓤𝓹𝓬𝓸𝓶𝓲𝓷𝓰 𝓔𝓿𝓮𝓷𝓽𝓼"
 PAPERLESS_LABEL = "𝓟𝓪𝓹𝓮𝓻𝓵𝓮𝓼𝓼"
 MEMOS_LABEL = "𝓜𝓮𝓶𝓸𝓼"
@@ -2094,7 +2095,7 @@ class BrainServiceMenuView(discord.ui.View):
             return
         tasks = _task_results(payload)
         await interaction.followup.send(
-            _render_active_service_message("Tasks", tasks),
+            _render_active_service_message(ACTIVE_TASKS_LABEL, tasks),
             view=BrainActiveTasksView(
                 self.governor_tools,
                 int(interaction.user.id),
@@ -2122,7 +2123,7 @@ class BrainServiceMenuView(discord.ui.View):
             return
         supplies = _task_results(payload)
         await interaction.followup.send(
-            _render_active_service_message("Supplies", supplies),
+            _render_active_service_message(SUPPLIES_SERVICE_TITLE, supplies, supplies=True),
             view=BrainActiveTasksView(self.governor_tools, int(interaction.user.id), request, supplies) if supplies else None,
             allowed_mentions=NO_MENTIONS,
         )
@@ -2130,7 +2131,7 @@ class BrainServiceMenuView(discord.ui.View):
     @discord.ui.button(label=PAPERLESS_LABEL, style=discord.ButtonStyle.secondary)
     async def paperless_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_message(
-            "Paperless: use `..keyword` to search documents, or `..ALL` to browse documents.",
+            f"## {PAPERLESS_LABEL}\n- use `..keyword` to search documents\n- use `..ALL` to browse documents",
             ephemeral=True,
             allowed_mentions=NO_MENTIONS,
         )
@@ -2138,7 +2139,7 @@ class BrainServiceMenuView(discord.ui.View):
     @discord.ui.button(label=MEMOS_LABEL, style=discord.ButtonStyle.secondary)
     async def memos_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_message(
-            "Memos: use `..keyword` to search memos.",
+            f"## {MEMOS_LABEL}\n- use `..keyword` to search memos",
             ephemeral=True,
             allowed_mentions=NO_MENTIONS,
         )
@@ -2174,7 +2175,7 @@ class BrainCalendarMonthView(discord.ui.View):
         return False
 
     def content(self) -> str:
-        return f"## Calendar · {self.year}.{self.month:02d}"
+        return f"## {CALENDAR_LABEL} · {self.year}.{self.month:02d}"
 
     async def weekly_content(self) -> str:
         return await _render_calendar_weekly(
@@ -2964,7 +2965,7 @@ def _render_active_task_selection(title: str, task: dict[str, Any], *, supplies:
     return "\n".join(lines)
 
 
-def _render_active_service_message(title: str, tasks: list[dict[str, Any]]) -> str:
+def _render_active_service_message(title: str, tasks: list[dict[str, Any]], *, supplies: bool = False) -> str:
     lines = [f"## {title}", f"- active: {len(tasks)}"]
     for task in tasks[:25]:
         item_title = str(task.get("title") or task.get("summary") or "Untitled task").strip()
@@ -2976,7 +2977,7 @@ def _render_active_service_message(title: str, tasks: list[dict[str, Any]]) -> s
             )
             if part
         )
-        suffix = f" · {due}" if due and title != "Supplies" else ""
+        suffix = f" · {due}" if due and not supplies else ""
         lines.append(f"- {discord.utils.escape_markdown(item_title)}{suffix}")
     if len(tasks) > 25:
         lines.append(f"- {len(tasks) - 25} more")
@@ -2991,7 +2992,7 @@ async def _render_calendar_weekly(governor_tools: GovernorToolClient, *, profile
     raw_items = payload.get("items")
     items = [dict(item) for item in raw_items if isinstance(item, dict)] if isinstance(raw_items, list) else []
     payloads = {str(item.get("date") or ""): item for item in items}
-    lines = [f"## Calendar · Weekly", f"- {days[0]:%Y.%m.%d} - {days[-1]:%Y.%m.%d}"]
+    lines = [f"## {CALENDAR_LABEL} · Weekly", f"- {days[0]:%Y.%m.%d} - {days[-1]:%Y.%m.%d}"]
     for value in days:
         day_payload = payloads.get(value.isoformat())
         if day_payload is None:

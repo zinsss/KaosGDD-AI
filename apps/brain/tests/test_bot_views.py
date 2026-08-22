@@ -36,6 +36,7 @@ from kaos_brain.bot import (
     MEMOS_LABEL,
     PAPERLESS_LABEL,
     SUPPLIES_LABEL,
+    SUPPLIES_SERVICE_TITLE,
     TaskCreateConfirmationView,
     UPCOMING_EVENTS_LABEL,
     _read_active_control_message_id,
@@ -101,7 +102,7 @@ class FakeGovernorTools:
         if request.kind is ToolKind.RECENT_IMPORTS:
             return {"imports": [{"kind": "fax", "title": "Fax jobs tracked: 1", "detail": "2026-08-22T10:00:00Z"}]}
         if request.profile == "supplies":
-            return {"tasks": [{"title": "토프라민"}]}
+            return {"tasks": [{"title": "토프라민", "date": "2026-08-21", "due": "2026-08-21"}]}
         return {"tasks": [{"title": "로운이 제로이드", "due": "2026-08-22", "dueTime": "10:00"}]}
 
     async def calendar_month_image(self, *, profile: str = "", year: int | None = None, month: int | None = None):
@@ -275,7 +276,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
 
         interaction.response.defer.assert_awaited_once()
         content = interaction.followup.send.await_args.args[0]
-        self.assertIn("## Tasks", content)
+        self.assertIn(f"## {ACTIVE_TASKS_LABEL}", content)
         self.assertIn("- active: 1", content)
         self.assertIn("- 로운이 제로이드", content)
         self.assertIsInstance(interaction.followup.send.await_args.kwargs["view"], BrainActiveTasksView)
@@ -298,7 +299,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         await button.callback(interaction)  # type: ignore[arg-type,union-attr]
 
         interaction.response.defer.assert_awaited_once()
-        self.assertIn("## Calendar ·", interaction.followup.send.await_args.kwargs["content"])
+        self.assertIn(f"## {CALENDAR_LABEL} ·", interaction.followup.send.await_args.kwargs["content"])
         service_view = interaction.followup.send.await_args.kwargs["view"]
         self.assertIsInstance(service_view, BrainCalendarMonthView)
         self.assertEqual([getattr(item, "label", "") for item in service_view.children], ["Month", "Weekly", "Close", "<", "Today", ">"])
@@ -324,7 +325,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
 
         interaction.response.defer.assert_awaited_once()
         kwargs = interaction.edit_original_response.await_args.kwargs
-        self.assertIn("## Calendar · Weekly", kwargs["content"])
+        self.assertIn(f"## {CALENDAR_LABEL} · Weekly", kwargs["content"])
         self.assertIn("⛅️ 23-28℃", kwargs["content"])
         self.assertIn("Clinic  • 𝘎𝘋𝘋𝙕𝘪𝙉", kwargs["content"])
         self.assertIn("School  • 𝘧𝘢𝘮𝘪𝘭𝘺", kwargs["content"])
@@ -349,8 +350,32 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         await memos.callback(interaction)  # type: ignore[arg-type,union-attr]
 
         calls = interaction.response.send_message.await_args_list
-        self.assertIn("Paperless", calls[0].args[0])
-        self.assertIn("Memos", calls[1].args[0])
+        self.assertIn(f"## {PAPERLESS_LABEL}", calls[0].args[0])
+        self.assertIn(f"## {MEMOS_LABEL}", calls[1].args[0])
+
+    async def test_supplies_button_calls_up_named_shopping_list_without_dates(self) -> None:
+        view = BrainServiceMenuView(
+            FakeGovernorTools(),  # type: ignore[arg-type]
+            self.active_control_settings(),
+        )
+        button = next(child for child in view.children if getattr(child, "label", "") == SUPPLIES_LABEL)
+        interaction = SimpleNamespace(
+            id=703,
+            guild_id=100,
+            channel_id=300,
+            user=SimpleNamespace(id=200),
+            response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+            followup=SimpleNamespace(send=AsyncMock()),
+        )
+
+        await button.callback(interaction)  # type: ignore[arg-type,union-attr]
+
+        interaction.response.defer.assert_awaited_once()
+        content = interaction.followup.send.await_args.args[0]
+        self.assertIn(f"## {SUPPLIES_SERVICE_TITLE}", content)
+        self.assertIn("- active: 1", content)
+        self.assertIn("- 토프라민", content)
+        self.assertNotIn("2026-", content)
 
     async def test_active_control_refresh_rebuilds_dropdowns(self) -> None:
         view = BrainActiveControlView(
