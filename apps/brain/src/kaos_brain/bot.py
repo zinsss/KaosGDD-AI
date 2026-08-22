@@ -84,6 +84,7 @@ ACTIVE_CONTROL_MARKER = "# "
 SERVICE_MENU_MARKER = "\u200b"
 ACTIVE_CONTROL_LIMIT = 25
 ACTIVE_CONTROL_HISTORY_LIMIT = 20
+TASKS_SERVICE_BUTTON_LABEL = "Tasks"
 ACTIVE_TASKS_LABEL = "Active Tasks"
 CALENDAR_LABEL = "Calendar"
 SUPPLIES_LABEL = "Supplies"
@@ -2086,7 +2087,7 @@ class BrainServiceMenuView(discord.ui.View):
             kwargs["file"] = file
         await interaction.followup.send(**kwargs)
 
-    @discord.ui.button(label=ACTIVE_TASKS_LABEL, style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label=TASKS_SERVICE_BUTTON_LABEL, style=discord.ButtonStyle.secondary)
     async def tasks_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
         try:

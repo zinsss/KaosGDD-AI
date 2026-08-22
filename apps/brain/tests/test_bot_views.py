@@ -41,6 +41,7 @@ from kaos_brain.bot import (
     PAPERLESS_TITLE,
     SUPPLIES_LABEL,
     SUPPLIES_TITLE,
+    TASKS_SERVICE_BUTTON_LABEL,
     TaskCreateConfirmationView,
     UPCOMING_EVENTS_LABEL,
     _read_active_control_message_id,
@@ -266,7 +267,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             FakeGovernorTools(),  # type: ignore[arg-type]
             self.active_control_settings(),
         )
-        button = next(child for child in view.children if getattr(child, "label", "") == ACTIVE_TASKS_LABEL)
+        button = next(child for child in view.children if getattr(child, "label", "") == TASKS_SERVICE_BUTTON_LABEL)
         interaction = SimpleNamespace(
             id=701,
             guild_id=100,
