@@ -165,7 +165,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         refreshed = interaction.edit_original_response.await_args.kwargs["view"]
         self.assertEqual(
             [child.placeholder for child in refreshed.children if isinstance(child, BrainActiveControlSelect)],
-            ["Active tasks", "Active supplies"],
+            ["Active Tasks: 1", "Active Supplies: 1"],
         )
 
     async def test_memo_search_select_opens_selected_memo_as_new_message(self) -> None:

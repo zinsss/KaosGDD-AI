@@ -156,7 +156,7 @@ class BrainToolResponseTests(unittest.IsolatedAsyncioTestCase):
         assert isinstance(view, BrainCombinedSearchView)
         self.assertEqual(
             [getattr(item, "placeholder", "") for item in view.children if getattr(item, "placeholder", "")],
-            ["Open memo", "Open document"],
+            ["Memos: 30", "Paperless: 30"],
         )
         self.assertEqual(
             [getattr(item, "label", "") for item in view.children if getattr(item, "label", "")],

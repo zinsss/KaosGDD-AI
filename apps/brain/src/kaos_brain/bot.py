@@ -1240,7 +1240,7 @@ class BrainMemoSearchSelect(discord.ui.Select):
             )
             for index, item in enumerate(parent.results)
         ]
-        super().__init__(placeholder="Open memo", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder=f"Memos: {len(parent.results)}", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         try:
@@ -1317,7 +1317,7 @@ class BrainCombinedMemoSearchSelect(discord.ui.Select):
             )
             for index, item in enumerate(parent.memo_results)
         ]
-        super().__init__(placeholder="Open memo", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder=f"Memos: {parent.memo_count}", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         try:
@@ -1349,7 +1349,7 @@ class BrainCombinedDocumentSearchSelect(discord.ui.Select):
             )
             for index, item in enumerate(parent.document_results)
         ]
-        super().__init__(placeholder="Open document", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder=f"Paperless: {parent.document_count}", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         try:
@@ -1730,7 +1730,7 @@ class BrainDocumentSearchSelect(discord.ui.Select):
             )
             for index, item in enumerate(parent.results)
         ]
-        super().__init__(placeholder="Open document", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder=f"Paperless: {len(parent.results)}", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         try:
@@ -1930,7 +1930,7 @@ class BrainActiveControlSelect(discord.ui.Select):
             )
             for index, task in enumerate(tasks[:ACTIVE_CONTROL_LIMIT])
         ]
-        placeholder = "Active supplies" if kind == "supplies" else "Active tasks"
+        placeholder = f"Active Supplies: {len(tasks)}" if kind == "supplies" else f"Active Tasks: {len(tasks)}"
         row = 1 if kind == "supplies" else 0
         super().__init__(placeholder=placeholder, min_values=1, max_values=1, options=options, row=row)
 
@@ -1985,7 +1985,8 @@ class BrainActiveTasksSelect(discord.ui.Select):
             )
             for index, task in enumerate(parent.tasks)
         ]
-        super().__init__(placeholder="Choose active item", min_values=1, max_values=1, options=options)
+        label = "Active Supplies" if _uses_supplies_request(parent.request) else "Active Tasks"
+        super().__init__(placeholder=f"{label}: {len(parent.tasks)}", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         try:
