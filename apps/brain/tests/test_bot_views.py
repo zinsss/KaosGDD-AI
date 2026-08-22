@@ -35,7 +35,7 @@ from kaos_brain.bot import (
     FAX_MAIL_LABEL,
     MEMOS_LABEL,
     PAPERLESS_LABEL,
-    SUPPLIES_SHOPPING_LIST_LABEL,
+    SUPPLIES_LABEL,
     TaskCreateConfirmationView,
     UPCOMING_EVENTS_LABEL,
     _read_active_control_message_id,
@@ -220,7 +220,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             [
                 f"{UPCOMING_EVENTS_LABEL}: 1",
                 f"{ACTIVE_TASKS_LABEL}: 1",
-                f"{SUPPLIES_SHOPPING_LIST_LABEL}: 1",
+                f"{SUPPLIES_LABEL}: 1",
                 f"{FAX_MAIL_LABEL}: 1",
             ],
         )
@@ -356,7 +356,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
                 for child in refreshed.children
                 if isinstance(child, BrainActiveControlSelect | BrainUpcomingEventsSelect)
             ],
-            [f"{UPCOMING_EVENTS_LABEL}: 1", f"{ACTIVE_TASKS_LABEL}: 1", f"{SUPPLIES_SHOPPING_LIST_LABEL}: 1"],
+            [f"{UPCOMING_EVENTS_LABEL}: 1", f"{ACTIVE_TASKS_LABEL}: 1", f"{SUPPLIES_LABEL}: 1"],
         )
 
     async def test_upcoming_event_select_opens_detail_message(self) -> None:

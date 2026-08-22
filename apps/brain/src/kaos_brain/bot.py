@@ -84,7 +84,7 @@ ACTIVE_CONTROL_LIMIT = 25
 ACTIVE_CONTROL_HISTORY_LIMIT = 20
 ACTIVE_TASKS_LABEL = "𝓐𝓬𝓽𝓲𝓿𝓮 𝓣𝓪𝓼𝓴𝓼"
 CALENDAR_LABEL = "𝓒𝓪𝓵𝓮𝓷𝓭𝓪𝓻"
-SUPPLIES_SHOPPING_LIST_LABEL = "𝓢𝓾𝓹𝓹𝓵𝓲𝓮𝓼 𝓢𝓱𝓸𝓹𝓹𝓲𝓷𝓰 𝓛𝓲𝓼𝓽"
+SUPPLIES_LABEL = "𝓢𝓾𝓹𝓹𝓵𝓲𝓮𝓼"
 UPCOMING_EVENTS_LABEL = "𝓤𝓹𝓬𝓸𝓶𝓲𝓷𝓰 𝓔𝓿𝓮𝓷𝓽𝓼"
 PAPERLESS_LABEL = "𝓟𝓪𝓹𝓮𝓻𝓵𝓮𝓼𝓼"
 MEMOS_LABEL = "𝓜𝓮𝓶𝓸𝓼"
@@ -2104,7 +2104,7 @@ class BrainServiceMenuView(discord.ui.View):
             allowed_mentions=NO_MENTIONS,
         )
 
-    @discord.ui.button(label=SUPPLIES_SHOPPING_LIST_LABEL, style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label=SUPPLIES_LABEL, style=discord.ButtonStyle.secondary)
     async def supplies_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
         request = ToolRequest(
@@ -2291,7 +2291,7 @@ class BrainActiveControlSelect(discord.ui.Select):
             )
             for index, task in enumerate(tasks[:ACTIVE_CONTROL_LIMIT])
         ]
-        label = SUPPLIES_SHOPPING_LIST_LABEL if kind == "supplies" else ACTIVE_TASKS_LABEL
+        label = SUPPLIES_LABEL if kind == "supplies" else ACTIVE_TASKS_LABEL
         placeholder = f"{label}: {len(tasks)}"
         row = 2 if kind == "supplies" else 1
         disabled = not options
