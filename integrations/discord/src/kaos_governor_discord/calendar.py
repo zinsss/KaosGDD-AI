@@ -442,10 +442,9 @@ def _collections_by_id(bootstrap: Mapping[str, Any]) -> dict[str, Mapping[str, A
 
 
 def agenda_owner_suffix(collection: Mapping[str, Any]) -> str:
-    if str(collection.get("owner") or "").lower() != "zin":
-        return ""
-    label = escape_text(collection.get("ownerLabel") or "GDD_ZiN")
-    return f" · ***{label}***"
+    if str(collection.get("owner") or "").lower() == "family":
+        return " •𝘧𝘢𝘮𝘪𝘭𝘺"
+    return ""
 
 
 def weather_by_date(bootstrap: Mapping[str, Any]) -> dict[date, str]:

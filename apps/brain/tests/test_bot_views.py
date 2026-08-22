@@ -114,7 +114,10 @@ class FakeGovernorTools:
                 {
                     "date": (base + timedelta(days=offset)).isoformat(),
                     "weather": {"summary": "⛅️ 23-28℃"},
-                    "events": [{"title": "Clinic", "time": "10:50", "ownerLabel": "GDD_ZiN"}],
+                    "events": [
+                        {"title": "Clinic", "time": "10:50", "ownerLabel": "GDD_ZiN"},
+                        {"title": "School", "time": "15:00", "ownerLabel": "Family"},
+                    ],
                 }
                 for offset in range(days)
             ],
@@ -288,7 +291,9 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         kwargs = interaction.edit_original_response.await_args.kwargs
         self.assertIn("## Calendar · Weekly", kwargs["content"])
         self.assertIn("⛅️ 23-28℃", kwargs["content"])
-        self.assertIn("Clinic · ***GDD_ZiN***", kwargs["content"])
+        self.assertIn("Clinic", kwargs["content"])
+        self.assertIn("School •𝘧𝘢𝘮𝘪𝘭𝘺", kwargs["content"])
+        self.assertNotIn("GDD_ZiN", kwargs["content"])
         self.assertEqual(kwargs["attachments"], [])
 
     async def test_active_control_refresh_rebuilds_dropdowns(self) -> None:

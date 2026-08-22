@@ -197,17 +197,17 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("# Agenda", content)
         self.assertIn("## 2026.08.13 Thu • 🌧️ 26-33℃", content)
         self.assertNotIn("\n🌧️ ", content)
-        self.assertIn("- 09:00 Clinic · ***GDD_ZiN***", content)
-        self.assertIn("- 당직", content)
-        self.assertNotIn("***Family***", content)
+        self.assertIn("- 09:00 Clinic", content)
+        self.assertNotIn("GDD_ZiN", content)
+        self.assertIn("- 당직 •𝘧𝘢𝘮𝘪𝘭𝘺", content)
         self.assertNotIn("**Events**", content)
         self.assertNotIn("Claim review", content)
         self.assertNotIn("Tasks", content)
         self.assertNotIn("Old done", content)
 
-    def test_agenda_owner_suffix_marks_personal_and_hides_family(self) -> None:
-        self.assertEqual(agenda_owner_suffix({"owner": "zin", "ownerLabel": "GDD_ZiN"}), " · ***GDD_ZiN***")
-        self.assertEqual(agenda_owner_suffix({"owner": "family", "ownerLabel": "Family"}), "")
+    def test_agenda_owner_suffix_marks_family_and_hides_personal(self) -> None:
+        self.assertEqual(agenda_owner_suffix({"owner": "zin", "ownerLabel": "GDD_ZiN"}), "")
+        self.assertEqual(agenda_owner_suffix({"owner": "family", "ownerLabel": "Family"}), " •𝘧𝘢𝘮𝘪𝘭𝘺")
 
     def test_agenda_keeps_days_without_events(self) -> None:
         content = render_agenda(

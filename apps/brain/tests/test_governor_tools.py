@@ -39,13 +39,18 @@ class GovernorToolRenderingTests(unittest.TestCase):
             {
                 "date": "2026-08-14",
                 "weather": {"summary": "⛅️ 23-28℃"},
-                "events": [{"title": "Clinic", "time": "10:00", "ownerLabel": "GDD_ZiN"}],
+                "events": [
+                    {"title": "Clinic", "time": "10:00", "ownerLabel": "GDD_ZiN"},
+                    {"title": "School", "time": "15:00", "ownerLabel": "Family"},
+                ],
                 "tasks": [{"title": "Call mom", "due": "2026-08-14", "dueTime": "10:00"}],
             },
         )
         self.assertIn("## 2026-08-14 · ⛅️ 23-28℃", context)
         self.assertIn("### 일정", context)
-        self.assertIn("- 10:00 Clinic (GDD_ZiN)", context)
+        self.assertIn("- 10:00 Clinic", context)
+        self.assertIn("- 15:00 School •𝘧𝘢𝘮𝘪𝘭𝘺", context)
+        self.assertNotIn("GDD_ZiN", context)
         self.assertIn("### 할 일", context)
         self.assertIn("- Call mom - 2026-08-14 10:00", context)
 

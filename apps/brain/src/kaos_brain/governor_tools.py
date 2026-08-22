@@ -856,9 +856,13 @@ def _count(payload: dict[str, Any], *keys: str, fallback: int) -> int:
 def _event_line(item: dict[str, Any]) -> str:
     time = str(item.get("time") or "").strip()
     title = str(item.get("title") or "Untitled event").strip()
-    owner = str(item.get("ownerLabel") or item.get("owner") or "").strip()
     detail = " ".join(part for part in (time, title) if part)
-    return f"- {detail} ({owner})" if owner else f"- {detail}"
+    return f"- {detail}{_event_owner_suffix(item)}"
+
+
+def _event_owner_suffix(item: dict[str, Any]) -> str:
+    owner = str(item.get("owner") or item.get("ownerLabel") or "").strip().lower()
+    return " •𝘧𝘢𝘮𝘪𝘭𝘺" if owner == "family" else ""
 
 
 def _task_line(item: dict[str, Any]) -> str:

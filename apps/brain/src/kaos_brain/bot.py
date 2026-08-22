@@ -2921,10 +2921,13 @@ async def _render_calendar_weekly(governor_tools: GovernorToolClient, *, profile
 def _calendar_weekly_event_line(event: dict[str, Any]) -> str:
     time_text = str(event.get("time") or event.get("startTime") or "").strip()
     title = discord.utils.escape_markdown(str(event.get("title") or event.get("summary") or "Untitled event").strip())
-    owner = str(event.get("ownerLabel") or event.get("owner") or "").strip()
-    owner_suffix = " · ***GDD_ZiN***" if owner == "GDD_ZiN" else ""
     prefix = f"{time_text} " if time_text else ""
-    return f"- {prefix}{title}{owner_suffix}"
+    return f"- {prefix}{title}{_calendar_event_owner_suffix(event)}"
+
+
+def _calendar_event_owner_suffix(event: dict[str, Any]) -> str:
+    owner = str(event.get("owner") or event.get("ownerLabel") or "").strip().lower()
+    return " •𝘧𝘢𝘮𝘪𝘭𝘺" if owner == "family" else ""
 
 
 def _shift_month(year: int, month: int, delta: int) -> tuple[int, int]:
