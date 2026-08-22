@@ -165,6 +165,53 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(action_view, BrainActiveTaskActionsView)
         self.assertEqual([item.label for item in action_view.children], ["Complete", "Edit", "Delete", "Close"])
 
+    async def test_active_control_keeps_dropdowns_and_service_buttons(self) -> None:
+        view = BrainActiveControlView(
+            FakeGovernorTools(),  # type: ignore[arg-type]
+            self.active_control_settings(),
+            [{"title": "Clinic", "date": "2026-08-22"}],
+            [{"title": "로운이 제로이드"}],
+            [{"title": "토프라민"}],
+            [{"kind": "fax", "title": "Fax jobs tracked: 1"}],
+        )
+
+        self.assertEqual(
+            [getattr(child, "placeholder", "") for child in view.children if getattr(child, "placeholder", "")],
+            ["Upcoming Events: 1", "Active Tasks: 1", "Supplies Shopping List: 1", "Fax/Mail Imports: 1"],
+        )
+        self.assertEqual(
+            [getattr(child, "label", "") for child in view.children if getattr(child, "label", "")],
+            ["Calendar", "Tasks", "Supplies", "Paperless/Memos", "Reload"],
+        )
+
+    async def test_tasks_button_calls_up_active_tasks_message(self) -> None:
+        view = BrainActiveControlView(
+            FakeGovernorTools(),  # type: ignore[arg-type]
+            self.active_control_settings(),
+            [],
+            [{"title": "로운이 제로이드"}],
+            [],
+            [],
+        )
+        button = next(child for child in view.children if getattr(child, "label", "") == "Tasks")
+        interaction = SimpleNamespace(
+            id=701,
+            guild_id=100,
+            channel_id=300,
+            user=SimpleNamespace(id=200),
+            response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+            followup=SimpleNamespace(send=AsyncMock()),
+        )
+
+        await button.callback(interaction)  # type: ignore[arg-type,union-attr]
+
+        interaction.response.defer.assert_awaited_once()
+        content = interaction.followup.send.await_args.args[0]
+        self.assertIn("## Tasks", content)
+        self.assertIn("- active: 1", content)
+        self.assertIn("- 로운이 제로이드", content)
+        self.assertIsInstance(interaction.followup.send.await_args.kwargs["view"], BrainActiveTasksView)
+
     async def test_active_control_refresh_rebuilds_dropdowns(self) -> None:
         view = BrainActiveControlView(
             FakeGovernorTools(),  # type: ignore[arg-type]

@@ -1969,15 +1969,69 @@ class BrainActiveControlView(discord.ui.View):
 
     @discord.ui.button(label="Calendar", style=discord.ButtonStyle.secondary, row=4)
     async def calendar_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_message("Calendar image is attached to this message.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        await interaction.response.defer()
+        current = datetime.now(KST).date()
+        view = BrainCalendarMonthView(
+            self.governor_tools,
+            self.settings,
+            year=current.year,
+            month=current.month,
+        )
+        file = await view.month_file()
+        kwargs: dict[str, Any] = {
+            "content": view.content(),
+            "view": view,
+            "allowed_mentions": NO_MENTIONS,
+        }
+        if file is not None:
+            kwargs["file"] = file
+        await interaction.followup.send(**kwargs)
 
     @discord.ui.button(label="Tasks", style=discord.ButtonStyle.secondary, row=4)
     async def tasks_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_message("Use the Active Tasks dropdown above.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        await interaction.response.defer()
+        try:
+            payload = await self.governor_tools.fetch(
+                ToolRequest(ToolKind.ACTIVE_TASKS, profile=self.settings.governor_tools_profile)
+            )
+        except GovernorToolError as exc:
+            LOGGER.warning("Tasks service message failed: %s", exc)
+            await interaction.followup.send(_tool_failed("할 일 불러오기"), ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        tasks = _task_results(payload)
+        await interaction.followup.send(
+            _render_active_service_message("Tasks", tasks),
+            view=BrainActiveTasksView(
+                self.governor_tools,
+                int(interaction.user.id),
+                ToolRequest(ToolKind.ACTIVE_TASKS, profile=self.settings.governor_tools_profile),
+                tasks,
+            )
+            if tasks
+            else None,
+            allowed_mentions=NO_MENTIONS,
+        )
 
     @discord.ui.button(label="Supplies", style=discord.ButtonStyle.secondary, row=4)
     async def supplies_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_message("Use the Supplies Shopping List dropdown above.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        await interaction.response.defer()
+        request = ToolRequest(
+            ToolKind.ACTIVE_TASKS,
+            profile="supplies",
+            collection_id=self.settings.governor_tools_supplies_collection_id,
+        )
+        try:
+            payload = await self.governor_tools.fetch(request)
+        except GovernorToolError as exc:
+            LOGGER.warning("Supplies service message failed: %s", exc)
+            await interaction.followup.send(_tool_failed("비품 불러오기"), ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        supplies = _task_results(payload)
+        await interaction.followup.send(
+            _render_active_service_message("Supplies", supplies),
+            view=BrainActiveTasksView(self.governor_tools, int(interaction.user.id), request, supplies) if supplies else None,
+            allowed_mentions=NO_MENTIONS,
+        )
 
     @discord.ui.button(label="Paperless/Memos", style=discord.ButtonStyle.secondary, row=4)
     async def knowledge_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -2004,6 +2058,65 @@ class BrainActiveControlView(discord.ui.View):
         if month_file is not None:
             kwargs["attachments"] = [month_file]
         await interaction.edit_original_response(**kwargs)
+
+
+class BrainCalendarMonthView(discord.ui.View):
+    def __init__(self, governor_tools: GovernorToolClient, settings: Settings, *, year: int, month: int) -> None:
+        super().__init__(timeout=600)
+        self.governor_tools = governor_tools
+        self.settings = settings
+        self.year = year
+        self.month = month
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if (
+            interaction.guild_id == self.settings.guild_id
+            and interaction.channel_id == self.settings.brain_channel_id
+            and int(interaction.user.id) in self.settings.allowed_user_ids
+        ):
+            return True
+        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+    def content(self) -> str:
+        return f"## Calendar · {self.year}.{self.month:02d}"
+
+    async def month_file(self) -> discord.File | None:
+        return await _active_control_month_file_for(
+            self.governor_tools,
+            profile=self.settings.governor_tools_profile,
+            year=self.year,
+            month=self.month,
+        )
+
+    async def _edit_month(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
+        file = await self.month_file()
+        kwargs: dict[str, Any] = {
+            "content": self.content(),
+            "view": self,
+            "allowed_mentions": NO_MENTIONS,
+        }
+        if file is not None:
+            kwargs["attachments"] = [file]
+        await interaction.edit_original_response(**kwargs)
+
+    @discord.ui.button(label="<", style=discord.ButtonStyle.secondary)
+    async def previous_month(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.year, self.month = _shift_month(self.year, self.month, -1)
+        await self._edit_month(interaction)
+
+    @discord.ui.button(label="Today", style=discord.ButtonStyle.primary)
+    async def today_month(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        current = datetime.now(KST).date()
+        self.year = current.year
+        self.month = current.month
+        await self._edit_month(interaction)
+
+    @discord.ui.button(label=">", style=discord.ButtonStyle.secondary)
+    async def next_month(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.year, self.month = _shift_month(self.year, self.month, 1)
+        await self._edit_month(interaction)
 
 
 class BrainUpcomingEventsSelect(discord.ui.Select):
@@ -2633,13 +2746,18 @@ async def _active_control_month_file_for(
     governor_tools: GovernorToolClient | None,
     *,
     profile: str,
+    year: int | None = None,
+    month: int | None = None,
 ) -> discord.File | None:
     if governor_tools is None:
         return None
     try:
-        payload = await governor_tools.fetch(ToolRequest(ToolKind.CALENDAR_MONTH_IMAGE, profile=profile))
+        if year is None and month is None:
+            payload = await governor_tools.fetch(ToolRequest(ToolKind.CALENDAR_MONTH_IMAGE, profile=profile))
+        else:
+            payload = await governor_tools.calendar_month_image(profile=profile, year=year, month=month)
         return _month_image_file(payload)
-    except (GovernorToolError, ValueError, binascii.Error) as exc:
+    except (GovernorToolError, AttributeError, ValueError, binascii.Error) as exc:
         LOGGER.warning("Active control month image unavailable: %s", exc)
         return None
 
@@ -2699,6 +2817,32 @@ def _render_active_task_selection(title: str, task: dict[str, Any], *, supplies:
         if due:
             lines.append(f"- due: {due}")
     return "\n".join(lines)
+
+
+def _render_active_service_message(title: str, tasks: list[dict[str, Any]]) -> str:
+    lines = [f"## {title}", f"- active: {len(tasks)}"]
+    for task in tasks[:25]:
+        item_title = str(task.get("title") or task.get("summary") or "Untitled task").strip()
+        due = " ".join(
+            part
+            for part in (
+                str(task.get("due") or task.get("dueDate") or "").strip(),
+                str(task.get("dueTime") or "").strip(),
+            )
+            if part
+        )
+        suffix = f" · {due}" if due and title != "Supplies" else ""
+        lines.append(f"- {discord.utils.escape_markdown(item_title)}{suffix}")
+    if len(tasks) > 25:
+        lines.append(f"- {len(tasks) - 25} more")
+    if not tasks:
+        lines.append("- none")
+    return "\n".join(lines)
+
+
+def _shift_month(year: int, month: int, delta: int) -> tuple[int, int]:
+    index = year * 12 + (month - 1) + delta
+    return index // 12, index % 12 + 1
 
 
 def _task_option_label(task: dict[str, Any]) -> str:

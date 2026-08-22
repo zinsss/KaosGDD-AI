@@ -52,7 +52,7 @@ class GovernorToolClient:
         if request.kind is ToolKind.UPCOMING_EVENTS:
             return await self._get("/tools/events/upcoming", {"profile": self._profile(request.profile), "days": "7"})
         if request.kind is ToolKind.CALENDAR_MONTH_IMAGE:
-            return await self._get("/tools/calendar/month-image", {"profile": self._profile(request.profile)})
+            return await self.calendar_month_image(profile=request.profile)
         if request.kind is ToolKind.RECENT_IMPORTS:
             return await self._get("/tools/imports/recent", {"profile": self._profile(request.profile)})
         if request.kind is ToolKind.ACTIVE_TASKS:
@@ -72,6 +72,14 @@ class GovernorToolClient:
         if request.kind is ToolKind.DOCUMENT_SEARCH:
             return await self._get("/tools/documents/search", {"query": request.query, "limit": "25"})
         raise GovernorToolError("unsupported Governor tool")
+
+    async def calendar_month_image(self, *, profile: str = "", year: int | None = None, month: int | None = None) -> dict[str, Any]:
+        params = {"profile": self._profile(profile)}
+        if year is not None:
+            params["year"] = str(year)
+        if month is not None:
+            params["month"] = str(month)
+        return await self._get("/tools/calendar/month-image", params)
 
     async def _with_single_memo_body(self, payload: dict[str, Any]) -> dict[str, Any]:
         results = payload.get("results")
