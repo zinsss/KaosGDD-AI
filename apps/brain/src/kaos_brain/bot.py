@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
+import json
 import logging
+from pathlib import Path
 import re
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -74,6 +76,7 @@ OPENAI_CALLBACK_PREFIX = "http://localhost:1455/auth/callback?"
 OPENAI_CODE_PATTERN = re.compile(r"^ac_[A-Za-z0-9_.-]+$")
 ACTIVE_CONTROL_MARKER = "## Active"
 ACTIVE_CONTROL_LIMIT = 25
+ACTIVE_CONTROL_HISTORY_LIMIT = 500
 
 
 def _bind_view_message(view: discord.ui.View | None, message: discord.Message) -> None:
@@ -118,6 +121,30 @@ def _tool_unavailable() -> str:
 
 def _tool_failed(action: str) -> str:
     return f"{action} 실패했어요."
+
+
+def _read_active_control_message_id(path: str) -> int:
+    if not path:
+        return 0
+    try:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return 0
+    try:
+        message_id = int(payload.get("messageId", 0))
+    except (TypeError, ValueError):
+        return 0
+    return message_id if message_id > 0 else 0
+
+
+def _write_active_control_message_id(path: str, message_id: int) -> None:
+    if not path or message_id <= 0:
+        return
+    state_path = Path(path)
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = state_path.with_suffix(f"{state_path.suffix}.tmp")
+    tmp_path.write_text(json.dumps({"messageId": message_id}, separators=(",", ":")), encoding="utf-8")
+    tmp_path.replace(state_path)
 
 
 def _tool_cancelled(action: str) -> str:
@@ -344,7 +371,7 @@ class BrainBot(discord.Client):
             if settings.governor_tools_enabled
             else None
         )
-        self._active_control_message_id = 0
+        self._active_control_message_id = _read_active_control_message_id(settings.active_control_state_path)
         self._active_control_refresh_task: asyncio.Task[None] | None = None
 
     async def on_ready(self) -> None:
@@ -882,6 +909,10 @@ class BrainBot(discord.Client):
             else:
                 await message.edit(content=content, view=view, allowed_mentions=NO_MENTIONS)
             self._active_control_message_id = int(message.id)
+            try:
+                _write_active_control_message_id(self.settings.active_control_state_path, self._active_control_message_id)
+            except OSError as exc:
+                LOGGER.warning("Active control message state write failed: %s", exc)
         except Exception as exc:
             LOGGER.warning("Active control message refresh failed: %s", exc)
 
@@ -891,7 +922,7 @@ class BrainBot(discord.Client):
                 return await channel.fetch_message(self._active_control_message_id)
             except discord.HTTPException:
                 self._active_control_message_id = 0
-        async for message in channel.history(limit=50):
+        async for message in channel.history(limit=ACTIVE_CONTROL_HISTORY_LIMIT):
             if message.author.id == self.user.id and str(message.content or "").startswith(ACTIVE_CONTROL_MARKER):
                 return message
         return None

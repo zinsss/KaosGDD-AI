@@ -11,7 +11,7 @@ EnvironmentFile=__KAOSBRAIN_ENV_FILE__
 Restart=always
 RestartSec=10
 ExecStartPre=-/usr/bin/docker rm -f __KAOSBRAIN_CONTAINER_NAME__
-ExecStart=/usr/bin/docker run --rm --name __KAOSBRAIN_CONTAINER_NAME__ --network host --user ${KAOS_HOST_UID}:${KAOS_HOST_GID} --env-file __KAOSBRAIN_ENV_FILE__ --mount type=bind,src=__KAOSBRAIN_SECRETS_DIR__,dst=/run/secrets,ro __KAOSBRAIN_IMAGE_NAME__
+ExecStart=/usr/bin/docker run --rm --name __KAOSBRAIN_CONTAINER_NAME__ --network host --user ${KAOS_HOST_UID}:${KAOS_HOST_GID} --env-file __KAOSBRAIN_ENV_FILE__ --mount type=bind,src=__KAOSBRAIN_SECRETS_DIR__,dst=/run/secrets,ro --mount type=bind,src=__KAOSBRAIN_STATE_DIR__,dst=/data/kaosbrain __KAOSBRAIN_IMAGE_NAME__
 ExecStop=/usr/bin/docker stop __KAOSBRAIN_CONTAINER_NAME__
 
 [Install]

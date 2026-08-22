@@ -107,6 +107,7 @@ class Settings:
     governor_tools_api_token: str
     governor_tools_profile: str
     governor_tools_supplies_collection_id: str
+    active_control_state_path: str
     governor_tools_timeout_seconds: int
     imaging_enabled: bool
     imaging_api_token: str
@@ -219,6 +220,11 @@ class Settings:
             governor_tools_api_token=governor_tools_api_token,
             governor_tools_profile=source.get("KAOSBRAIN_GOVERNOR_TOOLS_PROFILE", "main").strip() or "main",
             governor_tools_supplies_collection_id=source.get("KAOSBRAIN_SUPPLIES_COLLECTION_ID", "").strip(),
+            active_control_state_path=source.get(
+                "KAOSBRAIN_ACTIVE_CONTROL_STATE_PATH",
+                "/data/kaosbrain/active-control.json",
+            ).strip()
+            or "/data/kaosbrain/active-control.json",
             governor_tools_timeout_seconds=_positive_int(
                 source.get("KAOSBRAIN_GOVERNOR_TOOLS_TIMEOUT_SECONDS", "10"),
                 "KAOSBRAIN_GOVERNOR_TOOLS_TIMEOUT_SECONDS",

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock
 
 from kaos_brain.bot import (
+    ACTIVE_CONTROL_HISTORY_LIMIT,
     BrainActiveControlSelect,
     BrainActiveControlView,
     BrainActiveTaskActionsView,
@@ -24,6 +27,8 @@ from kaos_brain.bot import (
     BrainMemoSearchSelect,
     BrainMemoSearchView,
     TaskCreateConfirmationView,
+    _read_active_control_message_id,
+    _write_active_control_message_id,
     render_active_control_message,
 )
 from kaos_brain.tool_intent import ToolKind, ToolRequest
@@ -107,6 +112,16 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(content, "## Active\n- Tasks: 1 active\n- Supplies: 1 active")
+        self.assertGreaterEqual(ACTIVE_CONTROL_HISTORY_LIMIT, 500)
+
+    def test_active_control_message_id_state_round_trips(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            state_path = str(Path(tmpdir) / "nested" / "active-control.json")
+
+            self.assertEqual(_read_active_control_message_id(state_path), 0)
+            _write_active_control_message_id(state_path, 1536983928337076224)
+
+            self.assertEqual(_read_active_control_message_id(state_path), 1536983928337076224)
 
     async def test_active_control_select_opens_existing_action_view(self) -> None:
         view = BrainActiveControlView(

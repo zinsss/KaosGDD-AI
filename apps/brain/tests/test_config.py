@@ -168,6 +168,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.governor_tools_base_url, "http://100.64.0.1:8098")
         self.assertEqual(settings.governor_tools_profile, "family")
         self.assertEqual(settings.governor_tools_supplies_collection_id, "supplies:abc")
+        self.assertEqual(settings.active_control_state_path, "/data/kaosbrain/active-control.json")
 
         magic_dns = Settings.from_env(
             {
