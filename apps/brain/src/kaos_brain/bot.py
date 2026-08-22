@@ -2893,21 +2893,22 @@ def _render_active_service_message(title: str, tasks: list[dict[str, Any]]) -> s
 
 async def _render_calendar_weekly(governor_tools: GovernorToolClient, *, profile: str, start: date) -> str:
     days = [start + timedelta(days=offset) for offset in range(7)]
-    payloads = await asyncio.gather(
-        *(governor_tools.today(profile=profile, day=value.isoformat()) for value in days),
-        return_exceptions=True,
-    )
+    payload = await governor_tools.calendar_week(profile=profile, start=start.isoformat(), days=7)
+    raw_items = payload.get("items")
+    items = [dict(item) for item in raw_items if isinstance(item, dict)] if isinstance(raw_items, list) else []
+    payloads = {str(item.get("date") or ""): item for item in items}
     lines = [f"## Calendar · Weekly", f"- {days[0]:%Y.%m.%d} - {days[-1]:%Y.%m.%d}"]
-    for value, payload in zip(days, payloads, strict=True):
-        if isinstance(payload, Exception):
+    for value in days:
+        day_payload = payloads.get(value.isoformat())
+        if day_payload is None:
             lines.append("")
             lines.append(f"### {value:%Y.%m.%d %a}")
             lines.append("- calendar unavailable")
             continue
-        weather = payload.get("weather")
+        weather = day_payload.get("weather")
         weather_summary = str(weather.get("summary") or "").strip() if isinstance(weather, dict) else ""
         suffix = f" • {weather_summary}" if weather_summary else ""
-        events = _event_results(payload)
+        events = _event_results(day_payload)
         lines.append("")
         lines.append(f"### {value:%Y.%m.%d %a}{suffix}")
         if events:

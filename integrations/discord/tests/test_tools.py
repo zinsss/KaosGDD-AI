@@ -663,6 +663,19 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([item["title"] for item in payload["events"]], ["Clinic", "Tomorrow"])
         self.assertEqual(payload["events"][0]["ownerLabel"], "Family")
 
+    async def test_calendar_week_returns_days_with_single_weather_range(self) -> None:
+        response = await self.client.get("/tools/calendar/week?profile=main&date=2026-08-14&days=7", headers=self.headers())
+
+        self.assertEqual(response.status, 200)
+        payload = await response.json()
+        self.assertEqual(payload["date"], "2026-08-14")
+        self.assertEqual(payload["days"], 7)
+        self.assertEqual(len(payload["items"]), 7)
+        self.assertEqual(payload["items"][0]["events"][0]["title"], "Clinic")
+        self.assertEqual(payload["items"][0]["weather"]["summary"], "⛅️ 23-28℃")
+        self.assertEqual(self.calendar.bootstrap_calls, ["main"])
+        self.assertEqual(self.calendar.month_weather_calls, [("main", "2026-08-14", "2026-08-20", "pohang")])
+
     async def test_calendar_month_image_returns_png_payload(self) -> None:
         response = await self.client.get("/tools/calendar/month-image?profile=main", headers=self.headers())
 

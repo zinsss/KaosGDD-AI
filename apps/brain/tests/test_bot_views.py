@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
@@ -103,6 +103,21 @@ class FakeGovernorTools:
             "date": str(day or "2026-08-22"),
             "weather": {"summary": "⛅️ 23-28℃"},
             "events": [{"title": "Clinic", "date": str(day or "2026-08-22"), "time": "10:50", "ownerLabel": "GDD_ZiN"}],
+        }
+
+    async def calendar_week(self, *, profile: str = "", start: object | None = None, days: int = 7):
+        base = datetime.fromisoformat(str(start or "2026-08-22")).date()
+        return {
+            "date": base.isoformat(),
+            "days": days,
+            "items": [
+                {
+                    "date": (base + timedelta(days=offset)).isoformat(),
+                    "weather": {"summary": "⛅️ 23-28℃"},
+                    "events": [{"title": "Clinic", "time": "10:50", "ownerLabel": "GDD_ZiN"}],
+                }
+                for offset in range(days)
+            ],
         }
 
     async def propose_memo_create(self, request, *, actor_id: int, idempotency_key: str):

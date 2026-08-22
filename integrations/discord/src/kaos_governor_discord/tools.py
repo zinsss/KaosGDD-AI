@@ -258,6 +258,7 @@ class BrainToolServer:
         app.middlewares.append(self._auth_middleware)
         app.router.add_get("/tools/today", self._today)
         app.router.add_get("/tools/events/upcoming", self._upcoming_events)
+        app.router.add_get("/tools/calendar/week", self._calendar_week)
         app.router.add_get("/tools/calendar/month-image", self._calendar_month_image)
         app.router.add_get("/tools/imports/recent", self._recent_imports)
         app.router.add_get("/tools/tasks/active", self._active_tasks)
@@ -346,6 +347,22 @@ class BrainToolServer:
                 "source": "calendar-adapter-live",
             }
         )
+
+    async def _calendar_week(self, request: web.Request) -> web.Response:
+        profile = _profile(request)
+        current = _request_date(request, default=self._today_provider())
+        try:
+            days = int(request.query.get("days", "7").strip() or "7")
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text='{"error": "invalid_days"}', content_type="application/json") from exc
+        days = min(max(days, 1), 14)
+        day_values = [current + timedelta(days=offset) for offset in range(days)]
+        try:
+            bootstrap = await asyncio.to_thread(self._calendar_adapter.bootstrap, profile)
+            bootstrap = await asyncio.to_thread(self._with_weather, profile, bootstrap, day_values)
+        except CalendarAdapterError as exc:
+            return web.json_response({"error": str(exc)}, status=502)
+        return web.json_response(calendar_week_payload(bootstrap, profile=profile, current=current, days=days))
 
     async def _calendar_month_image(self, request: web.Request) -> web.Response:
         profile = _profile(request)
@@ -1732,6 +1749,17 @@ def upcoming_event_payloads(
             str(item.get("uid") or ""),
         ),
     )
+
+
+def calendar_week_payload(bootstrap: Mapping[str, Any], *, profile: str, current: date, days: int) -> dict[str, object]:
+    day_values = [current + timedelta(days=offset) for offset in range(days)]
+    return {
+        "date": current.isoformat(),
+        "profile": profile,
+        "days": days,
+        "items": [today_payload(bootstrap, profile=profile, current=value) for value in day_values],
+        "source": "calendar-adapter-live",
+    }
 
 
 def active_task_payloads(tasks: list[Mapping[str, Any]], *, collection_id: str = "") -> list[dict[str, object]]:

@@ -87,6 +87,12 @@ class GovernorToolClient:
             params["date"] = str(day)
         return await self._get("/tools/today", params)
 
+    async def calendar_week(self, *, profile: str = "", start: object | None = None, days: int = 7) -> dict[str, Any]:
+        params = {"profile": self._profile(profile), "days": str(days)}
+        if start is not None:
+            params["date"] = str(start)
+        return await self._get("/tools/calendar/week", params)
+
     async def _with_single_memo_body(self, payload: dict[str, Any]) -> dict[str, Any]:
         results = payload.get("results")
         if not isinstance(results, list) or len(results) != 1:
