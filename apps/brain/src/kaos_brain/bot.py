@@ -76,7 +76,7 @@ OPENAI_CALLBACK_PREFIX = "http://localhost:1455/auth/callback?"
 OPENAI_CODE_PATTERN = re.compile(r"^ac_[A-Za-z0-9_.-]+$")
 ACTIVE_CONTROL_MARKER = "## Active"
 ACTIVE_CONTROL_LIMIT = 25
-ACTIVE_CONTROL_HISTORY_LIMIT = 500
+ACTIVE_CONTROL_HISTORY_LIMIT = 20
 
 
 def _bind_view_message(view: discord.ui.View | None, message: discord.Message) -> None:

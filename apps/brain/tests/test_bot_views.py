@@ -112,7 +112,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(content, "## Active\n- Tasks: 1 active\n- Supplies: 1 active")
-        self.assertGreaterEqual(ACTIVE_CONTROL_HISTORY_LIMIT, 500)
+        self.assertEqual(ACTIVE_CONTROL_HISTORY_LIMIT, 20)
 
     def test_active_control_message_id_state_round_trips(self) -> None:
         with TemporaryDirectory() as tmpdir:
