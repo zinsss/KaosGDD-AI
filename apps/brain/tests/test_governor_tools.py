@@ -741,7 +741,7 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
             idempotency_key="discord:1",
         )
         await client.propose_task_action(
-            TaskActionRequest("Soap", "reopen", profile="supplies"),
+            TaskActionRequest("Soap", "reopen", profile="supplies", uid="SUPPLY-1"),
             actor_id=994,
             idempotency_key="discord:2",
         )
@@ -753,6 +753,7 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(client.calls[0][1]["profile"], "supplies")
         self.assertEqual(client.calls[0][1]["collectionId"], "supplies:abc")
         self.assertNotIn("dueDate", client.calls[0][1])
+        self.assertEqual(client.calls[1][1]["uid"], "SUPPLY-1")
         self.assertNotIn("dueTime", client.calls[0][1])
         self.assertEqual(client.calls[1][1]["profile"], "supplies")
         self.assertEqual(client.calls[1][1]["collectionId"], "supplies:abc")

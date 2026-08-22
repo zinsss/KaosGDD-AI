@@ -371,6 +371,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         await view.children[0].callback(interaction)  # type: ignore[arg-type,union-attr]
 
         request, actor_id, idempotency_key = tools.task_action_calls[0]
+        self.assertEqual(request.uid, "TASK-1")
         self.assertEqual(request.task_title, "Call mom")
         self.assertEqual(request.action, "complete")
         self.assertEqual(request.profile, "family")
@@ -397,6 +398,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         await view.children[2].callback(interaction)  # type: ignore[arg-type,union-attr]
 
         request, _, idempotency_key = tools.task_action_calls[0]
+        self.assertEqual(request.uid, "SUPPLY-1")
         self.assertEqual(request.task_title, "Soap")
         self.assertEqual(request.action, "delete")
         self.assertEqual(request.profile, "supplies")

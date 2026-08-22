@@ -177,6 +177,7 @@ class GovernorToolClient:
                 "idempotencyKey": idempotency_key,
                 "profile": self._profile(request.profile),
                 **self._collection_payload(request.profile, request.collection_id),
+                "uid": request.uid,
                 "taskTitle": request.task_title,
                 "action": request.action,
             },

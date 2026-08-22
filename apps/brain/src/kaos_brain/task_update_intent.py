@@ -47,6 +47,7 @@ class TaskActionRequest:
     action: str
     profile: str = ""
     collection_id: str = ""
+    uid: str = ""
 
 
 @dataclass(frozen=True)

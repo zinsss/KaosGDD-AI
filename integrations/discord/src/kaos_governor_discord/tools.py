@@ -1120,18 +1120,23 @@ class BrainToolServer:
             return web.json_response({"error": "invalid_profile"}, status=400)
         actor_id = str(body.get("actorId") or "").strip()
         idempotency_key = str(body.get("idempotencyKey") or "").strip()
+        requested_uid = str(body.get("uid") or "").strip()
         task_title = " ".join(str(body.get("taskTitle") or "").split())
         collection_id = str(body.get("collectionId") or "").strip()
         action = str(body.get("action") or "").strip().lower()
         if action not in {"complete", "delete", "reopen"}:
             return web.json_response({"error": "task_action_invalid_action"}, status=400)
-        if not actor_id or not idempotency_key or not task_title:
+        if not actor_id or not idempotency_key or (not requested_uid and not task_title):
             return web.json_response({"error": "task_action_missing_required_field"}, status=400)
         try:
             tasks = await asyncio.to_thread(self._calendar_adapter.list_tasks, profile)
         except CalendarAdapterError as exc:
             return web.json_response({"error": str(exc)}, status=502)
-        matches = _match_completed_tasks(tasks, task_title) if action == "reopen" else _match_active_tasks(tasks, task_title)
+        if requested_uid:
+            candidates = [item for item in tasks if is_completed_task(item)] if action == "reopen" else [item for item in tasks if is_active_task(item)]
+            matches = [task for task in candidates if str(task.get("uid") or "") == requested_uid]
+        else:
+            matches = _match_completed_tasks(tasks, task_title) if action == "reopen" else _match_active_tasks(tasks, task_title)
         if collection_id:
             matches = [task for task in matches if str(task.get("collection") or "") == collection_id]
         if not matches:

@@ -1618,6 +1618,34 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["task"]["action"], "complete")
         self.assertEqual(self.calendar.updated, [])
 
+    async def test_task_complete_proposal_can_match_by_uid(self) -> None:
+        self.calendar.tasks.append(
+            {
+                "uid": "TASK-5",
+                "summary": "Call mom",
+                "status": "NEEDS-ACTION",
+                "collection": "zin:tasks",
+            }
+        )
+        response = await self.client.post(
+            "/tools/tasks/action/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-complete-by-uid-1",
+                "profile": "main",
+                "uid": "TASK-1",
+                "taskTitle": "Call mom",
+                "action": "complete",
+            },
+        )
+
+        self.assertEqual(response.status, 201)
+        payload = await response.json()
+        self.assertEqual(payload["task"]["uid"], "TASK-1")
+        self.assertEqual(payload["task"]["title"], "Call mom")
+        self.assertEqual(payload["task"]["action"], "complete")
+
     async def test_task_complete_approval_marks_task_completed(self) -> None:
         proposal = await self.client.post(
             "/tools/tasks/action/proposals",
