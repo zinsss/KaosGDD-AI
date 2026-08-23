@@ -262,6 +262,7 @@ class CalendarAdapterServerTests(unittest.TestCase):
                             "title": "세린샘",
                             "memo": "",
                             "color": "#A7C6FF",
+                            "icon": "✏️",
                             "slots": [
                                 {
                                     "id": "slot-1",
@@ -281,6 +282,7 @@ class CalendarAdapterServerTests(unittest.TestCase):
             self.assertEqual(saved["revision"], 1)
             self.assertEqual(current["templates"][0]["name"], "기본")
             self.assertEqual(current["templates"][0]["items"][0]["color"], "#a7c6ff")
+            self.assertEqual(current["templates"][0]["items"][0]["icon"], "✏️")
 
     def test_rouny_document_rejects_stale_revision_with_current_copy(self) -> None:
         server = load_server_module()

@@ -65,9 +65,9 @@ const WEATHER_LOCATION_OPTIONS = [
   { id: "yeonghae", label: "Yeonghae", translationKey: "weather.locationYeonghae" },
 ];
 const WEATHER_LOCATION_IDS = new Set(WEATHER_LOCATION_OPTIONS.map((location) => location.id));
-const ROUNY_TIMELINE_DEFAULT_START_HOUR = 8;
+const ROUNY_TIMELINE_DEFAULT_START_HOUR = 9;
 const ROUNY_TIMELINE_DEFAULT_END_HOUR = 22;
-const ROUNY_TIMELINE_HOUR_HEIGHT = 48;
+const ROUNY_TIMELINE_HOUR_HEIGHT = 64;
 const ROUNY_TIMELINE_SLOT_MINUTES = 10;
 const ROUNY_DRAG_MOVE_THRESHOLD = 8;
 const ROUNY_DRAG_HOLD_MS = 260;
@@ -103,6 +103,27 @@ const rounyColorMap = {
   gray: "#d8dee9",
 };
 const DEFAULT_ROUNY_COLOR = "#f4c7df";
+const DEFAULT_ROUNY_ICON = "⭐";
+const rounySubjectIcons = [
+  "🏫",
+  "🔤",
+  "📖",
+  "🧊",
+  "💻",
+  "💛",
+  "🛴",
+  "🧱",
+  "🎨",
+  "💬",
+  "🌸",
+  "🎵",
+  "🛝",
+  "✏️",
+  "⚽",
+  "🧩",
+  "🎒",
+  "⭐",
+];
 
 const profileConfigs = {
   main: {
@@ -4491,6 +4512,7 @@ function defaultRounyItem() {
     slots: [slot],
     memo: "",
     color: DEFAULT_ROUNY_COLOR,
+    icon: DEFAULT_ROUNY_ICON,
   };
 }
 
@@ -4533,7 +4555,14 @@ function normalizeRounyItem(item) {
     slots: normalizedSlots,
     memo: String(item.memo || ""),
     color: normalizeRounyColor(item.color),
+    icon: normalizeRounyIcon(item.icon),
   };
+}
+
+function normalizeRounyIcon(icon) {
+  const value = String(icon || "").trim();
+  if (!value) return DEFAULT_ROUNY_ICON;
+  return [...value].slice(0, 4).join("");
 }
 
 function normalizeRounySlot(slot) {
@@ -5173,8 +5202,16 @@ function renderRounyGrid(template) {
     grouped[day].sort((a, b) => rounyMinutes(a.slot.startTime) - rounyMinutes(b.slot.startTime));
   });
   return `
-    <section class="panel">
-      <div class="panelHeader">
+    <section class="panel rounySchedulePanel">
+      <div class="rounyScheduleHero">
+        <img src="/icons/family/rouny-hero.png?v=1" alt="" aria-hidden="true" />
+        <div>
+          <h2>${uiText("rouny.timetableTitle", "Rouny's timetable")}</h2>
+          <p>${uiText("rouny.timetableMotto", "Have a good day, one step at a time.")}</p>
+        </div>
+        <span>${uiText("rouny.cheer", "Fighting!")}</span>
+      </div>
+      <div class="panelHeader rounyScheduleToolbar">
         <h2>${uiText("rouny.week", "Week")}</h2>
         <label class="rounyGridToggle">
           <input type="checkbox" data-rouny-saturday ${state.rouny.includeSaturday ? "checked" : ""} />
@@ -5194,10 +5231,10 @@ function renderRounyGrid(template) {
         ${visibleDays.map((day) => `<span class="rounyTimelineDayHeader">${escapeHtml(portalProfile() === "family" ? day.familyLabel : day.label)}</span>`).join("")}
         <div class="rounyTimelineTimeRail" aria-hidden="true">
           ${hours
-            .slice(1, -1)
+            .slice(0, -1)
             .map(
               (hour) => `
-                <span class="rounyTimelineHourLabel" style="top:${(hour - range.startHour) * ROUNY_TIMELINE_HOUR_HEIGHT}px">
+                <span class="rounyTimelineHourLabel" style="top:${(hour - range.startHour) * ROUNY_TIMELINE_HOUR_HEIGHT + 16}px">
                   ${String(hour).padStart(2, "0")}:00
                 </span>
               `,
@@ -5240,6 +5277,7 @@ function renderRounyGrid(template) {
                         data-rouny-slot-id="${escapeHtml(slot.id)}"
                         title="${escapeHtml(`${item.title || uiText("common.untitled", "Untitled")} ${rounyTimeLabel(slot)}${issue ? ` · ${issue}` : ""}`)}"
                       >
+                        <span class="rounyBlockIcon" aria-hidden="true">${escapeHtml(normalizeRounyIcon(item.icon))}</span>
                         <strong>${escapeHtml(item.title || uiText("common.untitled", "Untitled"))}</strong>
                       </div>
                     `;
@@ -5461,7 +5499,18 @@ function itemFromRounyClassForm(form) {
     slots: slots.length ? slots : [defaultRounySlot()],
     memo: form.querySelector('[name="memo"]')?.value || "",
     color: form.querySelector('[name="color"]')?.value || DEFAULT_ROUNY_COLOR,
+    icon: form.querySelector('[name="icon"]')?.value || DEFAULT_ROUNY_ICON,
   });
+}
+
+function rounyIconOptions(selectedIcon) {
+  const normalized = normalizeRounyIcon(selectedIcon);
+  const icons = rounySubjectIcons.includes(normalized)
+    ? rounySubjectIcons
+    : [normalized, ...rounySubjectIcons];
+  return icons
+    .map((icon) => `<option value="${escapeHtml(icon)}" ${icon === normalized ? "selected" : ""}>${escapeHtml(icon)}</option>`)
+    .join("");
 }
 
 function upsertRounyDraftItem(item) {
@@ -5483,6 +5532,10 @@ function renderRounyItem(item, validation = validateRounyTemplateTimes(rounyTemp
       </div>
       <button class="openButton" type="button" data-rouny-add-slot>+ ${uiText("rouny.addTime", "Add")}</button>
       <div class="rounyMetaGrid">
+        <label>
+          <span>${uiText("rouny.icon", "Icon")}</span>
+          <select name="icon" class="rounyIconSelect">${rounyIconOptions(item.icon)}</select>
+        </label>
         <label>
           <span>${uiText("rouny.color", "Color")}</span>
           <input name="color" type="color" value="${escapeHtml(normalizeRounyColor(item.color))}" />

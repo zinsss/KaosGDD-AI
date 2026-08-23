@@ -3316,14 +3316,84 @@ h3 {
   margin: 0;
 }
 
+.rounySchedulePanel {
+  overflow: hidden;
+  border-color: rgba(129, 161, 193, 0.42);
+  background: #fbfdff;
+}
+
+.rounyScheduleHero {
+  display: grid;
+  grid-template-columns: 118px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 142px;
+  border-bottom: 1px solid rgba(184, 205, 241, 0.78);
+  background: linear-gradient(180deg, #f7fbff, #e9f2ff);
+  padding: 10px 16px 12px;
+}
+
+.rounyScheduleHero img {
+  align-self: end;
+  width: 112px;
+  height: 128px;
+  object-fit: contain;
+  filter: drop-shadow(8px 10px 0 rgba(46, 52, 64, 0.14));
+}
+
+.rounyScheduleHero h2 {
+  margin: 0;
+  color: #224a96;
+  font-family: "SKYBORI", "Pretendard", ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(2.15rem, 6vw, 3.6rem);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.rounyScheduleHero p {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  margin: 14px 0 0;
+  border: 1px solid #f0c349;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #fff9d9, #fff1a9);
+  color: #9a6a16;
+  padding: 0 18px;
+  font-size: 0.88rem;
+  font-weight: 850;
+}
+
+.rounyScheduleHero > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 122px;
+  min-height: 56px;
+  border: 2px solid #9abcf8;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #3570d7;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.rounyScheduleToolbar {
+  min-height: 46px;
+  border-bottom: 1px solid var(--line);
+  background: #f5f9ff;
+}
+
 .rounyTimelineGrid {
   display: grid;
-  grid-template-columns: 30px repeat(5, minmax(0, 1fr));
-  grid-template-rows: 30px var(--rouny-timeline-height);
+  grid-template-columns: 56px repeat(5, minmax(0, 1fr));
+  grid-template-rows: 44px var(--rouny-timeline-height);
   min-width: 0;
   max-width: 100%;
   overflow: visible;
-  background: var(--surface);
+  border: 1px solid rgba(129, 161, 193, 0.6);
+  border-radius: 14px;
+  background: #ffffff;
   touch-action: pan-y;
 }
 
@@ -3355,7 +3425,7 @@ h3 {
 }
 
 .rounyTimelineGrid.hasSaturday {
-  grid-template-columns: 30px repeat(6, minmax(0, 1fr));
+  grid-template-columns: 56px repeat(6, minmax(0, 1fr));
 }
 
 .rounyTimelineCorner,
@@ -3367,9 +3437,9 @@ h3 {
   justify-content: center;
   min-width: 0;
   border-bottom: 1px solid var(--line);
-  background: var(--panel);
-  color: var(--dim);
-  font-size: 0.68rem;
+  background: #eef5ff;
+  color: #536583;
+  font-size: 0.78rem;
   font-weight: 900;
   text-align: center;
 }
@@ -3387,16 +3457,16 @@ h3 {
 
 .rounyTimelineTimeRail {
   z-index: 2;
-  background: var(--panel);
+  background: #ffffff;
 }
 
 .rounyTimelineHourLabel {
   position: absolute;
-  right: 3px;
+  right: 8px;
   z-index: 2;
   transform: translateY(-0.5em);
-  color: var(--dim);
-  font-size: 0.56rem;
+  color: #25324a;
+  font-size: 0.78rem;
   font-weight: 800;
   line-height: 1;
   white-space: nowrap;
@@ -3404,7 +3474,7 @@ h3 {
 
 .rounyTimelineDayColumn {
   border-left: 1px solid var(--line);
-  background: color-mix(in srgb, var(--surface) 88%, var(--panel));
+  background: #ffffff;
   transition: background-color 120ms ease;
 }
 
@@ -3416,8 +3486,8 @@ h3 {
   position: absolute;
   left: 0;
   right: 0;
-  height: 48px;
-  border-top: 1px solid var(--line);
+  height: 64px;
+  border-top: 1px solid #d7e3f7;
   pointer-events: none;
 }
 
@@ -3429,7 +3499,7 @@ h3 {
   position: absolute;
   left: 0;
   right: 0;
-  border-top: 1px solid color-mix(in srgb, var(--line) 48%, transparent);
+  border-top: 1px solid rgba(215, 227, 247, 0.55);
 }
 
 .rounyTimelineHour i:nth-child(1) {
@@ -3470,24 +3540,40 @@ h3 {
   appearance: none;
   position: absolute;
   z-index: 3;
-  left: 2px;
-  right: 2px;
-  display: flex;
+  left: 6px;
+  right: 6px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
   align-items: center;
-  justify-content: center;
+  gap: 7px;
   min-width: 0;
   overflow: hidden;
-  border: 1px solid rgba(216, 222, 233, 0.16);
-  border-radius: 6px;
-  padding: 3px 2px;
+  border: 1px solid rgba(129, 161, 193, 0.6);
+  border-radius: 10px;
+  padding: 5px 8px;
   background: var(--surface);
   color: #2e3440;
-  text-align: center;
-  box-shadow: 0 3px 7px var(--shadow);
+  text-align: left;
+  box-shadow: none;
   cursor: grab;
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
+}
+
+.rounyBlockIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid currentColor;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.72);
+  color: inherit;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Pretendard", sans-serif;
+  font-size: 1.12rem;
+  line-height: 1;
 }
 
 .rounyBlock strong {
@@ -3496,9 +3582,9 @@ h3 {
   min-width: 0;
   overflow: hidden;
   color: inherit;
-  font-size: 0.64rem;
+  font-size: clamp(0.74rem, 2.9vw, 1rem);
   font-weight: 900;
-  line-height: 1.05;
+  line-height: 1.08;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3670,8 +3756,15 @@ h3 {
 
 .rounyMetaGrid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(84px, 0.35fr) minmax(0, 1fr);
+  gap: 8px;
   min-width: 0;
+}
+
+.rounyIconSelect {
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Pretendard", sans-serif;
+  font-size: 1.2rem !important;
+  text-align: center;
 }
 
 .rounyMetaGrid input[type="color"] {
@@ -4489,27 +4582,64 @@ h3 {
 }
 
 @media (max-width: 680px) {
+  .rounyScheduleHero {
+    grid-template-columns: 78px minmax(0, 1fr);
+    gap: 10px;
+    min-height: 108px;
+    padding: 8px 10px 10px;
+  }
+
+  .rounyScheduleHero img {
+    width: 78px;
+    height: 94px;
+  }
+
+  .rounyScheduleHero h2 {
+    font-size: clamp(2rem, 11vw, 2.8rem);
+  }
+
+  .rounyScheduleHero p {
+    min-height: 30px;
+    margin-top: 8px;
+    padding: 0 12px;
+    font-size: 0.75rem;
+  }
+
+  .rounyScheduleHero > span {
+    display: none;
+  }
+
   .rounyTimelineGrid {
-    grid-template-columns: 28px repeat(5, minmax(0, 1fr));
+    grid-template-columns: 46px repeat(5, minmax(0, 1fr));
   }
 
   .rounyTimelineGrid.hasSaturday {
-    grid-template-columns: 28px repeat(6, minmax(0, 1fr));
+    grid-template-columns: 46px repeat(6, minmax(0, 1fr));
   }
 
   .rounyTimelineHourLabel {
-    right: 2px;
-    font-size: 0.5rem;
+    right: 5px;
+    font-size: 0.66rem;
   }
 
   .rounyBlock {
-    left: 1px;
-    right: 1px;
-    padding: 2px 1px;
+    left: 3px;
+    right: 3px;
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 3px;
+    padding: 4px;
+    border-radius: 8px;
+  }
+
+  .rounyBlockIcon {
+    width: 22px;
+    height: 22px;
+    border-radius: 7px;
+    font-size: 0.84rem;
   }
 
   .rounyBlock strong {
-    font-size: 0.6rem;
+    font-size: 0.72rem;
   }
 
   .rounyItemGrid {

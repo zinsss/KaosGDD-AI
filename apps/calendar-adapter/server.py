@@ -44,6 +44,7 @@ MAX_ROUNY_SLOTS = 2000
 MAX_ROUNY_ID_LENGTH = 128
 MAX_ROUNY_NAME_LENGTH = 200
 MAX_ROUNY_TITLE_LENGTH = 500
+MAX_ROUNY_ICON_LENGTH = 8
 MAX_ROUNY_MEMO_LENGTH = 10000
 ROUNY_COLOR_PATTERN = re.compile(r"^#[0-9a-fA-F]{6}$")
 WEATHER_CITIES = {
@@ -2620,6 +2621,7 @@ def validate_rouny_item(item):
         "slots": normalized_slots,
         "memo": optional_rouny_text(item.get("memo"), "memo", MAX_ROUNY_MEMO_LENGTH),
         "color": color.lower(),
+        "icon": optional_rouny_text(item.get("icon"), "icon", MAX_ROUNY_ICON_LENGTH),
     }
 
 

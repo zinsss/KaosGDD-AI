@@ -238,6 +238,9 @@ window.KAOS_TRANSLATIONS = {
 
     "rouny.label": "로운이",
     "rouny.week": "주간",
+    "rouny.timetableTitle": "로운이 시간표",
+    "rouny.timetableMotto": "매일 즐겁게! 오늘도 멋진 하루",
+    "rouny.cheer": "화이팅!",
     "rouny.saturday": "토요일",
     "rouny.weeklyAria": "로운이 주간 시간표",
     "rouny.noItems": "항목 없음",
@@ -259,6 +262,7 @@ window.KAOS_TRANSLATIONS = {
     "rouny.classTitle": "수업 이름",
     "rouny.activity": "활동",
     "rouny.addTime": "시간 추가",
+    "rouny.icon": "아이콘",
     "rouny.color": "색상",
     "rouny.optional": "선택 사항",
     "rouny.day": "요일",
