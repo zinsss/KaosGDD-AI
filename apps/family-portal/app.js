@@ -104,26 +104,6 @@ const rounyColorMap = {
 };
 const DEFAULT_ROUNY_COLOR = "#f4c7df";
 const DEFAULT_ROUNY_ICON = "⭐";
-const rounySubjectIcons = [
-  "🏫",
-  "🔤",
-  "📖",
-  "🧊",
-  "💻",
-  "💛",
-  "🛴",
-  "🧱",
-  "🎨",
-  "💬",
-  "🌸",
-  "🎵",
-  "🛝",
-  "✏️",
-  "⚽",
-  "🧩",
-  "🎒",
-  "⭐",
-];
 
 const profileConfigs = {
   main: {
@@ -5503,16 +5483,6 @@ function itemFromRounyClassForm(form) {
   });
 }
 
-function rounyIconOptions(selectedIcon) {
-  const normalized = normalizeRounyIcon(selectedIcon);
-  const icons = rounySubjectIcons.includes(normalized)
-    ? rounySubjectIcons
-    : [normalized, ...rounySubjectIcons];
-  return icons
-    .map((icon) => `<option value="${escapeHtml(icon)}" ${icon === normalized ? "selected" : ""}>${escapeHtml(icon)}</option>`)
-    .join("");
-}
-
 function upsertRounyDraftItem(item) {
   const exists = state.rouny.draft.items.some((draftItem) => draftItem.id === item.id);
   state.rouny.draft.items = exists
@@ -5534,7 +5504,17 @@ function renderRounyItem(item, validation = validateRounyTemplateTimes(rounyTemp
       <div class="rounyMetaGrid">
         <label>
           <span>${uiText("rouny.icon", "Icon")}</span>
-          <select name="icon" class="rounyIconSelect">${rounyIconOptions(item.icon)}</select>
+          <input
+            name="icon"
+            class="rounyIconInput"
+            type="text"
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+            inputmode="text"
+            value="${escapeHtml(normalizeRounyIcon(item.icon))}"
+            placeholder="${escapeHtml(DEFAULT_ROUNY_ICON)}"
+          />
         </label>
         <label>
           <span>${uiText("rouny.color", "Color")}</span>
