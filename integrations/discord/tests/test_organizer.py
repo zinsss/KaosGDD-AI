@@ -68,6 +68,7 @@ class DiscordOrganizerViewTests(unittest.IsolatedAsyncioTestCase):
     async def test_digest_and_import_use_their_separate_channels(self) -> None:
         service = SimpleNamespace(
             naver_config=SimpleNamespace(max_attachment_bytes=1024),
+            active_digests=Mock(return_value=[]),
             attach_message=Mock(),
             attach_item_message=Mock(),
             fetch_item=Mock(
@@ -100,6 +101,56 @@ class DiscordOrganizerViewTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(organizer_channel.send.await_count, 2)
         archive_channel.send.assert_awaited_once()
+
+    async def test_publish_digest_deletes_previous_day_snapshot_only(self) -> None:
+        old_digest = digest(1)
+        old_digest["id"] = "old-digest"
+        old_digest["createdAt"] = "2026-08-21T09:00:00+09:00"
+        old_digest["channelId"] = 100
+        old_digest["messageId"] = 401
+        old_digest["items"]["item-0"]["organizerMessageId"] = 402
+        same_day_digest = digest(1)
+        same_day_digest["id"] = "same-day-digest"
+        same_day_digest["createdAt"] = "2026-08-22T08:00:00+09:00"
+        same_day_digest["channelId"] = 100
+        same_day_digest["messageId"] = 403
+        new_digest = digest(1)
+        new_digest["id"] = "new-digest"
+        new_digest["createdAt"] = "2026-08-22T09:00:00+09:00"
+        service = SimpleNamespace(
+            active_digests=Mock(return_value=[old_digest, same_day_digest]),
+            close_digest=Mock(return_value=old_digest),
+            attach_message=Mock(),
+            attach_item_message=Mock(),
+        )
+        deleted_messages = []
+
+        def message(message_id: int):
+            item = AsyncMock()
+            item.id = message_id
+
+            async def delete() -> None:
+                deleted_messages.append(message_id)
+
+            item.delete.side_effect = delete
+            return item
+
+        organizer_channel = AsyncMock()
+        organizer_channel.fetch_message.side_effect = lambda message_id: message(message_id)
+        organizer_channel.send.side_effect = [SimpleNamespace(id=501), SimpleNamespace(id=502)]
+        bot = SimpleNamespace(
+            get_channel=Mock(return_value=organizer_channel),
+            fetch_channel=AsyncMock(return_value=organizer_channel),
+        )
+        coordinator = DiscordMailOrganizer(bot, service, SimpleNamespace(), 100, 200)
+        coordinator.channel = AsyncMock(return_value=organizer_channel)
+
+        await coordinator.publish_digest(new_digest)
+
+        service.close_digest.assert_called_once_with("old-digest")
+        self.assertEqual(deleted_messages, [402, 401])
+        self.assertEqual(organizer_channel.send.await_count, 2)
+        service.attach_message.assert_called_once_with("new-digest", 100, 501)
 
     async def test_bulk_mark_read_acknowledges_as_thinking_before_work(self) -> None:
         organizer = SimpleNamespace(

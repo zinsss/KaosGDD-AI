@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import suppress
+from datetime import date, datetime
 import io
+import logging
 from typing import TYPE_CHECKING
 
 import discord
@@ -14,6 +16,8 @@ from .markdown import MarkdownField, MarkdownMessage, NO_MENTIONS
 
 if TYPE_CHECKING:
     from .bot import GovernorBot
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _ordered_items(digest: dict[str, object]) -> list[tuple[str, dict[str, object]]]:
@@ -28,6 +32,18 @@ def _ordered_items(digest: dict[str, object]) -> list[tuple[str, dict[str, objec
 def _short(value: object, limit: int) -> str:
     text = " ".join(str(value or "").split()) or "(No subject)"
     return text if len(text) <= limit else f"{text[: limit - 3]}..."
+
+
+def _digest_date(digest: dict[str, object]) -> date | None:
+    created_at = str(digest.get("createdAt") or "").strip()
+    if created_at:
+        with suppress(ValueError):
+            return datetime.fromisoformat(created_at).date()
+    created_epoch = digest.get("createdEpoch")
+    if isinstance(created_epoch, (int, float)):
+        with suppress(OSError, ValueError):
+            return datetime.fromtimestamp(float(created_epoch)).date()
+    return None
 
 
 def render_digest(digest: dict[str, object]) -> str:
@@ -88,6 +104,7 @@ class DiscordMailOrganizer:
         channel = await self.channel()
         digest_id = str(digest["id"])
         try:
+            await self.delete_previous_day_digests(digest)
             message = await channel.send(
                 render_digest(digest),
                 view=MailDigestView(self, digest_id),
@@ -135,6 +152,25 @@ class DiscordMailOrganizer:
         deleted = 0
         for digest in expired:
             deleted += await self._delete_digest_messages(digest)
+        return deleted
+
+    async def delete_previous_day_digests(self, digest: dict[str, object]) -> int:
+        current_date = _digest_date(digest)
+        if current_date is None:
+            return 0
+        deleted = 0
+        for existing in await asyncio.to_thread(self.organizer.active_digests):
+            existing_id = str(existing.get("id") or "")
+            existing_date = _digest_date(existing)
+            if not existing_id or existing_id == str(digest.get("id") or "") or existing_date is None:
+                continue
+            if existing_date >= current_date:
+                continue
+            try:
+                await self.delete_digest(existing_id)
+                deleted += 1
+            except Exception as exc:
+                LOGGER.warning("Failed to delete stale mail organizer digest id=%s: %s", existing_id, exc)
         return deleted
 
     async def refresh_digest(self, digest_id: str) -> bool:
