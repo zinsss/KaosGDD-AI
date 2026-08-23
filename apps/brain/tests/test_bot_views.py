@@ -27,6 +27,7 @@ from kaos_brain.bot import (
     BrainCombinedSearchView,
     BrainDocumentSearchSelect,
     BrainDocumentSearchView,
+    BrainFaxMailView,
     BrainMemoDeleteConfirmView,
     BrainMemoEditConfirmView,
     BrainOpenedDocumentView,
@@ -37,6 +38,8 @@ from kaos_brain.bot import (
     CALENDAR_LABEL,
     CALENDAR_TITLE,
     FAX_MAIL_LABEL,
+    FAX_MAIL_PAGE_SIZE,
+    FAX_MAIL_TITLE,
     MEMOS_LABEL,
     MEMOS_TITLE,
     PAPERLESS_LABEL,
@@ -120,7 +123,13 @@ class FakeGovernorTools:
         if request.kind is ToolKind.UPCOMING_EVENTS:
             return {"events": [{"title": "Clinic", "date": "2026-08-22", "time": "10:50", "ownerLabel": "Family"}]}
         if request.kind is ToolKind.RECENT_IMPORTS:
-            return {"imports": [{"kind": "fax", "title": "Fax jobs tracked: 1", "detail": "2026-08-22T10:00:00Z"}]}
+            return {
+                "imports": [
+                    {"kind": "mail", "title": "Naver organizer digests: 1", "detail": "2026-08-22T09:00:00Z"},
+                    {"kind": "fax", "title": "Fax jobs tracked: 1", "detail": "2026-08-22T10:00:00Z"},
+                    {"kind": "documents", "title": "Documents accepted: 1", "detail": "OCR ready: 1"},
+                ]
+            }
         if request.profile == "supplies":
             return {"tasks": [{"title": "토프라민", "date": "2026-08-21", "due": "2026-08-21"}]}
         return {"tasks": [{"title": "로운이 제로이드", "due": "2026-08-22", "dueTime": "10:00"}]}
@@ -388,6 +397,61 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         calls = interaction.response.send_message.await_args_list
         self.assertIn(f"## {PAPERLESS_TITLE}", calls[0].args[0])
         self.assertIn(f"## {MEMOS_TITLE}", calls[1].args[0])
+
+    async def test_fax_mail_button_calls_up_incoming_service_message(self) -> None:
+        view = BrainServiceMenuView(
+            FakeGovernorTools(),  # type: ignore[arg-type]
+            self.active_control_settings(),
+        )
+        button = next(child for child in view.children if getattr(child, "label", "") == FAX_MAIL_LABEL)
+        interaction = SimpleNamespace(
+            id=704,
+            guild_id=100,
+            channel_id=300,
+            user=SimpleNamespace(id=200),
+            response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+            followup=SimpleNamespace(send=AsyncMock()),
+        )
+
+        await button.callback(interaction)  # type: ignore[arg-type,union-attr]
+
+        interaction.response.defer.assert_awaited_once()
+        content = interaction.followup.send.await_args.args[0]
+        self.assertIn(f"## {FAX_MAIL_TITLE}", content)
+        self.assertIn("### Incoming Fax Mail", content)
+        self.assertIn("- total: 2", content)
+        self.assertIn("- Naver organizer digests: 1", content)
+        self.assertIn("- Fax jobs tracked: 1", content)
+        self.assertNotIn("Documents accepted", content)
+        service_view = interaction.followup.send.await_args.kwargs["view"]
+        self.assertIsInstance(service_view, BrainFaxMailView)
+        self.assertIn("Outgoing Fax", [getattr(item, "label", "") for item in service_view.children])
+        self.assertIn("Close", [getattr(item, "label", "") for item in service_view.children])
+
+    async def test_fax_mail_outgoing_message_paginates(self) -> None:
+        imports = [
+            {"kind": "fax", "title": f"Fax job {index:02d}", "detail": "queued"}
+            for index in range(1, FAX_MAIL_PAGE_SIZE + 2)
+        ]
+        view = BrainFaxMailView(
+            FakeGovernorTools(),  # type: ignore[arg-type]
+            200,
+            self.active_control_settings(),
+            imports,
+            mode="outgoing",
+        )
+
+        content = view.content()
+
+        self.assertIn(f"## {FAX_MAIL_TITLE}", content)
+        self.assertIn("### Outgoing Fax", content)
+        self.assertIn(f"- showing: 1-{FAX_MAIL_PAGE_SIZE}", content)
+        self.assertIn("Fax job 01", content)
+        self.assertNotIn(f"Fax job {FAX_MAIL_PAGE_SIZE + 1:02d}", content)
+        self.assertEqual(
+            [getattr(item, "label", "") for item in view.children if getattr(item, "label", "")],
+            ["←", "Page 1/2", "→", "Incoming", "Close"],
+        )
 
     async def test_supplies_button_calls_up_named_shopping_list_without_dates(self) -> None:
         view = BrainServiceMenuView(
