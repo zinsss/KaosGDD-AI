@@ -318,10 +318,11 @@ class BrainToolServer:
     async def _today(self, request: web.Request) -> web.Response:
         profile = _profile(request)
         current = _request_date(request, default=self._today_provider())
+        city = str(request.query.get("city") or "").strip()
         days = [current]
         try:
             bootstrap = await asyncio.to_thread(self._calendar_adapter.bootstrap, profile)
-            bootstrap = await asyncio.to_thread(self._with_weather, profile, bootstrap, days)
+            bootstrap = await asyncio.to_thread(self._with_weather, profile, bootstrap, days, city=city)
         except CalendarAdapterError as exc:
             return web.json_response({"error": str(exc)}, status=502)
         return web.json_response(today_payload(bootstrap, profile=profile, current=current))
@@ -1707,13 +1708,14 @@ class BrainToolServer:
         except Exception:
             LOGGER.exception("Brain tool calendar surface refresh failed")
 
-    def _with_weather(self, profile: str, bootstrap: Mapping[str, Any], days: list[date]) -> dict[str, Any]:
+    def _with_weather(self, profile: str, bootstrap: Mapping[str, Any], days: list[date], *, city: str = "") -> dict[str, Any]:
         payload = dict(bootstrap)
         try:
+            kwargs = {"profile": profile, "start": min(days).isoformat(), "end": max(days).isoformat()}
+            if city:
+                kwargs["city"] = city
             weather = self._calendar_adapter.month_weather(
-                profile,
-                start=min(days).isoformat(),
-                end=max(days).isoformat(),
+                **kwargs,
             )
         except CalendarAdapterError:
             payload.setdefault("weather", [])

@@ -653,6 +653,14 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["weather"]["summary"], "⛅️ 23-28℃")
         self.assertEqual(self.calendar.month_weather_calls, [("main", "2026-08-14", "2026-08-14", "pohang")])
 
+    async def test_today_passes_requested_weather_city(self) -> None:
+        response = await self.client.get("/tools/today?profile=main&city=busan", headers=self.headers())
+
+        self.assertEqual(response.status, 200)
+        payload = await response.json()
+        self.assertEqual(payload["weather"]["summary"], "⛅️ 23-28℃")
+        self.assertEqual(self.calendar.month_weather_calls, [("main", "2026-08-14", "2026-08-14", "busan")])
+
     async def test_upcoming_events_returns_next_three_days(self) -> None:
         response = await self.client.get("/tools/events/upcoming?profile=main&days=3", headers=self.headers())
 

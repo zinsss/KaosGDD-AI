@@ -6,6 +6,37 @@ from enum import StrEnum
 import re
 
 
+WEATHER_CITY_ALIASES = {
+    "포항": ("pohang", "포항"),
+    "pohang": ("pohang", "포항"),
+    "대구": ("daegu", "대구"),
+    "daegu": ("daegu", "대구"),
+    "서울": ("seoul", "서울"),
+    "seoul": ("seoul", "서울"),
+    "부산": ("busan", "부산"),
+    "busan": ("busan", "부산"),
+    "울산": ("ulsan", "울산"),
+    "ulsan": ("ulsan", "울산"),
+    "경주": ("gyeongju", "경주"),
+    "gyeongju": ("gyeongju", "경주"),
+    "영천": ("yeongcheon", "영천"),
+    "yeongcheon": ("yeongcheon", "영천"),
+    "영해": ("yeonghae", "영해"),
+    "yeonghae": ("yeonghae", "영해"),
+    "영덕": ("yeongdeok", "영덕"),
+    "yeongdeok": ("yeongdeok", "영덕"),
+    "제주": ("jeju", "제주"),
+    "jeju": ("jeju", "제주"),
+    "인천": ("incheon", "인천"),
+    "incheon": ("incheon", "인천"),
+    "대전": ("daejeon", "대전"),
+    "daejeon": ("daejeon", "대전"),
+    "광주": ("gwangju", "광주"),
+    "gwangju": ("gwangju", "광주"),
+}
+DEFAULT_LOCATION_WORDS = {"", "여기", "현재위치", "currentlocation", "here"}
+
+
 class ToolKind(StrEnum):
     TODAY = "today"
     WEATHER = "weather"
@@ -42,7 +73,8 @@ def parse_tool_request(content: str, *, today: date | None = None) -> ToolReques
     if dotdot is not None:
         return dotdot
     if _asks_weather(lowered):
-        return ToolRequest(ToolKind.WEATHER, _weather_location_label(text), profile=profile)
+        label, city = _weather_location(text)
+        return ToolRequest(ToolKind.WEATHER, label, profile=profile, collection_id=city)
     if _asks_today(lowered):
         return ToolRequest(ToolKind.TODAY, profile=profile)
     completed = _completed_task_request(text, lowered, current, profile=profile, collection_id=collection_id)
@@ -101,6 +133,17 @@ def _weather_location_label(text: str) -> str:
         cleaned = cleaned.replace(marker, " ")
     cleaned = re.sub(r"\b(weather|temperature|current|today|now|show|tell|me)\b", " ", cleaned, flags=re.IGNORECASE)
     return " ".join(cleaned.split())
+
+
+def _weather_location(text: str) -> tuple[str, str]:
+    label = _weather_location_label(text)
+    normalized = label.lower().replace(" ", "")
+    if normalized in DEFAULT_LOCATION_WORDS:
+        return "", ""
+    for alias, (city, display) in WEATHER_CITY_ALIASES.items():
+        if alias.lower().replace(" ", "") == normalized:
+            return display, city
+    return label, f"unsupported:{label}" if label else ""
 
 
 def _asks_active_tasks(lowered: str) -> bool:

@@ -52,7 +52,28 @@ class GovernorToolClient:
         self.config = config
 
     async def fetch(self, request: ToolRequest) -> dict[str, Any]:
-        if request.kind in {ToolKind.TODAY, ToolKind.WEATHER}:
+        if request.kind is ToolKind.WEATHER:
+            if request.collection_id.startswith("unsupported:"):
+                return {
+                    "weatherLocationUnsupported": request.query,
+                    "supportedWeatherLocations": [
+                        "포항",
+                        "대구",
+                        "서울",
+                        "부산",
+                        "울산",
+                        "경주",
+                        "영천",
+                        "영해",
+                        "영덕",
+                        "제주",
+                        "인천",
+                        "대전",
+                        "광주",
+                    ],
+                }
+            return await self.today(profile=request.profile, city=request.collection_id)
+        if request.kind is ToolKind.TODAY:
             return await self.today(profile=request.profile)
         if request.kind is ToolKind.UPCOMING_EVENTS:
             return await self._get("/tools/events/upcoming", {"profile": self._profile(request.profile), "days": "7"})
@@ -89,10 +110,12 @@ class GovernorToolClient:
             params["month"] = str(month)
         return await self._get("/tools/calendar/month-image", params)
 
-    async def today(self, *, profile: str = "", day: object | None = None) -> dict[str, Any]:
+    async def today(self, *, profile: str = "", day: object | None = None, city: str = "") -> dict[str, Any]:
         params = {"profile": self._profile(profile)}
         if day is not None:
             params["date"] = str(day)
+        if city:
+            params["city"] = city
         return await self._get("/tools/today", params)
 
     async def calendar_week(self, *, profile: str = "", start: object | None = None, days: int = 7) -> dict[str, Any]:
@@ -769,6 +792,14 @@ def _render_today(payload: dict[str, Any]) -> str:
 
 
 def _render_weather(request: ToolRequest, payload: dict[str, Any]) -> str:
+    unsupported = str(payload.get("weatherLocationUnsupported") or "").strip()
+    if unsupported:
+        supported = payload.get("supportedWeatherLocations")
+        supported_text = ", ".join(str(item) for item in supported) if isinstance(supported, list) else ""
+        lines = [f"## {unsupported} 날씨", "- 지원하지 않는 위치예요."]
+        if supported_text:
+            lines.append(f"- 지원 위치: {supported_text}")
+        return "\n".join(lines)
     date_text = str(payload.get("date") or "").strip()
     location = request.query.strip() or "날씨"
     title = f"## {location} 날씨" if location != "날씨" else "## 날씨"

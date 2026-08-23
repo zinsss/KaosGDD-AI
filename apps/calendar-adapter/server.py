@@ -49,16 +49,32 @@ ROUNY_COLOR_PATTERN = re.compile(r"^#[0-9a-fA-F]{6}$")
 WEATHER_CITIES = {
     "pohang": "포항",
     "daegu": "대구",
+    "seoul": "서울",
+    "busan": "부산",
+    "ulsan": "울산",
+    "gyeongju": "경주",
     "yeongcheon": "영천",
     "yeonghae": "영해",
     "yeongdeok": "영덕",
+    "jeju": "제주",
+    "incheon": "인천",
+    "daejeon": "대전",
+    "gwangju": "광주",
 }
 WEATHER_LOCATIONS = {
     "pohang": {"label": "포항", "latitude": 36.0190, "longitude": 129.3435},
     "daegu": {"label": "대구", "latitude": 35.8714, "longitude": 128.6014},
+    "seoul": {"label": "서울", "latitude": 37.5665, "longitude": 126.9780},
+    "busan": {"label": "부산", "latitude": 35.1796, "longitude": 129.0756},
+    "ulsan": {"label": "울산", "latitude": 35.5384, "longitude": 129.3114},
+    "gyeongju": {"label": "경주", "latitude": 35.8562, "longitude": 129.2247},
     "yeongcheon": {"label": "영천", "latitude": 35.9733, "longitude": 128.9389},
     "yeonghae": {"label": "영해", "latitude": 36.5372, "longitude": 129.3878},
     "yeongdeok": {"label": "영덕", "latitude": 36.4151, "longitude": 129.3650},
+    "jeju": {"label": "제주", "latitude": 33.4996, "longitude": 126.5312},
+    "incheon": {"label": "인천", "latitude": 37.4563, "longitude": 126.7052},
+    "daejeon": {"label": "대전", "latitude": 36.3504, "longitude": 127.3845},
+    "gwangju": {"label": "광주", "latitude": 35.1595, "longitude": 126.8526},
 }
 WEATHER_DEFAULT_CITY_KEYS = ("pohang", "daegu", "yeongcheon", "yeonghae")
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
