@@ -381,6 +381,36 @@ class NaverMailOrganizer:
             state = self.load_state()
             return [dict(digest) for digest in state["digests"].values() if int(digest.get("messageId") or 0) > 0]
 
+    def recent_items(self, *, limit: int = 50) -> list[dict[str, object]]:
+        with self._lock:
+            digests = self.active_digests()
+        rows: list[dict[str, object]] = []
+        for digest in digests:
+            digest_id = str(digest.get("id") or "")
+            created_at = str(digest.get("createdAt") or "")
+            items = digest.get("items") if isinstance(digest.get("items"), dict) else {}
+            order = [item_id for item_id in digest.get("order", []) if item_id in items]
+            for item_id in order:
+                item = items.get(item_id)
+                if not isinstance(item, dict):
+                    continue
+                subject = str(item.get("subject") or "Untitled mail").strip() or "Untitled mail"
+                sender = str(item.get("sender") or "").strip()
+                mailbox = str(item.get("mailboxName") or "").strip()
+                rows.append(
+                    {
+                        "kind": "mail",
+                        "direction": "incoming",
+                        "title": subject,
+                        "detail": " · ".join(part for part in (sender, mailbox, created_at[:16]) if part),
+                        "digestId": digest_id,
+                        "itemId": str(item_id),
+                        "createdAt": created_at,
+                    }
+                )
+        rows.sort(key=lambda row: str(row.get("createdAt") or ""), reverse=True)
+        return rows[: max(0, limit)]
+
     def prune_digests(self, now_epoch: float | None = None) -> list[dict[str, object]]:
         with self._lock:
             state = self.load_state()

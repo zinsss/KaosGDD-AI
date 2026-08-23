@@ -717,6 +717,54 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await client.close()
 
+    async def test_recent_imports_prefers_detailed_mail_fax_items(self) -> None:
+        server = BrainToolServer(
+            "127.0.0.1",
+            8098,
+            governor_api_token="governor-secret",
+            calendar_adapter=self.calendar,  # type: ignore[arg-type]
+            memos=self.memos,  # type: ignore[arg-type]
+            paperless=self.paperless,  # type: ignore[arg-type]
+            import_status_provider=lambda: {
+                "naverMailOrganizer": {"digestCount": 1, "lastDigestAt": "2026-08-22T09:00:00Z"},
+                "fax": {"trackedJobs": 1, "lastScanAt": "2026-08-22T08:00:00Z"},
+                "documentInbox": {"acceptedCount": 1, "ocrReadyCount": 1},
+            },
+            import_items_provider=lambda: [
+                {
+                    "kind": "mail",
+                    "direction": "incoming",
+                    "title": "Unread subject",
+                    "detail": "sender@example.test · INBOX",
+                    "digestId": "digest-1",
+                    "itemId": "item-1",
+                },
+                {
+                    "kind": "fax",
+                    "direction": "outgoing",
+                    "title": "처방전.pdf",
+                    "detail": "sent · to 022848302",
+                    "jobId": "job-1",
+                    "status": "sent",
+                },
+            ],
+            today_provider=lambda: date(2026, 8, 14),
+        )
+        client = TestClient(TestServer(server.application()))
+        await client.start_server()
+        try:
+            response = await client.get("/tools/imports/recent?profile=main", headers=self.headers())
+            self.assertEqual(response.status, 200)
+            payload = await response.json()
+            self.assertEqual(payload["source"], "governor-runtime-items")
+            self.assertEqual(payload["count"], 3)
+            self.assertEqual([item["kind"] for item in payload["imports"]], ["mail", "fax", "documents"])
+            self.assertEqual(payload["imports"][0]["direction"], "incoming")
+            self.assertEqual(payload["imports"][1]["direction"], "outgoing")
+            self.assertEqual(payload["imports"][2]["title"], "Documents accepted: 1")
+        finally:
+            await client.close()
+
     async def test_active_tasks_returns_sorted_non_completed_tasks(self) -> None:
         response = await self.client.get("/tools/tasks/active?profile=main", headers=self.headers())
 

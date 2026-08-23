@@ -601,6 +601,35 @@ class FaxService:
     def record_error(self, exc: Exception) -> None:
         self.last_error = f"{type(exc).__name__}: {exc}"
 
+    def recent_items(self, *, limit: int = 50) -> list[dict[str, object]]:
+        state = self._load()
+        rows: list[dict[str, object]] = []
+        for job_id, job in state["jobs"].items():
+            if not isinstance(job, dict):
+                continue
+            status = str(job.get("status") or "").strip() or "unknown"
+            filename = unicodedata.normalize("NFC", str(job.get("filename") or "fax.pdf"))
+            destination = str(job.get("destination") or "unknown").strip() or "unknown"
+            created_at = str(job.get("createdAt") or "")
+            completed_at = str(job.get("completedAt") or "")
+            rows.append(
+                {
+                    "kind": "fax",
+                    "direction": "outgoing",
+                    "title": filename,
+                    "detail": " · ".join(
+                        part for part in (status, f"to {destination}", completed_at[:16] or created_at[:16]) if part
+                    ),
+                    "jobId": str(job_id),
+                    "status": status,
+                    "destination": destination,
+                    "createdAt": created_at,
+                    "completedAt": completed_at,
+                }
+            )
+        rows.sort(key=lambda row: str(row.get("completedAt") or row.get("createdAt") or ""), reverse=True)
+        return rows[: max(0, limit)]
+
     def status(self) -> dict[str, object]:
         state = self._load()
         return {

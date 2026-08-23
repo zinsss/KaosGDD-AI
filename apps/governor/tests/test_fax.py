@@ -155,6 +155,38 @@ class FaxTests(unittest.TestCase):
         self.assertEqual(actions[2].content, "Fax successfully sent.")
         self.assertEqual(actions[-1].message_ids, (20, 21))
 
+    def test_recent_items_returns_outgoing_jobs_without_pdf_content(self) -> None:
+        class Connector:
+            def submit(self, job_id, request, source_metadata):
+                return {"status": "sent", "hylafaxJobId": "42", "completedAt": "2026-08-13T06:00:00Z"}
+
+            def job_status(self, job_id):
+                return {"status": "sent", "hylafaxJobId": "42", "completedAt": "2026-08-13T06:00:00Z"}
+
+            def incoming_events(self):
+                return []
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = FaxConfig(
+                **{
+                    **self.config(root).__dict__,
+                    "transport": "connector",
+                    "connector_base_url": "http://office-fax:8098",
+                    "connector_token": "not-a-real-token",
+                }
+            )
+            service = FaxService(config, connector=Connector())  # type: ignore[arg-type]
+            service.submit(self.request(filename="처방전.pdf"), {"channelId": 10, "messageId": 20})
+            rows = service.recent_items()
+
+        self.assertEqual(rows[0]["kind"], "fax")
+        self.assertEqual(rows[0]["direction"], "outgoing")
+        self.assertEqual(rows[0]["title"], "처방전.pdf")
+        self.assertEqual(rows[0]["status"], "sent")
+        self.assertEqual(rows[0]["destination"], "022848302")
+        self.assertNotIn("pdf", {key.lower() for key in rows[0]})
+
     def test_connector_failed_job_can_recover_after_office_repair(self) -> None:
         class Connector:
             def __init__(self):

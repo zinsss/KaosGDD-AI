@@ -302,6 +302,7 @@ class GovernorBot(discord.Client):
                 paperless=self.paperless,
                 calendar_refresh_callback=self._refresh_calendar_surfaces,
                 import_status_provider=self._import_status,
+                import_items_provider=self._recent_import_items,
                 imaging_second_look=ImagingSecondLookClient(
                     ImagingSecondLookConfig(
                         url=settings.imaging_second_look_url,
@@ -324,6 +325,12 @@ class GovernorBot(discord.Client):
             "fax": self.fax_service.status(),
             "documentInbox": self.discord_inbox.status() if self.discord_inbox is not None else {"enabled": False},
         }
+
+    def _recent_import_items(self) -> list[dict[str, object]]:
+        return [
+            *self.mail_organizer.recent_items(limit=50),
+            *self.fax_service.recent_items(limit=50),
+        ]
 
     def _register_commands(self) -> None:
         @self.tree.command(name="status", description="Show KaosGovernor bot transport status")

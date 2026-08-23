@@ -3372,8 +3372,12 @@ def _import_results(payload: dict[str, Any]) -> list[dict[str, Any]]:
 def _fax_mail_results(payload: dict[str, Any], *, mode: str) -> list[dict[str, Any]]:
     imports = _import_results(payload)
     if mode == "outgoing":
-        return [item for item in imports if _import_kind(item) == "fax"]
-    return [item for item in imports if _import_kind(item) in {"fax", "mail"}]
+        return [item for item in imports if _import_kind(item) == "fax" and _import_direction(item) == "outgoing"]
+    return [
+        item
+        for item in imports
+        if _import_kind(item) in {"fax", "mail"} and _import_direction(item) != "outgoing"
+    ]
 
 
 async def _active_control_month_file_for(
@@ -3660,6 +3664,10 @@ def _import_option_description(item: dict[str, Any]) -> str:
 
 def _import_kind(item: dict[str, Any]) -> str:
     return str(item.get("kind") or "").strip().lower()
+
+
+def _import_direction(item: dict[str, Any]) -> str:
+    return str(item.get("direction") or "").strip().lower()
 
 
 def _safe_discord_line(value: str) -> str:

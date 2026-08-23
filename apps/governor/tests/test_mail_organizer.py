@@ -207,6 +207,23 @@ class MailOrganizerTests(unittest.TestCase):
         self.assertEqual(restored["messageId"], 400)
         self.assertEqual(restored["items"][item_id]["organizerMessageId"], 500)
 
+    def test_recent_items_returns_digest_references_without_body(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            server = FakeOrganizerServer()
+            service = organizer(Path(tmp), server)
+            digest = service.create_digest()
+            service.attach_message(str(digest["id"]), 300, 400)
+            rows = service.recent_items()
+            state_text = service.config.state_path.read_text(encoding="utf-8")
+
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(rows[0]["kind"], "mail")
+        self.assertEqual(rows[0]["direction"], "incoming")
+        self.assertIn("digestId", rows[0])
+        self.assertIn("itemId", rows[0])
+        self.assertNotIn("body", rows[0])
+        self.assertNotIn("Newest body", state_text)
+
     def test_delete_all_uses_only_digest_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             server = FakeOrganizerServer()

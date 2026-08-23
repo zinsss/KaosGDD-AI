@@ -430,7 +430,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_fax_mail_outgoing_message_paginates(self) -> None:
         imports = [
-            {"kind": "fax", "title": f"Fax job {index:02d}", "detail": "queued"}
+            {"kind": "fax", "direction": "outgoing", "title": f"Fax job {index:02d}", "detail": "queued"}
             for index in range(1, FAX_MAIL_PAGE_SIZE + 2)
         ]
         view = BrainFaxMailView(

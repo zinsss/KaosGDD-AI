@@ -219,6 +219,7 @@ class BrainToolServer:
         task_refresh_callback: Callable[[], Awaitable[None]] | None = None,
         calendar_refresh_callback: Callable[[], Awaitable[None]] | None = None,
         import_status_provider: Callable[[], Mapping[str, object]] | None = None,
+        import_items_provider: Callable[[], list[Mapping[str, object]]] | None = None,
         today_provider: Callable[[], date] | None = None,
         durable_store: MemoryDurableGovernorStore | None = None,
         imaging_second_look: ImagingSecondLookClient | None = None,
@@ -233,6 +234,7 @@ class BrainToolServer:
         self._paperless = paperless
         self._calendar_refresh_callback = calendar_refresh_callback or task_refresh_callback
         self._import_status_provider = import_status_provider
+        self._import_items_provider = import_items_provider
         self._today_provider = today_provider or date.today
         self._durable = durable_store or MemoryDurableGovernorStore()
         self._imaging_second_look_client = imaging_second_look or ImagingSecondLookClient(ImagingSecondLookConfig())
@@ -404,16 +406,30 @@ class BrainToolServer:
         profile = _profile(request)
         current = _request_date(request, default=self._today_provider())
         status = self._import_status_provider() if self._import_status_provider is not None else {}
-        imports = _recent_import_payloads(status)
+        summary_imports = _recent_import_payloads(status)
+        detailed_imports = self._recent_import_detail_payloads()
+        imports = _merge_recent_import_payloads(detailed_imports, summary_imports)
         return web.json_response(
             {
                 "date": current.isoformat(),
                 "profile": profile,
                 "count": len(imports),
                 "imports": imports,
-                "source": "governor-runtime-status",
+                "source": "governor-runtime-items" if detailed_imports else "governor-runtime-status",
             }
         )
+
+    def _recent_import_detail_payloads(self) -> list[dict[str, object]]:
+        if self._import_items_provider is None:
+            return []
+        try:
+            rows = self._import_items_provider()
+        except Exception as exc:  # pragma: no cover - defensive runtime guard
+            LOGGER.warning("Detailed import provider failed: %s", exc)
+            return []
+        if not isinstance(rows, list):
+            return []
+        return [_normalize_recent_import_item(item) for item in rows if isinstance(item, Mapping)]
 
     async def _active_tasks(self, request: web.Request) -> web.Response:
         profile = _profile(request)
@@ -2370,6 +2386,43 @@ def _recent_import_payloads(status: Mapping[str, object]) -> list[dict[str, obje
             }
         )
     return imports[:25]
+
+
+def _normalize_recent_import_item(item: Mapping[str, object]) -> dict[str, object]:
+    kind = str(item.get("kind") or "").strip().lower()
+    if kind not in {"fax", "mail", "documents"}:
+        kind = "import"
+    direction = str(item.get("direction") or "").strip().lower()
+    title = str(item.get("title") or "Import").strip() or "Import"
+    detail = str(item.get("detail") or "").strip()
+    payload: dict[str, object] = {
+        "kind": kind,
+        "title": title[:120],
+    }
+    if direction in {"incoming", "outgoing"}:
+        payload["direction"] = direction
+    if detail:
+        payload["detail"] = detail[:180]
+    for key in ("digestId", "itemId", "jobId", "status", "destination", "createdAt", "completedAt"):
+        value = str(item.get(key) or "").strip()
+        if value:
+            payload[key] = value[:120]
+    return payload
+
+
+def _merge_recent_import_payloads(
+    detailed: list[dict[str, object]],
+    summary: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    if not detailed:
+        return summary[:25]
+    kinds = {str(item.get("kind") or "").strip().lower() for item in detailed}
+    merged = list(detailed)
+    for item in summary:
+        kind = str(item.get("kind") or "").strip().lower()
+        if kind == "documents" or kind not in kinds:
+            merged.append(item)
+    return merged[:50]
 
 
 def _mapping_value(payload: Mapping[str, object], key: str) -> Mapping[str, object]:
