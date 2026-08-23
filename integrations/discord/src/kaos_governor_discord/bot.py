@@ -327,10 +327,7 @@ class GovernorBot(discord.Client):
         }
 
     def _recent_import_items(self) -> list[dict[str, object]]:
-        return [
-            *self.mail_organizer.recent_items(limit=50),
-            *self.fax_service.recent_items(limit=50),
-        ]
+        return self.fax_service.recent_items(limit=50)
 
     def _register_commands(self) -> None:
         @self.tree.command(name="status", description="Show KaosGovernor bot transport status")

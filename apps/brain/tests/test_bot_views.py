@@ -419,8 +419,8 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         content = interaction.followup.send.await_args.args[0]
         self.assertIn(f"## {FAX_MAIL_TITLE}", content)
         self.assertIn("### Incoming Fax Mail", content)
-        self.assertIn("- total: 2", content)
-        self.assertIn("- Naver organizer digests: 1", content)
+        self.assertIn("- total: 1", content)
+        self.assertNotIn("Naver organizer digests", content)
         self.assertIn("- Fax jobs tracked: 1", content)
         self.assertNotIn("Documents accepted", content)
         service_view = interaction.followup.send.await_args.kwargs["view"]

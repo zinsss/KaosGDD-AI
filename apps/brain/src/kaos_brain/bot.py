@@ -3373,11 +3373,7 @@ def _fax_mail_results(payload: dict[str, Any], *, mode: str) -> list[dict[str, A
     imports = _import_results(payload)
     if mode == "outgoing":
         return [item for item in imports if _import_kind(item) == "fax" and _import_direction(item) == "outgoing"]
-    return [
-        item
-        for item in imports
-        if _import_kind(item) in {"fax", "mail"} and _import_direction(item) != "outgoing"
-    ]
+    return [item for item in imports if _import_kind(item) == "fax" and _import_direction(item) != "outgoing"]
 
 
 async def _active_control_month_file_for(
@@ -3447,7 +3443,7 @@ def _render_fax_mail_service_message(imports: list[dict[str, Any]], *, mode: str
     showing_start = start + 1 if page_imports else 0
     showing_end = start + len(page_imports)
     subtitle = "Outgoing Fax" if mode == "outgoing" else "Incoming Fax Mail"
-    empty = "no outgoing fax" if mode == "outgoing" else "no incoming fax/mail"
+    empty = "no outgoing fax" if mode == "outgoing" else "no incoming fax"
     lines = [f"## {FAX_MAIL_TITLE}", f"### {subtitle}", f"- total: {len(imports)}"]
     if page_imports:
         lines.append(f"- showing: {showing_start}-{showing_end}")
