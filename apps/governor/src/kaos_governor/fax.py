@@ -131,6 +131,9 @@ class FaxAction:
     channel_id: int = 0
     message_ids: tuple[int, ...] = ()
     content_bytes: bytes = b""
+    remote: str = ""
+    pages: str = ""
+    received_at: str = ""
 
 
 class OfficeFaxConnectorClient:
@@ -207,7 +210,7 @@ def normalize_destination(raw: str) -> str:
 
 def request_from_pdf(*, destination: str, sender: str, source_id: str, filename: str, pdf: bytes, max_bytes: int) -> FaxRequest:
     destination = normalize_destination(destination)
-    filename = unicodedata.normalize("NFC", Path(filename or "fax.pdf").name)
+    filename = safe_name(filename or "fax.pdf")
     if not sender.strip() or not source_id.strip():
         raise FaxError("source_identity_required")
     if not filename.lower().endswith(".pdf"):
@@ -217,6 +220,12 @@ def request_from_pdf(*, destination: str, sender: str, source_id: str, filename:
     if not pdf or len(pdf) > max_bytes:
         raise FaxError("pdf_size_invalid")
     return FaxRequest(destination, sender, source_id, filename, pdf, hashlib.sha256(pdf).hexdigest())
+
+
+def safe_name(value: str) -> str:
+    filename = unicodedata.normalize("NFC", Path(value or "fax.pdf").name)
+    filename = re.sub(r'[\x00-\x1f\x7f"\\/]+', "-", filename).strip(" .-")
+    return filename or "fax.pdf"
 
 
 def request_job_id(request: FaxRequest) -> str:
@@ -335,6 +344,7 @@ class FaxService:
     def _load(self) -> dict:
         value = _read_json(self.config.state_path)
         value["jobs"] = value.get("jobs") if isinstance(value.get("jobs"), dict) else {}
+        value["incoming"] = value.get("incoming") if isinstance(value.get("incoming"), dict) else {}
         value["delivered"] = value.get("delivered") if isinstance(value.get("delivered"), dict) else {}
         value["prompts"] = value.get("prompts") if isinstance(value.get("prompts"), dict) else {}
         return value
@@ -499,6 +509,9 @@ class FaxService:
                     "archive",
                     path=path,
                     filename=f"{received:%Y-%m-%d-%H:%M}_FROM_{remote}.pdf",
+                    remote=remote,
+                    pages=pages,
+                    received_at=received.astimezone(UTC).isoformat().replace("+00:00", "Z"),
                 )
             )
         return actions
@@ -520,6 +533,9 @@ class FaxService:
                     "archive",
                     filename=filename,
                     content_bytes=pdf,
+                    remote=str(event.get("remote") or "").strip(),
+                    pages=str(event.get("pages") or "").strip(),
+                    received_at=str(event.get("receivedAt") or event.get("createdAt") or "").strip(),
                 )
             )
         return actions
@@ -595,8 +611,24 @@ class FaxService:
     def acknowledge(self, action: FaxAction) -> None:
         with self._lock:
             state = self._load()
+            if action.kind == "archive" and action.key.startswith("incoming:archive:"):
+                self._record_incoming_archive(state, action)
             state["delivered"][action.key] = {"at": _timestamp(), "status": "delivered"}
             self._save(state)
+
+    @staticmethod
+    def _record_incoming_archive(state: dict, action: FaxAction) -> None:
+        incoming_id = hashlib.sha256(action.key.encode("utf-8")).hexdigest()[:32]
+        state["incoming"][incoming_id] = {
+            "id": incoming_id,
+            "actionKey": action.key,
+            "filename": unicodedata.normalize("NFC", safe_name(action.filename or "incoming-fax.pdf")),
+            "remote": action.remote,
+            "pages": action.pages,
+            "receivedAt": action.received_at,
+            "archivedAt": _timestamp(),
+            "status": "archived",
+        }
 
     def record_error(self, exc: Exception) -> None:
         self.last_error = f"{type(exc).__name__}: {exc}"
@@ -604,6 +636,37 @@ class FaxService:
     def recent_items(self, *, limit: int = 50) -> list[dict[str, object]]:
         state = self._load()
         rows: list[dict[str, object]] = []
+        for incoming_id, incoming in state["incoming"].items():
+            if not isinstance(incoming, dict):
+                continue
+            filename = unicodedata.normalize("NFC", str(incoming.get("filename") or "incoming-fax.pdf"))
+            remote = str(incoming.get("remote") or "").strip()
+            pages = str(incoming.get("pages") or "").strip()
+            received_at = str(incoming.get("receivedAt") or "")
+            archived_at = str(incoming.get("archivedAt") or "")
+            rows.append(
+                {
+                    "kind": "fax",
+                    "direction": "incoming",
+                    "title": filename,
+                    "detail": " · ".join(
+                        part
+                        for part in (
+                            "received",
+                            f"from {remote}" if remote else "",
+                            f"{pages} pages" if pages else "",
+                            received_at[:16] or archived_at[:16],
+                        )
+                        if part
+                    ),
+                    "faxId": str(incoming_id),
+                    "status": str(incoming.get("status") or "archived"),
+                    "remote": remote,
+                    "pages": pages,
+                    "receivedAt": received_at,
+                    "archivedAt": archived_at,
+                }
+            )
         for job_id, job in state["jobs"].items():
             if not isinstance(job, dict):
                 continue
@@ -627,7 +690,12 @@ class FaxService:
                     "completedAt": completed_at,
                 }
             )
-        rows.sort(key=lambda row: str(row.get("completedAt") or row.get("createdAt") or ""), reverse=True)
+        rows.sort(
+            key=lambda row: str(
+                row.get("completedAt") or row.get("createdAt") or row.get("receivedAt") or row.get("archivedAt") or ""
+            ),
+            reverse=True,
+        )
         return rows[: max(0, limit)]
 
     def status(self) -> dict[str, object]:
@@ -652,6 +720,7 @@ class FaxService:
             "connectorUrlConfigured": bool(self.config.connector_base_url),
             "lastScanAt": self.last_scan_at,
             "lastError": self.last_error,
+            "incomingCount": len(state["incoming"]),
             "trackedJobs": len(state["jobs"]),
             "deliveredActions": len(state["delivered"]),
         }

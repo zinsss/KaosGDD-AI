@@ -266,10 +266,19 @@ class FaxTests(unittest.TestCase):
             service = FaxService(config, connector=Connector())  # type: ignore[arg-type]
 
             actions = service.scan_actions()
+            service.acknowledge(actions[0])
+            recent = service.recent_items()
+            state_text = service.config.state_path.read_text(encoding="utf-8")
 
         self.assertEqual([action.kind for action in actions], ["archive"])
         self.assertEqual(actions[0].filename, "2026-08-12-13:55_FROM_0547337787.pdf")
         self.assertEqual(actions[0].content_bytes, b"%PDF-converted")
+        self.assertEqual(recent[0]["kind"], "fax")
+        self.assertEqual(recent[0]["direction"], "incoming")
+        self.assertEqual(recent[0]["title"], "2026-08-12-13:55_FROM_0547337787.pdf")
+        self.assertEqual(recent[0]["remote"], "0547337787")
+        self.assertEqual(recent[0]["pages"], "1")
+        self.assertNotIn("JVBERi1jb252ZXJ0ZWQ", state_text)
 
     def test_connector_token_can_be_loaded_from_secret_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -361,9 +370,14 @@ class FaxTests(unittest.TestCase):
             )
 
             actions = service.scan_actions()
+            service.acknowledge(actions[0])
+            recent = service.recent_items()
 
         self.assertEqual([action.kind for action in actions], ["archive"])
         self.assertEqual(actions[0].filename, "2026-08-12-13:55_FROM_0547337787.pdf")
+        self.assertEqual(recent[0]["direction"], "incoming")
+        self.assertEqual(recent[0]["remote"], "0547337787")
+        self.assertEqual(recent[0]["pages"], "1")
 
     def test_doneq_compatibility_success_rule(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

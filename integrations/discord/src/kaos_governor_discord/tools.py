@@ -2403,7 +2403,20 @@ def _normalize_recent_import_item(item: Mapping[str, object]) -> dict[str, objec
         payload["direction"] = direction
     if detail:
         payload["detail"] = detail[:180]
-    for key in ("digestId", "itemId", "jobId", "status", "destination", "createdAt", "completedAt"):
+    for key in (
+        "digestId",
+        "itemId",
+        "jobId",
+        "faxId",
+        "status",
+        "destination",
+        "remote",
+        "pages",
+        "createdAt",
+        "completedAt",
+        "receivedAt",
+        "archivedAt",
+    ):
         value = str(item.get(key) or "").strip()
         if value:
             payload[key] = value[:120]
