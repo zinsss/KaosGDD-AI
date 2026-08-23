@@ -95,10 +95,13 @@ PAPERLESS_LABEL = "Paperless"
 MEMOS_LABEL = "Memos"
 FAX_MAIL_LABEL = "Fax Mail"
 ACTIVE_TASKS_TITLE = "𝓐𝓬𝓽𝓲𝓿𝓮 𝓣𝓪𝓼𝓴𝓼"
+TASKS_HISTORY_TITLE = "𝓣𝓪𝓼𝓴𝓼 𝓗𝓲𝓼𝓽𝓸𝓻𝔂"
 CALENDAR_TITLE = "𝓒𝓪𝓵𝓮𝓷𝓭𝓪𝓻"
 SUPPLIES_TITLE = "𝓢𝓾𝓹𝓹𝓵𝓲𝓮𝓼"
+SUPPLIES_HISTORY_TITLE = "𝓢𝓾𝓹𝓹𝓵𝓲𝓮𝓼 𝓗𝓲𝓼𝓽𝓸𝓻𝔂"
 PAPERLESS_TITLE = "𝓟𝓪𝓹𝓮𝓻𝓵𝓮𝓼𝓼"
 MEMOS_TITLE = "𝓜𝓮𝓶𝓸𝓼"
+KOREAN_SHORT_WEEKDAYS = ("월", "화", "수", "목", "금", "토", "일")
 
 
 def _bind_view_message(view: discord.ui.View | None, message: discord.Message) -> None:
@@ -2401,7 +2404,7 @@ class BrainActiveTasksView(discord.ui.View):
     @property
     def title(self) -> str:
         if self.mode == "history":
-            return f"{SUPPLIES_TITLE if self.supplies else ACTIVE_TASKS_TITLE} History · {self.month:%Y.%m}"
+            return SUPPLIES_HISTORY_TITLE if self.supplies else TASKS_HISTORY_TITLE
         return SUPPLIES_TITLE if self.supplies else ACTIVE_TASKS_TITLE
 
     @property
@@ -2422,6 +2425,7 @@ class BrainActiveTasksView(discord.ui.View):
             page=self.page,
             history=self.mode == "history",
             supplies=self.supplies,
+            month=self.month,
         )
 
     def _rebuild_items(self) -> None:
@@ -2433,6 +2437,7 @@ class BrainActiveTasksView(discord.ui.View):
                 self.add_item(BrainTaskHistorySelect(self))
             self.add_item(BrainTaskServiceMonthButton("<<", -1))
             self.add_item(BrainTaskServicePageButton("←", -1, disabled=self.page <= 0))
+            self.add_item(BrainTaskServicePageStatusButton(self.page, self.max_page))
             self.add_item(BrainTaskServicePageButton("→", 1, disabled=self.page >= self.max_page))
             self.add_item(BrainTaskServiceMonthButton(">>", 1))
             self.add_item(BrainTaskServiceModeButton("Active"))
@@ -2572,6 +2577,16 @@ class BrainTaskServicePageButton(discord.ui.Button):
         await interaction.response.defer()
         view.page = min(max(view.page + self.delta, 0), view.max_page)
         await view.edit_message(interaction)
+
+
+class BrainTaskServicePageStatusButton(discord.ui.Button):
+    def __init__(self, page: int, max_page: int) -> None:
+        super().__init__(
+            label=f"Page {page + 1}/{max_page + 1}",
+            style=discord.ButtonStyle.secondary,
+            row=1,
+            disabled=True,
+        )
 
 
 class BrainTaskServiceMonthButton(discord.ui.Button):
@@ -3269,15 +3284,19 @@ def _render_task_service_message(
     page: int,
     history: bool,
     supplies: bool,
+    month: date | None = None,
 ) -> str:
     start = page * TASK_SERVICE_PAGE_SIZE
     page_tasks = tasks[start : start + TASK_SERVICE_PAGE_SIZE]
-    showing_start = start + 1 if page_tasks else 0
-    showing_end = start + len(page_tasks)
-    count_label = "completed" if history else "active"
-    lines = [f"## {title}", f"- {count_label}: {len(tasks)}"]
-    if page_tasks:
-        lines.append(f"- showing: {showing_start}-{showing_end}")
+    if history:
+        month_label = f"{month:%Y.%m}" if month else ""
+        lines = [f"## {title}", f"### {month_label} • Completed: {len(tasks)}"]
+    else:
+        showing_start = start + 1 if page_tasks else 0
+        showing_end = start + len(page_tasks)
+        lines = [f"## {title}", f"- active: {len(tasks)}"]
+        if page_tasks:
+            lines.append(f"- showing: {showing_start}-{showing_end}")
     for task in page_tasks:
         item_title = str(task.get("title") or task.get("summary") or "Untitled task").strip()
         if history:
@@ -3298,9 +3317,12 @@ def _render_task_service_message(
         detail = ""
         if due and not supplies and not history:
             detail = f" · {due}"
-        elif completed and not supplies and history:
-            detail = f" · {completed}"
-        lines.append(f"- {prefix}{discord.utils.escape_markdown(item_title)}{suffix_marker}{detail}")
+        escaped_title = discord.utils.escape_markdown(item_title)
+        if history and completed and not supplies:
+            detail = f" - {prefix}{escaped_title}{suffix_marker}"
+            lines.append(f"- {_format_month_day(completed)}{detail}")
+            continue
+        lines.append(f"- {prefix}{escaped_title}{suffix_marker}{detail}")
     if not page_tasks:
         lines.append("- none")
     return "\n".join(lines)
@@ -3392,6 +3414,14 @@ def _shift_date_month(value: date, delta: int) -> date:
 
 def _month_end(value: date) -> date:
     return _shift_date_month(value, 1) - timedelta(days=1)
+
+
+def _format_month_day(value: str) -> str:
+    try:
+        parsed = date.fromisoformat(value[:10])
+    except ValueError:
+        return value[:10]
+    return f"{parsed.day:02d}.{KOREAN_SHORT_WEEKDAYS[parsed.weekday()]}"
 
 
 def _task_option_label(task: dict[str, Any]) -> str:

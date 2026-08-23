@@ -756,12 +756,34 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
 
         interaction.response.defer.assert_awaited_once()
         kwargs = interaction.edit_original_response.await_args.kwargs
-        self.assertIn("History ·", kwargs["content"])
-        self.assertIn("- completed: 30", kwargs["content"])
-        self.assertIn("- showing: 1-25", kwargs["content"])
+        self.assertIn("## 𝓣𝓪𝓼𝓴𝓼 𝓗𝓲𝓼𝓽𝓸𝓻𝔂", kwargs["content"])
+        self.assertIn("### ", kwargs["content"])
+        self.assertIn(" • Completed: 30", kwargs["content"])
+        self.assertNotIn("- completed:", kwargs["content"])
+        self.assertNotIn("- showing:", kwargs["content"])
+        self.assertIn("- 15.토 - ~~Done 01~~", kwargs["content"])
         refreshed = kwargs["view"]
         self.assertTrue(any(isinstance(child, BrainTaskHistorySelect) for child in refreshed.children))
+        self.assertIn("Page 1/2", [getattr(child, "label", "") for child in refreshed.children])
         self.assertEqual([getattr(child, "label", "") for child in refreshed.children if getattr(child, "label", "")][-2:], ["Active", "Close"])
+
+    async def test_supplies_history_service_omits_dates(self) -> None:
+        view = BrainActiveTasksView(
+            FakeGovernorTools(),  # type: ignore[arg-type]
+            200,
+            ToolRequest(ToolKind.COMPLETED_TASKS, profile="supplies"),
+            [{"uid": "DONE-1", "title": "Soap", "completedDate": "2026-08-15"}],
+            mode="history",
+        )
+
+        content = view.content()
+
+        self.assertIn("## 𝓢𝓾𝓹𝓹𝓵𝓲𝓮𝓼 𝓗𝓲𝓼𝓽𝓸𝓻𝔂", content)
+        self.assertIn("### ", content)
+        self.assertIn(" • Completed: 1", content)
+        self.assertIn("- ~~Soap~~", content)
+        self.assertNotIn("2026-08-15", content)
+        self.assertNotIn("15.", content)
 
     async def test_task_history_select_sends_history_action_buttons(self) -> None:
         view = BrainActiveTasksView(
