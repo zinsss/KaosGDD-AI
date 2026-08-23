@@ -69,9 +69,39 @@ class GovernorToolRenderingTests(unittest.TestCase):
     def test_render_weather_context(self) -> None:
         context = render_tool_context(
             ToolRequest(ToolKind.WEATHER, "포항"),
-            {"date": "2026-08-14", "weather": {"summary": "⛅️ 23-28℃", "condition": "cloudy"}},
+            {
+                "date": "2026-08-14",
+                "weather": {
+                    "summary": "⛅️ 23-28℃",
+                    "condition": "cloudy",
+                    "precipitationProbability": 70,
+                    "precipitationMm": 2.5,
+                    "humidityPercent": 81,
+                    "windSpeedKmh": 13.2,
+                    "dayparts": [
+                        {
+                            "label": "Morning",
+                            "glyph": "🌧️",
+                            "minTemp": 23,
+                            "maxTemp": 25,
+                            "precipitationProbability": 80,
+                            "precipitationMm": 1.2,
+                            "humidityPercent": 88,
+                            "windSpeedKmh": 11,
+                        }
+                    ],
+                },
+            },
         )
-        self.assertEqual(context, "## 포항 날씨\n- ⛅️ 23-28℃\n- cloudy\n- 2026-08-14")
+        self.assertEqual(
+            context,
+            "## 포항 날씨\n"
+            "- ⛅️ 23-28℃\n"
+            "- 강수확률 70% · 강수량 2.5mm · 습도 81% · 바람 13.2km/h\n"
+            "### 시간대\n"
+            "- 오전 🌧️ 23-25℃ · 강수확률 80% · 강수량 1.2mm · 습도 88% · 바람 11km/h\n"
+            "- 2026-08-14",
+        )
 
     def test_render_empty_tasks_context(self) -> None:
         context = render_tool_context(ToolRequest(ToolKind.ACTIVE_TASKS), {"tasks": []})

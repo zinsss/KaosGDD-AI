@@ -807,12 +807,71 @@ def _render_weather(request: ToolRequest, payload: dict[str, Any]) -> str:
     if not isinstance(weather, dict) or not weather.get("summary"):
         return f"{title}\n- 조회 결과 없음"
     lines = [title, f"- {weather['summary']}"]
-    condition = str(weather.get("condition") or "").strip()
-    if condition:
-        lines.append(f"- {condition}")
+    detail = _weather_detail_line(weather)
+    if detail:
+        lines.append(f"- {detail}")
+    dayparts = weather.get("dayparts")
+    if isinstance(dayparts, list) and dayparts:
+        lines.append("### 시간대")
+        for part in dayparts:
+            if isinstance(part, dict):
+                part_line = _weather_daypart_line(part)
+                if part_line:
+                    lines.append(f"- {part_line}")
     if date_text:
         lines.append(f"- {date_text}")
     return "\n".join(lines)
+
+
+def _weather_detail_line(weather: dict[str, Any]) -> str:
+    parts = []
+    precip_prob = _compact_weather_number(weather.get("precipitationProbability"))
+    precip = _compact_weather_number(weather.get("precipitationMm"))
+    humidity = _compact_weather_number(weather.get("humidityPercent"))
+    wind = _compact_weather_number(weather.get("windSpeedKmh"))
+    if precip_prob:
+        parts.append(f"강수확률 {precip_prob}%")
+    if precip:
+        parts.append(f"강수량 {precip}mm")
+    if humidity:
+        parts.append(f"습도 {humidity}%")
+    if wind:
+        parts.append(f"바람 {wind}km/h")
+    return " · ".join(parts)
+
+
+def _weather_daypart_line(part: dict[str, Any]) -> str:
+    label = _weather_daypart_label(str(part.get("label") or ""))
+    glyph = str(part.get("glyph") or "").strip()
+    temp = _weather_temp_range(part)
+    details = _weather_detail_line(part)
+    head = " ".join(value for value in (label, glyph, temp) if value)
+    return f"{head} · {details}" if details else head
+
+
+def _weather_daypart_label(label: str) -> str:
+    return {
+        "Morning": "오전",
+        "Afternoon": "오후",
+        "Evening": "저녁",
+        "Night": "밤",
+    }.get(label, label)
+
+
+def _weather_temp_range(weather: dict[str, Any]) -> str:
+    low = _compact_weather_number(weather.get("minTemp"))
+    high = _compact_weather_number(weather.get("maxTemp"))
+    return f"{low}-{high}℃" if low and high else ""
+
+
+def _compact_weather_number(value: object) -> str:
+    if value is None or value == "":
+        return ""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return ""
+    return str(int(number)) if number.is_integer() else f"{number:.1f}".rstrip("0").rstrip(".")
 
 
 def _render_tasks(payload: dict[str, Any]) -> str:

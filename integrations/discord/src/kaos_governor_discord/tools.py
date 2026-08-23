@@ -1865,13 +1865,20 @@ def task_payload(item: Mapping[str, Any], collections: Mapping[str, Mapping[str,
 def weather_payload(weather: Mapping[str, Any] | None) -> dict[str, object]:
     if not weather:
         return {}
-    return {
+    payload = {
         "date": str(weather.get("date") or ""),
         "summary": weather_agenda_summary(weather),
         "condition": str(weather.get("condition") or weather.get("summary") or weather.get("weather") or ""),
         "minTemp": weather.get("minTemp", ""),
         "maxTemp": weather.get("maxTemp", ""),
     }
+    for key in ("precipitationProbability", "precipitationMm", "humidityPercent", "windSpeedKmh"):
+        if weather.get(key) not in (None, ""):
+            payload[key] = weather.get(key)
+    dayparts = weather.get("dayparts")
+    if isinstance(dayparts, list):
+        payload["dayparts"] = [dict(item) for item in dayparts if isinstance(item, Mapping)]
+    return payload
 
 
 def collections_by_id(bootstrap: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:

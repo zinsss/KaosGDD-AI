@@ -79,6 +79,23 @@ class FakeCalendarAdapter:
                     "condition": "cloudy",
                     "minTemp": 23,
                     "maxTemp": 28,
+                    "precipitationProbability": 70,
+                    "precipitationMm": 2.5,
+                    "humidityPercent": 81,
+                    "windSpeedKmh": 13.2,
+                    "dayparts": [
+                        {
+                            "label": "Morning",
+                            "glyph": "🌧️",
+                            "condition": "rain",
+                            "minTemp": 23,
+                            "maxTemp": 25,
+                            "precipitationProbability": 80,
+                            "precipitationMm": 1.2,
+                            "humidityPercent": 88,
+                            "windSpeedKmh": 11,
+                        }
+                    ],
                 }
             ]
         }
@@ -651,6 +668,8 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["events"][0]["title"], "Clinic")
         self.assertEqual(payload["tasks"][0]["title"], "Call mom")
         self.assertEqual(payload["weather"]["summary"], "⛅️ 23-28℃")
+        self.assertEqual(payload["weather"]["precipitationProbability"], 70)
+        self.assertEqual(payload["weather"]["dayparts"][0]["humidityPercent"], 88)
         self.assertEqual(self.calendar.month_weather_calls, [("main", "2026-08-14", "2026-08-14", "pohang")])
 
     async def test_today_passes_requested_weather_city(self) -> None:

@@ -1159,6 +1159,24 @@ def round_celsius(value):
     return round(float(value))
 
 
+def round_weather_value(value, digits=0):
+    number = round(float(value), digits)
+    return int(number) if float(number).is_integer() else number
+
+
+def optional_weather_value(values, index, digits=0):
+    try:
+        value = values[index]
+    except (IndexError, TypeError):
+        return None
+    if value is None or value == "":
+        return None
+    try:
+        return round_weather_value(value, digits)
+    except (TypeError, ValueError):
+        return None
+
+
 def parse_date_or_default(value, default):
     try:
         return date.fromisoformat(str(value or ""))
@@ -1202,7 +1220,7 @@ def fetch_open_meteo_forecast_coordinates(latitude, longitude, start_date, end_d
             "latitude": latitude,
             "longitude": longitude,
             "daily": "weather_code,temperature_2m_min,temperature_2m_max",
-            "hourly": "weather_code,temperature_2m",
+            "hourly": "weather_code,temperature_2m,precipitation_probability,precipitation,relative_humidity_2m,wind_speed_10m",
             "timezone": LOCAL_TZID,
             "start_date": start_date,
             "end_date": end_date,
@@ -1229,7 +1247,7 @@ def fetch_open_meteo_archive(city, start_date, end_date):
         {
             "latitude": location["latitude"],
             "longitude": location["longitude"],
-            "daily": "weather_code,temperature_2m_min,temperature_2m_max",
+            "daily": "weather_code,temperature_2m_min,temperature_2m_max,precipitation_probability_max,precipitation_sum,wind_speed_10m_max",
             "timezone": LOCAL_TZID,
             "start_date": start_date,
             "end_date": end_date,
@@ -1246,11 +1264,14 @@ def forecast_daily_items(city, payload, city_name=""):
     codes = daily.get("weather_code") or []
     min_values = daily.get("temperature_2m_min") or []
     max_values = daily.get("temperature_2m_max") or []
+    precip_prob_values = daily.get("precipitation_probability_max") or []
+    precip_values = daily.get("precipitation_sum") or []
+    wind_values = daily.get("wind_speed_10m_max") or []
     items = {}
     for index, date_value in enumerate(times):
         try:
             condition = weather_code_to_condition(codes[index])
-            items[str(date_value)] = {
+            item = {
                 "city": city,
                 "cityName": city_name or WEATHER_CITIES[city],
                 "date": str(date_value),
@@ -1261,6 +1282,16 @@ def forecast_daily_items(city, payload, city_name=""):
                 "source": "forecast",
                 "dayparts": [],
             }
+            precip_prob = optional_weather_value(precip_prob_values, index)
+            precip = optional_weather_value(precip_values, index, 1)
+            wind = optional_weather_value(wind_values, index, 1)
+            if precip_prob is not None:
+                item["precipitationProbability"] = precip_prob
+            if precip is not None:
+                item["precipitationMm"] = precip
+            if wind is not None:
+                item["windSpeedKmh"] = wind
+            items[str(date_value)] = item
         except (IndexError, TypeError, ValueError):
             continue
     return items
@@ -1359,6 +1390,10 @@ def forecast_dayparts(payload):
     times = hourly.get("time") or []
     codes = hourly.get("weather_code") or []
     temperatures = hourly.get("temperature_2m") or []
+    precip_probs = hourly.get("precipitation_probability") or []
+    precipitation = hourly.get("precipitation") or []
+    humidity = hourly.get("relative_humidity_2m") or []
+    winds = hourly.get("wind_speed_10m") or []
     by_date = {}
     for index, timestamp in enumerate(times):
         try:
@@ -1367,7 +1402,20 @@ def forecast_dayparts(payload):
             weather_code = int(codes[index])
         except (IndexError, TypeError, ValueError):
             continue
-        by_date.setdefault(parsed.date().isoformat(), {})[parsed.hour] = {"temp": temp_c, "weatherCode": weather_code}
+        row = {"temp": temp_c, "weatherCode": weather_code}
+        precip_prob = optional_weather_value(precip_probs, index)
+        precip = optional_weather_value(precipitation, index, 1)
+        humidity_value = optional_weather_value(humidity, index)
+        wind = optional_weather_value(winds, index, 1)
+        if precip_prob is not None:
+            row["precipitationProbability"] = precip_prob
+        if precip is not None:
+            row["precipitationMm"] = precip
+        if humidity_value is not None:
+            row["humidityPercent"] = humidity_value
+        if wind is not None:
+            row["windSpeedKmh"] = wind
+        by_date.setdefault(parsed.date().isoformat(), {})[parsed.hour] = row
 
     results = {}
     for date_value, by_hour in by_date.items():
@@ -1382,16 +1430,27 @@ def forecast_dayparts(payload):
             )
             condition = weather_code_to_condition(representative_code)
             temps = [row["temp"] for row in rows]
-            parts.append(
-                {
-                    "label": label,
-                    "glyph": weather_glyph_for_condition(condition),
-                    "condition": condition,
-                    "weatherCode": representative_code,
-                    "minTemp": min(temps),
-                    "maxTemp": max(temps),
-                }
-            )
+            part = {
+                "label": label,
+                "glyph": weather_glyph_for_condition(condition),
+                "condition": condition,
+                "weatherCode": representative_code,
+                "minTemp": min(temps),
+                "maxTemp": max(temps),
+            }
+            precip_values = [row["precipitationMm"] for row in rows if "precipitationMm" in row]
+            precip_prob_values = [row["precipitationProbability"] for row in rows if "precipitationProbability" in row]
+            humidity_values = [row["humidityPercent"] for row in rows if "humidityPercent" in row]
+            wind_values = [row["windSpeedKmh"] for row in rows if "windSpeedKmh" in row]
+            if precip_values:
+                part["precipitationMm"] = round_weather_value(sum(precip_values), 1)
+            if precip_prob_values:
+                part["precipitationProbability"] = max(precip_prob_values)
+            if humidity_values:
+                part["humidityPercent"] = round_weather_value(sum(humidity_values) / len(humidity_values))
+            if wind_values:
+                part["windSpeedKmh"] = round_weather_value(max(wind_values), 1)
+            parts.append(part)
         results[date_value] = parts
     return results
 

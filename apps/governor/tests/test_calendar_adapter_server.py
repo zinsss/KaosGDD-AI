@@ -143,6 +143,41 @@ class CalendarAdapterServerTests(unittest.TestCase):
             server.select_collection = original_select
             server.radicale_request = original_radicale
 
+    def test_forecast_weather_includes_precipitation_humidity_and_wind(self) -> None:
+        server = load_server_module()
+        payload = {
+            "daily": {
+                "time": ["2026-08-23"],
+                "weather_code": [61],
+                "temperature_2m_min": [24.2],
+                "temperature_2m_max": [33.4],
+                "precipitation_probability_max": [70],
+                "precipitation_sum": [2.55],
+                "wind_speed_10m_max": [13.24],
+            },
+            "hourly": {
+                "time": ["2026-08-23T06:00", "2026-08-23T07:00"],
+                "weather_code": [61, 3],
+                "temperature_2m": [24.2, 25.4],
+                "precipitation_probability": [80, 20],
+                "precipitation": [0.6, 0.7],
+                "relative_humidity_2m": [90, 86],
+                "wind_speed_10m": [10.2, 11.4],
+            },
+        }
+
+        item = server.forecast_daily_items("pohang", payload)["2026-08-23"]
+        daypart = server.forecast_dayparts(payload)["2026-08-23"][0]
+
+        self.assertEqual(item["precipitationProbability"], 70)
+        self.assertEqual(item["precipitationMm"], 2.5)
+        self.assertEqual(item["windSpeedKmh"], 13.2)
+        self.assertEqual(daypart["label"], "Morning")
+        self.assertEqual(daypart["precipitationProbability"], 80)
+        self.assertEqual(daypart["precipitationMm"], 1.3)
+        self.assertEqual(daypart["humidityPercent"], 88)
+        self.assertEqual(daypart["windSpeedKmh"], 11.4)
+
     def test_create_task_rejects_recurring_occurrence_uid_due_mismatch(self) -> None:
         server = load_server_module()
 
