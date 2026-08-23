@@ -1219,7 +1219,7 @@ def fetch_open_meteo_forecast_coordinates(latitude, longitude, start_date, end_d
         {
             "latitude": latitude,
             "longitude": longitude,
-            "daily": "weather_code,temperature_2m_min,temperature_2m_max",
+            "daily": "weather_code,temperature_2m_min,temperature_2m_max,precipitation_probability_max,precipitation_sum,wind_speed_10m_max",
             "hourly": "weather_code,temperature_2m,precipitation_probability,precipitation,relative_humidity_2m,wind_speed_10m",
             "timezone": LOCAL_TZID,
             "start_date": start_date,
@@ -1247,7 +1247,7 @@ def fetch_open_meteo_archive(city, start_date, end_date):
         {
             "latitude": location["latitude"],
             "longitude": location["longitude"],
-            "daily": "weather_code,temperature_2m_min,temperature_2m_max,precipitation_probability_max,precipitation_sum,wind_speed_10m_max",
+            "daily": "weather_code,temperature_2m_min,temperature_2m_max",
             "timezone": LOCAL_TZID,
             "start_date": start_date,
             "end_date": end_date,
