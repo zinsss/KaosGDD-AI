@@ -8,6 +8,7 @@ from kaos_governor_discord.organizer import (
     MailBulkView,
     MailDeleteAllConfirmationView,
     MailDigestView,
+    MailItemSelect,
     MailItemActionView,
     render_digest,
     render_digest_item,
@@ -33,11 +34,12 @@ def digest(count: int) -> dict[str, object]:
 
 
 class DiscordOrganizerRenderingTests(unittest.TestCase):
-    def test_digest_renders_markdown_without_a_select_menu(self) -> None:
+    def test_digest_renders_compact_numbered_list(self) -> None:
         value = digest(3)
         rendered = render_digest(value)
         self.assertIn("## Naver Mail Organizer", rendered)
-        self.assertIn("direct actions", rendered)
+        self.assertIn("1. Unread subject 0", rendered)
+        self.assertIn("Select one message", rendered)
         self.assertNotIn("Page", rendered)
 
     def test_item_message_is_compact_and_escapes_mail_content(self) -> None:
@@ -51,11 +53,11 @@ class DiscordOrganizerRenderingTests(unittest.TestCase):
 class DiscordOrganizerViewTests(unittest.IsolatedAsyncioTestCase):
     async def test_persistent_digest_components_have_stable_custom_ids(self) -> None:
         coordinator = SimpleNamespace(policy=SimpleNamespace())
-        header = MailDigestView(coordinator, "digest-1")
+        header = MailDigestView(coordinator, "digest-1", digest(1))
         item = MailItemActionView(coordinator, "digest-1", "item-1")
         header_ids = [child.custom_id for child in header.children]
         item_ids = [child.custom_id for child in item.children]
-        self.assertEqual(header_ids, ["mail:menu:digest-1", "mail:close:digest-1"])
+        self.assertEqual(header_ids, ["mail:select:digest-1", "mail:menu:digest-1", "mail:close:digest-1"])
         self.assertEqual(
             item_ids,
             [
@@ -90,7 +92,7 @@ class DiscordOrganizerViewTests(unittest.IsolatedAsyncioTestCase):
             SimpleNamespace(), service, SimpleNamespace(), 100, 200
         )
         organizer_channel = AsyncMock()
-        organizer_channel.send.side_effect = [SimpleNamespace(id=501), SimpleNamespace(id=502)]
+        organizer_channel.send.return_value = SimpleNamespace(id=501)
         archive_channel = AsyncMock()
         archive_channel.send.return_value = SimpleNamespace(id=601)
         coordinator.channel = AsyncMock(return_value=organizer_channel)
@@ -99,7 +101,7 @@ class DiscordOrganizerViewTests(unittest.IsolatedAsyncioTestCase):
         await coordinator.publish_digest(digest(1))
         await coordinator.import_item("digest-1", "item-0")
 
-        self.assertEqual(organizer_channel.send.await_count, 2)
+        organizer_channel.send.assert_awaited_once()
         archive_channel.send.assert_awaited_once()
 
     async def test_publish_digest_deletes_previous_day_snapshot_only(self) -> None:
@@ -137,7 +139,7 @@ class DiscordOrganizerViewTests(unittest.IsolatedAsyncioTestCase):
 
         organizer_channel = AsyncMock()
         organizer_channel.fetch_message.side_effect = lambda message_id: message(message_id)
-        organizer_channel.send.side_effect = [SimpleNamespace(id=501), SimpleNamespace(id=502)]
+        organizer_channel.send.return_value = SimpleNamespace(id=501)
         bot = SimpleNamespace(
             get_channel=Mock(return_value=organizer_channel),
             fetch_channel=AsyncMock(return_value=organizer_channel),
@@ -149,8 +151,32 @@ class DiscordOrganizerViewTests(unittest.IsolatedAsyncioTestCase):
 
         service.close_digest.assert_called_once_with("old-digest")
         self.assertEqual(deleted_messages, [402, 401])
-        self.assertEqual(organizer_channel.send.await_count, 2)
+        organizer_channel.send.assert_awaited_once()
         service.attach_message.assert_called_once_with("new-digest", 100, 501)
+
+    async def test_mail_select_opens_item_action_panel(self) -> None:
+        value = digest(1)
+        service = SimpleNamespace(digest=Mock(return_value=value))
+        coordinator = SimpleNamespace(
+            policy=SimpleNamespace(allows=Mock(return_value=True)),
+            organizer=service,
+        )
+        interaction = SimpleNamespace(
+            guild_id=1,
+            channel_id=2,
+            user=SimpleNamespace(id=3),
+            response=SimpleNamespace(send_message=AsyncMock()),
+        )
+        select = MailItemSelect(coordinator, "digest-1", value)
+        select._values = ["item-0"]
+
+        await select.callback(interaction)
+
+        interaction.response.send_message.assert_awaited_once()
+        args = interaction.response.send_message.await_args.args
+        kwargs = interaction.response.send_message.await_args.kwargs
+        self.assertIn("Unread subject 0", args[0])
+        self.assertTrue(kwargs["ephemeral"])
 
     async def test_bulk_mark_read_acknowledges_as_thinking_before_work(self) -> None:
         organizer = SimpleNamespace(

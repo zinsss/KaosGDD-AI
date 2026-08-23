@@ -34,6 +34,13 @@ def _short(value: object, limit: int) -> str:
     return text if len(text) <= limit else f"{text[: limit - 3]}..."
 
 
+def _select_text(value: object, limit: int) -> str:
+    text = _short(value, limit).strip()
+    if not text:
+        text = "(No subject)"
+    return text[:limit]
+
+
 def _digest_date(digest: dict[str, object]) -> date | None:
     created_at = str(digest.get("createdAt") or "").strip()
     if created_at:
@@ -50,6 +57,10 @@ def render_digest(digest: dict[str, object]) -> str:
     items = _ordered_items(digest)
     shown = len(items)
     total = int(digest.get("totalUnread") or shown)
+    lines = [
+        f"{index}. {discord.utils.escape_markdown(discord.utils.escape_mentions(_short(item.get('subject'), 90)))}"
+        for index, (_item_id, item) in enumerate(items[:25], start=1)
+    ]
     fields = [
         MarkdownField("Updated", str(digest.get("createdAt") or "").replace("T", " ")[:16] + " KST"),
         MarkdownField("Unread", str(total)),
@@ -58,9 +69,9 @@ def render_digest(digest: dict[str, object]) -> str:
         fields.append(MarkdownField("Loaded", f"{shown} newest messages"))
     return MarkdownMessage(
         title="Naver Mail Organizer",
-        summary="Use the direct actions on each unread message below.",
+        summary="\n".join(lines) if lines else "No unread messages.",
         fields=tuple(fields),
-        footer="Naver remains authoritative",
+        footer="Select one message for Import, Mark Read, or Trash",
     ).render()
 
 
@@ -107,7 +118,7 @@ class DiscordMailOrganizer:
             await self.delete_previous_day_digests(digest)
             message = await channel.send(
                 render_digest(digest),
-                view=MailDigestView(self, digest_id),
+                view=MailDigestView(self, digest_id, digest),
                 allowed_mentions=NO_MENTIONS,
             )
             await asyncio.to_thread(
@@ -116,8 +127,6 @@ class DiscordMailOrganizer:
                 self.channel_id,
                 message.id,
             )
-            for item_id, item in _ordered_items(digest):
-                await self._publish_item(channel, digest_id, item_id, item)
             return message
         except Exception:
             await self.delete_digest(digest_id)
@@ -131,19 +140,16 @@ class DiscordMailOrganizer:
             digest_id = str(digest.get("id") or "")
             message_id = int(digest.get("messageId") or 0)
             if digest_id and message_id:
-                self.bot.add_view(MailDigestView(self, digest_id), message_id=message_id)
+                self.bot.add_view(MailDigestView(self, digest_id, digest), message_id=message_id)
                 count += 1
-                channel = await self.channel()
                 for item_id, item in _ordered_items(digest):
                     item_message_id = int(item.get("organizerMessageId") or 0)
                     if item_message_id:
                         self.bot.add_view(
-                            MailItemActionView(self, digest_id, item_id),
+                            MailItemActionView(self, digest_id, item_id, organizer_message_id=item_message_id),
                             message_id=item_message_id,
                         )
-                    else:
-                        await self._publish_item(channel, digest_id, item_id, item)
-                    count += 1
+                        count += 1
         self.restored = True
         return count
 
@@ -181,7 +187,7 @@ class DiscordMailOrganizer:
         message = await self._fetch_digest_message(digest)
         await message.edit(
             content=render_digest(digest),
-            view=MailDigestView(self, digest_id),
+            view=MailDigestView(self, digest_id, digest),
             allowed_mentions=NO_MENTIONS,
         )
         return True
@@ -315,9 +321,14 @@ class RestrictedView(discord.ui.View):
 
 
 class MailDigestView(RestrictedView):
-    def __init__(self, coordinator: DiscordMailOrganizer, digest_id: str) -> None:
+    def __init__(self, coordinator: DiscordMailOrganizer, digest_id: str, digest: dict[str, object] | None = None) -> None:
         super().__init__(coordinator, timeout=None)
         self.digest_id = digest_id
+        if digest is None:
+            with suppress(Exception):
+                digest = coordinator.organizer.digest(digest_id)
+        if digest is not None and _ordered_items(digest):
+            self.add_item(MailItemSelect(coordinator, digest_id, digest))
         self._add_button("Menu", discord.ButtonStyle.primary, "menu", self._menu)
         self._add_button("Close", discord.ButtonStyle.secondary, "close", self._close)
 
@@ -326,7 +337,7 @@ class MailDigestView(RestrictedView):
             label=label,
             style=style,
             custom_id=f"mail:{action}:{self.digest_id}",
-            row=0,
+            row=1,
         )
         button.callback = callback
         self.add_item(button)
@@ -345,11 +356,60 @@ class MailDigestView(RestrictedView):
         await delete_ephemeral_response(interaction)
 
 
+class MailItemSelect(discord.ui.Select):
+    def __init__(self, coordinator: DiscordMailOrganizer, digest_id: str, digest: dict[str, object]) -> None:
+        options = [
+            discord.SelectOption(
+                label=_select_text(item.get("subject"), 100),
+                description=_select_text(f"{item.get('mailboxName')} · {item.get('sender')}", 100),
+                value=item_id,
+            )
+            for item_id, item in _ordered_items(digest)[:25]
+        ]
+        super().__init__(
+            placeholder=f"Unread mail: {len(_ordered_items(digest))}",
+            min_values=1,
+            max_values=1,
+            options=options,
+            custom_id=f"mail:select:{digest_id}",
+            row=0,
+        )
+        self.coordinator = coordinator
+        self.digest_id = digest_id
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        item_id = self.values[0]
+        digest = await asyncio.to_thread(self.coordinator.organizer.digest, self.digest_id)
+        item = dict(digest.get("items", {})).get(item_id)
+        if not isinstance(item, dict):
+            await interaction.response.send_message(
+                MarkdownMessage(title="Mail selection expired").render(),
+                ephemeral=True,
+                allowed_mentions=NO_MENTIONS,
+            )
+            return
+        await interaction.response.send_message(
+            render_digest_item(item),
+            view=MailItemActionView(self.coordinator, self.digest_id, item_id, owner_id=interaction.user.id),
+            ephemeral=True,
+            allowed_mentions=NO_MENTIONS,
+        )
+
+
 class MailItemActionView(RestrictedView):
-    def __init__(self, coordinator: DiscordMailOrganizer, digest_id: str, item_id: str) -> None:
-        super().__init__(coordinator, timeout=None)
+    def __init__(
+        self,
+        coordinator: DiscordMailOrganizer,
+        digest_id: str,
+        item_id: str,
+        *,
+        owner_id: int | None = None,
+        organizer_message_id: int | None = None,
+    ) -> None:
+        super().__init__(coordinator, timeout=None if owner_id is None else 300, owner_id=owner_id)
         self.digest_id = digest_id
         self.item_id = item_id
+        self.organizer_message_id = organizer_message_id
         self._add_button("Import", discord.ButtonStyle.success, "import", self._import)
         self._add_button("Mark Read", discord.ButtonStyle.primary, "read", self._mark_read)
         self._add_button("Delete", discord.ButtonStyle.danger, "delete", self._delete)
@@ -366,7 +426,8 @@ class MailItemActionView(RestrictedView):
     async def _mark_read(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True, thinking=True)
         await asyncio.to_thread(self.coordinator.organizer.mark_read, self.digest_id, self.item_id)
-        await self.coordinator.delete_item_message(interaction.message.id)
+        if self.organizer_message_id is not None:
+            await self.coordinator.delete_item_message(self.organizer_message_id)
         await self.coordinator.refresh_digest(self.digest_id)
         await delete_ephemeral_response(interaction)
         self.stop()
@@ -374,24 +435,30 @@ class MailItemActionView(RestrictedView):
     async def _import(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True, thinking=True)
         await self.coordinator.import_item(self.digest_id, self.item_id)
-        await self.coordinator.delete_item_message(interaction.message.id)
+        if self.organizer_message_id is not None:
+            await self.coordinator.delete_item_message(self.organizer_message_id)
         await self.coordinator.refresh_digest(self.digest_id)
         await delete_ephemeral_response(interaction)
         self.stop()
 
     async def _delete(self, interaction: discord.Interaction) -> None:
-        await interaction.response.send_message(
-            content=MarkdownMessage(title="Delete this mail?", summary="The message will move to Naver Trash.").render(),
-            view=MailDeleteConfirmationView(
-                self.coordinator,
-                self.digest_id,
-                self.item_id,
-                interaction.user.id,
-                interaction.message.id,
-            ),
-            ephemeral=True,
-            allowed_mentions=NO_MENTIONS,
+        confirmation = MailDeleteConfirmationView(
+            self.coordinator,
+            self.digest_id,
+            self.item_id,
+            interaction.user.id,
+            self.organizer_message_id,
         )
+        content = MarkdownMessage(title="Delete this mail?", summary="The message will move to Naver Trash.").render()
+        if self.organizer_message_id is None:
+            await interaction.response.edit_message(content=content, view=confirmation, allowed_mentions=NO_MENTIONS)
+        else:
+            await interaction.response.send_message(
+                content=content,
+                view=confirmation,
+                ephemeral=True,
+                allowed_mentions=NO_MENTIONS,
+            )
 
 
 class MailDeleteConfirmationView(RestrictedView):
@@ -401,7 +468,7 @@ class MailDeleteConfirmationView(RestrictedView):
         digest_id: str,
         item_id: str,
         owner_id: int,
-        organizer_message_id: int,
+        organizer_message_id: int | None,
     ) -> None:
         super().__init__(coordinator, timeout=60, owner_id=owner_id)
         self.digest_id = digest_id
@@ -412,7 +479,8 @@ class MailDeleteConfirmationView(RestrictedView):
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer(ephemeral=True)
         await asyncio.to_thread(self.coordinator.organizer.delete, self.digest_id, self.item_id)
-        await self.coordinator.delete_item_message(self.organizer_message_id)
+        if self.organizer_message_id is not None:
+            await self.coordinator.delete_item_message(self.organizer_message_id)
         await self.coordinator.refresh_digest(self.digest_id)
         await delete_ephemeral_response(interaction)
         self.stop()
