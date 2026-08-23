@@ -3355,24 +3355,22 @@ async def _render_calendar_weekly(governor_tools: GovernorToolClient, *, profile
     raw_items = payload.get("items")
     items = [dict(item) for item in raw_items if isinstance(item, dict)] if isinstance(raw_items, list) else []
     payloads = {str(item.get("date") or ""): item for item in items}
-    lines = [f"## {CALENDAR_TITLE} · Weekly", f"- {days[0]:%Y.%m.%d} - {days[-1]:%Y.%m.%d}"]
+    lines = [f"## {CALENDAR_TITLE} · 𝓦𝓮𝓮𝓴𝓵𝔂", f"- {days[0]:%Y.%m.%d} - {days[-1]:%Y.%m.%d}"]
     for value in days:
         day_payload = payloads.get(value.isoformat())
         if day_payload is None:
-            lines.append("")
-            lines.append(f"### {value:%Y.%m.%d %a}")
-            lines.append("- calendar unavailable")
+            continue
+        events = _event_results(day_payload)
+        if not events:
             continue
         weather = day_payload.get("weather")
         weather_summary = str(weather.get("summary") or "").strip() if isinstance(weather, dict) else ""
         suffix = f" • {weather_summary}" if weather_summary else ""
-        events = _event_results(day_payload)
         lines.append("")
         lines.append(f"### {value:%Y.%m.%d %a}{suffix}")
-        if events:
-            lines.extend(_calendar_weekly_event_line(item) for item in events[:8])
-        else:
-            lines.append("- 일정 없음")
+        lines.extend(_calendar_weekly_event_line(item) for item in events[:8])
+    if len(lines) == 2:
+        lines.append("- 일정 없음")
     return "\n".join(lines)[:1990]
 
 

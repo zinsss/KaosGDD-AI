@@ -155,7 +155,9 @@ class FakeGovernorTools:
                     "events": [
                         {"title": "Clinic", "time": "10:50", "ownerLabel": "GDD_ZiN"},
                         {"title": "School", "time": "15:00", "ownerLabel": "Family"},
-                    ],
+                    ]
+                    if offset in (0, 2)
+                    else [],
                 }
                 for offset in range(days)
             ],
@@ -353,8 +355,12 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
 
         interaction.response.defer.assert_awaited_once()
         kwargs = interaction.edit_original_response.await_args.kwargs
-        self.assertIn(f"## {CALENDAR_TITLE} · Weekly", kwargs["content"])
+        self.assertIn(f"## {CALENDAR_TITLE} · 𝓦𝓮𝓮𝓴𝓵𝔂", kwargs["content"])
         self.assertIn("⛅️ 23-28℃", kwargs["content"])
+        self.assertIn("### 2026.08.22 Sat", kwargs["content"])
+        self.assertIn("### 2026.08.24 Mon", kwargs["content"])
+        self.assertNotIn("### 2026.08.23 Sun", kwargs["content"])
+        self.assertNotIn("일정 없음", kwargs["content"])
         self.assertIn("Clinic  • 𝘎𝘋𝘋𝙕𝘪𝙉", kwargs["content"])
         self.assertIn("School  • 𝘧𝘢𝘮𝘪𝘭𝘺", kwargs["content"])
         self.assertNotIn("GDD_ZiN", kwargs["content"])
