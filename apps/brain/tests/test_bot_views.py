@@ -356,9 +356,11 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         interaction.response.defer.assert_awaited_once()
         kwargs = interaction.edit_original_response.await_args.kwargs
         self.assertIn(f"## {CALENDAR_TITLE} · 𝓦𝓮𝓮𝓴𝓵𝔂", kwargs["content"])
+        self.assertIn("- 2026.08.16 - 2026.08.22", kwargs["content"])
         self.assertIn("⛅️ 23-28℃", kwargs["content"])
-        self.assertIn("### 2026.08.22 Sat", kwargs["content"])
-        self.assertIn("### 2026.08.24 Mon", kwargs["content"])
+        self.assertIn("### 2026.08.16 Sun", kwargs["content"])
+        self.assertIn("### 2026.08.18 Tue", kwargs["content"])
+        self.assertNotIn("### 2026.08.17 Mon", kwargs["content"])
         self.assertNotIn("### 2026.08.23 Sun", kwargs["content"])
         self.assertNotIn("일정 없음", kwargs["content"])
         self.assertIn("Clinic  • 𝘎𝘋𝘋𝙕𝘪𝙉", kwargs["content"])

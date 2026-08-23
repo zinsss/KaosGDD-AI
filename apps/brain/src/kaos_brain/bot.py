@@ -2191,7 +2191,7 @@ class BrainCalendarMonthView(discord.ui.View):
         return await _render_calendar_weekly(
             self.governor_tools,
             profile=self.settings.governor_tools_profile,
-            start=self.anchor_date,
+            start=_week_start_sunday(self.anchor_date),
         )
 
     async def month_file(self) -> discord.File | None:
@@ -3412,6 +3412,10 @@ def _shift_date_month(value: date, delta: int) -> date:
 
 def _month_end(value: date) -> date:
     return _shift_date_month(value, 1) - timedelta(days=1)
+
+
+def _week_start_sunday(value: date) -> date:
+    return value - timedelta(days=(value.weekday() + 1) % 7)
 
 
 def _format_month_day(value: str) -> str:
