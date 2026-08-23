@@ -235,6 +235,36 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(inbox.status()["pendingCount"], 1)
             self.assertEqual(inbox.status()["trackedSources"], 0)
 
+    async def test_extra_channel_ignores_text_only_messages(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            inbox = self.make_inbox_with_extra_channel(Path(temporary) / "inbox.json")
+            message = self.make_message([], content="지금 포항날씨는?")
+            message.channel = SimpleNamespace(id=302, sent=[], send=AsyncMock())
+
+            self.assertFalse(await inbox.handle_message(message))  # type: ignore[arg-type]
+            message.reply.assert_not_awaited()
+
+    async def test_extra_channel_ignores_dotdot_search_messages(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            paperless = FakePaperless()
+            inbox = self.make_inbox_with_extra_channel(Path(temporary) / "inbox.json", paperless)
+            message = self.make_message([], content="..보험")
+            message.channel = SimpleNamespace(id=302, sent=[], send=AsyncMock())
+
+            self.assertFalse(await inbox.handle_message(message))  # type: ignore[arg-type]
+            self.assertEqual(paperless.searches, [])
+            message.reply.assert_not_awaited()
+
+    async def test_extra_channel_still_accepts_pdf_uploads(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            paperless = FakePaperless()
+            inbox = self.make_inbox_with_extra_channel(Path(temporary) / "inbox.json", paperless)
+            message = self.make_message([FakeAttachment(filename="scan.pdf")])
+            message.channel = SimpleNamespace(id=302, sent=[], send=AsyncMock())
+
+            self.assertTrue(await inbox.handle_message(message))  # type: ignore[arg-type]
+            self.assertEqual(inbox.status()["pendingCount"], 1)
+
     async def test_pdf_upload_uses_canonical_attachment_before_cached_proxy(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             paperless = FakePaperless()

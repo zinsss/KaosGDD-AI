@@ -8,6 +8,7 @@ import re
 
 class ToolKind(StrEnum):
     TODAY = "today"
+    WEATHER = "weather"
     UPCOMING_EVENTS = "upcoming_events"
     CALENDAR_MONTH_IMAGE = "calendar_month_image"
     RECENT_IMPORTS = "recent_imports"
@@ -40,6 +41,8 @@ def parse_tool_request(content: str, *, today: date | None = None) -> ToolReques
     dotdot = _dotdot_request(text)
     if dotdot is not None:
         return dotdot
+    if _asks_weather(lowered):
+        return ToolRequest(ToolKind.WEATHER, _weather_location_label(text), profile=profile)
     if _asks_today(lowered):
         return ToolRequest(ToolKind.TODAY, profile=profile)
     completed = _completed_task_request(text, lowered, current, profile=profile, collection_id=collection_id)
@@ -81,6 +84,23 @@ def _asks_today(lowered: str) -> bool:
         or lowered.startswith("what's on today")
         or lowered.startswith("whats on today")
     )
+
+
+def _asks_weather(lowered: str) -> bool:
+    return (
+        "날씨" in lowered
+        or "weather" in lowered
+        or "temperature" in lowered
+        or "기온" in lowered
+    )
+
+
+def _weather_location_label(text: str) -> str:
+    cleaned = text
+    for marker in ("지금", "현재", "오늘", "날씨", "는", "은", "이", "가", "?", "알려줘", "보여줘"):
+        cleaned = cleaned.replace(marker, " ")
+    cleaned = re.sub(r"\b(weather|temperature|current|today|now|show|tell|me)\b", " ", cleaned, flags=re.IGNORECASE)
+    return " ".join(cleaned.split())
 
 
 def _asks_active_tasks(lowered: str) -> bool:

@@ -60,6 +60,12 @@ class CombinedGovernorTools:
         raise AssertionError(f"unexpected request: {request.kind}")
 
 
+class WeatherGovernorTools:
+    async def fetch(self, request: ToolRequest):
+        self.request = request
+        return {"date": "2026-08-14", "weather": {"summary": "⛅️ 23-28℃", "condition": "cloudy"}}
+
+
 class BrainToolResponseTests(unittest.IsolatedAsyncioTestCase):
     async def test_missing_governor_tools_uses_short_korean_message(self) -> None:
         brain = SimpleNamespace(governor_tools=None)
@@ -87,6 +93,20 @@ class BrainToolResponseTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(reply, "조회 실패했어요.")
         self.assertNotIn("upstream exploded", reply)
+        self.assertIsNone(view)
+
+    async def test_weather_request_returns_deterministic_weather_without_kaosai_summary(self) -> None:
+        tools = WeatherGovernorTools()
+        brain = SimpleNamespace(governor_tools=tools)
+
+        reply, view = await BrainBot._answer_with_governor_tool(  # type: ignore[arg-type]
+            brain,
+            "지금 포항날씨는?",
+            ToolRequest(ToolKind.WEATHER, "포항"),
+            actor_id=200,
+        )
+
+        self.assertEqual(reply, "## 포항 날씨\n- ⛅️ 23-28℃\n- cloudy\n- 2026-08-14")
         self.assertIsNone(view)
 
     async def test_single_memo_search_opens_original_memo_with_actions(self) -> None:

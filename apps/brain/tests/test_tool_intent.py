@@ -20,6 +20,12 @@ class ToolIntentTests(unittest.TestCase):
         assert request is not None
         self.assertEqual(request.kind, ToolKind.TODAY)
 
+    def test_weather_korean_request_uses_weather_context(self) -> None:
+        request = parse_tool_request("지금 포항날씨는?")
+        assert request is not None
+        self.assertEqual(request.kind, ToolKind.WEATHER)
+        self.assertEqual(request.query, "포항")
+
     def test_active_task_korean_request(self) -> None:
         request = parse_tool_request("뭐 해야 돼?")
         assert request is not None

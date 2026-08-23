@@ -933,7 +933,7 @@ class BrainBot(discord.Client):
             tasks = _task_results(payload)
             view = BrainActiveTasksView(self.governor_tools, actor_id, tool_request, tasks) if tasks else None
             return context, view
-        if tool_request.kind is ToolKind.TODAY:
+        if tool_request.kind in {ToolKind.TODAY, ToolKind.WEATHER}:
             return context, None
         try:
             return await self.ollama.summarize_tool_result(user_text, context), None

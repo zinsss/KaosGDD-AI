@@ -97,6 +97,8 @@ class DiscordDocumentInbox:
         if await self._handle_metadata_reply(message):
             return True
         content = str(getattr(message, "content", "") or "").strip()
+        if not message.attachments and message.channel.id != self.channel_id:
+            return False
         if content.startswith(".."):
             await self._handle_search(message, content[2:].strip())
             return True

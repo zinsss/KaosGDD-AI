@@ -66,6 +66,13 @@ class GovernorToolRenderingTests(unittest.TestCase):
         context = render_tool_context(ToolRequest(ToolKind.TODAY), {"date": "2026-08-14", "events": [], "tasks": []})
         self.assertEqual(context, "## 2026-08-14\n- 없음")
 
+    def test_render_weather_context(self) -> None:
+        context = render_tool_context(
+            ToolRequest(ToolKind.WEATHER, "포항"),
+            {"date": "2026-08-14", "weather": {"summary": "⛅️ 23-28℃", "condition": "cloudy"}},
+        )
+        self.assertEqual(context, "## 포항 날씨\n- ⛅️ 23-28℃\n- cloudy\n- 2026-08-14")
+
     def test_render_empty_tasks_context(self) -> None:
         context = render_tool_context(ToolRequest(ToolKind.ACTIVE_TASKS), {"tasks": []})
         self.assertEqual(context, "## 할 일\n- 없음")

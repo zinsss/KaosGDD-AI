@@ -52,7 +52,7 @@ class GovernorToolClient:
         self.config = config
 
     async def fetch(self, request: ToolRequest) -> dict[str, Any]:
-        if request.kind is ToolKind.TODAY:
+        if request.kind in {ToolKind.TODAY, ToolKind.WEATHER}:
             return await self.today(profile=request.profile)
         if request.kind is ToolKind.UPCOMING_EVENTS:
             return await self._get("/tools/events/upcoming", {"profile": self._profile(request.profile), "days": "7"})
@@ -634,6 +634,8 @@ def _tag_text(values: object) -> str:
 
 
 def render_tool_context(request: ToolRequest, payload: dict[str, Any]) -> str:
+    if request.kind is ToolKind.WEATHER:
+        return _render_weather(request, payload)
     if request.kind is ToolKind.TODAY:
         return _render_today(payload)
     if request.kind is ToolKind.ACTIVE_TASKS:
@@ -763,6 +765,22 @@ def _render_today(payload: dict[str, Any]) -> str:
         lines.extend(_task_line(item) for item in tasks)
     if not events and not tasks:
         lines.append("- 없음")
+    return "\n".join(lines)
+
+
+def _render_weather(request: ToolRequest, payload: dict[str, Any]) -> str:
+    date_text = str(payload.get("date") or "").strip()
+    location = request.query.strip() or "날씨"
+    title = f"## {location} 날씨" if location != "날씨" else "## 날씨"
+    weather = payload.get("weather")
+    if not isinstance(weather, dict) or not weather.get("summary"):
+        return f"{title}\n- 조회 결과 없음"
+    lines = [title, f"- {weather['summary']}"]
+    condition = str(weather.get("condition") or "").strip()
+    if condition:
+        lines.append(f"- {condition}")
+    if date_text:
+        lines.append(f"- {date_text}")
     return "\n".join(lines)
 
 
