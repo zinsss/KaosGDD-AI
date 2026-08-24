@@ -145,6 +145,15 @@ class FakeGovernorTools:
                 "resultCount": 2,
                 "totalCount": 2,
             }
+        if request.kind is ToolKind.MEMO_SEARCH:
+            return {
+                "results": [
+                    {"name": "memos/1", "title": "Rustdesk", "snippet": "# Rustdesk Settings", "tags": ["server"]},
+                    {"name": "memos/2", "title": "통관", "snippet": "# 개인통관번호", "tags": ["shopping"]},
+                ],
+                "resultCount": 2,
+                "totalCount": 2,
+            }
         if request.profile == "supplies":
             return {"tasks": [{"title": "토프라민", "date": "2026-08-21", "due": "2026-08-21"}]}
         return {"tasks": [{"title": "로운이 제로이드", "due": "2026-08-22", "dueTime": "10:00"}]}
@@ -476,7 +485,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("GDD_ZiN", kwargs["content"])
         self.assertEqual(kwargs["attachments"], [])
 
-    async def test_paperless_and_memos_select_options_are_separate(self) -> None:
+    async def test_paperless_and_memos_service_select_open_all_browsers(self) -> None:
         view = BrainServiceMenuView(
             FakeGovernorTools(),  # type: ignore[arg-type]
             self.active_control_settings(),
@@ -500,7 +509,10 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls[0].kwargs["embed"].title, "Paperless · ..")
         self.assertIn("2 results in 2 documents", calls[0].kwargs["embed"].description)
         self.assertIsInstance(calls[0].kwargs["view"], BrainDocumentSearchView)
-        self.assertIn(f"## {MEMOS_TITLE}", calls[1].args[0])
+        self.assertIn("Searched..", calls[1].args[0])
+        self.assertIn("## ..", calls[1].args[0])
+        self.assertIn("2 results in 2 memos", calls[1].args[0])
+        self.assertIsInstance(calls[1].kwargs["view"], BrainMemoSearchView)
 
     async def test_fax_mail_select_calls_up_incoming_service_message(self) -> None:
         view = BrainServiceMenuView(

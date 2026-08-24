@@ -2460,11 +2460,31 @@ class BrainServiceMenuView(discord.ui.View):
         )
 
     async def open_memos(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer(ephemeral=True)
-        await _delete_open_service_message(self.settings, interaction)
-        await interaction.followup.send(
-            f"## {MEMOS_TITLE}\n- use `..keyword` to search memos",
-            ephemeral=True,
+        await interaction.response.defer()
+        request = ToolRequest(ToolKind.MEMO_SEARCH, "")
+        try:
+            payload = await self.governor_tools.fetch(request)
+        except GovernorToolError as exc:
+            LOGGER.warning("Memos service message failed: %s", exc)
+            await interaction.followup.send(_tool_failed("Memos 불러오기"), ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        results = search_results(payload)
+        view = (
+            BrainMemoSearchView(
+                self.governor_tools,
+                int(interaction.user.id),
+                "",
+                results,
+                memos_public_url=self.settings.memos_public_url,
+            )
+            if results
+            else None
+        )
+        await _send_single_service_message(
+            self.settings,
+            interaction,
+            render_tool_context(request, payload),
+            view=view,
             allowed_mentions=NO_MENTIONS,
         )
 
