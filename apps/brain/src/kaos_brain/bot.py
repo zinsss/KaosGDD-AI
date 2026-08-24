@@ -2746,6 +2746,7 @@ class BrainActiveTasksView(discord.ui.View):
         if self.page_tasks:
             self.add_item(BrainActiveTasksSelect(self))
         self.add_item(BrainTaskServicePageButton("←", -1, disabled=self.page <= 0))
+        self.add_item(BrainTaskServicePageStatusButton(self.page, self.max_page))
         self.add_item(BrainTaskServicePageButton("→", 1, disabled=self.page >= self.max_page))
         self.add_item(BrainTaskServiceModeButton("History"))
         self.add_item(BrainTaskServiceCloseButton())
@@ -3619,11 +3620,7 @@ def _render_task_service_message(
         month_label = f"{month:%Y.%m}" if month else ""
         lines = [f"## {title}", f"### {month_label} • Completed: {len(tasks)}"]
     else:
-        showing_start = start + 1 if page_tasks else 0
-        showing_end = start + len(page_tasks)
-        lines = [f"## {title}", f"- active: {len(tasks)}"]
-        if page_tasks:
-            lines.append(f"- showing: {showing_start}-{showing_end}")
+        lines = [f"## {title}", f"### Total: {len(tasks)}", ""]
     for task in page_tasks:
         item_title = str(task.get("title") or task.get("summary") or "Untitled task").strip()
         if history:

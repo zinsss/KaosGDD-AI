@@ -327,8 +327,8 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         interaction.response.defer.assert_awaited_once()
         content = interaction.followup.send.await_args.args[0]
         self.assertIn(f"## {ACTIVE_TASKS_TITLE}", content)
-        self.assertIn("- active: 1", content)
-        self.assertIn("- 로운이 제로이드", content)
+        self.assertIn("### Total: 1", content)
+        self.assertIn("- 로운이 제로이드 · 2026-08-22 10:00", content)
         self.assertIsInstance(interaction.followup.send.await_args.kwargs["view"], BrainActiveTasksView)
 
     async def test_calendar_button_calls_up_closable_month_message(self) -> None:
@@ -484,7 +484,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         interaction.response.defer.assert_awaited_once()
         content = interaction.followup.send.await_args.args[0]
         self.assertIn(f"## {SUPPLIES_TITLE}", content)
-        self.assertIn("- active: 1", content)
+        self.assertIn("### Total: 1", content)
         self.assertIn("- 토프라민", content)
         self.assertNotIn("2026-", content)
 
@@ -797,10 +797,11 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         )
         select = next(child for child in view.children if isinstance(child, BrainActiveTasksSelect))
 
-        self.assertIn("- active: 27", view.content())
-        self.assertIn("- showing: 1-25", view.content())
+        self.assertIn("### Total: 27", view.content())
+        self.assertIn("- Task 25", view.content())
         self.assertEqual(len(select.options), 25)
         self.assertEqual(select.placeholder, "Active Tasks 1-25")
+        self.assertIn("Page 1/2", [getattr(child, "label", "") for child in view.children])
 
     async def test_active_task_service_next_page_edits_same_message(self) -> None:
         tasks = [{"title": f"Task {index:02d}"} for index in range(1, 28)]
@@ -821,11 +822,13 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
 
         interaction.response.defer.assert_awaited_once()
         kwargs = interaction.edit_original_response.await_args.kwargs
-        self.assertIn("- showing: 26-27", kwargs["content"])
+        self.assertIn("### Total: 27", kwargs["content"])
+        self.assertIn("- Task 26", kwargs["content"])
         refreshed = kwargs["view"]
         select = next(child for child in refreshed.children if isinstance(child, BrainActiveTasksSelect))
         self.assertEqual(len(select.options), 2)
         self.assertEqual(select.placeholder, "Active Tasks 26-27")
+        self.assertIn("Page 2/2", [getattr(child, "label", "") for child in refreshed.children])
 
     async def test_task_service_history_button_loads_month_archive(self) -> None:
         tools = FakeGovernorTools()
