@@ -51,6 +51,7 @@ from kaos_brain.bot import (
     UPCOMING_EVENTS_LABEL,
     _read_active_control_message_id,
     _read_active_control_service_message_id,
+    _is_transient_brain_message,
     _write_active_control_message_id,
     render_active_control_message,
 )
@@ -199,6 +200,14 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(content, "# 2026.09.12(Sat)")
         self.assertEqual(ACTIVE_CONTROL_HISTORY_LIMIT, 20)
+
+    def test_rrr_transient_cleanup_filter_keeps_durable_messages(self) -> None:
+        self.assertTrue(_is_transient_brain_message("Confirm New Task\n## 오도리 문고리"))
+        self.assertTrue(_is_transient_brain_message("할 일 변경 실패했어요."))
+        self.assertTrue(_is_transient_brain_message("Task added."))
+        self.assertFalse(_is_transient_brain_message("# 2026.08.24(Mon)"))
+        self.assertFalse(_is_transient_brain_message("## Documents\n### 의료폐기물 배출자 교육"))
+        self.assertFalse(_is_transient_brain_message("\u200b"))
 
     def test_active_control_message_id_state_round_trips(self) -> None:
         with TemporaryDirectory() as tmpdir:

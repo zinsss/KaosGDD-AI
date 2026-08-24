@@ -197,6 +197,32 @@ def _tool_cancelled(action: str) -> str:
     return f"{action} 취소했어요."
 
 
+def _is_transient_brain_message(content: str) -> bool:
+    normalized = content.strip()
+    if not normalized:
+        return False
+    if normalized.startswith(ACTIVE_CONTROL_MARKER) or normalized == SERVICE_MENU_MARKER:
+        return False
+    if normalized.startswith(("Confirm ", "## Confirm ")):
+        return True
+    if "실패했어요." in normalized or "취소했어요." in normalized:
+        return True
+    return normalized in {
+        "Task added.",
+        "Supply added.",
+        "일정 저장했어요.",
+        "메모 저장했어요.",
+        "할 일 수정했어요.",
+        "할 일 삭제했어요.",
+        "할 일 완료했어요.",
+        "할 일 다시 열었어요.",
+        "비품 수정했어요.",
+        "비품 삭제했어요.",
+        "비품 완료했어요.",
+        "비품 다시 열었어요.",
+    }
+
+
 def _payload_count(payload: dict[str, Any], *keys: str, fallback: int) -> int:
     for key in keys:
         value = payload.get(key)
@@ -968,6 +994,7 @@ class BrainBot(discord.Client):
             message = await self._find_active_control_message(channel)
             service_message = await self._find_active_control_service_message(channel)
             if move_to_bottom:
+                await self._delete_recent_transient_brain_messages(channel)
                 if message is not None:
                     try:
                         await message.delete()
@@ -1007,6 +1034,19 @@ class BrainBot(discord.Client):
                 LOGGER.warning("Active control message state write failed: %s", exc)
         except Exception as exc:
             LOGGER.warning("Active control message refresh failed: %s", exc)
+
+    async def _delete_recent_transient_brain_messages(self, channel: discord.TextChannel | discord.Thread) -> None:
+        if self.user is None:
+            return
+        async for message in channel.history(limit=ACTIVE_CONTROL_HISTORY_LIMIT):
+            if message.author.id != self.user.id:
+                continue
+            if not _is_transient_brain_message(str(message.content or "")):
+                continue
+            try:
+                await message.delete()
+            except discord.HTTPException:
+                LOGGER.warning("Failed to delete transient Brain message %s", getattr(message, "id", ""))
 
     async def _find_active_control_message(self, channel: discord.TextChannel | discord.Thread) -> discord.Message | None:
         if self._active_control_message_id:
