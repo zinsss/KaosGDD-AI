@@ -339,6 +339,8 @@ def _guarded_request_lines(request: object) -> list[str]:
         lines = [f"- title: {_preview_value(request.title)}"]
         if due := _preview_due(request.due_date, request.due_time):
             lines.append(f"- due: {due}")
+        if request.memo:
+            lines.append(f"- memo: {_preview_value(request.memo, limit=120)}")
         lines.append(f"- profile: {request.profile}")
         return lines
     if isinstance(request, TaskDueUpdateRequest):

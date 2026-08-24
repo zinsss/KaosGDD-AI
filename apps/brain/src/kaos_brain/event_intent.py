@@ -32,8 +32,7 @@ def parse_event_create(content: str, *, today: date) -> EventCreateRequest | Non
         start = date(year, month, day)
     except ValueError:
         return None
-    rest = text[date_match.end() :].strip(" .,")
-    memo = ""
+    rest, memo = _split_inline_memo(text[date_match.end() :].strip(" .,"))
     memo_match = re.search(r"(?:메모|memo)\s*:\s*(?P<memo>.+)$", rest, flags=re.IGNORECASE)
     if memo_match is not None:
         memo = memo_match.group("memo").strip(" .,")
@@ -64,3 +63,10 @@ def _prefixed_event_body(text: str) -> str:
     if match is None:
         return ""
     return match.group("body").strip()
+
+
+def _split_inline_memo(text: str) -> tuple[str, str]:
+    if "::" not in text:
+        return text, ""
+    body, memo = text.split("::", 1)
+    return body.strip(" .,"), memo.strip(" .,")

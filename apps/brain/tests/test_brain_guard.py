@@ -33,6 +33,7 @@ class BrainGuardTests(unittest.TestCase):
             INTENT_PARAMETER_KEYS["task.edit"],
             frozenset({"taskTitle", "title", "memo", "dueDate", "dueTime", "priority"}),
         )
+        self.assertEqual(INTENT_PARAMETER_KEYS["task.create"], frozenset({"title", "memo", "dueDate", "dueTime"}))
         self.assertEqual(INTENT_PARAMETER_KEYS["memo.search"], frozenset({"query"}))
         self.assertEqual(INTENT_PARAMETER_KEYS["document.search"], frozenset({"query"}))
         self.assertEqual(INTENT_PARAMETER_KEYS["document.update_tags"], frozenset({"documentId", "tags"}))
@@ -55,7 +56,7 @@ class BrainGuardTests(unittest.TestCase):
         result = adapt_kaosai_plan(
             {
                 "intent": "task.create",
-                "parameters": {"title": "엄마한테 전화", "dueDate": "2026-08-18"},
+                "parameters": {"title": "엄마한테 전화", "memo": "병원 끝나고", "dueDate": "2026-08-18"},
             },
             self.context(),
         )
@@ -68,6 +69,7 @@ class BrainGuardTests(unittest.TestCase):
         request = result.request
         assert isinstance(request, TaskCreateRequest)
         self.assertEqual(request.title, "엄마한테 전화")
+        self.assertEqual(request.memo, "병원 끝나고")
         self.assertEqual(request.due_date, "2026-08-18")
         self.assertEqual(request.due_time, "10:00")
         self.assertEqual(request.profile, "main")
@@ -77,7 +79,7 @@ class BrainGuardTests(unittest.TestCase):
             {
                 "intent": "task.create",
                 "scope": "supplies",
-                "parameters": {"title": "휴지", "dueDate": "2026-08-18", "dueTime": "14:00"},
+                "parameters": {"title": "휴지", "memo": "코스트코", "dueDate": "2026-08-18", "dueTime": "14:00"},
             },
             self.context(),
         )
@@ -86,6 +88,7 @@ class BrainGuardTests(unittest.TestCase):
         request = result.request
         assert isinstance(request, TaskCreateRequest)
         self.assertEqual(request.profile, "supplies")
+        self.assertEqual(request.memo, "코스트코")
         self.assertEqual(request.collection_id, "supplies:abc")
         self.assertEqual(request.due_date, "")
         self.assertEqual(request.due_time, "")

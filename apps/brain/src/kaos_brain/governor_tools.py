@@ -211,6 +211,8 @@ class GovernorToolClient:
             **self._collection_payload(request.profile, request.collection_id),
             "title": request.title,
         }
+        if request.memo:
+            payload["memo"] = request.memo
         if request.due_date:
             payload["dueDate"] = request.due_date
         if request.due_date and request.due_time:
@@ -505,6 +507,9 @@ def render_task_create_proposal(payload: dict[str, Any]) -> str:
     ]
     if due:
         lines.append(f"- due: {due}")
+    memo = str(task.get("memo") or "").strip()
+    if memo:
+        lines.append(f"- memo: {memo}")
     return "\n".join(lines)
 
 

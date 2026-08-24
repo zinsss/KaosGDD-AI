@@ -394,10 +394,10 @@ class GovernorToolRenderingTests(unittest.TestCase):
 
     def test_render_task_create_proposal_uses_title_headline_and_optional_due(self) -> None:
         content = render_task_create_proposal(
-            {"task": {"title": "엄마한테 전화", "due": "2026-08-18", "dueTime": "10:00"}}
+            {"task": {"title": "엄마한테 전화", "memo": "병원 끝나고", "due": "2026-08-18", "dueTime": "10:00"}}
         )
 
-        self.assertEqual(content, "Confirm New Task\n## 엄마한테 전화\n- due: 2026-08-18 10:00")
+        self.assertEqual(content, "Confirm New Task\n## 엄마한테 전화\n- due: 2026-08-18 10:00\n- memo: 병원 끝나고")
 
     def test_render_supplies_task_completed_messages_use_supplies_label(self) -> None:
         payload = {"task": {"title": "Soap", "collectionId": "supplies:main"}}
@@ -822,13 +822,14 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
         )
 
         payload = await client.propose_task_create(
-            TaskCreateRequest("오도리 문고리", "", "10:00"),
+            TaskCreateRequest("오도리 문고리", "", "10:00", memo="문고리 사이즈 확인"),
             actor_id=994,
             idempotency_key="discord:1",
         )
 
         self.assertEqual(payload["path"], "/tools/tasks/create/proposals")
         self.assertEqual(payload["payload"]["title"], "오도리 문고리")
+        self.assertEqual(payload["payload"]["memo"], "문고리 사이즈 확인")
         self.assertNotIn("dueDate", payload["payload"])
         self.assertNotIn("dueTime", payload["payload"])
 

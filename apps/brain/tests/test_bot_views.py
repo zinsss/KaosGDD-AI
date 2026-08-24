@@ -96,6 +96,7 @@ class FakeGovernorTools:
             "confirmationId": "confirm-create-1",
             "task": {
                 "title": request.title,
+                "memo": request.memo,
                 "profile": request.profile,
                 "due": request.due_date,
                 "dueTime": request.due_time,

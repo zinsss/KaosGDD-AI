@@ -65,6 +65,7 @@ class FakeGovernorTools:
             "confirmationId": "confirm-task-create",
             "task": {
                 "title": request.title,
+                "memo": request.memo,
                 "due": request.due_date,
                 "dueTime": request.due_time,
                 "profile": request.profile,
@@ -243,7 +244,7 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
             {
                 "intent": "task.create",
                 "scope": "personal",
-                "parameters": {"title": "엄마한테 전화", "dueDate": "2026-08-18"},
+                "parameters": {"title": "엄마한테 전화", "memo": "병원 끝나고", "dueDate": "2026-08-18"},
             },
             governor_tools=tools,
         )
@@ -271,7 +272,7 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
             {
                 "intent": "task.create",
                 "scope": "personal",
-                "parameters": {"title": "엄마한테 전화", "dueDate": "2026-08-18"},
+                "parameters": {"title": "엄마한테 전화", "memo": "병원 끝나고", "dueDate": "2026-08-18"},
             },
             governor_tools=tools,
             env={"KAOSAI_DRY_RUN_ENABLED": "true"},
@@ -329,7 +330,7 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
             {
                 "intent": "task.create",
                 "scope": "personal",
-                "parameters": {"title": "엄마한테 전화", "dueDate": "2026-08-18"},
+                "parameters": {"title": "엄마한테 전화", "memo": "병원 끝나고", "dueDate": "2026-08-18"},
             },
             governor_tools=tools,
         )
@@ -343,8 +344,10 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Confirm New Task", reply)
         self.assertIn("## 엄마한테 전화", reply)
         self.assertIn("- due: 2026-08-18 10:00", reply)
+        self.assertIn("- memo: 병원 끝나고", reply)
         self.assertIsNotNone(view)
         request, actor_id, idempotency_key = tools.task_create_calls[0]
+        self.assertEqual(request.memo, "병원 끝나고")
         self.assertEqual(request.due_time, "10:00")
         self.assertEqual(actor_id, 200)
         self.assertEqual(idempotency_key, "discord:777")
@@ -355,7 +358,7 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
             {
                 "intent": "task.create",
                 "scope": "supplies",
-                "parameters": {"title": "휴지", "dueDate": "2026-08-18", "dueTime": "14:00"},
+                "parameters": {"title": "휴지", "memo": "코스트코", "dueDate": "2026-08-18", "dueTime": "14:00"},
             },
             governor_tools=tools,
         )
@@ -369,9 +372,11 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
         request, _, _ = tools.task_create_calls[0]
         self.assertIn("Confirm New Supply", reply)
         self.assertIn("## 휴지", reply)
+        self.assertIn("- memo: 코스트코", reply)
         self.assertNotIn("- task: 휴지", reply)
         self.assertNotIn("- due:", reply)
         self.assertEqual(request.profile, "supplies")
+        self.assertEqual(request.memo, "코스트코")
         self.assertEqual(request.collection_id, "supplies:abc")
         self.assertEqual(request.due_date, "")
         self.assertEqual(request.due_time, "")

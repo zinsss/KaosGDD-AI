@@ -37,6 +37,7 @@ class TaskCreateRequest:
     title: str
     due_date: str
     due_time: str = "10:00"
+    memo: str = ""
     profile: str = ""
     collection_id: str = ""
 
@@ -109,17 +110,18 @@ def parse_task_create(content: str, *, today: date) -> TaskCreateRequest | None:
         return None
     if not text or any(marker in text for marker in ("편집", "변경", "바꿔", "수정")):
         return None
+    text, memo = _split_inline_memo(text)
     prefixed_create = _parse_prefixed_create(text, today=today)
     if prefixed_create is not None:
-        return prefixed_create
+        return _with_create_memo(prefixed_create, memo)
     supplies_request = _is_supplies(text)
     if supplies_request:
         supplies_create = _parse_supplies_create(text)
         if supplies_create is not None:
-            return supplies_create
+            return _with_create_memo(supplies_create, memo)
     explicit_create = _parse_explicit_task_create(text)
     if explicit_create is not None:
-        return explicit_create
+        return _with_create_memo(explicit_create, memo)
     if not any(marker in text for marker in ("해야", "할 일", "해야돼", "해야되", "해야 해", "필요")):
         return None
     profile, collection_id = _scope(text)
@@ -134,7 +136,14 @@ def parse_task_create(content: str, *, today: date) -> TaskCreateRequest | None:
     title = _clean_create_title(_strip_scope_words(title))
     if not title:
         return None
-    return TaskCreateRequest(title=title, due_date=due_date.isoformat(), due_time=due_time, profile=profile, collection_id=collection_id)
+    return TaskCreateRequest(
+        title=title,
+        due_date=due_date.isoformat(),
+        due_time=due_time,
+        memo=memo,
+        profile=profile,
+        collection_id=collection_id,
+    )
 
 
 def parse_task_action(content: str) -> TaskActionRequest | None:
@@ -351,6 +360,26 @@ def _parse_explicit_task_create(text: str) -> TaskCreateRequest | None:
     if not title:
         return None
     return TaskCreateRequest(title=title, due_date="", due_time="", profile=profile, collection_id=collection_id)
+
+
+def _split_inline_memo(text: str) -> tuple[str, str]:
+    if "::" not in text:
+        return text, ""
+    body, memo = text.split("::", 1)
+    return body.strip(" .,") or text, memo.strip(" .,")
+
+
+def _with_create_memo(request: TaskCreateRequest, memo: str) -> TaskCreateRequest:
+    if not memo:
+        return request
+    return TaskCreateRequest(
+        request.title,
+        request.due_date,
+        request.due_time,
+        memo=memo,
+        profile=request.profile,
+        collection_id=request.collection_id,
+    )
 
 
 def _is_supplies(text: str) -> bool:

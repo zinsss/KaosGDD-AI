@@ -72,7 +72,7 @@ INTENT_PARAMETER_KEYS: dict[str, frozenset[str]] = {
     "task.list_completed": frozenset({"query", "start", "end"}),
     "memo.search": frozenset({"query"}),
     "document.search": frozenset({"query"}),
-    "task.create": frozenset({"title", "dueDate", "dueTime"}),
+    "task.create": frozenset({"title", "memo", "dueDate", "dueTime"}),
     "task.update_due": frozenset({"taskTitle", "dueDate", "dueTime"}),
     "task.edit": frozenset({"taskTitle", "title", "memo", "dueDate", "dueTime", "priority"}),
     "task.complete": frozenset({"taskTitle"}),
@@ -152,7 +152,14 @@ def _mutation_request(intent: str, parameters: Mapping[str, Any], scope: str, co
         title = _required_text(parameters, "title")
         due_date = "" if scope == "supplies" else _optional_date(parameters, "dueDate")
         due_time = "" if scope == "supplies" or not due_date else _optional_time(parameters, "dueTime", default="10:00")
-        return TaskCreateRequest(title, due_date, due_time, profile=profile, collection_id=collection_id)
+        return TaskCreateRequest(
+            title,
+            due_date,
+            due_time,
+            memo=_clean_text(parameters.get("memo")),
+            profile=profile,
+            collection_id=collection_id,
+        )
     if intent == "task.update_due":
         if scope == "supplies":
             raise BrainGuardError("supplies_due_date_not_allowed")
