@@ -3679,7 +3679,7 @@ async def _render_calendar_weekly(governor_tools: GovernorToolClient, *, profile
     raw_items = payload.get("items")
     items = [dict(item) for item in raw_items if isinstance(item, dict)] if isinstance(raw_items, list) else []
     payloads = {str(item.get("date") or ""): item for item in items}
-    lines = [f"## {CALENDAR_TITLE} · 𝓦𝓮𝓮𝓴𝓵𝔂", f"## {days[0]:%Y.%m.%d} - {days[-1]:%Y.%m.%d}"]
+    lines = [f"## {CALENDAR_TITLE} · 𝓦𝓮𝓮𝓴𝓵𝔂", f"< {days[0]:%Y.%m.%d} - {days[-1]:%Y.%m.%d} >"]
     for value in days:
         day_payload = payloads.get(value.isoformat())
         if day_payload is None:
