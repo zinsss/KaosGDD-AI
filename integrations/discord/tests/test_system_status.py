@@ -165,6 +165,14 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
             channel = FakeChannel()
             path = Path(temporary) / "status.json"
             surface = self.make_surface(path, channel)
+
+            async def fake_check_services():
+                return {
+                    item.key: ServiceProbeResult(item.key, "unknown", "09:00", "No health probe configured.")
+                    for item in SERVICES
+                }
+
+            surface.check_services = fake_check_services  # type: ignore[method-assign]
             await surface.ensure_message()
 
             messages = list(channel.messages.values())
