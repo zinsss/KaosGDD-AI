@@ -42,6 +42,7 @@ from kaos_brain.bot import (
     FAX_MAIL_TITLE,
     MEMOS_LABEL,
     MEMOS_TITLE,
+    NO_MENTIONS,
     PAPERLESS_LABEL,
     PAPERLESS_TITLE,
     SUPPLIES_LABEL,
@@ -568,7 +569,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             "rustdesk",
             [{"name": "memos/42", "snippet": "# Rustdesk", "tags": ["server"]}],
         )
-        search_message = SimpleNamespace(id=900, delete=AsyncMock())
+        search_message = SimpleNamespace(id=900, edit=AsyncMock())
         view.bind_message(search_message)  # type: ignore[arg-type]
         select = next(child for child in view.children if isinstance(child, BrainMemoSearchSelect))
         select._values = ["0"]
@@ -584,7 +585,11 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         content = interaction.followup.send.await_args.args[0]
         self.assertEqual(content, "# Rustdesk\nUse Tailscale.")
         self.assertIn("view", interaction.followup.send.await_args.kwargs)
-        search_message.delete.assert_awaited_once()
+        search_message.edit.assert_awaited_once_with(
+            content="Searched from Memos.",
+            view=None,
+            allowed_mentions=NO_MENTIONS,
+        )
 
     async def test_document_search_select_opens_selected_document_as_new_message(self) -> None:
         view = BrainDocumentSearchView(
@@ -594,7 +599,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             [{"id": 42, "title": "Insurance"}],
             paperless_public_url="https://paperless.example",
         )
-        search_message = SimpleNamespace(id=901, delete=AsyncMock())
+        search_message = SimpleNamespace(id=901, edit=AsyncMock())
         view.bind_message(search_message)  # type: ignore[arg-type]
         select = next(child for child in view.children if isinstance(child, BrainDocumentSearchSelect))
         select._values = ["0"]
@@ -614,7 +619,11 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         opened_view = interaction.followup.send.await_args.kwargs["view"]
         self.assertIsInstance(opened_view, BrainOpenedDocumentView)
         self.assertEqual([item.label for item in opened_view.children], ["Close", "Open document"])
-        search_message.delete.assert_awaited_once()
+        search_message.edit.assert_awaited_once_with(
+            content="Searched from Paperless.",
+            view=None,
+            allowed_mentions=NO_MENTIONS,
+        )
 
     async def test_combined_paperless_button_switches_to_embed_list(self) -> None:
         view = BrainCombinedSearchView(
@@ -660,7 +669,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         search_message.edit.assert_awaited_once()
         self.assertEqual(
             search_message.edit.await_args.kwargs["content"],
-            "Search result of rustdesk expired after 10 mins.",
+            "Searched from Memos. Result expired after 10 mins.",
         )
         self.assertIsNone(search_message.edit.await_args.kwargs["view"])
 

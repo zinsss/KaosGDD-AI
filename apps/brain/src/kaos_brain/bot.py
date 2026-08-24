@@ -1384,21 +1384,32 @@ class BrainBot(discord.Client):
 
 
 class BrainTemporarySearchView(discord.ui.View):
-    def __init__(self, search_title: str) -> None:
+    def __init__(self, search_title: str, *, searched_from: str = "") -> None:
         super().__init__(timeout=BRAIN_SEARCH_WINDOW_SECONDS)
         self.search_title = search_title.strip() or "search"
+        self.searched_from = searched_from.strip()
         self._message: discord.Message | None = None
 
     def bind_message(self, message: discord.Message) -> None:
         self._message = message
 
+    def _closed_notice(self) -> str:
+        if self.searched_from:
+            return f"Searched from {self.searched_from}."
+        return "Searched."
+
+    def _expired_notice(self) -> str:
+        if self.searched_from:
+            return f"Searched from {self.searched_from}. Result expired after 10 mins."
+        return f"Search result of {self.search_title} expired after 10 mins."
+
     async def delete_message(self) -> None:
         if self._message is None:
             return
         try:
-            await self._message.delete()
+            await self._message.edit(content=self._closed_notice(), view=None, allowed_mentions=NO_MENTIONS)
         except discord.HTTPException:
-            LOGGER.info("Could not delete Brain search window %s", getattr(self._message, "id", ""))
+            LOGGER.info("Could not close Brain search window %s", getattr(self._message, "id", ""))
         finally:
             self._message = None
 
@@ -1407,7 +1418,7 @@ class BrainTemporarySearchView(discord.ui.View):
             return
         try:
             await self._message.edit(
-                content=f"Search result of {self.search_title} expired after 10 mins.",
+                content=self._expired_notice(),
                 view=None,
                 allowed_mentions=NO_MENTIONS,
             )
@@ -1446,7 +1457,7 @@ class BrainMemoSearchView(BrainTemporarySearchView):
         *,
         memos_public_url: str = "",
     ) -> None:
-        super().__init__(query)
+        super().__init__(query, searched_from="Memos")
         self.governor_tools = governor_tools
         self.actor_id = actor_id
         self.query = query
@@ -1510,7 +1521,7 @@ class BrainCombinedSearchView(BrainTemporarySearchView):
         paperless_public_url: str = "",
         memos_public_url: str = "",
     ) -> None:
-        super().__init__(query)
+        super().__init__(query, searched_from="Paperless and Memos")
         self.governor_tools = governor_tools
         self.actor_id = actor_id
         self.query = query
@@ -1937,7 +1948,7 @@ class BrainDocumentSearchView(BrainTemporarySearchView):
         *,
         paperless_public_url: str = "",
     ) -> None:
-        super().__init__(query)
+        super().__init__(query, searched_from="Paperless")
         self.governor_tools = governor_tools
         self.actor_id = actor_id
         self.query = query
