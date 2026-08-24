@@ -251,9 +251,9 @@ class Settings:
         task_due_notification_state_path = Path(
             source.get(
                 "DISCORD_TASK_DUE_NOTIFICATION_STATE_PATH",
-                "/data/discord-task-due-notifications/state.json",
+                "/data/discord-tasks/due-notifications.json",
             ).strip()
-            or "/data/discord-task-due-notifications/state.json"
+            or "/data/discord-tasks/due-notifications.json"
         )
         supplies_enabled = _boolean(source, "DISCORD_SUPPLIES_ENABLED")
         raw_supplies_channel = source.get("DISCORD_SUPPLIES_CHANNEL_ID", "").strip()

@@ -158,7 +158,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.task_due_notification_channel_id, 301)
         self.assertEqual(
             str(settings.task_due_notification_state_path),
-            "/data/discord-task-due-notifications/state.json",
+            "/data/discord-tasks/due-notifications.json",
         )
 
     def test_tasks_surface_requires_allowed_channel_when_enabled(self) -> None:
