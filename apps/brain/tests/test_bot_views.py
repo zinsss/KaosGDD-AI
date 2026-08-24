@@ -342,6 +342,24 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(service_view, BrainActiveTasksView)
         self.assertIsNone(service_view.timeout)
 
+    def test_service_menu_buttons_use_two_balanced_rows(self) -> None:
+        view = BrainServiceMenuView(
+            FakeGovernorTools(),  # type: ignore[arg-type]
+            self.active_control_settings(),
+        )
+
+        self.assertEqual(
+            [(getattr(item, "label", ""), getattr(item, "row", None)) for item in view.children],
+            [
+                (CALENDAR_LABEL, 0),
+                (TASKS_SERVICE_BUTTON_LABEL, 0),
+                (SUPPLIES_LABEL, 0),
+                (PAPERLESS_LABEL, 1),
+                (MEMOS_LABEL, 1),
+                (FAX_MAIL_LABEL, 1),
+            ],
+        )
+
     async def test_service_button_replaces_previous_open_service_message(self) -> None:
         with TemporaryDirectory() as tmpdir:
             state_path = str(Path(tmpdir) / "active-control.json")

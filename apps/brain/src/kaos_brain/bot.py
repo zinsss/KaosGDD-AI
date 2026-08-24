@@ -2343,7 +2343,7 @@ class BrainServiceMenuView(discord.ui.View):
         await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
         return False
 
-    @discord.ui.button(label=CALENDAR_LABEL, style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label=CALENDAR_LABEL, style=discord.ButtonStyle.secondary, row=0)
     async def calendar_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
         current = datetime.now(KST).date()
@@ -2364,7 +2364,7 @@ class BrainServiceMenuView(discord.ui.View):
             kwargs["file"] = file
         await _send_single_service_message(self.settings, interaction, **kwargs)
 
-    @discord.ui.button(label=TASKS_SERVICE_BUTTON_LABEL, style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label=TASKS_SERVICE_BUTTON_LABEL, style=discord.ButtonStyle.secondary, row=0)
     async def tasks_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
         try:
@@ -2390,7 +2390,7 @@ class BrainServiceMenuView(discord.ui.View):
             allowed_mentions=NO_MENTIONS,
         )
 
-    @discord.ui.button(label=SUPPLIES_LABEL, style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label=SUPPLIES_LABEL, style=discord.ButtonStyle.secondary, row=0)
     async def supplies_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
         request = ToolRequest(
@@ -2414,7 +2414,7 @@ class BrainServiceMenuView(discord.ui.View):
             allowed_mentions=NO_MENTIONS,
         )
 
-    @discord.ui.button(label=PAPERLESS_LABEL, style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label=PAPERLESS_LABEL, style=discord.ButtonStyle.secondary, row=1)
     async def paperless_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer(ephemeral=True)
         await _delete_open_service_message(self.settings, interaction)
@@ -2424,7 +2424,7 @@ class BrainServiceMenuView(discord.ui.View):
             allowed_mentions=NO_MENTIONS,
         )
 
-    @discord.ui.button(label=MEMOS_LABEL, style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label=MEMOS_LABEL, style=discord.ButtonStyle.secondary, row=1)
     async def memos_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer(ephemeral=True)
         await _delete_open_service_message(self.settings, interaction)
@@ -2434,7 +2434,7 @@ class BrainServiceMenuView(discord.ui.View):
             allowed_mentions=NO_MENTIONS,
         )
 
-    @discord.ui.button(label=FAX_MAIL_LABEL, style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label=FAX_MAIL_LABEL, style=discord.ButtonStyle.secondary, row=1)
     async def fax_mail_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
         try:
