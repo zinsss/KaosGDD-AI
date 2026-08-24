@@ -338,7 +338,9 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(f"## {ACTIVE_TASKS_TITLE}", content)
         self.assertIn("### Total: 1", content)
         self.assertIn("- 로운이 제로이드 · 2026-08-22 10:00", content)
-        self.assertIsInstance(interaction.followup.send.await_args.kwargs["view"], BrainActiveTasksView)
+        service_view = interaction.followup.send.await_args.kwargs["view"]
+        self.assertIsInstance(service_view, BrainActiveTasksView)
+        self.assertIsNone(service_view.timeout)
 
     async def test_service_button_replaces_previous_open_service_message(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -388,6 +390,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(f"## {CALENDAR_TITLE} ·", interaction.followup.send.await_args.kwargs["content"])
         service_view = interaction.followup.send.await_args.kwargs["view"]
         self.assertIsInstance(service_view, BrainCalendarMonthView)
+        self.assertIsNone(service_view.timeout)
         self.assertEqual([getattr(item, "label", "") for item in service_view.children], ["Month", "Weekly", "Close", "<", "Today", ">"])
 
     async def test_calendar_weekly_view_edits_to_weather_event_list(self) -> None:
@@ -473,6 +476,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("Documents accepted", content)
         service_view = interaction.followup.send.await_args.kwargs["view"]
         self.assertIsInstance(service_view, BrainFaxMailView)
+        self.assertIsNone(service_view.timeout)
         self.assertIn("Outgoing Fax", [getattr(item, "label", "") for item in service_view.children])
         self.assertIn("Close", [getattr(item, "label", "") for item in service_view.children])
 
@@ -524,6 +528,9 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("### Total: 1", content)
         self.assertIn("- 토프라민", content)
         self.assertNotIn("2026-", content)
+        service_view = interaction.followup.send.await_args.kwargs["view"]
+        self.assertIsInstance(service_view, BrainActiveTasksView)
+        self.assertIsNone(service_view.timeout)
 
     async def test_active_control_refresh_rebuilds_dropdowns(self) -> None:
         view = BrainActiveControlView(
@@ -952,17 +959,20 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         interaction = SimpleNamespace(
             id=890,
             user=SimpleNamespace(id=200),
-            response=SimpleNamespace(edit_message=AsyncMock(), send_message=AsyncMock()),
+            response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+            edit_original_response=AsyncMock(),
+            followup=SimpleNamespace(send=AsyncMock()),
         )
 
         await view.children[1].callback(interaction)  # type: ignore[arg-type,union-attr]
 
+        interaction.response.defer.assert_awaited_once()
         request, actor_id, idempotency_key = tools.task_create_calls[0]
         self.assertEqual(request.title, "Soap")
         self.assertEqual(request.profile, "supplies")
         self.assertEqual(actor_id, 200)
         self.assertEqual(idempotency_key, "brain-task-make-new-890")
-        content = interaction.response.edit_message.await_args.kwargs["content"]
+        content = interaction.edit_original_response.await_args.kwargs["content"]
         self.assertIn("Confirm New Supply", content)
         self.assertIn("## Soap", content)
 
@@ -977,11 +987,14 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         interaction = SimpleNamespace(
             id=999,
             user=SimpleNamespace(id=200),
-            response=SimpleNamespace(edit_message=AsyncMock(), send_message=AsyncMock()),
+            response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+            edit_original_response=AsyncMock(),
+            followup=SimpleNamespace(send=AsyncMock()),
         )
 
         await view.children[0].callback(interaction)  # type: ignore[arg-type,union-attr]
 
+        interaction.response.defer.assert_awaited_once()
         request, actor_id, idempotency_key = tools.task_action_calls[0]
         self.assertEqual(request.uid, "TASK-1")
         self.assertEqual(request.task_title, "Call mom")
@@ -989,7 +1002,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(request.profile, "family")
         self.assertEqual(actor_id, 200)
         self.assertEqual(idempotency_key, "brain-task-complete-999")
-        content = interaction.response.edit_message.await_args.kwargs["content"]
+        content = interaction.edit_original_response.await_args.kwargs["content"]
         self.assertIn("## Confirm task action", content)
         self.assertIn("- action: complete", content)
 
@@ -1004,11 +1017,14 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         interaction = SimpleNamespace(
             id=1000,
             user=SimpleNamespace(id=200),
-            response=SimpleNamespace(edit_message=AsyncMock(), send_message=AsyncMock()),
+            response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+            edit_original_response=AsyncMock(),
+            followup=SimpleNamespace(send=AsyncMock()),
         )
 
         await view.children[2].callback(interaction)  # type: ignore[arg-type,union-attr]
 
+        interaction.response.defer.assert_awaited_once()
         request, _, idempotency_key = tools.task_action_calls[0]
         self.assertEqual(request.uid, "SUPPLY-1")
         self.assertEqual(request.task_title, "Soap")

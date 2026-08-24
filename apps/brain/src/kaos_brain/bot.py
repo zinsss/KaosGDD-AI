@@ -1821,6 +1821,7 @@ class BrainOpenedMemoView(discord.ui.View):
         if interaction.message is None:
             await interaction.response.send_message("Closed.", ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
+        await interaction.response.defer()
         await interaction.message.delete()
 
     @discord.ui.button(label="More...", style=discord.ButtonStyle.secondary)
@@ -2411,7 +2412,7 @@ class BrainCalendarMonthView(discord.ui.View):
         month: int,
         mode: str = "month",
     ) -> None:
-        super().__init__(timeout=600)
+        super().__init__(timeout=None)
         self.governor_tools = governor_tools
         self.settings = settings
         self.anchor_date = anchor_date
@@ -2482,6 +2483,7 @@ class BrainCalendarMonthView(discord.ui.View):
         if interaction.message is None:
             await interaction.response.send_message("Closed.", ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
+        await interaction.response.defer()
         await interaction.message.delete()
 
     @discord.ui.button(label="<", style=discord.ButtonStyle.secondary, row=1)
@@ -2625,7 +2627,7 @@ class BrainFaxMailView(discord.ui.View):
         mode: str = "incoming",
         page: int = 0,
     ) -> None:
-        super().__init__(timeout=600)
+        super().__init__(timeout=None)
         self.governor_tools = governor_tools
         self.actor_id = actor_id
         self.settings = settings
@@ -2767,6 +2769,7 @@ class BrainFaxMailCloseButton(discord.ui.Button):
         if interaction.message is None:
             await interaction.response.send_message("Closed.", ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
+        await interaction.response.defer()
         await interaction.message.delete()
 
 
@@ -2782,7 +2785,7 @@ class BrainActiveTasksView(discord.ui.View):
         page: int = 0,
         month: date | None = None,
     ) -> None:
-        super().__init__(timeout=600)
+        super().__init__(timeout=None)
         self.governor_tools = governor_tools
         self.actor_id = actor_id
         self.request = request
@@ -3038,6 +3041,7 @@ class BrainTaskServiceCloseButton(discord.ui.Button):
         if interaction.message is None:
             await interaction.response.send_message("Closed.", ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
+        await interaction.response.defer()
         await interaction.message.delete()
 
 
@@ -3073,9 +3077,11 @@ class BrainActiveTaskActionsView(discord.ui.View):
         if interaction.message is None:
             await interaction.response.send_message("Closed.", ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
+        await interaction.response.defer()
         await interaction.message.delete()
 
     async def _propose(self, interaction: discord.Interaction, action: str) -> None:
+        await interaction.response.defer()
         try:
             payload = await self.governor_tools.propose_task_action(
                 TaskActionRequest(
@@ -3090,9 +3096,9 @@ class BrainActiveTaskActionsView(discord.ui.View):
             )
         except GovernorToolError as exc:
             LOGGER.warning("Task action failed action=%s: %s", action, exc)
-            await interaction.response.send_message(_tool_failed("할 일 변경"), ephemeral=True, allowed_mentions=NO_MENTIONS)
+            await interaction.followup.send(_tool_failed("할 일 변경"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=render_task_action_proposal(payload),
             view=TaskActionConfirmationView(self.governor_tools, self.actor_id, str(payload.get("confirmationId") or "")),
             allowed_mentions=NO_MENTIONS,
@@ -3121,6 +3127,7 @@ class BrainCompletedTaskActionsView(discord.ui.View):
 
     @discord.ui.button(label="Make New", style=discord.ButtonStyle.primary)
     async def make_new(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer()
         try:
             payload = await self.governor_tools.propose_task_create(
                 TaskCreateRequest(
@@ -3135,9 +3142,9 @@ class BrainCompletedTaskActionsView(discord.ui.View):
             )
         except GovernorToolError as exc:
             LOGGER.warning("Completed task make-new failed: %s", exc)
-            await interaction.response.send_message(_tool_failed("할 일 다시 만들기"), ephemeral=True, allowed_mentions=NO_MENTIONS)
+            await interaction.followup.send(_tool_failed("할 일 다시 만들기"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=render_task_create_proposal(payload),
             view=TaskCreateConfirmationView(self.governor_tools, self.actor_id, str(payload.get("confirmationId") or "")),
             allowed_mentions=NO_MENTIONS,
@@ -3153,9 +3160,11 @@ class BrainCompletedTaskActionsView(discord.ui.View):
         if interaction.message is None:
             await interaction.response.send_message("Closed.", ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
+        await interaction.response.defer()
         await interaction.message.delete()
 
     async def _propose_action(self, interaction: discord.Interaction, action: str) -> None:
+        await interaction.response.defer()
         try:
             payload = await self.governor_tools.propose_task_action(
                 TaskActionRequest(
@@ -3170,9 +3179,9 @@ class BrainCompletedTaskActionsView(discord.ui.View):
             )
         except GovernorToolError as exc:
             LOGGER.warning("Completed task action failed action=%s: %s", action, exc)
-            await interaction.response.send_message(_tool_failed("완료 할 일 변경"), ephemeral=True, allowed_mentions=NO_MENTIONS)
+            await interaction.followup.send(_tool_failed("완료 할 일 변경"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=render_task_action_proposal(payload),
             view=TaskActionConfirmationView(self.governor_tools, self.actor_id, str(payload.get("confirmationId") or "")),
             allowed_mentions=NO_MENTIONS,
