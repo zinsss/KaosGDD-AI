@@ -587,6 +587,22 @@ class BrainBot(discord.Client):
         if document_tag_suggestion:
             await self._propose_document_tag_suggestion(message, document_tag_suggestion)
             return
+        tool_request = (
+            parse_tool_request(request.text, today=message.created_at.astimezone(KST).date())
+            if request.route is Route.CHAT
+            else None
+        )
+        if tool_request is not None:
+            async with message.channel.typing():
+                reply, view = await self._answer_with_governor_tool(request.text, tool_request, actor_id=int(message.author.id))
+            sent = await message.reply(
+                reply[: self.settings.max_reply_chars],
+                view=view,
+                mention_author=False,
+                allowed_mentions=NO_MENTIONS,
+            )
+            _bind_view_message(view, sent)
+            return
         view: discord.ui.View | None = None
         async with message.channel.typing():
             try:
@@ -602,14 +618,7 @@ class BrainBot(discord.Client):
                         )
                         _bind_view_message(view, sent)
                         return
-                tool_request = (
-                    parse_tool_request(request.text, today=message.created_at.astimezone(KST).date())
-                    if request.route is Route.CHAT
-                    else None
-                )
-                if tool_request is not None:
-                    reply, view = await self._answer_with_governor_tool(request.text, tool_request, actor_id=int(message.author.id))
-                elif request.route is Route.CHAT and self.settings.auto_route_enabled:
+                if request.route is Route.CHAT and self.settings.auto_route_enabled:
                     reply = await self.ollama.generate_auto(request.text)
                 else:
                     reply = await self.ollama.generate(request.route, request.text)

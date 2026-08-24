@@ -7,6 +7,7 @@ from kaos_brain.bot import BrainBot, _kaosai_planner_from_settings, parse_docume
 from kaos_brain.config import Settings
 from kaos_brain.governor_tools import GovernorToolError
 from kaos_brain.kaos_ai import DisabledKaosAIPlanner, KaosAIError, OpenClawKaosAIPlanner
+from kaos_brain.tool_intent import ToolKind
 
 
 BASE_ENV = {
@@ -211,6 +212,18 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
         brain._reload_active_control_from_message.assert_awaited_once_with(message)
         self.assertEqual(brain.kaosai.calls, [])
         message.reply.assert_not_awaited()
+
+    async def test_dotdot_search_bypasses_kaosai_and_searches_governor_tools(self) -> None:
+        tools = FakeGovernorTools()
+        brain = self.brain({"intent": "clarify", "parameters": {"question": "무엇을 찾을까요?"}}, governor_tools=tools)
+        message = fake_discord_message("..통관")
+
+        await BrainBot.on_message(brain, message)  # type: ignore[arg-type]
+
+        self.assertEqual(brain.kaosai.calls, [])
+        self.assertEqual([request.kind for request in tools.fetch_calls], [ToolKind.MEMO_SEARCH, ToolKind.DOCUMENT_SEARCH])
+        self.assertTrue(all(request.query == "통관" for request in tools.fetch_calls))
+        self.assertIn("Searched..\n## 통관", message.reply.await_args.args[0])
 
     async def test_kaosai_reauth_callback_is_deleted_and_submitted(self) -> None:
         brain = self.brain(None)
