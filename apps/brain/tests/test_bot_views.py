@@ -136,6 +136,15 @@ class FakeGovernorTools:
                     {"kind": "documents", "title": "Documents accepted: 1", "detail": "OCR ready: 1"},
                 ]
             }
+        if request.kind is ToolKind.DOCUMENT_SEARCH:
+            return {
+                "results": [
+                    {"id": 1, "title": "Insurance receipt", "created": "2026-08-22"},
+                    {"id": 2, "title": "Clinic note", "created": "2026-08-23"},
+                ],
+                "resultCount": 2,
+                "totalCount": 2,
+            }
         if request.profile == "supplies":
             return {"tasks": [{"title": "토프라민", "date": "2026-08-21", "due": "2026-08-21"}]}
         return {"tasks": [{"title": "로운이 제로이드", "due": "2026-08-22", "dueTime": "10:00"}]}
@@ -202,6 +211,8 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             governor_tools_profile="main",
             governor_tools_supplies_collection_id="supplies:abc",
             active_control_state_path=state_path,
+            paperless_public_url="https://paperless.example",
+            memos_public_url="https://memos.example",
         )
 
     def test_active_control_message_uses_compact_date_header(self) -> None:
@@ -485,7 +496,10 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         await select.callback(interaction)  # type: ignore[arg-type]
 
         calls = interaction.followup.send.await_args_list
-        self.assertIn(f"## {PAPERLESS_TITLE}", calls[0].args[0])
+        self.assertEqual(calls[0].args[0], "")
+        self.assertEqual(calls[0].kwargs["embed"].title, "Paperless · ..")
+        self.assertIn("2 results in 2 documents", calls[0].kwargs["embed"].description)
+        self.assertIsInstance(calls[0].kwargs["view"], BrainDocumentSearchView)
         self.assertIn(f"## {MEMOS_TITLE}", calls[1].args[0])
 
     async def test_fax_mail_select_calls_up_incoming_service_message(self) -> None:

@@ -2417,11 +2417,45 @@ class BrainServiceMenuView(discord.ui.View):
         )
 
     async def open_paperless(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer(ephemeral=True)
-        await _delete_open_service_message(self.settings, interaction)
-        await interaction.followup.send(
-            f"## {PAPERLESS_TITLE}\n- use `..keyword` to search documents\n- use `..ALL` to browse documents",
-            ephemeral=True,
+        await interaction.response.defer()
+        try:
+            payload = await self.governor_tools.fetch(ToolRequest(ToolKind.DOCUMENT_SEARCH, ""))
+        except GovernorToolError as exc:
+            LOGGER.warning("Paperless service message failed: %s", exc)
+            await interaction.followup.send(_tool_failed("Paperless 불러오기"), ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        results = [
+            {
+                **item,
+                "url": item.get("url") or item.get("publicUrl") or document_public_url(self.settings.paperless_public_url, item.get("id")),
+            }
+            for item in search_results(payload)
+        ]
+        result_count = _payload_count(payload, "resultCount", "count", fallback=len(results))
+        total_count = _payload_count(payload, "totalCount", "total", fallback=result_count)
+        view = (
+            BrainDocumentSearchView(
+                self.governor_tools,
+                int(interaction.user.id),
+                "",
+                results,
+                paperless_public_url=self.settings.paperless_public_url,
+            )
+            if results
+            else None
+        )
+        await _send_single_service_message(
+            self.settings,
+            interaction,
+            "",
+            embed=_document_search_embed(
+                "",
+                results,
+                result_count=result_count,
+                total_count=total_count,
+                paperless_public_url=self.settings.paperless_public_url,
+            ),
+            view=view,
             allowed_mentions=NO_MENTIONS,
         )
 
