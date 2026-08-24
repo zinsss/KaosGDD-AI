@@ -57,6 +57,7 @@ class DiscordTasksSurface:
         button_prefix: str = "tasks",
         collection_id: str = "",
         show_due: bool = True,
+        messages_enabled: bool = True,
     ) -> None:
         self.bot = bot
         self.policy = policy
@@ -68,11 +69,17 @@ class DiscordTasksSurface:
         self.button_prefix = button_prefix
         self.collection_id = collection_id
         self.show_due = show_due
+        self.messages_enabled = messages_enabled
         self.message_refresh_delay_seconds = MESSAGE_REFRESH_DELAY_SECONDS
         self.state = self._load_state()
         self._tasks_by_key: dict[str, dict[str, Any]] = {}
 
     async def ensure_message(self) -> None:
+        if not self.messages_enabled:
+            tasks = await asyncio.to_thread(self.adapter.list_tasks, self.profile)
+            active = active_tasks(tasks, collection_id=self.collection_id)
+            self._tasks_by_key = {task_key(item): item for item in active}
+            return
         tasks = await asyncio.to_thread(self.adapter.list_tasks, self.profile)
         active = active_tasks(tasks, collection_id=self.collection_id)
         self._tasks_by_key = {task_key(item): item for item in active}
@@ -130,6 +137,8 @@ class DiscordTasksSurface:
         self._save_state()
 
     async def repost_active_messages(self) -> None:
+        if not self.messages_enabled:
+            return
         channel = await self.channel()
         for message_id in self.state.message_ids.values():
             await self._delete_message_id(channel, message_id)
@@ -340,6 +349,7 @@ class DiscordTasksSurface:
     def status(self) -> dict[str, object]:
         return {
             "enabled": True,
+            "messagesEnabled": self.messages_enabled,
             "channelId": str(self.channel_id),
             "profile": self.profile,
             "collectionId": self.collection_id,

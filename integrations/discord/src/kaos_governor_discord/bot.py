@@ -200,6 +200,19 @@ class GovernorBot(discord.Client):
             if settings.tasks_enabled and settings.tasks_channel_id is not None
             else None
         )
+        self.discord_task_due_notifications = (
+            DiscordTasksSurface(
+                self,
+                self.policy,
+                channel_id=settings.task_due_notification_channel_id,
+                profile=settings.tasks_profile,
+                state_path=settings.task_due_notification_state_path,
+                adapter=self.calendar_adapter,
+                messages_enabled=False,
+            )
+            if settings.task_due_notifications_enabled and settings.task_due_notification_channel_id is not None
+            else None
+        )
         self.discord_supplies = (
             DiscordTasksSurface(
                 self,
@@ -562,9 +575,14 @@ class GovernorBot(discord.Client):
         if self.discord_tasks is not None:
             try:
                 await self.discord_tasks.ensure_message()
-                await self.discord_tasks.notify_due_tasks()
             except Exception:
                 LOGGER.exception("Failed to ensure Discord tasks message")
+        due_task_surface = self.discord_task_due_notifications or self.discord_tasks
+        if due_task_surface is not None:
+            try:
+                await due_task_surface.notify_due_tasks()
+            except Exception:
+                LOGGER.exception("Failed to send startup Discord due task notifications")
         if self.discord_supplies is not None:
             try:
                 await self.discord_supplies.ensure_message()
@@ -580,7 +598,7 @@ class GovernorBot(discord.Client):
                 self._tasks_refresh_loop(),
                 name="governor-tasks-refresh",
             )
-        if self.discord_tasks is not None and self._tasks_due_task is None:
+        if due_task_surface is not None and self._tasks_due_task is None:
             self._tasks_due_task = asyncio.create_task(
                 self._tasks_due_loop(),
                 name="governor-tasks-due",
@@ -709,6 +727,11 @@ class GovernorBot(discord.Client):
                 self.discord_calendar.status() if self.discord_calendar is not None else {"enabled": False}
             ),
             "tasksSurface": self.discord_tasks.status() if self.discord_tasks is not None else {"enabled": False},
+            "taskDueNotifications": (
+                self.discord_task_due_notifications.status()
+                if self.discord_task_due_notifications is not None
+                else {"enabled": self.discord_tasks is not None, "messagesEnabled": self.discord_tasks is not None}
+            ),
             "suppliesSurface": (
                 self.discord_supplies.status() if self.discord_supplies is not None else {"enabled": False}
             ),
@@ -818,12 +841,13 @@ class GovernorBot(discord.Client):
                     LOGGER.exception("Failed to refresh Discord %s messages", surface.surface_name)
 
     async def _tasks_due_loop(self) -> None:
-        if self.discord_tasks is None:
+        due_task_surface = self.discord_task_due_notifications or self.discord_tasks
+        if due_task_surface is None:
             return
         while not self.is_closed():
             await asyncio.sleep(60)
             try:
-                await self.discord_tasks.notify_due_tasks()
+                await due_task_surface.notify_due_tasks()
             except Exception:
                 LOGGER.exception("Failed to send Discord due task notifications")
 

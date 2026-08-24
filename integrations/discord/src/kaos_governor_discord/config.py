@@ -103,6 +103,9 @@ class Settings:
     tasks_profile: Literal["main", "family"]
     tasks_state_path: Path
     tasks_refresh_seconds: int
+    task_due_notifications_enabled: bool
+    task_due_notification_channel_id: int | None
+    task_due_notification_state_path: Path
     supplies_enabled: bool
     supplies_channel_id: int | None
     supplies_profile: Literal["main", "family", "supplies"]
@@ -231,6 +234,27 @@ class Settings:
             source.get("DISCORD_TASKS_REFRESH_SECONDS", "60"),
             "DISCORD_TASKS_REFRESH_SECONDS",
         )
+        task_due_notifications_enabled = _boolean(source, "DISCORD_TASK_DUE_NOTIFICATIONS_ENABLED")
+        raw_task_due_notification_channel = source.get("DISCORD_TASK_DUE_NOTIFICATION_CHANNEL_ID", "").strip()
+        task_due_notification_channel_id = (
+            _positive_int(raw_task_due_notification_channel, "DISCORD_TASK_DUE_NOTIFICATION_CHANNEL_ID")
+            if raw_task_due_notification_channel
+            else system_channel_id
+        )
+        if task_due_notifications_enabled and task_due_notification_channel_id is None:
+            raise ConfigurationError(
+                "DISCORD_TASK_DUE_NOTIFICATION_CHANNEL_ID or DISCORD_SYSTEM_CHANNEL_ID is required "
+                "when DISCORD_TASK_DUE_NOTIFICATIONS_ENABLED=true"
+            )
+        if task_due_notification_channel_id is not None and task_due_notification_channel_id not in allowed_channels:
+            raise ConfigurationError("DISCORD_TASK_DUE_NOTIFICATION_CHANNEL_ID must be in DISCORD_ALLOWED_CHANNEL_IDS")
+        task_due_notification_state_path = Path(
+            source.get(
+                "DISCORD_TASK_DUE_NOTIFICATION_STATE_PATH",
+                "/data/discord-task-due-notifications/state.json",
+            ).strip()
+            or "/data/discord-task-due-notifications/state.json"
+        )
         supplies_enabled = _boolean(source, "DISCORD_SUPPLIES_ENABLED")
         raw_supplies_channel = source.get("DISCORD_SUPPLIES_CHANNEL_ID", "").strip()
         supplies_channel_id = (
@@ -348,6 +372,9 @@ class Settings:
             tasks_profile=tasks_profile,  # type: ignore[arg-type]
             tasks_state_path=tasks_state_path,
             tasks_refresh_seconds=tasks_refresh_seconds,
+            task_due_notifications_enabled=task_due_notifications_enabled,
+            task_due_notification_channel_id=task_due_notification_channel_id,
+            task_due_notification_state_path=task_due_notification_state_path,
             supplies_enabled=supplies_enabled,
             supplies_channel_id=supplies_channel_id,
             supplies_profile=supplies_profile,  # type: ignore[arg-type]

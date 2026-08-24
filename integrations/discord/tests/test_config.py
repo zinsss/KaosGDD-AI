@@ -154,6 +154,12 @@ class SettingsTests(unittest.TestCase):
         self.assertIsNone(settings.tasks_channel_id)
         self.assertEqual(settings.tasks_profile, "main")
         self.assertEqual(settings.tasks_refresh_seconds, 60)
+        self.assertFalse(settings.task_due_notifications_enabled)
+        self.assertEqual(settings.task_due_notification_channel_id, 301)
+        self.assertEqual(
+            str(settings.task_due_notification_state_path),
+            "/data/discord-task-due-notifications/state.json",
+        )
 
     def test_tasks_surface_requires_allowed_channel_when_enabled(self) -> None:
         with self.assertRaises(ConfigurationError):
@@ -176,6 +182,30 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.tasks_profile, "family")
         self.assertEqual(str(settings.tasks_state_path), "/tmp/tasks-state.json")
         self.assertEqual(settings.tasks_refresh_seconds, 30)
+
+    def test_task_due_notifications_can_use_system_channel_without_task_surface(self) -> None:
+        settings = Settings.from_env(
+            {
+                **BASE_ENV,
+                "DISCORD_TASK_DUE_NOTIFICATIONS_ENABLED": "true",
+                "DISCORD_TASK_DUE_NOTIFICATION_STATE_PATH": "/tmp/task-due.json",
+            }
+        )
+
+        self.assertFalse(settings.tasks_enabled)
+        self.assertTrue(settings.task_due_notifications_enabled)
+        self.assertEqual(settings.task_due_notification_channel_id, 301)
+        self.assertEqual(str(settings.task_due_notification_state_path), "/tmp/task-due.json")
+
+    def test_task_due_notifications_require_allowed_channel(self) -> None:
+        with self.assertRaises(ConfigurationError):
+            Settings.from_env(
+                {
+                    **BASE_ENV,
+                    "DISCORD_TASK_DUE_NOTIFICATIONS_ENABLED": "true",
+                    "DISCORD_TASK_DUE_NOTIFICATION_CHANNEL_ID": "999",
+                }
+            )
 
     def test_tasks_surface_rejects_unknown_profile(self) -> None:
         with self.assertRaises(ConfigurationError):

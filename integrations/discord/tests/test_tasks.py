@@ -846,6 +846,28 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await surface.notify_due_tasks(now=datetime(2026, 8, 13, 13, 44)), 1)
             self.assertIn("Buy milk", channel.sent[0]["content"])
 
+    async def test_due_notification_only_surface_does_not_post_task_messages(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            adapter = FakeAdapter()
+            surface = DiscordTasksSurface(
+                FakeBot(channel),  # type: ignore[arg-type]
+                AccessPolicy(100, frozenset({200}), frozenset({300})),
+                channel_id=300,
+                profile="main",
+                state_path=Path(temporary) / "task-due.json",
+                adapter=adapter,  # type: ignore[arg-type]
+                messages_enabled=False,
+            )
+
+            await surface.ensure_message()
+            self.assertEqual(channel.sent, [])
+            self.assertEqual(surface.status()["messagesEnabled"], False)
+
+            self.assertEqual(await surface.notify_due_tasks(now=datetime(2026, 8, 13, 13, 44)), 1)
+            self.assertEqual(len(channel.sent), 1)
+            self.assertIn("## Due task", channel.sent[0]["content"])
+
     async def test_supplies_surface_does_not_send_due_notifications(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             channel = FakeChannel()
