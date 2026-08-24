@@ -226,6 +226,10 @@ def _is_kaosai_reauth_command(text: str) -> bool:
     }
 
 
+def _is_active_control_reload_command(text: str) -> bool:
+    return text.strip().lower() == "/rrr"
+
+
 def _looks_like_auth_failure(text: str) -> bool:
     lowered = text.lower()
     return "token_expired" in lowered or "authentication failed" in lowered or "401" in lowered
@@ -456,6 +460,9 @@ class BrainBot(discord.Client):
         text = self._strip_mention(message)
         if _is_openai_callback(text):
             await self._submit_kaosai_reauth_callback(message, text)
+            return
+        if _is_active_control_reload_command(text):
+            await self._reload_active_control_from_message(message)
             return
         request = parse_request(text)
         if request is None:
@@ -940,7 +947,14 @@ class BrainBot(discord.Client):
         except OllamaError:
             return context, None
 
-    async def _ensure_active_control_message(self) -> None:
+    async def _reload_active_control_from_message(self, message: discord.Message) -> None:
+        try:
+            await message.delete()
+        except discord.HTTPException:
+            LOGGER.warning("Failed to delete active control reload command")
+        await self._ensure_active_control_message(move_to_bottom=True)
+
+    async def _ensure_active_control_message(self, *, move_to_bottom: bool = False) -> None:
         if self.governor_tools is None or self.user is None:
             return
         try:
@@ -952,6 +966,20 @@ class BrainBot(discord.Client):
             content = render_active_control_message(events, tasks, supplies)
             view = BrainActiveControlView(self.governor_tools, self.settings, events, tasks, supplies, imports)
             message = await self._find_active_control_message(channel)
+            service_message = await self._find_active_control_service_message(channel)
+            if move_to_bottom:
+                if message is not None:
+                    try:
+                        await message.delete()
+                    except discord.HTTPException:
+                        LOGGER.warning("Failed to delete old active control message")
+                    message = None
+                if service_message is not None:
+                    try:
+                        await service_message.delete()
+                    except discord.HTTPException:
+                        LOGGER.warning("Failed to delete old active control service message")
+                    service_message = None
             if message is None:
                 kwargs: dict[str, Any] = {"content": content, "view": view, "allowed_mentions": NO_MENTIONS}
                 if month_file is not None:
@@ -963,7 +991,6 @@ class BrainBot(discord.Client):
                     kwargs["attachments"] = [month_file]
                 await message.edit(**kwargs)
             self._active_control_message_id = int(message.id)
-            service_message = await self._find_active_control_service_message(channel)
             service_view = BrainServiceMenuView(self.governor_tools, self.settings)
             if service_message is None:
                 service_message = await channel.send(SERVICE_MENU_MARKER, view=service_view, allowed_mentions=NO_MENTIONS)

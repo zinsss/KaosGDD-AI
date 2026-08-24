@@ -200,6 +200,17 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("## KaosAI login renewal", reply)
         self.assertIn("https://auth.openai.com/oauth/authorize", reply)
 
+    async def test_rrr_command_reposts_active_control_message(self) -> None:
+        brain = self.brain(None)
+        brain._reload_active_control_from_message = AsyncMock()  # type: ignore[method-assign]
+        message = fake_discord_message("/rrr")
+
+        await BrainBot.on_message(brain, message)  # type: ignore[arg-type]
+
+        brain._reload_active_control_from_message.assert_awaited_once_with(message)
+        self.assertEqual(brain.kaosai.calls, [])
+        message.reply.assert_not_awaited()
+
     async def test_kaosai_reauth_callback_is_deleted_and_submitted(self) -> None:
         brain = self.brain(None)
         brain.reauth = FakeReauth()
