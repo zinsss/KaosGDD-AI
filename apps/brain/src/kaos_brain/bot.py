@@ -107,10 +107,40 @@ FAX_MAIL_TITLE = "𝓕𝓪𝔁 𝓜𝓪𝓲𝓵"
 KOREAN_SHORT_WEEKDAYS = ("월", "화", "수", "목", "금", "토", "일")
 
 
-def _bind_view_message(view: discord.ui.View | None, message: discord.Message) -> None:
+def _bind_view_message(view: discord.ui.View | None, message: Any) -> None:
     bind = getattr(view, "bind_message", None)
-    if callable(bind):
+    if callable(bind) and message is not None:
         bind(message)
+
+
+async def _reply_with_bound_view(
+    message: discord.Message,
+    content: str,
+    *,
+    view: discord.ui.View,
+) -> None:
+    sent = await message.reply(
+        content,
+        view=view,
+        mention_author=False,
+        allowed_mentions=NO_MENTIONS,
+    )
+    _bind_view_message(view, sent)
+
+
+async def _followup_with_bound_view(
+    interaction: discord.Interaction,
+    content: str,
+    *,
+    view: discord.ui.View,
+) -> None:
+    sent = await interaction.followup.send(
+        content,
+        view=view,
+        allowed_mentions=NO_MENTIONS,
+        wait=True,
+    )
+    _bind_view_message(view, sent)
 
 
 async def _defer_component_update(interaction: discord.Interaction) -> None:
@@ -123,6 +153,7 @@ async def _edit_deferred_component(
     content: str,
     view: discord.ui.View | None,
 ) -> None:
+    _bind_view_message(view, getattr(interaction, "message", None))
     await interaction.edit_original_response(content=content, view=view, allowed_mentions=NO_MENTIONS)
 
 
@@ -153,6 +184,7 @@ async def _send_single_service_message(
     kwargs.setdefault("allowed_mentions", NO_MENTIONS)
     kwargs.setdefault("wait", True)
     message = await interaction.followup.send(*args, **kwargs)
+    _bind_view_message(kwargs.get("view"), message)
     try:
         message_id = int(getattr(message, "id", 0) or 0)
     except (TypeError, ValueError):
@@ -1256,11 +1288,10 @@ class BrainBot(discord.Client):
                 allowed_mentions=NO_MENTIONS,
             )
             return
-        await message.reply(
+        await _reply_with_bound_view(
+            message,
             render_task_due_update_proposal(payload),
             view=TaskUpdateConfirmationView(self.governor_tools, int(message.author.id), str(payload.get("confirmationId") or "")),
-            mention_author=False,
-            allowed_mentions=NO_MENTIONS,
         )
 
     async def _propose_task_create(self, message: discord.Message, request: TaskCreateRequest) -> None:
@@ -1285,11 +1316,10 @@ class BrainBot(discord.Client):
                 allowed_mentions=NO_MENTIONS,
             )
             return
-        await message.reply(
+        await _reply_with_bound_view(
+            message,
             render_task_create_proposal(payload),
             view=TaskCreateConfirmationView(self.governor_tools, int(message.author.id), str(payload.get("confirmationId") or "")),
-            mention_author=False,
-            allowed_mentions=NO_MENTIONS,
         )
 
     async def _propose_task_action(self, message: discord.Message, request: TaskActionRequest) -> None:
@@ -1314,11 +1344,10 @@ class BrainBot(discord.Client):
                 allowed_mentions=NO_MENTIONS,
             )
             return
-        await message.reply(
+        await _reply_with_bound_view(
+            message,
             render_task_action_proposal(payload),
             view=TaskActionConfirmationView(self.governor_tools, int(message.author.id), str(payload.get("confirmationId") or "")),
-            mention_author=False,
-            allowed_mentions=NO_MENTIONS,
         )
 
     async def _propose_task_edit(self, message: discord.Message, request: TaskTextEditRequest) -> None:
@@ -1352,11 +1381,10 @@ class BrainBot(discord.Client):
                 allowed_mentions=NO_MENTIONS,
             )
             return
-        await message.reply(
+        await _reply_with_bound_view(
+            message,
             render_task_edit_proposal(payload),
             view=TaskEditConfirmationView(self.governor_tools, int(message.author.id), str(payload.get("confirmationId") or "")),
-            mention_author=False,
-            allowed_mentions=NO_MENTIONS,
         )
 
     async def _propose_event_create(self, message: discord.Message, request: EventCreateRequest) -> None:
@@ -1381,11 +1409,10 @@ class BrainBot(discord.Client):
                 allowed_mentions=NO_MENTIONS,
             )
             return
-        await message.reply(
+        await _reply_with_bound_view(
+            message,
             render_event_create_proposal(payload),
             view=EventCreateConfirmationView(self.governor_tools, int(message.author.id), str(payload.get("confirmationId") or "")),
-            mention_author=False,
-            allowed_mentions=NO_MENTIONS,
         )
 
     async def _propose_memo_create(self, message: discord.Message, request: MemoCreateRequest) -> None:
@@ -1410,11 +1437,10 @@ class BrainBot(discord.Client):
                 allowed_mentions=NO_MENTIONS,
             )
             return
-        await message.reply(
+        await _reply_with_bound_view(
+            message,
             render_memo_create_proposal(payload),
             view=MemoCreateConfirmationView(self.governor_tools, int(message.author.id), str(payload.get("confirmationId") or "")),
-            mention_author=False,
-            allowed_mentions=NO_MENTIONS,
         )
 
     async def _propose_memo_delete(self, message: discord.Message, request: MemoDeleteRequest) -> None:
@@ -1439,11 +1465,10 @@ class BrainBot(discord.Client):
                 allowed_mentions=NO_MENTIONS,
             )
             return
-        await message.reply(
+        await _reply_with_bound_view(
+            message,
             render_memo_delete_proposal(payload),
             view=MemoDeleteConfirmationView(self.governor_tools, int(message.author.id), str(payload.get("confirmationId") or "")),
-            mention_author=False,
-            allowed_mentions=NO_MENTIONS,
         )
 
     async def _propose_memo_edit(self, message: discord.Message, request: MemoEditRequest) -> None:
@@ -1468,11 +1493,10 @@ class BrainBot(discord.Client):
                 allowed_mentions=NO_MENTIONS,
             )
             return
-        await message.reply(
+        await _reply_with_bound_view(
+            message,
             render_memo_edit_proposal(payload),
             view=MemoEditConfirmationView(self.governor_tools, int(message.author.id), str(payload.get("confirmationId") or "")),
-            mention_author=False,
-            allowed_mentions=NO_MENTIONS,
         )
 
 
@@ -1518,6 +1542,25 @@ class BrainTemporarySearchView(discord.ui.View):
             )
         except discord.HTTPException:
             LOGGER.info("Could not expire Brain search window %s", getattr(self._message, "id", ""))
+        finally:
+            self._message = None
+
+
+class BrainAutoClosingView(discord.ui.View):
+    def __init__(self, *, timeout: float | None = 600) -> None:
+        super().__init__(timeout=timeout)
+        self._message: Any | None = None
+
+    def bind_message(self, message: Any) -> None:
+        self._message = message
+
+    async def on_timeout(self) -> None:
+        if self._message is None:
+            return
+        try:
+            await self._message.delete()
+        except discord.HTTPException:
+            LOGGER.info("Could not auto-close Brain temporary message %s", getattr(self._message, "id", ""))
         finally:
             self._message = None
 
@@ -1592,9 +1635,12 @@ class BrainMemoSearchSelect(discord.ui.Select):
             content = _tool_failed("메모 열기")
             await interaction.response.send_message(content, ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
-        view = BrainOpenedMemoView(self.parent_view.governor_tools, self.parent_view.actor_id, str(item.get("name") or ""), content)
         await interaction.response.defer()
-        await interaction.followup.send(content, view=view, allowed_mentions=NO_MENTIONS)
+        await _followup_with_bound_view(
+            interaction,
+            content,
+            view=BrainOpenedMemoView(self.parent_view.governor_tools, self.parent_view.actor_id, str(item.get("name") or ""), content),
+        )
         await self.parent_view.delete_message()
         self.parent_view.stop()
 
@@ -1668,9 +1714,12 @@ class BrainCombinedMemoSearchSelect(discord.ui.Select):
             LOGGER.warning("Memo open failed: %s", exc)
             await interaction.response.send_message(_tool_failed("메모 열기"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
-        view = BrainOpenedMemoView(self.parent_view.governor_tools, self.parent_view.actor_id, str(item.get("name") or ""), content)
         await interaction.response.defer()
-        await interaction.followup.send(content, view=view, allowed_mentions=NO_MENTIONS)
+        await _followup_with_bound_view(
+            interaction,
+            content,
+            view=BrainOpenedMemoView(self.parent_view.governor_tools, self.parent_view.actor_id, str(item.get("name") or ""), content),
+        )
         await self.parent_view.delete_message()
         self.parent_view.stop()
 
@@ -1700,14 +1749,13 @@ class BrainCombinedDocumentSearchSelect(discord.ui.Select):
             LOGGER.warning("Document open failed: %s", exc)
             content = _tool_failed("문서 열기")
         await interaction.response.defer()
-        await interaction.followup.send(
+        await _followup_with_bound_view(
+            interaction,
             content,
             view=BrainOpenedDocumentView(
                 self.parent_view.actor_id,
-                item if "item" in locals() else {},
-                paperless_public_url=self.parent_view.paperless_public_url,
+                document_public_url(self.parent_view.paperless_public_url, item.get("id")) if "item" in locals() else "",
             ),
-            allowed_mentions=NO_MENTIONS,
         )
         await self.parent_view.delete_message()
         self.parent_view.stop()
@@ -1802,7 +1850,7 @@ def _discord_embed_line(value: str, limit: int) -> str:
     return f"{stripped[: max(0, limit - 3)].rstrip()}..."
 
 
-class BrainOpenedMemoView(discord.ui.View):
+class BrainOpenedMemoView(BrainAutoClosingView):
     def __init__(self, governor_tools: GovernorToolClient, actor_id: int, name: str, content: str) -> None:
         super().__init__(timeout=600)
         self.governor_tools = governor_tools
@@ -1827,11 +1875,12 @@ class BrainOpenedMemoView(discord.ui.View):
     @discord.ui.button(label="More...", style=discord.ButtonStyle.secondary)
     async def more(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         view = BrainOpenedMemoActionsView(self.governor_tools, self.actor_id, self.name, self.content)
+        _bind_view_message(view, interaction.message)
         await interaction.response.edit_message(view=view, allowed_mentions=NO_MENTIONS)
         self.stop()
 
 
-class BrainOpenedMemoActionsView(discord.ui.View):
+class BrainOpenedMemoActionsView(BrainAutoClosingView):
     def __init__(self, governor_tools: GovernorToolClient, actor_id: int, name: str, content: str) -> None:
         super().__init__(timeout=600)
         self.governor_tools = governor_tools
@@ -1850,22 +1899,25 @@ class BrainOpenedMemoActionsView(discord.ui.View):
         if interaction.message is None:
             await interaction.response.send_message("Closed.", ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
+        await interaction.response.defer()
         await interaction.message.delete()
 
     @discord.ui.button(label="Edit", style=discord.ButtonStyle.primary)
     async def edit(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         view = BrainMemoEditConfirmView(self.governor_tools, self.actor_id, self.name, self.content)
+        _bind_view_message(view, interaction.message)
         await interaction.response.edit_message(view=view, allowed_mentions=NO_MENTIONS)
         self.stop()
 
     @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger)
     async def delete(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         view = BrainMemoDeleteConfirmView(self.governor_tools, self.actor_id, self.name, self.content)
+        _bind_view_message(view, interaction.message)
         await interaction.response.edit_message(view=view, allowed_mentions=NO_MENTIONS)
         self.stop()
 
 
-class BrainMemoEditConfirmView(discord.ui.View):
+class BrainMemoEditConfirmView(BrainAutoClosingView):
     def __init__(self, governor_tools: GovernorToolClient, actor_id: int, name: str, content: str) -> None:
         super().__init__(timeout=600)
         self.governor_tools = governor_tools
@@ -1888,6 +1940,7 @@ class BrainMemoEditConfirmView(discord.ui.View):
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         view = BrainOpenedMemoView(self.governor_tools, self.actor_id, self.name, self.content)
+        _bind_view_message(view, interaction.message)
         await interaction.response.edit_message(view=view, allowed_mentions=NO_MENTIONS)
         self.stop()
 
@@ -1948,7 +2001,7 @@ class BrainMemoEditModal(discord.ui.Modal, title="Edit memo"):
         )
 
 
-class BrainMemoDeleteConfirmView(discord.ui.View):
+class BrainMemoDeleteConfirmView(BrainAutoClosingView):
     def __init__(self, governor_tools: GovernorToolClient, actor_id: int, name: str, content: str) -> None:
         super().__init__(timeout=600)
         self.governor_tools = governor_tools
@@ -1988,7 +2041,7 @@ class BrainMemoDeleteConfirmView(discord.ui.View):
         self.stop()
 
 
-class BrainDeletedMemoView(discord.ui.View):
+class BrainDeletedMemoView(BrainAutoClosingView):
     def __init__(self, governor_tools: GovernorToolClient, actor_id: int, content: str) -> None:
         super().__init__(timeout=600)
         self.governor_tools = governor_tools
@@ -2030,6 +2083,7 @@ class BrainDeletedMemoView(discord.ui.View):
         if interaction.message is None:
             await interaction.response.send_message(_tool_failed("메시지 삭제"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
+        await interaction.response.defer()
         await interaction.message.delete()
 
 
@@ -2083,19 +2137,19 @@ class BrainDocumentSearchSelect(discord.ui.Select):
             LOGGER.warning("Document open failed: %s", exc)
             content = _tool_failed("문서 열기")
         await interaction.response.defer()
-        await interaction.followup.send(
+        await _followup_with_bound_view(
+            interaction,
             content,
             view=BrainOpenedDocumentView(
                 self.parent_view.actor_id,
                 document_public_url(self.parent_view.paperless_public_url, item.get("id")),
             ),
-            allowed_mentions=NO_MENTIONS,
         )
         await self.parent_view.delete_message()
         self.parent_view.stop()
 
 
-class BrainOpenedDocumentView(discord.ui.View):
+class BrainOpenedDocumentView(BrainAutoClosingView):
     def __init__(self, actor_id: int, url: str = "") -> None:
         super().__init__(timeout=600)
         self.actor_id = actor_id
@@ -2113,10 +2167,11 @@ class BrainOpenedDocumentView(discord.ui.View):
         if interaction.message is None:
             await interaction.response.send_message("Closed.", ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
+        await interaction.response.defer()
         await interaction.message.delete()
 
 
-class BrainCompletedTasksView(discord.ui.View):
+class BrainCompletedTasksView(BrainAutoClosingView):
     def __init__(self, governor_tools: GovernorToolClient, actor_id: int, request: ToolRequest, tasks: list[dict[str, Any]]) -> None:
         super().__init__(timeout=600)
         self.governor_tools = governor_tools
@@ -2167,14 +2222,14 @@ class BrainCompletedTasksSelect(discord.ui.Select):
             await interaction.response.send_message(_tool_failed("할 일 다시 열기"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         await interaction.response.defer()
-        await interaction.followup.send(
+        await _followup_with_bound_view(
+            interaction,
             render_task_action_proposal(payload),
             view=TaskActionConfirmationView(
                 self.parent_view.governor_tools,
                 self.parent_view.actor_id,
                 str(payload.get("confirmationId") or ""),
             ),
-            allowed_mentions=NO_MENTIONS,
         )
 
 
@@ -2577,7 +2632,8 @@ class BrainActiveControlSelect(discord.ui.Select):
             await interaction.response.send_message(_tool_failed("항목 선택"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         await interaction.response.defer()
-        await interaction.followup.send(
+        await _followup_with_bound_view(
+            interaction,
             _render_active_task_selection(title, task, supplies=self.kind == "supplies"),
             view=BrainActiveTaskActionsView(
                 self.parent_view.governor_tools,
@@ -2585,7 +2641,6 @@ class BrainActiveControlSelect(discord.ui.Select):
                 self.parent_view.request_for_kind(self.kind),
                 task,
             ),
-            allowed_mentions=NO_MENTIONS,
         )
 
 
@@ -2918,7 +2973,8 @@ class BrainActiveTasksSelect(discord.ui.Select):
             await interaction.response.send_message(_tool_failed("할 일 선택"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         await interaction.response.defer()
-        await interaction.followup.send(
+        await _followup_with_bound_view(
+            interaction,
             f"## {title}",
             view=BrainActiveTaskActionsView(
                 self.parent_view.governor_tools,
@@ -2926,7 +2982,6 @@ class BrainActiveTasksSelect(discord.ui.Select):
                 self.parent_view.request,
                 task,
             ),
-            allowed_mentions=NO_MENTIONS,
         )
 
 
@@ -2957,7 +3012,8 @@ class BrainTaskHistorySelect(discord.ui.Select):
             await interaction.response.send_message(_tool_failed("완료 할 일 선택"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         await interaction.response.defer()
-        await interaction.followup.send(
+        await _followup_with_bound_view(
+            interaction,
             _render_completed_task_selection(title, task, supplies=self.parent_view.supplies),
             view=BrainCompletedTaskActionsView(
                 self.parent_view.governor_tools,
@@ -2965,7 +3021,6 @@ class BrainTaskHistorySelect(discord.ui.Select):
                 self.parent_view.request,
                 task,
             ),
-            allowed_mentions=NO_MENTIONS,
         )
 
 
@@ -3045,7 +3100,7 @@ class BrainTaskServiceCloseButton(discord.ui.Button):
         await interaction.message.delete()
 
 
-class BrainActiveTaskActionsView(discord.ui.View):
+class BrainActiveTaskActionsView(BrainAutoClosingView):
     def __init__(self, governor_tools: GovernorToolClient, actor_id: int, request: ToolRequest, task: dict[str, Any]) -> None:
         super().__init__(timeout=600)
         self.governor_tools = governor_tools
@@ -3106,7 +3161,7 @@ class BrainActiveTaskActionsView(discord.ui.View):
         self.stop()
 
 
-class BrainCompletedTaskActionsView(discord.ui.View):
+class BrainCompletedTaskActionsView(BrainAutoClosingView):
     def __init__(self, governor_tools: GovernorToolClient, actor_id: int, request: ToolRequest, task: dict[str, Any]) -> None:
         super().__init__(timeout=600)
         self.governor_tools = governor_tools
@@ -3277,7 +3332,7 @@ class _EmptyInput:
     value = ""
 
 
-class TaskEditConfirmationView(discord.ui.View):
+class TaskEditConfirmationView(BrainAutoClosingView):
     def __init__(self, governor_tools: GovernorToolClient, actor_id: int, confirmation_id: str) -> None:
         super().__init__(timeout=600)
         self.governor_tools = governor_tools
@@ -3312,7 +3367,7 @@ class TaskEditConfirmationView(discord.ui.View):
         self.stop()
 
 
-class TaskUpdateConfirmationView(discord.ui.View):
+class TaskUpdateConfirmationView(BrainAutoClosingView):
     def __init__(self, governor_tools: GovernorToolClient, actor_id: int, confirmation_id: str) -> None:
         super().__init__(timeout=600)
         self.governor_tools = governor_tools
@@ -3347,7 +3402,7 @@ class TaskUpdateConfirmationView(discord.ui.View):
         self.stop()
 
 
-class TaskCreateConfirmationView(discord.ui.View):
+class TaskCreateConfirmationView(BrainAutoClosingView):
     def __init__(self, governor_tools: GovernorToolClient, actor_id: int, confirmation_id: str) -> None:
         super().__init__(timeout=600)
         self.governor_tools = governor_tools
@@ -3380,7 +3435,7 @@ class TaskCreateConfirmationView(discord.ui.View):
         self.stop()
 
 
-class EventCreateConfirmationView(discord.ui.View):
+class EventCreateConfirmationView(BrainAutoClosingView):
     def __init__(self, governor_tools: GovernorToolClient, actor_id: int, confirmation_id: str) -> None:
         super().__init__(timeout=600)
         self.governor_tools = governor_tools
@@ -3415,7 +3470,7 @@ class EventCreateConfirmationView(discord.ui.View):
         self.stop()
 
 
-class TaskActionConfirmationView(discord.ui.View):
+class TaskActionConfirmationView(BrainAutoClosingView):
     def __init__(self, governor_tools: GovernorToolClient, actor_id: int, confirmation_id: str) -> None:
         super().__init__(timeout=600)
         self.governor_tools = governor_tools
@@ -3450,7 +3505,7 @@ class TaskActionConfirmationView(discord.ui.View):
         self.stop()
 
 
-class MemoCreateConfirmationView(discord.ui.View):
+class MemoCreateConfirmationView(BrainAutoClosingView):
     def __init__(self, governor_tools: GovernorToolClient, actor_id: int, confirmation_id: str) -> None:
         super().__init__(timeout=600)
         self.governor_tools = governor_tools
@@ -3485,7 +3540,7 @@ class MemoCreateConfirmationView(discord.ui.View):
         self.stop()
 
 
-class MemoDeleteConfirmationView(discord.ui.View):
+class MemoDeleteConfirmationView(BrainAutoClosingView):
     def __init__(self, governor_tools: GovernorToolClient, actor_id: int, confirmation_id: str) -> None:
         super().__init__(timeout=600)
         self.governor_tools = governor_tools
@@ -3520,7 +3575,7 @@ class MemoDeleteConfirmationView(discord.ui.View):
         self.stop()
 
 
-class MemoEditConfirmationView(discord.ui.View):
+class MemoEditConfirmationView(BrainAutoClosingView):
     def __init__(self, governor_tools: GovernorToolClient, actor_id: int, confirmation_id: str) -> None:
         super().__init__(timeout=600)
         self.governor_tools = governor_tools
@@ -3555,7 +3610,7 @@ class MemoEditConfirmationView(discord.ui.View):
         self.stop()
 
 
-class DocumentTagConfirmationView(discord.ui.View):
+class DocumentTagConfirmationView(BrainAutoClosingView):
     def __init__(self, governor_tools: GovernorToolClient, actor_id: int, confirmation_id: str) -> None:
         super().__init__(timeout=600)
         self.governor_tools = governor_tools

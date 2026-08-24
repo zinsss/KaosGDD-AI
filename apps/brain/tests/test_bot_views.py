@@ -717,6 +717,20 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIsNone(search_message.edit.await_args.kwargs["view"])
 
+    async def test_temporary_action_view_deletes_bound_message_on_timeout(self) -> None:
+        view = BrainActiveTaskActionsView(
+            FakeGovernorTools(),  # type: ignore[arg-type]
+            200,
+            ToolRequest(ToolKind.ACTIVE_TASKS),
+            {"title": "Soap"},
+        )
+        message = SimpleNamespace(id=903, delete=AsyncMock())
+        view.bind_message(message)  # type: ignore[arg-type]
+
+        await view.on_timeout()
+
+        message.delete.assert_awaited_once()
+
     def test_memo_confirm_buttons_match_governor_labels(self) -> None:
         edit = BrainMemoEditConfirmView(FakeGovernorTools(), 200, "memos/42", "# Memo")  # type: ignore[arg-type]
         delete = BrainMemoDeleteConfirmView(FakeGovernorTools(), 200, "memos/42", "# Memo")  # type: ignore[arg-type]
@@ -816,11 +830,12 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         )
         select = next(child for child in view.children if isinstance(child, BrainActiveTasksSelect))
         select._values = ["0"]
+        sent_message = SimpleNamespace(id=904, delete=AsyncMock())
         interaction = SimpleNamespace(
             id=888,
             user=SimpleNamespace(id=200),
             response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
-            followup=SimpleNamespace(send=AsyncMock()),
+            followup=SimpleNamespace(send=AsyncMock(return_value=sent_message)),
         )
 
         await select.callback(interaction)  # type: ignore[arg-type]
@@ -830,6 +845,8 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         action_view = interaction.followup.send.await_args.kwargs["view"]
         self.assertIsInstance(action_view, BrainActiveTaskActionsView)
         self.assertEqual([item.label for item in action_view.children], ["Complete", "Edit", "Delete", "Close"])
+        await action_view.on_timeout()
+        sent_message.delete.assert_awaited_once()
 
     async def test_active_task_service_paginates_25_items(self) -> None:
         tasks = [{"title": f"Task {index:02d}"} for index in range(1, 28)]
