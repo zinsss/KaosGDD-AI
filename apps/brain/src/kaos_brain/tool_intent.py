@@ -97,14 +97,10 @@ def _dotdot_request(text: str) -> ToolRequest | None:
     query = " ".join(text[2:].strip().split())
     if not query:
         return None
-    lowered = query.lower()
     document_nouns = ("document", "documents", "paperless", "페이퍼리스", "문서", "서류")
     memo_nouns = ("memo", "memos", "메모")
-    if any(marker in lowered for marker in document_nouns):
-        return ToolRequest(ToolKind.DOCUMENT_SEARCH, _strip_search_nouns(query, document_nouns) or query)
-    if any(marker in lowered for marker in memo_nouns):
-        return ToolRequest(ToolKind.MEMO_SEARCH, _strip_search_nouns(query, memo_nouns) or query)
-    return ToolRequest(ToolKind.SEARCH_ALL, query)
+    stripped_query = _strip_search_nouns(query, (*document_nouns, *memo_nouns)) or query
+    return ToolRequest(ToolKind.SEARCH_ALL, stripped_query)
 
 
 def _asks_today(lowered: str) -> bool:

@@ -150,23 +150,29 @@ class ToolIntentTests(unittest.TestCase):
         self.assertEqual(request.kind, ToolKind.SEARCH_ALL)
         self.assertEqual(request.query, "rust desk setup")
 
-    def test_dotdot_can_target_document_search(self) -> None:
+    def test_dotdot_paperless_prefix_still_searches_everywhere(self) -> None:
         request = parse_tool_request("..paperless rust   desk setup")
         assert request is not None
-        self.assertEqual(request.kind, ToolKind.DOCUMENT_SEARCH)
+        self.assertEqual(request.kind, ToolKind.SEARCH_ALL)
         self.assertEqual(request.query, "rust desk setup")
 
-    def test_dotdot_can_target_korean_document_search(self) -> None:
+    def test_dotdot_korean_document_prefix_still_searches_everywhere(self) -> None:
         request = parse_tool_request("..문서 보험")
         assert request is not None
-        self.assertEqual(request.kind, ToolKind.DOCUMENT_SEARCH)
+        self.assertEqual(request.kind, ToolKind.SEARCH_ALL)
         self.assertEqual(request.query, "보험")
 
-    def test_dotdot_can_target_korean_paperless_search(self) -> None:
+    def test_dotdot_korean_paperless_prefix_still_searches_everywhere(self) -> None:
         request = parse_tool_request("..페이퍼리스 보험")
         assert request is not None
-        self.assertEqual(request.kind, ToolKind.DOCUMENT_SEARCH)
+        self.assertEqual(request.kind, ToolKind.SEARCH_ALL)
         self.assertEqual(request.query, "보험")
+
+    def test_dotdot_memo_prefix_still_searches_everywhere(self) -> None:
+        request = parse_tool_request("..메모 의무교육")
+        assert request is not None
+        self.assertEqual(request.kind, ToolKind.SEARCH_ALL)
+        self.assertEqual(request.query, "의무교육")
 
     def test_mutation_words_do_not_trigger_readonly_tool_lookup(self) -> None:
         self.assertIsNone(parse_tool_request("엄마 전화 할 일 추가해줘"))
