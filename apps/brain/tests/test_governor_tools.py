@@ -526,7 +526,7 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             client.calls,
             [
-                ("/tools/memos/search", {"query": "rustdesk", "limit": "25"}),
+                ("/tools/memos/search", {"query": "rustdesk", "limit": "20"}),
                 ("/tools/memos/42", {}),
             ],
         )
@@ -629,7 +629,7 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         payload = await client.fetch(ToolRequest(ToolKind.MEMO_SEARCH, "rustdesk"))
-        self.assertEqual(client.calls, [("/tools/memos/search", {"query": "rustdesk", "limit": "25"})])
+        self.assertEqual(client.calls, [("/tools/memos/search", {"query": "rustdesk", "limit": "20"})])
         self.assertNotIn("content", payload["results"][0])
 
     async def test_event_create_uses_request_profile(self) -> None:
@@ -704,7 +704,7 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             client.calls,
             [
-                ("/tools/documents/search", {"query": "rustdesk", "limit": "25"}),
+                ("/tools/documents/search", {"query": "rustdesk", "limit": "20"}),
             ],
         )
         self.assertEqual(payload["results"][0]["title"], "Rustdesk")
@@ -731,7 +731,7 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         payload = await client.fetch(ToolRequest(ToolKind.DOCUMENT_SEARCH, "rustdesk"))
-        self.assertEqual(client.calls, [("/tools/documents/search", {"query": "rustdesk", "limit": "25"})])
+        self.assertEqual(client.calls, [("/tools/documents/search", {"query": "rustdesk", "limit": "20"})])
         self.assertNotIn("full", payload["results"][0])
 
     async def test_propose_document_tags_posts_contract(self) -> None:

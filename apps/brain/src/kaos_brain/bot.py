@@ -54,6 +54,7 @@ from .governor_tools import (
     render_task_due_update_completed,
     render_task_due_update_proposal,
     render_tool_context,
+    SEARCH_RESULT_LIMIT,
     search_results,
 )
 from .intent import Route, parse_request
@@ -1449,7 +1450,7 @@ class BrainMemoSearchView(BrainTemporarySearchView):
         self.governor_tools = governor_tools
         self.actor_id = actor_id
         self.query = query
-        self.results = results[:25]
+        self.results = results[:SEARCH_RESULT_LIMIT]
         self.memos_public_url = memos_public_url
         self.add_item(BrainMemoSearchSelect(self))
 
@@ -1513,8 +1514,8 @@ class BrainCombinedSearchView(BrainTemporarySearchView):
         self.governor_tools = governor_tools
         self.actor_id = actor_id
         self.query = query
-        self.memo_results = memo_results[:25]
-        self.document_results = document_results[:25]
+        self.memo_results = memo_results[:SEARCH_RESULT_LIMIT]
+        self.document_results = document_results[:SEARCH_RESULT_LIMIT]
         self.memo_count = memo_count or len(memo_results)
         self.memo_total = memo_total or self.memo_count
         self.document_count = document_count or len(document_results)
@@ -1675,15 +1676,16 @@ def _document_search_embed(
         color=0x88C0D0,
     )
     lines: list[str] = []
-    for index, item in enumerate(results[:25], start=1):
+    visible_results = results[:SEARCH_RESULT_LIMIT]
+    for index, item in enumerate(visible_results, start=1):
         label = document_option_label(item)
         url = str(item.get("url") or item.get("publicUrl") or document_public_url(paperless_public_url, item.get("id"))).strip()
         line = f"{index}. {label}"
         if url:
             line = f"{line} · [open]({url})"
         lines.append(_discord_embed_line(line, 180))
-    if result_count > len(results[:25]):
-        lines.append(f"Showing first {len(results[:25])}. Press search in Paperless for the full backend result set.")
+    if result_count > len(visible_results):
+        lines.append(f"Showing first {len(visible_results)}. Press search in Paperless for the full backend result set.")
     embed.add_field(name="Documents", value="\n".join(lines)[:1024] if lines else "No matching documents.", inline=False)
     return embed
 
@@ -1939,7 +1941,7 @@ class BrainDocumentSearchView(BrainTemporarySearchView):
         self.governor_tools = governor_tools
         self.actor_id = actor_id
         self.query = query
-        self.results = results[:25]
+        self.results = results[:SEARCH_RESULT_LIMIT]
         self.paperless_public_url = paperless_public_url
         self.add_item(BrainDocumentSearchSelect(self))
 

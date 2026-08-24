@@ -9,6 +9,8 @@ from .memo_intent import MemoCreateRequest, MemoDeleteRequest, MemoEditRequest
 from .task_update_intent import TaskActionRequest, TaskCreateRequest, TaskDueUpdateRequest
 from .tool_intent import ToolKind, ToolRequest
 
+SEARCH_RESULT_LIMIT = 20
+
 
 PERSONAL_EVENT_MARKER = "𝘎𝘋𝘋𝙕𝘪𝙉"
 FAMILY_EVENT_MARKER = "𝘧𝘢𝘮𝘪𝘭𝘺"
@@ -86,10 +88,10 @@ class GovernorToolClient:
         if request.kind is ToolKind.COMPLETED_TASKS:
             return await self.completed_tasks(request, limit=25)
         if request.kind is ToolKind.MEMO_SEARCH:
-            payload = await self._get("/tools/memos/search", {"query": request.query, "limit": "25"})
+            payload = await self._get("/tools/memos/search", {"query": request.query, "limit": str(SEARCH_RESULT_LIMIT)})
             return await self._with_single_memo_body(payload)
         if request.kind is ToolKind.DOCUMENT_SEARCH:
-            return await self._get("/tools/documents/search", {"query": request.query, "limit": "25"})
+            return await self._get("/tools/documents/search", {"query": request.query, "limit": str(SEARCH_RESULT_LIMIT)})
         raise GovernorToolError("unsupported Governor tool")
 
     async def completed_tasks(self, request: ToolRequest, *, limit: int = 25) -> dict[str, Any]:
@@ -694,10 +696,10 @@ def render_combined_search_context(
         f"- Memos: {memo_count} results in {memo_total} memos",
         f"- Paperless: {document_count} results in {document_total} documents",
     ]
-    if memo_count > 25:
-        lines.append("- Memos: more than 25 found. First 25 shown.")
-    if document_count > 25:
-        lines.append("- Paperless: more than 25 found. First 25 shown.")
+    if memo_count > SEARCH_RESULT_LIMIT:
+        lines.append(f"- Memos: more than {SEARCH_RESULT_LIMIT} found. First {SEARCH_RESULT_LIMIT} shown.")
+    if document_count > SEARCH_RESULT_LIMIT:
+        lines.append(f"- Paperless: more than {SEARCH_RESULT_LIMIT} found. First {SEARCH_RESULT_LIMIT} shown.")
     if not memo_results:
         lines.append("- No matching memos.")
     if not document_results:
@@ -943,7 +945,7 @@ def _render_documents(query: str, payload: dict[str, Any]) -> str:
     result_count = _count(payload, "resultCount", "count", fallback=len(results))
     total_count = _count(payload, "totalCount", "total", fallback=result_count)
     page = _count(payload, "page", fallback=1)
-    page_size = _count(payload, "pageSize", "page_size", fallback=max(1, len(results) or 25))
+    page_size = _count(payload, "pageSize", "page_size", fallback=max(1, len(results) or SEARCH_RESULT_LIMIT))
     page_total = max(1, (result_count + page_size - 1) // page_size)
     lines = [
         "Searched..",
@@ -954,7 +956,7 @@ def _render_documents(query: str, payload: dict[str, Any]) -> str:
     if not results:
         lines.append("- No matching documents.")
         return "\n".join(lines)
-    lines.extend(_document_link_line(item) for item in results[:25])
+    lines.extend(_document_link_line(item) for item in results[:SEARCH_RESULT_LIMIT])
     return "\n".join(lines)[:1900]
 
 
