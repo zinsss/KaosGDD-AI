@@ -67,6 +67,7 @@ class FakeGovernorTools:
         self.task_create_calls = []
         self.task_edit_calls = []
         self.approve_calls = []
+        self.calendar_month_image_calls = []
 
     async def get_memo(self, name: str):
         return {"memo": {"name": name, "content": "# Rustdesk\nUse Tailscale."}}
@@ -147,7 +148,15 @@ class FakeGovernorTools:
             ]
         }
 
-    async def calendar_month_image(self, *, profile: str = "", year: int | None = None, month: int | None = None):
+    async def calendar_month_image(
+        self,
+        *,
+        profile: str = "",
+        year: int | None = None,
+        month: int | None = None,
+        today: object | None = None,
+    ):
+        self.calendar_month_image_calls.append((profile, year, month, today))
         return {"contentType": "text/plain", "contentBase64": "", "filename": "calendar.txt"}
 
     async def today(self, *, profile: str = "", day: object | None = None):
@@ -395,8 +404,9 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(_read_open_service_message_id(state_path), 9002)
 
     async def test_calendar_select_calls_up_closable_month_message(self) -> None:
+        governor_tools = FakeGovernorTools()
         view = BrainServiceMenuView(
-            FakeGovernorTools(),  # type: ignore[arg-type]
+            governor_tools,  # type: ignore[arg-type]
             self.active_control_settings(),
         )
         select = next(child for child in view.children if isinstance(child, BrainServiceMenuSelect))
@@ -418,6 +428,8 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(service_view, BrainCalendarMonthView)
         self.assertIsNone(service_view.timeout)
         self.assertEqual([getattr(item, "label", "") for item in service_view.children], ["Month", "Weekly", "Close", "<", "Today", ">"])
+        self.assertEqual(governor_tools.calendar_month_image_calls[0][:3], ("main", 2026, 8))
+        self.assertIsNotNone(governor_tools.calendar_month_image_calls[0][3])
 
     async def test_calendar_weekly_view_edits_to_weather_event_list(self) -> None:
         view = BrainCalendarMonthView(
@@ -562,8 +574,9 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(service_view.timeout)
 
     async def test_active_control_refresh_rebuilds_dropdowns(self) -> None:
+        governor_tools = FakeGovernorTools()
         view = BrainActiveControlView(
-            FakeGovernorTools(),  # type: ignore[arg-type]
+            governor_tools,  # type: ignore[arg-type]
             self.active_control_settings(),
             [{"title": "Clinic", "date": "2026-08-22", "time": "10:50", "ownerLabel": "Family"}],
             [],
@@ -594,6 +607,8 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             ],
             [f"{UPCOMING_EVENTS_LABEL}: 1", f"{ACTIVE_TASKS_LABEL}: 1", f"{SUPPLIES_LABEL}: 1"],
         )
+        self.assertEqual(governor_tools.calendar_month_image_calls[0][:3], ("main", None, None))
+        self.assertIsNotNone(governor_tools.calendar_month_image_calls[0][3])
 
     async def test_upcoming_event_select_opens_detail_message(self) -> None:
         view = BrainActiveControlView(

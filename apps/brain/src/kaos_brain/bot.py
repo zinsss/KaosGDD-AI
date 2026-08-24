@@ -1154,8 +1154,9 @@ class BrainBot(discord.Client):
             if not isinstance(channel, discord.TextChannel | discord.Thread):
                 return
             events, tasks, supplies, imports = await self._active_control_items()
-            month_file = await self._active_control_month_file()
-            content = render_active_control_message(events, tasks, supplies)
+            current = datetime.now(KST)
+            month_file = await self._active_control_month_file(today=current.date())
+            content = render_active_control_message(events, tasks, supplies, now=current)
             view = BrainActiveControlView(self.governor_tools, self.settings, events, tasks, supplies, imports)
             message = await self._find_active_control_message(channel)
             service_message = await self._find_active_control_service_message(channel)
@@ -1260,10 +1261,11 @@ class BrainBot(discord.Client):
         )
         return _event_results(events_payload), _task_results(tasks_payload), _task_results(supplies_payload), _import_results(imports_payload)
 
-    async def _active_control_month_file(self) -> discord.File | None:
+    async def _active_control_month_file(self, *, today: date) -> discord.File | None:
         return await _active_control_month_file_for(
             self.governor_tools,
             profile=self.settings.governor_tools_profile,
+            today=today,
         )
 
     async def _propose_task_due_update(self, message: discord.Message, request: TaskDueUpdateRequest) -> None:
@@ -2313,14 +2315,16 @@ class BrainActiveControlView(discord.ui.View):
             LOGGER.warning("Active control refresh failed: %s", exc)
             await interaction.followup.send(_tool_failed("Active 갱신"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
+        current = datetime.now(KST)
         kwargs: dict[str, Any] = {
-            "content": render_active_control_message(events, tasks, supplies),
+            "content": render_active_control_message(events, tasks, supplies, now=current),
             "view": BrainActiveControlView(self.governor_tools, self.settings, events, tasks, supplies, imports),
             "allowed_mentions": NO_MENTIONS,
         }
         month_file = await _active_control_month_file_for(
             self.governor_tools,
             profile=self.settings.governor_tools_profile,
+            today=current.date(),
         )
         if month_file is not None:
             kwargs["attachments"] = [month_file]
@@ -2531,6 +2535,7 @@ class BrainCalendarMonthView(discord.ui.View):
             profile=self.settings.governor_tools_profile,
             year=self.year,
             month=self.month,
+            today=datetime.now(KST).date(),
         )
 
     async def _edit_current(self, interaction: discord.Interaction) -> None:
@@ -3699,14 +3704,12 @@ async def _active_control_month_file_for(
     profile: str,
     year: int | None = None,
     month: int | None = None,
+    today: object | None = None,
 ) -> discord.File | None:
     if governor_tools is None:
         return None
     try:
-        if year is None and month is None:
-            payload = await governor_tools.fetch(ToolRequest(ToolKind.CALENDAR_MONTH_IMAGE, profile=profile))
-        else:
-            payload = await governor_tools.calendar_month_image(profile=profile, year=year, month=month)
+        payload = await governor_tools.calendar_month_image(profile=profile, year=year, month=month, today=today)
         return _month_image_file(payload)
     except (GovernorToolError, AttributeError, ValueError, binascii.Error) as exc:
         LOGGER.warning("Active control month image unavailable: %s", exc)

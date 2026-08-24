@@ -492,9 +492,9 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(month["path"], "/tools/calendar/month-image")
         self.assertEqual(month["params"], {"profile": "main"})
 
-        september = await client.calendar_month_image(year=2026, month=9)
+        september = await client.calendar_month_image(year=2026, month=9, today="2026-08-25")
         self.assertEqual(september["path"], "/tools/calendar/month-image")
-        self.assertEqual(september["params"], {"profile": "main", "year": "2026", "month": "9"})
+        self.assertEqual(september["params"], {"profile": "main", "year": "2026", "month": "9", "date": "2026-08-25"})
 
         imports = await client.fetch(ToolRequest(ToolKind.RECENT_IMPORTS))
         self.assertEqual(imports["path"], "/tools/imports/recent")

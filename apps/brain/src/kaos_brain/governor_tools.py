@@ -104,12 +104,21 @@ class GovernorToolClient:
             params["to"] = request.end
         return await self._get("/tools/tasks/completed", params)
 
-    async def calendar_month_image(self, *, profile: str = "", year: int | None = None, month: int | None = None) -> dict[str, Any]:
+    async def calendar_month_image(
+        self,
+        *,
+        profile: str = "",
+        year: int | None = None,
+        month: int | None = None,
+        today: object | None = None,
+    ) -> dict[str, Any]:
         params = {"profile": self._profile(profile)}
         if year is not None:
             params["year"] = str(year)
         if month is not None:
             params["month"] = str(month)
+        if today is not None:
+            params["date"] = str(today)
         return await self._get("/tools/calendar/month-image", params)
 
     async def today(self, *, profile: str = "", day: object | None = None, city: str = "") -> dict[str, Any]:
