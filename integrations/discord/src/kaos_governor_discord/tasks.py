@@ -176,7 +176,6 @@ class DiscordTasksSurface:
             key = task_key(task)
             await channel.send(
                 content=render_due_notification_message(task),
-                view=TaskView(self, key),
                 allowed_mentions=NO_MENTIONS,
             )
             self.state.due_notification_keys.add(notification_key)
@@ -1106,16 +1105,18 @@ def render_task_message(task: Mapping[str, Any], *, show_due: bool = True, compl
 def render_due_notification_message(task: Mapping[str, Any]) -> str:
     due_at = due_notification_time(task)
     title = escape_text(task.get("summary") or "Untitled task")
+    memo = escape_text(str(task.get("description") or "").strip())
     due_text = ""
     if due_at is not None:
         due_text = due_at.strftime("%Y-%m-%d %H:%M")
-    return "\n".join(
-        [
-            "## Due task",
-            f"### {title}",
-            f"- due: {escape_text(due_text)}" if due_text else "- due: today",
-        ]
-    )[:1990]
+    lines = [
+        "## Due task",
+        f"### {title}",
+        f"- due: {escape_text(due_text)}" if due_text else "- due: today",
+    ]
+    if memo:
+        lines.append(f"- memo: {memo}")
+    return "\n".join(lines)[:1990]
 
 
 def due_notification_time(task: Mapping[str, Any]) -> datetime | None:

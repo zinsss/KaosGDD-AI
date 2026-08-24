@@ -48,6 +48,7 @@ class PendingTaskCreate:
     profile: str
     collection_id: str
     title: str
+    memo: str
     due: str
     due_time: str
     payload: dict[str, Any]
@@ -1159,6 +1160,7 @@ class BrainToolServer:
         actor_id = str(body.get("actorId") or "").strip()
         idempotency_key = str(body.get("idempotencyKey") or "").strip()
         title = " ".join(str(body.get("title") or "").split())
+        memo = str(body.get("memo") or "").strip()
         due_date = str(body.get("dueDate") or "").strip()
         due_time = str(body.get("dueTime") or ("10:00" if due_date else "")).strip()
         collection_id = str(body.get("collectionId") or "").strip()
@@ -1169,7 +1171,7 @@ class BrainToolServer:
             return web.json_response({"error": "task_create_invalid_due"}, status=400)
         payload = {
             "title": title,
-            "memo": "",
+            "memo": memo,
             "dueDate": due_date,
             "dueTime": due_time,
             "priority": "",
@@ -1190,6 +1192,7 @@ class BrainToolServer:
                     parameters={
                         "profile": profile,
                         "title": title,
+                        "memo": memo,
                         "dueDate": due_date,
                         "dueTime": due_time,
                         "collectionId": collection_id,
@@ -1204,6 +1207,7 @@ class BrainToolServer:
             profile=profile,
             collection_id=collection_id,
             title=title,
+            memo=memo,
             due=due_date,
             due_time=due_time,
             payload=payload,
@@ -2025,6 +2029,7 @@ def _pending_task_payload(pending: PendingTaskDueUpdate) -> dict[str, object]:
 def _pending_task_create_payload(pending: PendingTaskCreate) -> dict[str, object]:
     payload: dict[str, object] = {
         "title": pending.title,
+        "memo": pending.memo,
         "due": pending.due,
         "dueTime": pending.due_time,
     }

@@ -1494,6 +1494,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
                 "idempotencyKey": "discord-message-create-1",
                 "profile": "main",
                 "title": "Call school",
+                "memo": "bring immunization paper",
                 "dueDate": "2026-08-17",
                 "dueTime": "10:00",
             },
@@ -1503,6 +1504,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         payload = await response.json()
         self.assertTrue(payload["confirmationId"].startswith("conf_"))
         self.assertEqual(payload["task"]["title"], "Call school")
+        self.assertEqual(payload["task"]["memo"], "bring immunization paper")
         self.assertEqual(payload["task"]["due"], "2026-08-17")
         self.assertEqual(self.calendar.created, [])
 
@@ -1515,6 +1517,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
                 "idempotencyKey": "discord-message-create-2",
                 "profile": "main",
                 "title": "Call school",
+                "memo": "bring immunization paper",
                 "dueDate": "2026-08-17",
                 "dueTime": "10:00",
             },
@@ -1533,6 +1536,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["task"]["uid"], "TASK-CREATED-1")
         self.assertEqual(self.calendar.created[0][0], "main")
         self.assertEqual(self.calendar.created[0][1]["title"], "Call school")
+        self.assertEqual(self.calendar.created[0][1]["memo"], "bring immunization paper")
         self.assertEqual(self.calendar.created[0][1]["dueDate"], "2026-08-17")
         self.assertEqual(self.calendar_refresh_count, 1)
 

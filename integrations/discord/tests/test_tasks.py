@@ -199,6 +199,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("## Due task", render_due_notification_message(TASKS[0]))
         self.assertIn("### Buy milk", render_due_notification_message(TASKS[0]))
         self.assertIn("- due: 2026-08-13 09:00", render_due_notification_message(TASKS[0]))
+        self.assertIn("- memo: 2L", render_due_notification_message(TASKS[0]))
         self.assertTrue(due_notification_key(TASKS[0]).endswith("|2026-08-13"))
 
     def test_completed_archive_renders_current_month_history(self) -> None:
@@ -831,7 +832,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await surface.notify_due_tasks(now=datetime(2026, 8, 13, 8, 0)), 1)
             self.assertIn("## Due task", channel.sent[0]["content"])
             self.assertIn("### Buy milk", channel.sent[0]["content"])
-            self.assertIsInstance(channel.sent[0]["view"], TaskView)
+            self.assertNotIn("view", channel.sent[0])
             self.assertEqual(surface.status()["dueNotificationCount"], 1)
 
             self.assertEqual(await surface.notify_due_tasks(now=datetime(2026, 8, 13, 8, 30)), 0)
@@ -867,6 +868,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await surface.notify_due_tasks(now=datetime(2026, 8, 13, 13, 44)), 1)
             self.assertEqual(len(channel.sent), 1)
             self.assertIn("## Due task", channel.sent[0]["content"])
+            self.assertNotIn("view", channel.sent[0])
 
     async def test_supplies_surface_does_not_send_due_notifications(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
