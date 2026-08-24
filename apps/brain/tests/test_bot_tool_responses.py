@@ -60,6 +60,25 @@ class CombinedGovernorTools:
         raise AssertionError(f"unexpected request: {request.kind}")
 
 
+class CombinedMemoOnlyGovernorTools:
+    async def fetch(self, request: ToolRequest):
+        if request.kind is ToolKind.MEMO_SEARCH:
+            return {
+                "query": request.query,
+                "resultCount": 1,
+                "totalCount": 6,
+                "results": [{"name": "memos/42", "content": "# 통관", "full": True}],
+            }
+        if request.kind is ToolKind.DOCUMENT_SEARCH:
+            return {
+                "query": request.query,
+                "resultCount": 0,
+                "totalCount": 26,
+                "results": [],
+            }
+        raise AssertionError(f"unexpected request: {request.kind}")
+
+
 class WeatherGovernorTools:
     async def fetch(self, request: ToolRequest):
         self.request = request
@@ -191,6 +210,32 @@ class BrainToolResponseTests(unittest.IsolatedAsyncioTestCase):
             [getattr(item, "label", "") for item in view.children if getattr(item, "label", "")],
             ["Paperless", "Memos"],
         )
+
+    async def test_combined_search_omits_redundant_no_match_lines(self) -> None:
+        brain = SimpleNamespace(
+            governor_tools=CombinedMemoOnlyGovernorTools(),
+            settings=SimpleNamespace(
+                paperless_public_url="https://paperless.example",
+                memos_public_url="https://memos.example",
+            ),
+        )
+
+        reply, view = await BrainBot._answer_with_governor_tool(  # type: ignore[arg-type]
+            brain,
+            "..통관",
+            ToolRequest(ToolKind.SEARCH_ALL, "통관"),
+            actor_id=200,
+        )
+
+        self.assertEqual(
+            reply,
+            "Searched..\n"
+            "## 통관\n"
+            "- Memos: 1 results in 6 memos\n"
+            "- Paperless: 0 results in 26 documents",
+        )
+        self.assertIsNotNone(view)
+        self.assertIsInstance(view, BrainCombinedSearchView)
 
 
 if __name__ == "__main__":

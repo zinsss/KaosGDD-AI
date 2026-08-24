@@ -700,10 +700,6 @@ def render_combined_search_context(
         lines.append(f"- Memos: more than {SEARCH_RESULT_LIMIT} found. First {SEARCH_RESULT_LIMIT} shown.")
     if document_count > SEARCH_RESULT_LIMIT:
         lines.append(f"- Paperless: more than {SEARCH_RESULT_LIMIT} found. First {SEARCH_RESULT_LIMIT} shown.")
-    if not memo_results:
-        lines.append("- No matching memos.")
-    if not document_results:
-        lines.append("- No matching documents.")
     return "\n".join(lines)[:1900]
 
 
