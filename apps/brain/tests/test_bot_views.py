@@ -362,7 +362,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(view.children), 1)
         select = view.children[0]
         self.assertIsInstance(select, BrainServiceMenuSelect)
-        self.assertEqual(select.placeholder, "KaosGDD Services")
+        self.assertEqual(select.placeholder, "Select one.")
         self.assertEqual(
             [(option.label, option.value) for option in select.options],
             [

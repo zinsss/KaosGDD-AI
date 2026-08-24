@@ -2459,7 +2459,7 @@ class BrainServiceMenuSelect(discord.ui.Select):
     def __init__(self, service_menu: BrainServiceMenuView) -> None:
         self.service_menu = service_menu
         super().__init__(
-            placeholder="KaosGDD Services",
+            placeholder="Select one.",
             min_values=1,
             max_values=1,
             options=[
