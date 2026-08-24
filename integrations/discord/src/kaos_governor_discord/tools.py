@@ -266,11 +266,13 @@ class BrainToolServer:
         app.router.add_get("/tools/imports/recent", self._recent_imports)
         app.router.add_get("/tools/tasks/active", self._active_tasks)
         app.router.add_get("/tools/tasks/completed", self._completed_tasks)
+        app.router.add_get("/tools/memos/list", self._list_memos)
         app.router.add_get("/tools/memos/search", self._search_memos)
         app.router.add_get("/tools/memos/{memo_id}", self._get_memo)
         app.router.add_post("/tools/memos/create/proposals", self._propose_memo_create)
         app.router.add_post("/tools/memos/edit/proposals", self._propose_memo_edit)
         app.router.add_post("/tools/memos/delete/proposals", self._propose_memo_delete)
+        app.router.add_get("/tools/documents/list", self._list_documents)
         app.router.add_get("/tools/documents/search", self._search_documents)
         app.router.add_get("/tools/documents/{document_id}", self._get_document)
         app.router.add_get("/tools/documents/{document_id}/tag-context", self._get_document_tag_context)
@@ -498,6 +500,19 @@ class BrainToolServer:
             return web.json_response({"error": "internal_error"}, status=500)
         return web.json_response({**page.as_dict(), "source": "memos-live"})
 
+    async def _list_memos(self, request: web.Request) -> web.Response:
+        if not self._memos.config.enabled:
+            return web.json_response({"error": "memos_search_disabled"}, status=503)
+        limit = _limit(request, default=20)
+        try:
+            page = await asyncio.to_thread(self._memos.list_page, limit=limit)
+        except (ValueError, MemosError) as exc:
+            return _memos_error(exc)
+        except Exception:
+            LOGGER.exception("Unexpected Brain Memos list failure")
+            return web.json_response({"error": "internal_error"}, status=500)
+        return web.json_response({**page.as_dict(), "source": "memos-live"})
+
     async def _get_memo(self, request: web.Request) -> web.Response:
         if not self._memos.config.enabled:
             return web.json_response({"error": "memos_search_disabled"}, status=503)
@@ -519,6 +534,17 @@ class BrainToolServer:
             return _document_error(exc)
         except Exception:
             LOGGER.exception("Unexpected Brain document search failure")
+            return web.json_response({"error": "internal_error"}, status=500)
+        return web.json_response({**page.as_dict(), "source": "paperless-live"})
+
+    async def _list_documents(self, request: web.Request) -> web.Response:
+        limit = _limit(request, default=20)
+        try:
+            page = await asyncio.to_thread(self._paperless.list_page, limit=limit)
+        except DocumentIntakeError as exc:
+            return _document_error(exc)
+        except Exception:
+            LOGGER.exception("Unexpected Brain document list failure")
             return web.json_response({"error": "internal_error"}, status=500)
         return web.json_response({**page.as_dict(), "source": "paperless-live"})
 

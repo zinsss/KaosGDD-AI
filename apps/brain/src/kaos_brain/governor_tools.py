@@ -88,10 +88,18 @@ class GovernorToolClient:
         if request.kind is ToolKind.COMPLETED_TASKS:
             return await self.completed_tasks(request, limit=25)
         if request.kind is ToolKind.MEMO_SEARCH:
-            payload = await self._get("/tools/memos/search", {"query": request.query, "limit": str(SEARCH_RESULT_LIMIT)})
+            path = "/tools/memos/search" if request.query else "/tools/memos/list"
+            params = {"limit": str(SEARCH_RESULT_LIMIT)}
+            if request.query:
+                params["query"] = request.query
+            payload = await self._get(path, params)
             return await self._with_single_memo_body(payload)
         if request.kind is ToolKind.DOCUMENT_SEARCH:
-            return await self._get("/tools/documents/search", {"query": request.query, "limit": str(SEARCH_RESULT_LIMIT)})
+            path = "/tools/documents/search" if request.query else "/tools/documents/list"
+            params = {"limit": str(SEARCH_RESULT_LIMIT)}
+            if request.query:
+                params["query"] = request.query
+            return await self._get(path, params)
         raise GovernorToolError("unsupported Governor tool")
 
     async def completed_tasks(self, request: ToolRequest, *, limit: int = 25) -> dict[str, Any]:

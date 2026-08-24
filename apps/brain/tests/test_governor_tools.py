@@ -533,6 +533,38 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["results"][0]["content"], "# Rustdesk\nUse Tailscale.")
         self.assertTrue(payload["results"][0]["full"])
 
+    async def test_fetch_empty_memo_search_uses_list_route(self) -> None:
+        from kaos_brain.governor_tools import GovernorToolClient, GovernorToolConfig
+
+        class FakeClient(GovernorToolClient):
+            def __init__(self, config: GovernorToolConfig) -> None:
+                super().__init__(config)
+                self.calls = []
+
+            async def _get(self, path: str, params: dict[str, str]):
+                self.calls.append((path, params))
+                return {
+                    "query": "",
+                    "resultCount": 2,
+                    "totalCount": 2,
+                    "results": [
+                        {"name": "memos/42", "snippet": "Rustdesk"},
+                        {"name": "memos/43", "snippet": "Clinic"},
+                    ],
+                }
+
+        client = FakeClient(
+            GovernorToolConfig(
+                base_url="http://127.0.0.1:8098",
+                api_token="token",
+                profile="main",
+                timeout_seconds=1,
+            )
+        )
+        payload = await client.fetch(ToolRequest(ToolKind.MEMO_SEARCH, ""))
+        self.assertEqual(client.calls, [("/tools/memos/list", {"limit": "20"})])
+        self.assertEqual(payload["results"][0]["name"], "memos/42")
+
     async def test_fetch_completed_tasks_builds_filtered_route(self) -> None:
         from kaos_brain.governor_tools import GovernorToolClient, GovernorToolConfig
 
@@ -733,6 +765,30 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
         payload = await client.fetch(ToolRequest(ToolKind.DOCUMENT_SEARCH, "rustdesk"))
         self.assertEqual(client.calls, [("/tools/documents/search", {"query": "rustdesk", "limit": "20"})])
         self.assertNotIn("full", payload["results"][0])
+
+    async def test_fetch_empty_document_search_uses_list_route(self) -> None:
+        from kaos_brain.governor_tools import GovernorToolClient, GovernorToolConfig
+
+        class FakeClient(GovernorToolClient):
+            def __init__(self, config: GovernorToolConfig) -> None:
+                super().__init__(config)
+                self.calls = []
+
+            async def _get(self, path: str, params: dict[str, str]):
+                self.calls.append((path, params))
+                return {"query": "", "resultCount": 1, "results": [{"id": 42, "title": "One"}]}
+
+        client = FakeClient(
+            GovernorToolConfig(
+                base_url="http://127.0.0.1:8098",
+                api_token="token",
+                profile="main",
+                timeout_seconds=1,
+            )
+        )
+        payload = await client.fetch(ToolRequest(ToolKind.DOCUMENT_SEARCH, ""))
+        self.assertEqual(client.calls, [("/tools/documents/list", {"limit": "20"})])
+        self.assertEqual(payload["results"][0]["title"], "One")
 
     async def test_propose_document_tags_posts_contract(self) -> None:
         from kaos_brain.governor_tools import GovernorToolClient, GovernorToolConfig

@@ -162,6 +162,11 @@ class FakeMemos:
         results = tuple(self.search(query, tags, limit))
         return MemoSearchPage(query, tuple(tags or ()), results, 13, 213)
 
+    def list_page(self, *, limit):
+        memo = Memo("memos/42", "Secret body", ("server",), "created", "updated", "PRIVATE", True)
+        self.search_calls.append(("", None, limit))
+        return MemoSearchPage("", (), (MemoSearchResult(memo, "Secret body"),), 1, 213)
+
     def get(self, name):
         self.get_calls.append(name)
         return Memo(name, "Full memo body", ("server",), "created", "updated", "PRIVATE", False)
@@ -191,6 +196,15 @@ class FakePaperless:
             query,
             (PaperlessSearchResult(42, "Rustdesk setup", "2026-08-14", "rustdesk.pdf"),),
             1,
+            12,
+        )
+
+    def list_page(self, *, limit):
+        self.search_calls.append(("", limit))
+        return PaperlessSearchPage(
+            "",
+            (PaperlessSearchResult(42, "Rustdesk setup", "2026-08-14", "rustdesk.pdf"),),
+            12,
             12,
         )
 
@@ -837,6 +851,18 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["totalCount"], 213)
         self.assertEqual(self.memos.search_calls, [("rust desk", ["server"], 3)])
 
+    async def test_memos_list_returns_recent_memos_without_query(self) -> None:
+        response = await self.client.get("/tools/memos/list", headers=self.headers())
+
+        self.assertEqual(response.status, 200)
+        payload = await response.json()
+        self.assertEqual(payload["source"], "memos-live")
+        self.assertEqual(payload["query"], "")
+        self.assertEqual(payload["results"][0]["name"], "memos/42")
+        self.assertEqual(payload["resultCount"], 1)
+        self.assertEqual(payload["totalCount"], 213)
+        self.assertEqual(self.memos.search_calls, [("", None, 20)])
+
     async def test_memo_get_returns_full_content(self) -> None:
         response = await self.client.get("/tools/memos/42", headers=self.headers())
 
@@ -1128,6 +1154,18 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["source"], "paperless-live")
         self.assertEqual(payload["results"][0]["title"], "Rustdesk setup")
         self.assertEqual(self.paperless.search_calls, [("rust desk", 5)])
+
+    async def test_document_list_returns_recent_paperless_documents(self) -> None:
+        response = await self.client.get("/tools/documents/list", headers=self.headers())
+
+        self.assertEqual(response.status, 200)
+        payload = await response.json()
+        self.assertEqual(payload["source"], "paperless-live")
+        self.assertEqual(payload["query"], "")
+        self.assertEqual(payload["resultCount"], 12)
+        self.assertEqual(payload["totalCount"], 12)
+        self.assertEqual(payload["results"][0]["title"], "Rustdesk setup")
+        self.assertEqual(self.paperless.search_calls, [("", 20)])
 
     async def test_document_get_returns_paperless_document(self) -> None:
         response = await self.client.get("/tools/documents/42", headers=self.headers())

@@ -182,6 +182,39 @@ class MemosServiceTests(unittest.TestCase):
         self.assertEqual(service.status()["lastResultCount"], 13)
         self.assertEqual(len(requests), 2)
 
+    def test_list_page_returns_recent_memos_without_search_terms(self) -> None:
+        requests = []
+
+        def open_url(request, timeout):
+            requests.append(request.full_url)
+            return FakeResponse(
+                {
+                    "memos": [
+                        {
+                            "name": "memos/abc",
+                            "content": "# Rustdesk\nSettings",
+                            "tags": ["server"],
+                            "createTime": "2026-08-01T00:00:00Z",
+                            "updateTime": "2026-08-02T00:00:00Z",
+                            "visibility": "PRIVATE",
+                        }
+                    ],
+                    "totalSize": 9,
+                }
+            )
+
+        page = MemosService(config(max_results=20), open_url).list_page(limit=20)
+
+        self.assertEqual(page.query, "")
+        self.assertEqual(page.result_count, 9)
+        self.assertEqual(page.total_count, 9)
+        self.assertEqual(page.results[0].memo.title, "Rustdesk")
+        parsed = urllib.parse.urlsplit(requests[0])
+        query = urllib.parse.parse_qs(parsed.query)
+        self.assertEqual(query["pageSize"], ["20"])
+        self.assertEqual(query["orderBy"], ["pinned desc, create_time desc"])
+        self.assertIn("creator ==", query["filter"][0])
+
     def test_search_requires_a_query_or_tag_and_enforces_limits(self) -> None:
         service = MemosService(config(), lambda *_args, **_kwargs: FakeResponse({"memos": []}))
         with self.assertRaisesRegex(ValueError, "memos_query_or_tag_required"):

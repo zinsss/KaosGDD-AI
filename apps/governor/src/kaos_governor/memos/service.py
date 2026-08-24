@@ -270,6 +270,42 @@ class MemosService:
     def search(self, query: object = "", tags: object = None, limit: object = None) -> list[MemoSearchResult]:
         return list(self.search_page(query, tags, limit).results)
 
+    def list_page(self, *, limit: object = None) -> MemoSearchPage:
+        self._require_enabled()
+        result_limit = self.config.max_results if limit is None else self._limit(limit)
+        filters = self._base_filters()
+        query_string = urllib.parse.urlencode(
+            {
+                "pageSize": str(result_limit),
+                "orderBy": "pinned desc, create_time desc",
+                "filter": " && ".join(filters),
+            }
+        )
+        try:
+            payload = self._request(f"/api/v1/memos?{query_string}")
+            raw_memos = payload.get("memos")
+            if not isinstance(raw_memos, list):
+                raise MemosError("memos_upstream_response_invalid")
+            results = tuple(
+                MemoSearchResult(memo, _snippet(memo.content, ""))
+                for memo in (Memo.from_payload(item) for item in raw_memos if isinstance(item, dict))
+            )[:result_limit]
+            total_count = self._count_memos(filters, fallback_payload=payload, fallback_count=len(results))
+        except Exception as exc:
+            self._record_error(exc)
+            raise
+        with self._lock:
+            self._last_search_at = _now()
+            self._last_result_count = total_count
+            self._last_error = ""
+        return MemoSearchPage(
+            query="",
+            tags=(),
+            results=results,
+            result_count=total_count,
+            total_count=total_count,
+        )
+
     def search_page(self, query: object = "", tags: object = None, limit: object = None) -> MemoSearchPage:
         self._require_enabled()
         normalized_query = _normalize_query(query)
