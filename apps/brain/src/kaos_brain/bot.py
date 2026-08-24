@@ -126,6 +126,78 @@ async def _edit_deferred_component(
     await interaction.edit_original_response(content=content, view=view, allowed_mentions=NO_MENTIONS)
 
 
+async def _delete_open_service_message(settings: Settings, interaction: discord.Interaction) -> None:
+    state_path = getattr(settings, "active_control_state_path", "")
+    message_id = _read_open_service_message_id(state_path)
+    if not message_id:
+        return
+    try:
+        channel = await _interaction_brain_channel(settings, interaction)
+        if channel is None:
+            return
+        message = await channel.fetch_message(message_id)
+        await message.delete()
+    except discord.HTTPException:
+        LOGGER.info("Open Brain service message %s was already unavailable", message_id)
+    finally:
+        _write_active_control_message_id(state_path, 0, open_service_message_id=0)
+
+
+async def _send_single_service_message(
+    settings: Settings,
+    interaction: discord.Interaction,
+    *args: Any,
+    **kwargs: Any,
+) -> discord.Message | None:
+    await _delete_open_service_message(settings, interaction)
+    kwargs.setdefault("allowed_mentions", NO_MENTIONS)
+    kwargs.setdefault("wait", True)
+    message = await interaction.followup.send(*args, **kwargs)
+    try:
+        message_id = int(getattr(message, "id", 0) or 0)
+    except (TypeError, ValueError):
+        message_id = 0
+    if message_id > 0:
+        _write_active_control_message_id(
+            getattr(settings, "active_control_state_path", ""),
+            0,
+            open_service_message_id=message_id,
+        )
+    return message if isinstance(message, discord.Message) else None
+
+
+async def _interaction_brain_channel(
+    settings: Settings,
+    interaction: discord.Interaction,
+) -> Any | None:
+    channel = getattr(interaction, "channel", None)
+    if isinstance(channel, discord.TextChannel | discord.Thread):
+        return channel
+    if callable(getattr(channel, "fetch_message", None)):
+        return channel
+    client = getattr(interaction, "client", None)
+    if client is None:
+        return None
+    get_channel = getattr(client, "get_channel", None)
+    if callable(get_channel):
+        channel = get_channel(settings.brain_channel_id)
+        if isinstance(channel, discord.TextChannel | discord.Thread):
+            return channel
+        if callable(getattr(channel, "fetch_message", None)):
+            return channel
+    fetch_channel = getattr(client, "fetch_channel", None)
+    if callable(fetch_channel):
+        try:
+            channel = await fetch_channel(settings.brain_channel_id)
+        except discord.HTTPException:
+            return None
+        if isinstance(channel, discord.TextChannel | discord.Thread):
+            return channel
+        if callable(getattr(channel, "fetch_message", None)):
+            return channel
+    return None
+
+
 def _kaosai_planner_from_settings(settings: Settings) -> KaosAIPlanner:
     if not settings.kaosai_enabled:
         return DisabledKaosAIPlanner()
@@ -159,6 +231,10 @@ def _read_active_control_service_message_id(path: str) -> int:
     return _read_active_control_state_value(path, "serviceMessageId")
 
 
+def _read_open_service_message_id(path: str) -> int:
+    return _read_active_control_state_value(path, "openServiceMessageId")
+
+
 def _read_active_control_state_value(path: str, key: str) -> int:
     if not path:
         return 0
@@ -173,8 +249,14 @@ def _read_active_control_state_value(path: str, key: str) -> int:
     return message_id if message_id > 0 else 0
 
 
-def _write_active_control_message_id(path: str, message_id: int, service_message_id: int = 0) -> None:
-    if not path or (message_id <= 0 and service_message_id <= 0):
+def _write_active_control_message_id(
+    path: str,
+    message_id: int,
+    service_message_id: int = 0,
+    *,
+    open_service_message_id: int | None = None,
+) -> None:
+    if not path or (message_id <= 0 and service_message_id <= 0 and open_service_message_id is None):
         return
     state_path = Path(path)
     state_path.parent.mkdir(parents=True, exist_ok=True)
@@ -182,13 +264,24 @@ def _write_active_control_message_id(path: str, message_id: int, service_message
     try:
         existing = json.loads(state_path.read_text(encoding="utf-8"))
         if isinstance(existing, dict):
-            payload.update({key: int(value) for key, value in existing.items() if key in {"messageId", "serviceMessageId"}})
+            payload.update(
+                {
+                    key: int(value)
+                    for key, value in existing.items()
+                    if key in {"messageId", "serviceMessageId", "openServiceMessageId"}
+                }
+            )
     except (OSError, json.JSONDecodeError, TypeError, ValueError):
         payload = {}
     if message_id > 0:
         payload["messageId"] = message_id
     if service_message_id > 0:
         payload["serviceMessageId"] = service_message_id
+    if open_service_message_id is not None:
+        if open_service_message_id > 0:
+            payload["openServiceMessageId"] = open_service_message_id
+        else:
+            payload.pop("openServiceMessageId", None)
     tmp_path = state_path.with_suffix(f"{state_path.suffix}.tmp")
     tmp_path.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
     tmp_path.replace(state_path)
@@ -2213,7 +2306,7 @@ class BrainServiceMenuView(discord.ui.View):
         }
         if file is not None:
             kwargs["file"] = file
-        await interaction.followup.send(**kwargs)
+        await _send_single_service_message(self.settings, interaction, **kwargs)
 
     @discord.ui.button(label=TASKS_SERVICE_BUTTON_LABEL, style=discord.ButtonStyle.secondary)
     async def tasks_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -2233,7 +2326,9 @@ class BrainServiceMenuView(discord.ui.View):
             ToolRequest(ToolKind.ACTIVE_TASKS, profile=self.settings.governor_tools_profile),
             tasks,
         )
-        await interaction.followup.send(
+        await _send_single_service_message(
+            self.settings,
+            interaction,
             view.content(),
             view=view,
             allowed_mentions=NO_MENTIONS,
@@ -2255,7 +2350,9 @@ class BrainServiceMenuView(discord.ui.View):
             return
         supplies = _task_results(payload)
         view = BrainActiveTasksView(self.governor_tools, int(interaction.user.id), request, supplies)
-        await interaction.followup.send(
+        await _send_single_service_message(
+            self.settings,
+            interaction,
             view.content(),
             view=view,
             allowed_mentions=NO_MENTIONS,
@@ -2263,7 +2360,9 @@ class BrainServiceMenuView(discord.ui.View):
 
     @discord.ui.button(label=PAPERLESS_LABEL, style=discord.ButtonStyle.secondary)
     async def paperless_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_message(
+        await interaction.response.defer(ephemeral=True)
+        await _delete_open_service_message(self.settings, interaction)
+        await interaction.followup.send(
             f"## {PAPERLESS_TITLE}\n- use `..keyword` to search documents\n- use `..ALL` to browse documents",
             ephemeral=True,
             allowed_mentions=NO_MENTIONS,
@@ -2271,7 +2370,9 @@ class BrainServiceMenuView(discord.ui.View):
 
     @discord.ui.button(label=MEMOS_LABEL, style=discord.ButtonStyle.secondary)
     async def memos_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_message(
+        await interaction.response.defer(ephemeral=True)
+        await _delete_open_service_message(self.settings, interaction)
+        await interaction.followup.send(
             f"## {MEMOS_TITLE}\n- use `..keyword` to search memos",
             ephemeral=True,
             allowed_mentions=NO_MENTIONS,
@@ -2296,7 +2397,7 @@ class BrainServiceMenuView(discord.ui.View):
             imports,
             mode="incoming",
         )
-        await interaction.followup.send(view.content(), view=view, allowed_mentions=NO_MENTIONS)
+        await _send_single_service_message(self.settings, interaction, view.content(), view=view, allowed_mentions=NO_MENTIONS)
 
 
 class BrainCalendarMonthView(discord.ui.View):

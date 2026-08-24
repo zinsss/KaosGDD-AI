@@ -52,6 +52,7 @@ from kaos_brain.bot import (
     UPCOMING_EVENTS_LABEL,
     _read_active_control_message_id,
     _read_active_control_service_message_id,
+    _read_open_service_message_id,
     _is_transient_brain_message,
     _write_active_control_message_id,
     render_active_control_message,
@@ -183,13 +184,14 @@ class FakeGovernorTools:
 
 
 class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
-    def active_control_settings(self):
+    def active_control_settings(self, *, state_path: str = ""):
         return SimpleNamespace(
             guild_id=100,
             brain_channel_id=300,
             allowed_user_ids=frozenset({200}),
             governor_tools_profile="main",
             governor_tools_supplies_collection_id="supplies:abc",
+            active_control_state_path=state_path,
         )
 
     def test_active_control_message_uses_compact_date_header(self) -> None:
@@ -217,10 +219,17 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(_read_active_control_message_id(state_path), 0)
             self.assertEqual(_read_active_control_service_message_id(state_path), 0)
-            _write_active_control_message_id(state_path, 1536983928337076224, 1536983928337076225)
+            self.assertEqual(_read_open_service_message_id(state_path), 0)
+            _write_active_control_message_id(
+                state_path,
+                1536983928337076224,
+                1536983928337076225,
+                open_service_message_id=1536983928337076226,
+            )
 
             self.assertEqual(_read_active_control_message_id(state_path), 1536983928337076224)
             self.assertEqual(_read_active_control_service_message_id(state_path), 1536983928337076225)
+            self.assertEqual(_read_open_service_message_id(state_path), 1536983928337076226)
 
     async def test_active_control_select_opens_existing_action_view(self) -> None:
         view = BrainActiveControlView(
@@ -331,6 +340,33 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("- 로운이 제로이드 · 2026-08-22 10:00", content)
         self.assertIsInstance(interaction.followup.send.await_args.kwargs["view"], BrainActiveTasksView)
 
+    async def test_service_button_replaces_previous_open_service_message(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            state_path = str(Path(tmpdir) / "active-control.json")
+            _write_active_control_message_id(state_path, 0, open_service_message_id=9001)
+            old_message = SimpleNamespace(delete=AsyncMock())
+            channel = SimpleNamespace(fetch_message=AsyncMock(return_value=old_message))
+            view = BrainServiceMenuView(
+                FakeGovernorTools(),  # type: ignore[arg-type]
+                self.active_control_settings(state_path=state_path),
+            )
+            button = next(child for child in view.children if getattr(child, "label", "") == TASKS_SERVICE_BUTTON_LABEL)
+            interaction = SimpleNamespace(
+                id=704,
+                guild_id=100,
+                channel_id=300,
+                channel=channel,
+                user=SimpleNamespace(id=200),
+                response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+                followup=SimpleNamespace(send=AsyncMock(return_value=SimpleNamespace(id=9002))),
+            )
+
+            await button.callback(interaction)  # type: ignore[arg-type,union-attr]
+
+            channel.fetch_message.assert_awaited_once_with(9001)
+            old_message.delete.assert_awaited_once()
+            self.assertEqual(_read_open_service_message_id(state_path), 9002)
+
     async def test_calendar_button_calls_up_closable_month_message(self) -> None:
         view = BrainServiceMenuView(
             FakeGovernorTools(),  # type: ignore[arg-type]
@@ -399,13 +435,14 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             guild_id=100,
             channel_id=300,
             user=SimpleNamespace(id=200),
-            response=SimpleNamespace(send_message=AsyncMock()),
+            response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+            followup=SimpleNamespace(send=AsyncMock()),
         )
 
         await paperless.callback(interaction)  # type: ignore[arg-type,union-attr]
         await memos.callback(interaction)  # type: ignore[arg-type,union-attr]
 
-        calls = interaction.response.send_message.await_args_list
+        calls = interaction.followup.send.await_args_list
         self.assertIn(f"## {PAPERLESS_TITLE}", calls[0].args[0])
         self.assertIn(f"## {MEMOS_TITLE}", calls[1].args[0])
 
