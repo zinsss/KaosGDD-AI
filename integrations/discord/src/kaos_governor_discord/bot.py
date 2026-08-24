@@ -260,6 +260,15 @@ class GovernorBot(discord.Client):
                 self.policy,
                 settings.mail_organizer_channel_id,
                 settings.mail_archive_channel_id,
+                notification_channel_ids=frozenset(
+                    channel_id
+                    for channel_id in (
+                        settings.system_channel_id,
+                        settings.task_due_notification_channel_id,
+                        settings.fax_notification_channel_id,
+                    )
+                    if channel_id is not None
+                ),
             )
             if settings.mail_organizer_channel_id is not None and settings.mail_archive_channel_id is not None
             else None

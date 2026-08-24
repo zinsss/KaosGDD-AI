@@ -75,6 +75,21 @@ def render_digest(digest: dict[str, object]) -> str:
     ).render()
 
 
+def render_digest_notification(digest: dict[str, object]) -> str:
+    items = _ordered_items(digest)
+    shown = len(items)
+    total = int(digest.get("totalUnread") or shown)
+    fields = [
+        MarkdownField("Updated", str(digest.get("createdAt") or "").replace("T", " ")[:16] + " KST"),
+        MarkdownField("Unread", str(total)),
+    ]
+    return MarkdownMessage(
+        title="Naver Mail",
+        summary=f"{total} unread message{'s' if total != 1 else ''}. Open Brain for organizer actions.",
+        fields=tuple(fields),
+    ).render()
+
+
 def render_digest_item(item: dict[str, object]) -> str:
     subject = _short(item.get("subject"), 300)
     context = _short(f"{item.get('mailboxName')} · {item.get('sender')}", 500)
@@ -91,12 +106,15 @@ class DiscordMailOrganizer:
         policy: AccessPolicy,
         channel_id: int,
         archive_channel_id: int,
+        *,
+        notification_channel_ids: frozenset[int] = frozenset(),
     ) -> None:
         self.bot = bot
         self.organizer = organizer
         self.policy = policy
         self.channel_id = channel_id
         self.archive_channel_id = archive_channel_id
+        self.notification_channel_ids = notification_channel_ids
         self.restored = False
 
     async def channel(self) -> discord.abc.Messageable:
@@ -116,9 +134,10 @@ class DiscordMailOrganizer:
         digest_id = str(digest["id"])
         try:
             await self.delete_previous_day_digests(digest)
+            is_notification_channel = self.channel_id in self.notification_channel_ids
             message = await channel.send(
-                render_digest(digest),
-                view=MailDigestView(self, digest_id, digest),
+                render_digest_notification(digest) if is_notification_channel else render_digest(digest),
+                view=None if is_notification_channel else MailDigestView(self, digest_id, digest),
                 allowed_mentions=NO_MENTIONS,
             )
             await asyncio.to_thread(
@@ -139,6 +158,9 @@ class DiscordMailOrganizer:
         for digest in self.organizer.active_digests():
             digest_id = str(digest.get("id") or "")
             message_id = int(digest.get("messageId") or 0)
+            channel_id = int(digest.get("channelId") or self.channel_id)
+            if channel_id in self.notification_channel_ids:
+                continue
             if digest_id and message_id:
                 self.bot.add_view(MailDigestView(self, digest_id, digest), message_id=message_id)
                 count += 1
@@ -170,7 +192,8 @@ class DiscordMailOrganizer:
             existing_date = _digest_date(existing)
             if not existing_id or existing_id == str(digest.get("id") or "") or existing_date is None:
                 continue
-            if existing_date >= current_date:
+            existing_channel_id = int(existing.get("channelId") or self.channel_id)
+            if existing_date >= current_date and existing_channel_id == self.channel_id:
                 continue
             try:
                 await self.delete_digest(existing_id)

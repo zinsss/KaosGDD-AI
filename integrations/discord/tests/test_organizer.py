@@ -12,6 +12,7 @@ from kaos_governor_discord.organizer import (
     MailItemActionView,
     render_digest,
     render_digest_item,
+    render_digest_notification,
 )
 
 
@@ -41,6 +42,12 @@ class DiscordOrganizerRenderingTests(unittest.TestCase):
         self.assertIn("1. Unread subject 0", rendered)
         self.assertIn("Select one message", rendered)
         self.assertNotIn("Page", rendered)
+
+    def test_notification_digest_is_plain_without_action_copy(self) -> None:
+        rendered = render_digest_notification(digest(2))
+        self.assertIn("## Naver Mail", rendered)
+        self.assertIn("2 unread messages", rendered)
+        self.assertNotIn("Select one message", rendered)
 
     def test_item_message_is_compact_and_escapes_mail_content(self) -> None:
         value = digest(1)
@@ -153,6 +160,84 @@ class DiscordOrganizerViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(deleted_messages, [402, 401])
         organizer_channel.send.assert_awaited_once()
         service.attach_message.assert_called_once_with("new-digest", 100, 501)
+
+    async def test_publish_digest_uses_plain_message_in_notification_channel(self) -> None:
+        service = SimpleNamespace(
+            active_digests=Mock(return_value=[]),
+            attach_message=Mock(),
+            attach_item_message=Mock(),
+        )
+        organizer_channel = AsyncMock()
+        organizer_channel.send.return_value = SimpleNamespace(id=501)
+        coordinator = DiscordMailOrganizer(
+            SimpleNamespace(),
+            service,
+            SimpleNamespace(),
+            100,
+            200,
+            notification_channel_ids=frozenset({100}),
+        )
+        coordinator.channel = AsyncMock(return_value=organizer_channel)
+
+        await coordinator.publish_digest(digest(1))
+
+        organizer_channel.send.assert_awaited_once()
+        kwargs = organizer_channel.send.await_args.kwargs
+        self.assertIsNone(kwargs["view"])
+        self.assertIn("Open Brain for organizer actions", organizer_channel.send.await_args.args[0])
+
+    async def test_publish_digest_deletes_same_day_digest_from_old_channel(self) -> None:
+        old_digest = digest(1)
+        old_digest["id"] = "old-digest"
+        old_digest["createdAt"] = "2026-08-22T08:00:00+09:00"
+        old_digest["channelId"] = 300
+        old_digest["messageId"] = 401
+        new_digest = digest(1)
+        new_digest["id"] = "new-digest"
+        new_digest["createdAt"] = "2026-08-22T09:00:00+09:00"
+        service = SimpleNamespace(
+            active_digests=Mock(return_value=[old_digest]),
+            close_digest=Mock(return_value=old_digest),
+            attach_message=Mock(),
+            attach_item_message=Mock(),
+        )
+        old_channel = AsyncMock()
+        old_channel.fetch_message.return_value = AsyncMock()
+        organizer_channel = AsyncMock()
+        organizer_channel.send.return_value = SimpleNamespace(id=501)
+        bot = SimpleNamespace(
+            get_channel=Mock(side_effect=lambda channel_id: old_channel if channel_id == 300 else organizer_channel),
+            fetch_channel=AsyncMock(return_value=organizer_channel),
+        )
+        coordinator = DiscordMailOrganizer(bot, service, SimpleNamespace(), 100, 200)
+        coordinator.channel = AsyncMock(return_value=organizer_channel)
+
+        await coordinator.publish_digest(new_digest)
+
+        service.close_digest.assert_called_once_with("old-digest")
+        old_channel.fetch_message.assert_awaited_once_with(401)
+        old_channel.fetch_message.return_value.delete.assert_awaited_once()
+
+    async def test_restore_views_skips_notification_channel_digests(self) -> None:
+        value = digest(1)
+        value["channelId"] = 100
+        value["messageId"] = 501
+        value["items"]["item-0"]["organizerMessageId"] = 502
+        service = SimpleNamespace(active_digests=Mock(return_value=[value]))
+        bot = SimpleNamespace(add_view=Mock())
+        coordinator = DiscordMailOrganizer(
+            bot,
+            service,
+            SimpleNamespace(),
+            100,
+            200,
+            notification_channel_ids=frozenset({100}),
+        )
+
+        restored = await coordinator.restore_views()
+
+        self.assertEqual(restored, 0)
+        bot.add_view.assert_not_called()
 
     async def test_mail_select_opens_item_action_panel(self) -> None:
         value = digest(1)
