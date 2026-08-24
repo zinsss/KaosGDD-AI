@@ -41,6 +41,16 @@ def _positive_int(value: str, name: str) -> int:
     return parsed
 
 
+def _non_negative_int(value: str, name: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise ConfigurationError(f"{name} must be an integer") from exc
+    if parsed < 0:
+        raise ConfigurationError(f"{name} must be non-negative")
+    return parsed
+
+
 def _id_set(env: Mapping[str, str], name: str) -> frozenset[int]:
     values = frozenset(
         _positive_int(part.strip(), name)
@@ -108,6 +118,7 @@ class Settings:
     governor_tools_profile: str
     governor_tools_supplies_collection_id: str
     active_control_state_path: str
+    active_control_repost_seconds: int
     governor_tools_timeout_seconds: int
     imaging_enabled: bool
     imaging_api_token: str
@@ -225,6 +236,10 @@ class Settings:
                 "/data/kaosbrain/active-control.json",
             ).strip()
             or "/data/kaosbrain/active-control.json",
+            active_control_repost_seconds=_non_negative_int(
+                source.get("KAOSBRAIN_ACTIVE_CONTROL_REPOST_SECONDS", "10800"),
+                "KAOSBRAIN_ACTIVE_CONTROL_REPOST_SECONDS",
+            ),
             governor_tools_timeout_seconds=_positive_int(
                 source.get("KAOSBRAIN_GOVERNOR_TOOLS_TIMEOUT_SECONDS", "10"),
                 "KAOSBRAIN_GOVERNOR_TOOLS_TIMEOUT_SECONDS",

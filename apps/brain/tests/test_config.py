@@ -32,6 +32,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.health_port, 8099)
         self.assertFalse(settings.imaging_enabled)
         self.assertFalse(settings.kaosai_reauth_enabled)
+        self.assertEqual(settings.active_control_repost_seconds, 10800)
 
     def test_token_can_be_loaded_from_secret_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -169,6 +170,18 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.governor_tools_profile, "family")
         self.assertEqual(settings.governor_tools_supplies_collection_id, "supplies:abc")
         self.assertEqual(settings.active_control_state_path, "/data/kaosbrain/active-control.json")
+        self.assertEqual(settings.active_control_repost_seconds, 10800)
+
+        disabled_repost = Settings.from_env(
+            {
+                **BASE_ENV,
+                "KAOSBRAIN_GOVERNOR_TOOLS_ENABLED": "true",
+                "KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL": "http://100.64.0.1:8098",
+                "KAOSBRAIN_ACTIVE_CONTROL_REPOST_SECONDS": "0",
+                "GOVERNOR_API_TOKEN": "token",
+            }
+        )
+        self.assertEqual(disabled_repost.active_control_repost_seconds, 0)
 
         magic_dns = Settings.from_env(
             {

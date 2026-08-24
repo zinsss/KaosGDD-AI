@@ -450,6 +450,7 @@ class BrainBot(discord.Client):
         self._active_control_message_id = _read_active_control_message_id(settings.active_control_state_path)
         self._active_control_service_message_id = _read_active_control_service_message_id(settings.active_control_state_path)
         self._active_control_refresh_task: asyncio.Task[None] | None = None
+        self._active_control_repost_task: asyncio.Task[None] | None = None
 
     async def on_ready(self) -> None:
         LOGGER.info("KaosBrain connected as %s", self.user)
@@ -457,6 +458,34 @@ class BrainBot(discord.Client):
             self._active_control_refresh_task is None or self._active_control_refresh_task.done()
         ):
             self._active_control_refresh_task = asyncio.create_task(self._ensure_active_control_message())
+        if (
+            self.governor_tools is not None
+            and self.settings.active_control_repost_seconds > 0
+            and (self._active_control_repost_task is None or self._active_control_repost_task.done())
+        ):
+            self._active_control_repost_task = asyncio.create_task(
+                self._active_control_repost_loop(),
+                name="kaosbrain-active-control-repost",
+            )
+
+    async def close(self) -> None:
+        for task in (self._active_control_refresh_task, self._active_control_repost_task):
+            if task is not None:
+                task.cancel()
+        await asyncio.gather(
+            *(task for task in (self._active_control_refresh_task, self._active_control_repost_task) if task is not None),
+            return_exceptions=True,
+        )
+        self._active_control_refresh_task = None
+        self._active_control_repost_task = None
+        await super().close()
+
+    async def _active_control_repost_loop(self) -> None:
+        while not self.is_closed():
+            await asyncio.sleep(self.settings.active_control_repost_seconds)
+            if self.is_closed():
+                return
+            await self._ensure_active_control_message(move_to_bottom=True)
 
     def _allowed(self, message: discord.Message) -> bool:
         return (
