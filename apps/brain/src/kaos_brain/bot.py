@@ -1393,15 +1393,16 @@ class BrainTemporarySearchView(discord.ui.View):
     def bind_message(self, message: discord.Message) -> None:
         self._message = message
 
+    def _search_source_label(self) -> str:
+        if self.searched_from == "Paperless and Memos":
+            return "Paperless/Memos"
+        return self.searched_from or "Search"
+
     def _closed_notice(self) -> str:
-        if self.searched_from:
-            return f"Searched from {self.searched_from}."
-        return "Searched."
+        return f"{self._search_source_label()} searched."
 
     def _expired_notice(self) -> str:
-        if self.searched_from:
-            return f"Searched from {self.searched_from}. Result expired after 10 mins."
-        return f"Search result of {self.search_title} expired after 10 mins."
+        return f"{self._search_source_label()} search expired."
 
     async def delete_message(self) -> None:
         if self._message is None:

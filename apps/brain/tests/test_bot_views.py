@@ -586,7 +586,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(content, "# Rustdesk\nUse Tailscale.")
         self.assertIn("view", interaction.followup.send.await_args.kwargs)
         search_message.edit.assert_awaited_once_with(
-            content="Searched from Memos.",
+            content="Memos searched.",
             view=None,
             allowed_mentions=NO_MENTIONS,
         )
@@ -620,7 +620,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(opened_view, BrainOpenedDocumentView)
         self.assertEqual([item.label for item in opened_view.children], ["Close", "Open document"])
         search_message.edit.assert_awaited_once_with(
-            content="Searched from Paperless.",
+            content="Paperless searched.",
             view=None,
             allowed_mentions=NO_MENTIONS,
         )
@@ -669,7 +669,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         search_message.edit.assert_awaited_once()
         self.assertEqual(
             search_message.edit.await_args.kwargs["content"],
-            "Searched from Memos. Result expired after 10 mins.",
+            "Memos search expired.",
         )
         self.assertIsNone(search_message.edit.await_args.kwargs["view"])
 
