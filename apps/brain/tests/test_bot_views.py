@@ -31,6 +31,7 @@ from kaos_brain.bot import (
     BrainMemoDeleteConfirmView,
     BrainMemoEditConfirmView,
     BrainOpenedDocumentView,
+    BrainServiceMenuSelect,
     BrainServiceMenuView,
     BrainUpcomingEventsSelect,
     BrainMemoSearchSelect,
@@ -316,12 +317,13 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(task_select.options[1].description, "2026-08-22 10:00")
         self.assertIsNone(supplies_select.options[0].description)
 
-    async def test_tasks_button_calls_up_active_tasks_message(self) -> None:
+    async def test_service_menu_select_calls_up_active_tasks_message(self) -> None:
         view = BrainServiceMenuView(
             FakeGovernorTools(),  # type: ignore[arg-type]
             self.active_control_settings(),
         )
-        button = next(child for child in view.children if getattr(child, "label", "") == TASKS_SERVICE_BUTTON_LABEL)
+        select = next(child for child in view.children if isinstance(child, BrainServiceMenuSelect))
+        select._values = ["tasks"]
         interaction = SimpleNamespace(
             id=701,
             guild_id=100,
@@ -331,7 +333,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             followup=SimpleNamespace(send=AsyncMock()),
         )
 
-        await button.callback(interaction)  # type: ignore[arg-type,union-attr]
+        await select.callback(interaction)  # type: ignore[arg-type]
 
         interaction.response.defer.assert_awaited_once()
         content = interaction.followup.send.await_args.args[0]
@@ -342,25 +344,29 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(service_view, BrainActiveTasksView)
         self.assertIsNone(service_view.timeout)
 
-    def test_service_menu_buttons_use_two_balanced_rows(self) -> None:
+    def test_service_menu_uses_single_services_dropdown(self) -> None:
         view = BrainServiceMenuView(
             FakeGovernorTools(),  # type: ignore[arg-type]
             self.active_control_settings(),
         )
 
+        self.assertEqual(len(view.children), 1)
+        select = view.children[0]
+        self.assertIsInstance(select, BrainServiceMenuSelect)
+        self.assertEqual(select.placeholder, "KaosGDD Services")
         self.assertEqual(
-            [(getattr(item, "label", ""), getattr(item, "row", None)) for item in view.children],
+            [(option.label, option.value) for option in select.options],
             [
-                (CALENDAR_LABEL, 0),
-                (TASKS_SERVICE_BUTTON_LABEL, 0),
-                (SUPPLIES_LABEL, 0),
-                (PAPERLESS_LABEL, 1),
-                (MEMOS_LABEL, 1),
-                (FAX_MAIL_LABEL, 1),
+                (CALENDAR_LABEL, "calendar"),
+                (TASKS_SERVICE_BUTTON_LABEL, "tasks"),
+                (SUPPLIES_LABEL, "supplies"),
+                (PAPERLESS_LABEL, "paperless"),
+                (MEMOS_LABEL, "memos"),
+                (FAX_MAIL_LABEL, "fax_mail"),
             ],
         )
 
-    async def test_service_button_replaces_previous_open_service_message(self) -> None:
+    async def test_service_select_replaces_previous_open_service_message(self) -> None:
         with TemporaryDirectory() as tmpdir:
             state_path = str(Path(tmpdir) / "active-control.json")
             _write_active_control_message_id(state_path, 0, open_service_message_id=9001)
@@ -370,7 +376,8 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
                 FakeGovernorTools(),  # type: ignore[arg-type]
                 self.active_control_settings(state_path=state_path),
             )
-            button = next(child for child in view.children if getattr(child, "label", "") == TASKS_SERVICE_BUTTON_LABEL)
+            select = next(child for child in view.children if isinstance(child, BrainServiceMenuSelect))
+            select._values = ["tasks"]
             interaction = SimpleNamespace(
                 id=704,
                 guild_id=100,
@@ -381,18 +388,19 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
                 followup=SimpleNamespace(send=AsyncMock(return_value=SimpleNamespace(id=9002))),
             )
 
-            await button.callback(interaction)  # type: ignore[arg-type,union-attr]
+            await select.callback(interaction)  # type: ignore[arg-type]
 
             channel.fetch_message.assert_awaited_once_with(9001)
             old_message.delete.assert_awaited_once()
             self.assertEqual(_read_open_service_message_id(state_path), 9002)
 
-    async def test_calendar_button_calls_up_closable_month_message(self) -> None:
+    async def test_calendar_select_calls_up_closable_month_message(self) -> None:
         view = BrainServiceMenuView(
             FakeGovernorTools(),  # type: ignore[arg-type]
             self.active_control_settings(),
         )
-        button = next(child for child in view.children if getattr(child, "label", "") == CALENDAR_LABEL)
+        select = next(child for child in view.children if isinstance(child, BrainServiceMenuSelect))
+        select._values = ["calendar"]
         interaction = SimpleNamespace(
             id=702,
             guild_id=100,
@@ -402,7 +410,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             followup=SimpleNamespace(send=AsyncMock()),
         )
 
-        await button.callback(interaction)  # type: ignore[arg-type,union-attr]
+        await select.callback(interaction)  # type: ignore[arg-type]
 
         interaction.response.defer.assert_awaited_once()
         self.assertIn(f"## {CALENDAR_TITLE} ·", interaction.followup.send.await_args.kwargs["content"])
@@ -445,13 +453,12 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("GDD_ZiN", kwargs["content"])
         self.assertEqual(kwargs["attachments"], [])
 
-    async def test_paperless_and_memos_buttons_are_separate(self) -> None:
+    async def test_paperless_and_memos_select_options_are_separate(self) -> None:
         view = BrainServiceMenuView(
             FakeGovernorTools(),  # type: ignore[arg-type]
             self.active_control_settings(),
         )
-        paperless = next(child for child in view.children if getattr(child, "label", "") == PAPERLESS_LABEL)
-        memos = next(child for child in view.children if getattr(child, "label", "") == MEMOS_LABEL)
+        select = next(child for child in view.children if isinstance(child, BrainServiceMenuSelect))
         interaction = SimpleNamespace(
             guild_id=100,
             channel_id=300,
@@ -460,19 +467,22 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             followup=SimpleNamespace(send=AsyncMock()),
         )
 
-        await paperless.callback(interaction)  # type: ignore[arg-type,union-attr]
-        await memos.callback(interaction)  # type: ignore[arg-type,union-attr]
+        select._values = ["paperless"]
+        await select.callback(interaction)  # type: ignore[arg-type]
+        select._values = ["memos"]
+        await select.callback(interaction)  # type: ignore[arg-type]
 
         calls = interaction.followup.send.await_args_list
         self.assertIn(f"## {PAPERLESS_TITLE}", calls[0].args[0])
         self.assertIn(f"## {MEMOS_TITLE}", calls[1].args[0])
 
-    async def test_fax_mail_button_calls_up_incoming_service_message(self) -> None:
+    async def test_fax_mail_select_calls_up_incoming_service_message(self) -> None:
         view = BrainServiceMenuView(
             FakeGovernorTools(),  # type: ignore[arg-type]
             self.active_control_settings(),
         )
-        button = next(child for child in view.children if getattr(child, "label", "") == FAX_MAIL_LABEL)
+        select = next(child for child in view.children if isinstance(child, BrainServiceMenuSelect))
+        select._values = ["fax_mail"]
         interaction = SimpleNamespace(
             id=704,
             guild_id=100,
@@ -482,7 +492,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             followup=SimpleNamespace(send=AsyncMock()),
         )
 
-        await button.callback(interaction)  # type: ignore[arg-type,union-attr]
+        await select.callback(interaction)  # type: ignore[arg-type]
 
         interaction.response.defer.assert_awaited_once()
         content = interaction.followup.send.await_args.args[0]
@@ -523,12 +533,13 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             ["←", "Page 1/2", "→", "Incoming", "Close"],
         )
 
-    async def test_supplies_button_calls_up_named_shopping_list_without_dates(self) -> None:
+    async def test_supplies_select_calls_up_named_shopping_list_without_dates(self) -> None:
         view = BrainServiceMenuView(
             FakeGovernorTools(),  # type: ignore[arg-type]
             self.active_control_settings(),
         )
-        button = next(child for child in view.children if getattr(child, "label", "") == SUPPLIES_LABEL)
+        select = next(child for child in view.children if isinstance(child, BrainServiceMenuSelect))
+        select._values = ["supplies"]
         interaction = SimpleNamespace(
             id=703,
             guild_id=100,
@@ -538,7 +549,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             followup=SimpleNamespace(send=AsyncMock()),
         )
 
-        await button.callback(interaction)  # type: ignore[arg-type,union-attr]
+        await select.callback(interaction)  # type: ignore[arg-type]
 
         interaction.response.defer.assert_awaited_once()
         content = interaction.followup.send.await_args.args[0]

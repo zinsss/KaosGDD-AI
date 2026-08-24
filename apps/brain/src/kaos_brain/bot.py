@@ -82,7 +82,7 @@ BRAIN_SEARCH_WINDOW_SECONDS = 600
 OPENAI_CALLBACK_PREFIX = "http://localhost:1455/auth/callback?"
 OPENAI_CODE_PATTERN = re.compile(r"^ac_[A-Za-z0-9_.-]+$")
 ACTIVE_CONTROL_MARKER = "# "
-SERVICE_MENU_MARKER = "\u200b"
+SERVICE_MENU_MARKER = "### KaosGDD Services"
 ACTIVE_CONTROL_LIMIT = 25
 ACTIVE_CONTROL_HISTORY_LIMIT = 20
 TASK_SERVICE_PAGE_SIZE = 25
@@ -2332,6 +2332,7 @@ class BrainServiceMenuView(discord.ui.View):
         super().__init__(timeout=None)
         self.governor_tools = governor_tools
         self.settings = settings
+        self.add_item(BrainServiceMenuSelect(self))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if (
@@ -2343,8 +2344,7 @@ class BrainServiceMenuView(discord.ui.View):
         await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
         return False
 
-    @discord.ui.button(label=CALENDAR_LABEL, style=discord.ButtonStyle.secondary, row=0)
-    async def calendar_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def open_calendar(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
         current = datetime.now(KST).date()
         view = BrainCalendarMonthView(
@@ -2364,8 +2364,7 @@ class BrainServiceMenuView(discord.ui.View):
             kwargs["file"] = file
         await _send_single_service_message(self.settings, interaction, **kwargs)
 
-    @discord.ui.button(label=TASKS_SERVICE_BUTTON_LABEL, style=discord.ButtonStyle.secondary, row=0)
-    async def tasks_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def open_tasks(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
         try:
             payload = await self.governor_tools.fetch(
@@ -2390,8 +2389,7 @@ class BrainServiceMenuView(discord.ui.View):
             allowed_mentions=NO_MENTIONS,
         )
 
-    @discord.ui.button(label=SUPPLIES_LABEL, style=discord.ButtonStyle.secondary, row=0)
-    async def supplies_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def open_supplies(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
         request = ToolRequest(
             ToolKind.ACTIVE_TASKS,
@@ -2414,8 +2412,7 @@ class BrainServiceMenuView(discord.ui.View):
             allowed_mentions=NO_MENTIONS,
         )
 
-    @discord.ui.button(label=PAPERLESS_LABEL, style=discord.ButtonStyle.secondary, row=1)
-    async def paperless_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def open_paperless(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
         await _delete_open_service_message(self.settings, interaction)
         await interaction.followup.send(
@@ -2424,8 +2421,7 @@ class BrainServiceMenuView(discord.ui.View):
             allowed_mentions=NO_MENTIONS,
         )
 
-    @discord.ui.button(label=MEMOS_LABEL, style=discord.ButtonStyle.secondary, row=1)
-    async def memos_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def open_memos(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
         await _delete_open_service_message(self.settings, interaction)
         await interaction.followup.send(
@@ -2434,8 +2430,7 @@ class BrainServiceMenuView(discord.ui.View):
             allowed_mentions=NO_MENTIONS,
         )
 
-    @discord.ui.button(label=FAX_MAIL_LABEL, style=discord.ButtonStyle.secondary, row=1)
-    async def fax_mail_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def open_fax_mail(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
         try:
             payload = await self.governor_tools.fetch(
@@ -2454,6 +2449,41 @@ class BrainServiceMenuView(discord.ui.View):
             mode="incoming",
         )
         await _send_single_service_message(self.settings, interaction, view.content(), view=view, allowed_mentions=NO_MENTIONS)
+
+
+class BrainServiceMenuSelect(discord.ui.Select):
+    def __init__(self, service_menu: BrainServiceMenuView) -> None:
+        self.service_menu = service_menu
+        super().__init__(
+            placeholder="KaosGDD Services",
+            min_values=1,
+            max_values=1,
+            options=[
+                discord.SelectOption(label=CALENDAR_LABEL, value="calendar"),
+                discord.SelectOption(label=TASKS_SERVICE_BUTTON_LABEL, value="tasks"),
+                discord.SelectOption(label=SUPPLIES_LABEL, value="supplies"),
+                discord.SelectOption(label=PAPERLESS_LABEL, value="paperless"),
+                discord.SelectOption(label=MEMOS_LABEL, value="memos"),
+                discord.SelectOption(label=FAX_MAIL_LABEL, value="fax_mail"),
+            ],
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        selected = self.values[0] if self.values else ""
+        if selected == "calendar":
+            await self.service_menu.open_calendar(interaction)
+        elif selected == "tasks":
+            await self.service_menu.open_tasks(interaction)
+        elif selected == "supplies":
+            await self.service_menu.open_supplies(interaction)
+        elif selected == "paperless":
+            await self.service_menu.open_paperless(interaction)
+        elif selected == "memos":
+            await self.service_menu.open_memos(interaction)
+        elif selected == "fax_mail":
+            await self.service_menu.open_fax_mail(interaction)
+        else:
+            await interaction.response.send_message("Unknown service.", ephemeral=True, allowed_mentions=NO_MENTIONS)
 
 
 class BrainCalendarMonthView(discord.ui.View):
