@@ -564,9 +564,12 @@ def render_task_action_completed(payload: dict[str, Any]) -> str:
         return f"{_task_noun(payload)} 수정했어요."
     action = str(task.get("action") or "")
     noun = _task_noun(payload)
+    title = str(task.get("title") or task.get("summary") or "").strip()
     if action == "delete":
         return f"{noun} 삭제했어요."
     if action == "complete":
+        if title:
+            return f"{title}을 구매했어요." if noun == "비품" else f"{title}을 완료했어요."
         return f"{noun} 완료했어요."
     if action == "reopen":
         return f"{noun} 다시 열었어요."

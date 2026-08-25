@@ -49,6 +49,7 @@ from kaos_brain.bot import (
     SUPPLIES_LABEL,
     SUPPLIES_TITLE,
     TASKS_SERVICE_BUTTON_LABEL,
+    TaskActionConfirmationView,
     TaskCreateConfirmationView,
     UPCOMING_EVENTS_LABEL,
     _read_active_control_message_id,
@@ -1305,6 +1306,26 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         interaction.edit_original_response.assert_awaited_once()
         content = interaction.edit_original_response.await_args.kwargs["content"]
         self.assertEqual(content, "Task added.")
+        self.assertIsNone(interaction.edit_original_response.await_args.kwargs["view"])
+
+    async def test_task_action_confirm_removes_buttons_after_completion(self) -> None:
+        tools = FakeGovernorTools()
+        view = TaskActionConfirmationView(tools, 200, "confirm-action-1")  # type: ignore[arg-type]
+
+        async def approve_confirmation(confirmation_id: str, *, actor_id: int):
+            return {"task": {"title": "Call mom", "action": "complete", "profile": "family"}}
+
+        tools.approve_confirmation = approve_confirmation  # type: ignore[method-assign]
+        interaction = SimpleNamespace(
+            user=SimpleNamespace(id=200),
+            response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+            edit_original_response=AsyncMock(),
+        )
+
+        await view.children[0].callback(interaction)  # type: ignore[arg-type,union-attr]
+
+        interaction.edit_original_response.assert_awaited_once()
+        self.assertEqual(interaction.edit_original_response.await_args.kwargs["content"], "Call mom을 완료했어요.")
         self.assertIsNone(interaction.edit_original_response.await_args.kwargs["view"])
 
 

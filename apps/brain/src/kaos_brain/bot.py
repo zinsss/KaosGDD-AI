@@ -3707,9 +3707,7 @@ class TaskActionConfirmationView(BrainAutoClosingView):
         except GovernorToolError as exc:
             LOGGER.warning("Task action approval failed: %s", exc)
             content = _tool_failed("할 일 변경")
-        for item in self.children:
-            item.disabled = True
-        await _edit_deferred_component(interaction, content=content, view=self)
+        await _edit_deferred_component(interaction, content=content, view=None)
         self.stop()
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)

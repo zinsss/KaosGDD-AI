@@ -447,8 +447,12 @@ class GovernorToolRenderingTests(unittest.TestCase):
         self.assertEqual(render_task_create_completed(payload), "Supply added.")
         self.assertEqual(render_task_edit_completed(payload), "비품 수정했어요.")
         self.assertEqual(render_task_action_completed({"task": {**payload["task"], "action": "delete"}}), "비품 삭제했어요.")
-        self.assertEqual(render_task_action_completed({"task": {**payload["task"], "action": "complete"}}), "비품 완료했어요.")
+        self.assertEqual(render_task_action_completed({"task": {**payload["task"], "action": "complete"}}), "Soap을 구매했어요.")
         self.assertEqual(render_task_action_completed({"task": {**payload["task"], "action": "reopen"}}), "비품 다시 열었어요.")
+
+    def test_render_task_complete_completed_uses_task_title(self) -> None:
+        content = render_task_action_completed({"task": {"title": "Call school", "action": "complete"}})
+        self.assertEqual(content, "Call school을 완료했어요.")
 
     def test_render_task_delete_completed(self) -> None:
         content = render_task_action_completed({"task": {"title": "Call school", "action": "delete"}})
