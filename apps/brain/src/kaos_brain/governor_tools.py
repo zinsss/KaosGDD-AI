@@ -953,10 +953,7 @@ def _render_memos(query: str, payload: dict[str, Any]) -> str:
     if len(results) > 1:
         lines.append("### Memos")
         for index, item in enumerate(results[:SEARCH_RESULT_LIMIT], start=1):
-            tags = _memo_tags_text(item)
             lines.append(_truncate(f"{index}. {_memo_title(item)}", 180))
-            if tags:
-                lines.append(_truncate(f"   {tags}", 180))
         return "\n".join(lines)
     lines.extend(_memo_line(item) for item in results[:5])
     return "\n".join(lines)
