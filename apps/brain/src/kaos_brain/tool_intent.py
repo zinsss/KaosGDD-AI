@@ -73,6 +73,9 @@ def parse_tool_request(content: str, *, today: date | None = None) -> ToolReques
     dotdot = _dotdot_request(text)
     if dotdot is not None:
         return dotdot
+    day_request = _specific_day_request(text, lowered, current, profile=profile)
+    if day_request is not None:
+        return day_request
     if _asks_weather(lowered):
         label, city = _weather_location(text)
         return ToolRequest(ToolKind.WEATHER, label, profile=profile, collection_id=city)
@@ -102,6 +105,51 @@ def _dotdot_request(text: str) -> ToolRequest | None:
     memo_nouns = ("memo", "memos", "메모")
     stripped_query = _strip_search_nouns(query, (*document_nouns, *memo_nouns)) or query
     return ToolRequest(ToolKind.SEARCH_ALL, stripped_query)
+
+
+def _specific_day_request(text: str, lowered: str, today: date, *, profile: str) -> ToolRequest | None:
+    cleaned = lowered
+    for marker in (
+        "보여줘",
+        "보여",
+        "알려줘",
+        "알려",
+        "일정",
+        "스케줄",
+        "캘린더",
+        "calendar",
+        "show",
+        "?",
+    ):
+        cleaned = cleaned.replace(marker, " ")
+    cleaned = " ".join(cleaned.split())
+    if cleaned in {"오늘", "today"}:
+        return ToolRequest(ToolKind.TODAY, start=today.isoformat(), profile=profile)
+    if cleaned in {"내일", "tomorrow"}:
+        return ToolRequest(ToolKind.TODAY, start=(today + timedelta(days=1)).isoformat(), profile=profile)
+    if cleaned in {"모레"}:
+        return ToolRequest(ToolKind.TODAY, start=(today + timedelta(days=2)).isoformat(), profile=profile)
+
+    parsed = _parse_explicit_day(cleaned, today=today)
+    if parsed is None:
+        return None
+    return ToolRequest(ToolKind.TODAY, start=parsed.isoformat(), profile=profile)
+
+
+def _parse_explicit_day(cleaned: str, *, today: date) -> date | None:
+    match = re.fullmatch(r"(?:(\d{4})[./-])?(\d{1,2})[./-](\d{1,2})", cleaned)
+    if match is None:
+        match = re.fullmatch(r"(?:(\d{4})년\s*)?(\d{1,2})월\s*(\d{1,2})일?", cleaned)
+    if match is None:
+        return None
+    year_text, month_text, day_text = match.groups()
+    year = int(year_text) if year_text else today.year
+    month = int(month_text)
+    day = int(day_text)
+    try:
+        return date(year, month, day)
+    except ValueError:
+        return None
 
 
 def _asks_today(lowered: str) -> bool:

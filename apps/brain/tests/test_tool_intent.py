@@ -20,6 +20,24 @@ class ToolIntentTests(unittest.TestCase):
         assert request is not None
         self.assertEqual(request.kind, ToolKind.TODAY)
 
+    def test_slash_month_day_request_uses_current_year_and_requested_day(self) -> None:
+        request = parse_tool_request("8/26 보여줘", today=date(2026, 8, 26))
+        assert request is not None
+        self.assertEqual(request.kind, ToolKind.TODAY)
+        self.assertEqual(request.start, "2026-08-26")
+
+    def test_korean_month_day_request_uses_current_year_and_requested_day(self) -> None:
+        request = parse_tool_request("8월 26일 보여줘", today=date(2026, 8, 25))
+        assert request is not None
+        self.assertEqual(request.kind, ToolKind.TODAY)
+        self.assertEqual(request.start, "2026-08-26")
+
+    def test_tomorrow_request_uses_today_context(self) -> None:
+        request = parse_tool_request("내일 보여줘", today=date(2026, 8, 25))
+        assert request is not None
+        self.assertEqual(request.kind, ToolKind.TODAY)
+        self.assertEqual(request.start, "2026-08-26")
+
     def test_weather_korean_request_uses_weather_context(self) -> None:
         request = parse_tool_request("지금 포항날씨는?")
         assert request is not None

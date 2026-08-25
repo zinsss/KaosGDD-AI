@@ -514,6 +514,10 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["path"], "/tools/today")
         self.assertEqual(payload["params"], {"profile": "main"})
 
+        dated_payload = await client.fetch(ToolRequest(ToolKind.TODAY, start="2026-08-26"))
+        self.assertEqual(dated_payload["path"], "/tools/today")
+        self.assertEqual(dated_payload["params"], {"profile": "main", "date": "2026-08-26"})
+
         weather = await client.fetch(ToolRequest(ToolKind.WEATHER, "부산", collection_id="busan"))
         self.assertEqual(weather["path"], "/tools/today")
         self.assertEqual(weather["params"], {"profile": "main", "city": "busan"})

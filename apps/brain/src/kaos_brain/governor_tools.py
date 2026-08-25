@@ -76,7 +76,7 @@ class GovernorToolClient:
                 }
             return await self.today(profile=request.profile, city=request.collection_id)
         if request.kind is ToolKind.TODAY:
-            return await self.today(profile=request.profile)
+            return await self.today(profile=request.profile, day=request.start or None)
         if request.kind is ToolKind.UPCOMING_EVENTS:
             return await self._get("/tools/events/upcoming", {"profile": self._profile(request.profile), "days": "7"})
         if request.kind is ToolKind.CALENDAR_MONTH_IMAGE:
