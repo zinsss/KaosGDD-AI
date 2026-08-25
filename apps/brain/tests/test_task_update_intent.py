@@ -281,6 +281,27 @@ class TaskUpdateIntentTests(unittest.TestCase):
         self.assertEqual(request.title, "엔소쿠료칸")
         self.assertEqual(request.start_date, "2026-08-15")
 
+    def test_prefixed_event_create_accepts_today_as_all_day(self) -> None:
+        request = parse_event_create("일정, 오늘 미영샘 월차", today=date(2026, 8, 26))
+        assert request is not None
+        self.assertEqual(request.title, "미영샘 월차")
+        self.assertEqual(request.start_date, "2026-08-26")
+        self.assertEqual(request.end_date, "2026-08-26")
+        self.assertTrue(request.all_day)
+        self.assertEqual(request.profile, "main")
+
+    def test_prefixed_event_create_accepts_tomorrow_family_with_memo(self) -> None:
+        request = parse_event_create("일정, 가족 내일 로운이 체험학습 :: 도시락", today=date(2026, 8, 26))
+        assert request is not None
+        self.assertEqual(request.title, "로운이 체험학습")
+        self.assertEqual(request.start_date, "2026-08-27")
+        self.assertTrue(request.all_day)
+        self.assertEqual(request.profile, "family")
+        self.assertEqual(request.memo, "도시락")
+
+    def test_prefixed_event_view_is_not_create(self) -> None:
+        self.assertIsNone(parse_event_create("일정, 오늘 보여줘", today=date(2026, 8, 26)))
+
     def test_event_create_rejects_invalid_date(self) -> None:
         self.assertIsNone(parse_event_create("13-40 이상한 일정으로 가족에 추가", today=date(2026, 8, 15)))
 
