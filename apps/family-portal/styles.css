@@ -5297,7 +5297,8 @@ h3 {
   html,
   body,
   .app {
-    width: auto;
+    width: 100% !important;
+    max-width: none !important;
     min-height: auto;
     overflow: visible !important;
     background: #ffffff !important;
@@ -5321,6 +5322,8 @@ h3 {
 
   .view {
     display: block;
+    width: 100% !important;
+    max-width: none !important;
     height: auto;
     min-height: auto;
     overflow: visible !important;
@@ -5329,7 +5332,8 @@ h3 {
 
   .rounyEditor {
     display: block;
-    width: 100%;
+    width: 100% !important;
+    max-width: none !important;
   }
 
   .panel {
@@ -5366,20 +5370,20 @@ h3 {
   }
 
   .rounyScheduleHero {
-    grid-template-columns: 58px minmax(0, 1fr) 82px;
-    min-height: 58px;
-    gap: 8px;
-    padding: 3mm 5mm;
+    grid-template-columns: 76px minmax(0, 1fr) 96px;
+    min-height: 74px;
+    gap: 10px;
+    padding: 4mm 6mm;
   }
 
   .rounyScheduleHero img {
-    width: 52px;
-    height: 58px;
+    width: 68px;
+    height: 74px;
     filter: none !important;
   }
 
   .rounyScheduleHero h2 {
-    font-size: 20pt;
+    font-size: 25pt;
   }
 
   .rounyScheduleHero p {
@@ -5390,10 +5394,10 @@ h3 {
   }
 
   .rounyScheduleHero > span {
-    min-width: 70px;
-    min-height: 30px;
+    min-width: 84px;
+    min-height: 36px;
     border-width: 1px;
-    font-size: 8pt;
+    font-size: 9pt;
   }
 
   .rounyScheduleToolbar {
@@ -5406,8 +5410,9 @@ h3 {
 
   .rounyTimelineGrid {
     width: 100%;
+    max-width: none !important;
     --rouny-timeline-height: var(--rouny-print-timeline-height) !important;
-    grid-template-rows: 28px var(--rouny-timeline-height);
+    grid-template-rows: 32px var(--rouny-timeline-height);
     border-radius: 8px;
     background: #ffffff !important;
     break-inside: avoid;
@@ -5436,29 +5441,29 @@ h3 {
   }
 
   .rounyTimelineHourLabel {
-    right: 5px;
-    font-size: 7pt;
+    right: 6px;
+    font-size: 8pt;
   }
 
   .rounyBlock {
     border-color: rgba(46, 52, 64, 0.28) !important;
-    left: 4px;
-    right: 4px;
-    grid-template-columns: 24px minmax(0, 1fr);
-    gap: 4px;
+    left: 5px;
+    right: 5px;
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 5px;
     min-height: 16px;
-    border-radius: 7px;
-    padding: 3px 5px;
+    border-radius: 8px;
+    padding: 4px 6px;
   }
 
   .rounyBlockIcon {
-    width: 22px;
-    height: 22px;
+    width: 26px;
+    height: 26px;
     border-radius: 6px;
-    font-size: 9pt;
+    font-size: 10pt;
   }
 
   .rounyBlock strong {
-    font-size: 8pt;
+    font-size: 9pt;
   }
 }

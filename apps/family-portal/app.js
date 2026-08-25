@@ -5208,7 +5208,7 @@ function renderRounyGrid(template) {
         data-start-minutes="${range.startMinutes}"
         data-end-minutes="${range.endMinutes}"
         aria-label="${uiText("rouny.weeklyAria", "Rouny weekly timetable")}"
-        style="--rouny-timeline-height:${range.bodyHeight}px;--rouny-print-timeline-height:${Math.max(360, range.hourCount * 36)}px"
+        style="--rouny-timeline-height:${range.bodyHeight}px;--rouny-print-timeline-height:${Math.max(520, range.hourCount * 48)}px"
       >
         <span class="rounyTimelineCorner" aria-hidden="true"></span>
         ${visibleDays.map((day) => `<span class="rounyTimelineDayHeader">${escapeHtml(portalProfile() === "family" ? day.familyLabel : day.label)}</span>`).join("")}
