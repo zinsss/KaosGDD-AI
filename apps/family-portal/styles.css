@@ -5282,7 +5282,7 @@ h3 {
 @media print {
   @page {
     size: A4 landscape;
-    margin: 10mm;
+    margin: 6mm;
   }
 
   *,
@@ -5302,6 +5302,10 @@ h3 {
     overflow: visible !important;
     background: #ffffff !important;
     color: #111111 !important;
+  }
+
+  body {
+    margin: 0 !important;
   }
 
   .appTop,
@@ -5337,7 +5341,7 @@ h3 {
   }
 
   .rounyTemplateHeaderPanel {
-    margin: 0 0 6mm;
+    margin: 0 0 3mm;
     padding: 0;
     border: 0;
   }
@@ -5352,12 +5356,59 @@ h3 {
 
   .rounyTemplateNameRow h2 {
     color: #111111 !important;
-    font-size: 22pt;
+    font-size: 16pt;
     line-height: 1.1;
+  }
+
+  .rounySchedulePanel {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .rounyScheduleHero {
+    grid-template-columns: 58px minmax(0, 1fr) 82px;
+    min-height: 58px;
+    gap: 8px;
+    padding: 3mm 5mm;
+  }
+
+  .rounyScheduleHero img {
+    width: 52px;
+    height: 58px;
+    filter: none !important;
+  }
+
+  .rounyScheduleHero h2 {
+    font-size: 20pt;
+  }
+
+  .rounyScheduleHero p {
+    min-height: 22px;
+    margin-top: 3px;
+    padding: 0 10px;
+    font-size: 8pt;
+  }
+
+  .rounyScheduleHero > span {
+    min-width: 70px;
+    min-height: 30px;
+    border-width: 1px;
+    font-size: 8pt;
+  }
+
+  .rounyScheduleToolbar {
+    min-height: 28px;
+  }
+
+  .rounyScheduleToolbar h2 {
+    font-size: 11pt;
   }
 
   .rounyTimelineGrid {
     width: 100%;
+    --rouny-timeline-height: var(--rouny-print-timeline-height) !important;
+    grid-template-rows: 28px var(--rouny-timeline-height);
+    border-radius: 8px;
     background: #ffffff !important;
     break-inside: avoid;
     page-break-inside: avoid;
@@ -5384,7 +5435,30 @@ h3 {
     border-color: #ece5ef !important;
   }
 
+  .rounyTimelineHourLabel {
+    right: 5px;
+    font-size: 7pt;
+  }
+
   .rounyBlock {
     border-color: rgba(46, 52, 64, 0.28) !important;
+    left: 4px;
+    right: 4px;
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 4px;
+    min-height: 16px;
+    border-radius: 7px;
+    padding: 3px 5px;
+  }
+
+  .rounyBlockIcon {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    font-size: 9pt;
+  }
+
+  .rounyBlock strong {
+    font-size: 8pt;
   }
 }

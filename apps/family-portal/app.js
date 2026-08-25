@@ -5146,12 +5146,14 @@ function rounyTimelineRange(template) {
   const latest = Math.max(ROUNY_TIMELINE_DEFAULT_END_HOUR * 60, ...endMinutes);
   const startHour = Math.max(0, Math.floor(earliest / 60));
   const endHour = Math.min(24, Math.max(startHour + 1, Math.ceil(latest / 60)));
+  const hourCount = endHour - startHour;
   return {
     startHour,
     endHour,
+    hourCount,
     startMinutes: startHour * 60,
     endMinutes: endHour * 60,
-    bodyHeight: (endHour - startHour) * ROUNY_TIMELINE_HOUR_HEIGHT,
+    bodyHeight: hourCount * ROUNY_TIMELINE_HOUR_HEIGHT,
   };
 }
 
@@ -5162,9 +5164,10 @@ function rounyTimelineBlockStyle(item, slot, range) {
     rounyMinutes(slot.endTime) - rounyMinutes(slot.startTime),
   );
   const end = Math.min(range.endMinutes, start + duration);
-  const top = ((start - range.startMinutes) / 60) * ROUNY_TIMELINE_HOUR_HEIGHT;
-  const height = Math.max(20, ((end - start) / 60) * ROUNY_TIMELINE_HOUR_HEIGHT);
-  return `style="background:${escapeHtml(normalizeRounyColor(item.color))};top:${top}px;height:${height}px"`;
+  const rangeMinutes = Math.max(ROUNY_TIMELINE_SLOT_MINUTES, range.endMinutes - range.startMinutes);
+  const top = ((start - range.startMinutes) / rangeMinutes) * 100;
+  const height = ((end - start) / rangeMinutes) * 100;
+  return `style="background:${escapeHtml(normalizeRounyColor(item.color))};top:${top.toFixed(4)}%;height:${height.toFixed(4)}%"`;
 }
 
 function renderRounyGrid(template) {
@@ -5205,7 +5208,7 @@ function renderRounyGrid(template) {
         data-start-minutes="${range.startMinutes}"
         data-end-minutes="${range.endMinutes}"
         aria-label="${uiText("rouny.weeklyAria", "Rouny weekly timetable")}"
-        style="--rouny-timeline-height:${range.bodyHeight}px"
+        style="--rouny-timeline-height:${range.bodyHeight}px;--rouny-print-timeline-height:${Math.max(360, range.hourCount * 36)}px"
       >
         <span class="rounyTimelineCorner" aria-hidden="true"></span>
         ${visibleDays.map((day) => `<span class="rounyTimelineDayHeader">${escapeHtml(portalProfile() === "family" ? day.familyLabel : day.label)}</span>`).join("")}
@@ -5214,7 +5217,7 @@ function renderRounyGrid(template) {
             .slice(0, -1)
             .map(
               (hour) => `
-                <span class="rounyTimelineHourLabel" style="top:${(hour - range.startHour) * ROUNY_TIMELINE_HOUR_HEIGHT + 16}px">
+                <span class="rounyTimelineHourLabel" style="top:${(((hour - range.startHour) + 0.24) / range.hourCount) * 100}%">
                   ${String(hour).padStart(2, "0")}:00
                 </span>
               `,
@@ -5229,7 +5232,7 @@ function renderRounyGrid(template) {
                   .slice(0, -1)
                   .map(
                     (hour) => `
-                      <span class="rounyTimelineHour" style="top:${(hour - range.startHour) * ROUNY_TIMELINE_HOUR_HEIGHT}px" aria-hidden="true">
+                      <span class="rounyTimelineHour" style="top:${((hour - range.startHour) / range.hourCount) * 100}%;height:${100 / range.hourCount}%" aria-hidden="true">
                         <i></i><i></i><i></i><i></i><i></i>
                       </span>
                     `,
