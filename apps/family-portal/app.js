@@ -4917,6 +4917,84 @@ function saveRounyDraft({ asCopy = false } = {}) {
   return true;
 }
 
+function rounyCopyDayLabel(day) {
+  if (portalProfile() === "family") {
+    return {
+      "1": "월요일",
+      "2": "화요일",
+      "3": "수요일",
+      "4": "목요일",
+      "5": "금요일",
+      "6": "토요일",
+      "0": "일요일",
+    }[day.value] || day.familyLabel || day.label;
+  }
+  return {
+    "1": "Monday",
+    "2": "Tuesday",
+    "3": "Wednesday",
+    "4": "Thursday",
+    "5": "Friday",
+    "6": "Saturday",
+    "0": "Sunday",
+  }[day.value] || day.label;
+}
+
+function rounyTimetableCopyText(template) {
+  const days = rounyGridDays();
+  const grouped = days.reduce((items, day) => ({ ...items, [day.value]: [] }), {});
+  (template.items || []).forEach((item) => {
+    (item.slots || []).forEach((slot) => {
+      if (!grouped[slot.dayOfWeek]) return;
+      grouped[slot.dayOfWeek].push({ item, slot });
+    });
+  });
+  days.forEach((day) => {
+    grouped[day.value].sort((a, b) => {
+      const startDiff = rounyMinutes(a.slot.startTime) - rounyMinutes(b.slot.startTime);
+      if (startDiff) return startDiff;
+      return String(a.item.title || "").localeCompare(String(b.item.title || ""), "ko");
+    });
+  });
+  const lines = [`제목: ${template.name || uiText("rouny.untitledTemplate", "Untitled template")}`];
+  days.forEach((day) => {
+    const entries = grouped[day.value] || [];
+    if (!entries.length) return;
+    lines.push("", rounyCopyDayLabel(day));
+    entries.forEach(({ item, slot }) => {
+      const title = String(item.title || uiText("rouny.activity", "Activity")).trim();
+      lines.push(`${String(slot.startTime || "").slice(0, 5)}-${String(slot.endTime || "").slice(0, 5)} ${title}`);
+    });
+  });
+  return lines.join("\n").trim();
+}
+
+async function writeTextToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  textarea.setSelectionRange(0, textarea.value.length);
+  const copied = document.execCommand("copy");
+  textarea.remove();
+  if (!copied) throw new Error("copy_failed");
+}
+
+async function copyRounyTimetableText() {
+  const draft = collectRounyDraft();
+  const text = rounyTimetableCopyText(draft);
+  await writeTextToClipboard(text);
+  window.alert(uiText("rouny.copyDone", "Timetable text copied."));
+}
+
 function deleteRounyTemplate(templateId) {
   if (state.rouny.templates.length <= 1) {
     window.alert(uiText("dialog.keepOneTemplate", "Keep at least one template."));
@@ -5421,6 +5499,7 @@ function renderRounyTemplateDetail() {
         <button class="openButton" type="button" data-rouny-add-item>${uiText("rouny.addClass", "Add class")}</button>
         <button class="openButton" type="button" data-rouny-undo ${canUndoRounyDraft() ? "" : "disabled"}>${uiText("rouny.undo", "Undo")}</button>
         <button class="openButton" type="button" data-rouny-reset>${uiText("rouny.reset", "Reset")}</button>
+        <button class="openButton" type="button" data-rouny-copy>${uiText("rouny.copy", "Copy")}</button>
         <button class="openButton" type="button" data-rouny-print>${uiText("rouny.print", "Print")}</button>
         <button class="primaryButton" type="button" data-rouny-save>${uiText("common.save", "Save")}</button>
         <button class="openButton" type="button" data-rouny-save-as>${uiText("rouny.saveAs", "Save as")}</button>
@@ -7352,6 +7431,15 @@ document.addEventListener("click", async (event) => {
 
   if (event.target.closest("[data-rouny-reset]")) {
     if (resetRounyDraftToSaved()) render();
+    return;
+  }
+
+  if (event.target.closest("[data-rouny-copy]")) {
+    try {
+      await copyRounyTimetableText();
+    } catch (error) {
+      window.alert(uiText("rouny.copyError", "Could not copy timetable text."));
+    }
     return;
   }
 
