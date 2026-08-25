@@ -2473,15 +2473,13 @@ class BrainServiceMenuView(discord.ui.View):
             anchor_date=current,
             year=current.year,
             month=current.month,
+            mode="weekly",
         )
-        file = await view.month_file()
         kwargs: dict[str, Any] = {
-            "content": view.content(),
+            "content": await view.weekly_content(),
             "view": view,
             "allowed_mentions": NO_MENTIONS,
         }
-        if file is not None:
-            kwargs["file"] = file
         await _send_single_service_message(self.settings, interaction, **kwargs)
 
     async def open_tasks(self, interaction: discord.Interaction) -> None:

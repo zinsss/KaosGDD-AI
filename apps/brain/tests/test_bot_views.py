@@ -68,6 +68,7 @@ class FakeGovernorTools:
         self.task_edit_calls = []
         self.approve_calls = []
         self.calendar_month_image_calls = []
+        self.calendar_week_calls = []
 
     async def get_memo(self, name: str):
         return {"memo": {"name": name, "content": "# Rustdesk\nUse Tailscale."}}
@@ -197,6 +198,7 @@ class FakeGovernorTools:
         }
 
     async def calendar_week(self, *, profile: str = "", start: object | None = None, days: int = 7):
+        self.calendar_week_calls.append((profile, str(start or ""), days))
         base = datetime.fromisoformat(str(start or "2026-08-22")).date()
         return {
             "date": base.isoformat(),
@@ -455,13 +457,14 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         await select.callback(interaction)  # type: ignore[arg-type]
 
         interaction.response.defer.assert_awaited_once()
-        self.assertIn(f"## {CALENDAR_TITLE} ·", interaction.followup.send.await_args.kwargs["content"])
+        self.assertIn(f"## {CALENDAR_TITLE} · 𝓦𝓮𝓮𝓴𝓵𝔂", interaction.followup.send.await_args.kwargs["content"])
         service_view = interaction.followup.send.await_args.kwargs["view"]
         self.assertIsInstance(service_view, BrainCalendarMonthView)
+        self.assertEqual(service_view.mode, "weekly")
         self.assertIsNone(service_view.timeout)
         self.assertEqual([getattr(item, "label", "") for item in service_view.children], ["Month", "Weekly", "Close", "<", "Today", ">"])
-        self.assertEqual(governor_tools.calendar_month_image_calls[0][:3], ("main", 2026, 8))
-        self.assertIsNotNone(governor_tools.calendar_month_image_calls[0][3])
+        self.assertEqual(governor_tools.calendar_week_calls[0], ("main", "2026-08-23", 7))
+        self.assertEqual(governor_tools.calendar_month_image_calls, [])
 
     async def test_calendar_weekly_view_edits_to_weather_event_list(self) -> None:
         view = BrainCalendarMonthView(
