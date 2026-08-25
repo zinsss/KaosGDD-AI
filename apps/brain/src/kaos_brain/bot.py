@@ -4017,10 +4017,7 @@ def _render_fax_mail_service_message(imports: list[dict[str, Any]], *, mode: str
     if page_imports:
         lines.append(f"- showing: {showing_start}-{showing_end}")
     for item in page_imports:
-        title = _safe_discord_line(str(item.get("subject") or item.get("title") or "Import").strip() or "Import")
-        detail = _safe_discord_line(str(item.get("detail") or "").strip())
-        suffix = f" · {detail}" if detail else ""
-        lines.append(f"- {title}{suffix}")
+        lines.append(f"- {_fax_mail_list_line(item)}")
     if not page_imports:
         lines.append(f"- {empty}")
     return "\n".join(lines)
@@ -4035,16 +4032,60 @@ def _fax_mail_mode_label(mode: str) -> str:
 
 
 def _fax_mail_option_label(item: dict[str, Any]) -> str:
+    if _import_kind(item) == "mail":
+        return _compact_select_text(_fax_mail_mail_heading(item, escape=False), 100)
     return _compact_select_text(str(item.get("subject") or item.get("title") or "Import"), 100)
 
 
 def _fax_mail_option_description(item: dict[str, Any]) -> str:
     if _import_kind(item) == "mail":
-        received = str(item.get("receivedAt") or "").strip()[:16]
-        sender = str(item.get("sender") or "").strip()
-        mailbox = str(item.get("mailbox") or "").strip()
-        return _compact_select_text(" · ".join(part for part in (received, sender, mailbox) if part), 100)
+        return _compact_select_text(f"{_mail_attachment_summary(item)} from {_mail_sender_display(item)}", 100)
     return _import_option_description(item)
+
+
+def _fax_mail_list_line(item: dict[str, Any]) -> str:
+    if _import_kind(item) == "mail":
+        return _fax_mail_mail_heading(item, escape=True)
+    title = _safe_discord_line(str(item.get("subject") or item.get("title") or "Import").strip() or "Import")
+    detail = _safe_discord_line(str(item.get("detail") or "").strip())
+    return f"{title} · {detail}" if detail else title
+
+
+def _fax_mail_mail_heading(item: dict[str, Any], *, escape: bool) -> str:
+    title = str(item.get("subject") or item.get("title") or "(No subject)").strip() or "(No subject)"
+    received = _mail_mmdd(str(item.get("receivedAt") or ""))
+    mailbox = str(item.get("mailbox") or "").strip()
+    heading = f"{title}{f'({received})' if received else ''}"
+    if mailbox:
+        heading = f"{heading} • <{mailbox}>"
+    return _safe_discord_line(heading) if escape else heading
+
+
+def _mail_mmdd(value: str) -> str:
+    match = re.search(r"\b\d{4}-(\d{2})-(\d{2})\b", value)
+    return f"{match.group(1)}/{match.group(2)}" if match else ""
+
+
+def _mail_attachment_summary(item: dict[str, Any]) -> str:
+    names = item.get("attachmentNames") or item.get("attachments")
+    if isinstance(names, list):
+        cleaned = [str(value).strip() for value in names if str(value).strip()]
+        if cleaned:
+            return ", ".join(cleaned[:2]) + (f" 외 {len(cleaned) - 2}개" if len(cleaned) > 2 else "")
+    try:
+        count = int(item.get("attachmentCount") or 0)
+    except (TypeError, ValueError):
+        count = 0
+    return f"첨부 {count}개" if count else "첨부 없음"
+
+
+def _mail_sender_display(item: dict[str, Any]) -> str:
+    sender = str(item.get("sender") or "").strip()
+    if not sender:
+        return "unknown"
+    if "<" in sender:
+        sender = sender.split("<", 1)[0].strip()
+    return sender.strip('"') or str(item.get("sender") or "").strip()
 
 
 def _render_active_task_selection(title: str, task: dict[str, Any], *, supplies: bool) -> str:

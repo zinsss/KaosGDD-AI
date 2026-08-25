@@ -27,6 +27,7 @@ from kaos_brain.bot import (
     BrainCombinedSearchView,
     BrainDocumentSearchSelect,
     BrainDocumentSearchView,
+    BrainFaxMailSelect,
     BrainFaxMailView,
     BrainMemoDeleteConfirmView,
     BrainMemoEditConfirmView,
@@ -171,6 +172,7 @@ class FakeGovernorTools:
                     "mailbox": "세무사",
                     "receivedAt": "2026-08-22 09:00 KST",
                     "preview": "신고 안내입니다.",
+                    "attachmentCount": 2,
                     "detail": "2026-08-22 09:00 · tax@example.test · 세무사",
                 }
             ],
@@ -630,11 +632,14 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         interaction.response.defer.assert_awaited_once()
         content = interaction.edit_original_response.await_args.kwargs["content"]
         self.assertIn("### Mail", content)
-        self.assertIn("세무사 안내", content)
-        self.assertIn("세무사", content)
+        self.assertIn("- 세무사 안내(08/22) • <세무사>", content)
+        self.assertNotIn("tax@example.test", content)
         next_view = interaction.edit_original_response.await_args.kwargs["view"]
         self.assertIsInstance(next_view, BrainFaxMailView)
         self.assertEqual(next_view.mode, "mail")
+        select = next(item for item in next_view.children if isinstance(item, BrainFaxMailSelect))
+        self.assertEqual(select.options[0].label, "세무사 안내(08/22) • <세무사>")
+        self.assertEqual(select.options[0].description, "첨부 2개 from tax@example.test")
 
     async def test_supplies_select_calls_up_named_shopping_list_without_dates(self) -> None:
         view = BrainServiceMenuView(
