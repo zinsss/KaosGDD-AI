@@ -38,6 +38,8 @@ class FakeKaosAI:
         self.calls.append((user_text, context))
         if self.error is not None:
             raise self.error
+        if isinstance(self.plan_value, list):
+            return self.plan_value.pop(0) if self.plan_value else None
         return self.plan_value
 
     async def suggest_document_tags(self, context):
@@ -52,6 +54,7 @@ class FakeGovernorTools:
         self.fetch_calls = []
         self.task_create_calls = []
         self.task_due_calls = []
+        self.event_create_calls = []
         self.memo_create_calls = []
         self.document_tag_context_calls = []
         self.document_tag_calls = []
@@ -84,6 +87,20 @@ class FakeGovernorTools:
                 "oldDueTime": "",
                 "newDue": request.due_date,
                 "newDueTime": request.due_time,
+            },
+        }
+
+    async def propose_event_create(self, request, *, actor_id: int, idempotency_key: str):
+        self.event_create_calls.append((request, actor_id, idempotency_key))
+        return {
+            "confirmationId": "confirm-event-create",
+            "event": {
+                "title": request.title,
+                "startDate": request.start_date,
+                "endDate": request.end_date,
+                "allDay": request.all_day,
+                "memo": request.memo,
+                "profile": request.profile,
             },
         }
 
@@ -250,6 +267,30 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reply, "어떤 메모인가요?")
         self.assertIsNone(view)
         self.assertEqual(brain.governor_tools.fetch_calls, [])
+
+    async def test_event_date_clarification_answer_creates_event(self) -> None:
+        tools = FakeGovernorTools()
+        brain = self.brain(
+            [{"intent": "clarify", "scope": "personal", "parameters": {"question": "미영샘 월차 일정을 등록할 날짜가 언제인가요?"}}],
+            governor_tools=tools,
+            env={"KAOSAI_CHAT_ENABLED": "true"},
+        )
+        first = fake_discord_message("일정, 미영샘 월차")
+        second = fake_discord_message("오늘")
+        second.id = 778
+
+        await BrainBot.on_message(brain, first)  # type: ignore[arg-type]
+        await BrainBot.on_message(brain, second)  # type: ignore[arg-type]
+
+        self.assertIn("날짜가 언제", first.reply.await_args.args[0])
+        self.assertEqual(len(brain.kaosai.calls), 1)
+        request, actor_id, idempotency_key = tools.event_create_calls[0]
+        self.assertEqual(request.title, "미영샘 월차")
+        self.assertEqual(request.start_date, "2026-08-17")
+        self.assertTrue(request.all_day)
+        self.assertEqual(actor_id, 200)
+        self.assertEqual(idempotency_key, "discord:778")
+        self.assertIn("Confirm new event", second.reply.await_args.args[0])
 
     async def test_kaosai_diagnostic_shows_plan_and_guard_without_governor_call(self) -> None:
         tools = FakeGovernorTools()

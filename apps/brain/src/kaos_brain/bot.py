@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 import io
 import json
@@ -106,12 +107,38 @@ PAPERLESS_TITLE = "𝓟𝓪𝓹𝓮𝓻𝓵𝓮𝓼𝓼"
 MEMOS_TITLE = "𝓜𝓮𝓶𝓸𝓼"
 FAX_MAIL_TITLE = "𝓕𝓪𝔁 𝓜𝓪𝓲𝓵"
 KOREAN_SHORT_WEEKDAYS = ("월", "화", "수", "목", "금", "토", "일")
+KAOSAI_CLARIFY_WINDOW_SECONDS = 300
+
+
+@dataclass(frozen=True)
+class _PendingKaosAIClarification:
+    original_text: str
+    question: str
+    created_at: datetime
 
 
 def _bind_view_message(view: discord.ui.View | None, message: Any) -> None:
     bind = getattr(view, "bind_message", None)
     if callable(bind) and message is not None:
         bind(message)
+
+
+def _combine_clarification_answer(original_text: str, answer: str) -> str:
+    original = " ".join(original_text.strip().split())
+    cleaned_answer = " ".join(answer.strip().split())
+    if not original or not cleaned_answer:
+        return original_text
+    event_match = re.match(r"^(?P<prefix>일정|event)\s*[,，;；:：]\s*(?P<body>.+)$", original, flags=re.IGNORECASE)
+    if event_match is not None and _looks_like_date_answer(cleaned_answer):
+        return f"{event_match.group('prefix')}, {cleaned_answer} {event_match.group('body').strip()}"
+    return f"{original}\n답변: {cleaned_answer}"
+
+
+def _looks_like_date_answer(text: str) -> bool:
+    lowered = text.lower()
+    if lowered in {"오늘", "내일", "모레", "today", "tomorrow"}:
+        return True
+    return re.fullmatch(r"(?:(?:\d{4})[-./년]\s*)?\d{1,2}[-./월]\s*\d{1,2}일?", text) is not None
 
 
 async def _reply_with_bound_view(
@@ -580,6 +607,7 @@ class BrainBot(discord.Client):
         self._active_control_service_message_id = _read_active_control_service_message_id(settings.active_control_state_path)
         self._active_control_refresh_task: asyncio.Task[None] | None = None
         self._active_control_repost_task: asyncio.Task[None] | None = None
+        self._pending_kaosai_clarifications: dict[tuple[int, int], _PendingKaosAIClarification] = {}
 
     async def on_ready(self) -> None:
         LOGGER.info("KaosBrain connected as %s", self.user)
@@ -657,9 +685,10 @@ class BrainBot(discord.Client):
         if request.route is Route.CHAT and request.text.strip().lower().startswith("ai:"):
             await self._answer_with_kaosai_diagnostic(message, request.text)
             return
+        request_text = self._consume_kaosai_clarification_answer(message, request.text)
         if request.route is Route.CHAT and self.settings.kaosai_dry_run_enabled:
             async with message.channel.typing():
-                reply = await self._render_kaosai_diagnostic(request.text, message=message)
+                reply = await self._render_kaosai_diagnostic(request_text, message=message)
             await message.reply(
                 reply[: self.settings.max_reply_chars],
                 mention_author=False,
@@ -667,61 +696,61 @@ class BrainBot(discord.Client):
             )
             return
         task_update = (
-            parse_task_due_update(request.text, today=message.created_at.astimezone(KST).date())
+            parse_task_due_update(request_text, today=message.created_at.astimezone(KST).date())
             if request.route is Route.CHAT
             else None
         )
         if task_update is not None:
             await self._propose_task_due_update(message, task_update)
             return
-        task_edit = parse_task_edit(request.text) if request.route is Route.CHAT else None
+        task_edit = parse_task_edit(request_text) if request.route is Route.CHAT else None
         if task_edit is not None:
             await self._propose_task_edit(message, task_edit)
             return
         task_create = (
-            parse_task_create(request.text, today=message.created_at.astimezone(KST).date())
+            parse_task_create(request_text, today=message.created_at.astimezone(KST).date())
             if request.route is Route.CHAT
             else None
         )
         if task_create is not None:
             await self._propose_task_create(message, task_create)
             return
-        task_action = parse_task_action(request.text) if request.route is Route.CHAT else None
+        task_action = parse_task_action(request_text) if request.route is Route.CHAT else None
         if task_action is not None:
             await self._propose_task_action(message, task_action)
             return
         event_create = (
-            parse_event_create(request.text, today=message.created_at.astimezone(KST).date())
+            parse_event_create(request_text, today=message.created_at.astimezone(KST).date())
             if request.route is Route.CHAT
             else None
         )
         if event_create is not None:
             await self._propose_event_create(message, event_create)
             return
-        memo_edit = parse_memo_edit(request.text) if request.route is Route.CHAT else None
+        memo_edit = parse_memo_edit(request_text) if request.route is Route.CHAT else None
         if memo_edit is not None:
             await self._propose_memo_edit(message, memo_edit)
             return
-        memo_delete = parse_memo_delete(request.text) if request.route is Route.CHAT else None
+        memo_delete = parse_memo_delete(request_text) if request.route is Route.CHAT else None
         if memo_delete is not None:
             await self._propose_memo_delete(message, memo_delete)
             return
-        memo_create = parse_memo_create(request.text) if request.route is Route.CHAT else None
+        memo_create = parse_memo_create(request_text) if request.route is Route.CHAT else None
         if memo_create is not None:
             await self._propose_memo_create(message, memo_create)
             return
-        document_tag_suggestion = parse_document_tag_suggestion(request.text) if request.route is Route.CHAT else ""
+        document_tag_suggestion = parse_document_tag_suggestion(request_text) if request.route is Route.CHAT else ""
         if document_tag_suggestion:
             await self._propose_document_tag_suggestion(message, document_tag_suggestion)
             return
         tool_request = (
-            parse_tool_request(request.text, today=message.created_at.astimezone(KST).date())
+            parse_tool_request(request_text, today=message.created_at.astimezone(KST).date())
             if request.route is Route.CHAT
             else None
         )
         if tool_request is not None:
             async with message.channel.typing():
-                reply, view = await self._answer_with_governor_tool(request.text, tool_request, actor_id=int(message.author.id))
+                reply, view = await self._answer_with_governor_tool(request_text, tool_request, actor_id=int(message.author.id))
             sent = await message.reply(
                 reply[: self.settings.max_reply_chars],
                 view=view,
@@ -734,7 +763,7 @@ class BrainBot(discord.Client):
         async with message.channel.typing():
             try:
                 if request.route is Route.CHAT and self.settings.kaosai_chat_enabled:
-                    kaosai_reply = await self._answer_with_kaosai_plan(request.text, message=message)
+                    kaosai_reply = await self._answer_with_kaosai_plan(request_text, message=message)
                     if kaosai_reply is not None:
                         reply, view = kaosai_reply
                         sent = await message.reply(
@@ -746,9 +775,9 @@ class BrainBot(discord.Client):
                         _bind_view_message(view, sent)
                         return
                 if request.route is Route.CHAT and self.settings.auto_route_enabled:
-                    reply = await self.ollama.generate_auto(request.text)
+                    reply = await self.ollama.generate_auto(request_text)
                 else:
-                    reply = await self.ollama.generate(request.route, request.text)
+                    reply = await self.ollama.generate(request.route, request_text)
             except OllamaError as exc:
                 LOGGER.warning("Ollama failed route=%s: %s", request.route.value, exc)
                 label = "Deep thinking failed" if request.route is Route.DEEP else "Brain failed"
@@ -760,6 +789,37 @@ class BrainBot(discord.Client):
             allowed_mentions=NO_MENTIONS,
         )
         _bind_view_message(view, sent)
+
+    def _pending_kaosai_store(self) -> dict[tuple[int, int], _PendingKaosAIClarification]:
+        store = getattr(self, "_pending_kaosai_clarifications", None)
+        if store is None:
+            store = {}
+            self._pending_kaosai_clarifications = store
+        return store
+
+    def _clarification_key(self, message: discord.Message) -> tuple[int, int]:
+        return (int(message.channel.id), int(message.author.id))
+
+    def _consume_kaosai_clarification_answer(self, message: discord.Message, user_text: str) -> str:
+        store = self._pending_kaosai_store()
+        key = self._clarification_key(message)
+        pending = store.pop(key, None)
+        if pending is None:
+            return user_text
+        now = message.created_at.astimezone(KST)
+        if now - pending.created_at > timedelta(seconds=KAOSAI_CLARIFY_WINDOW_SECONDS):
+            return user_text
+        answer = user_text.strip()
+        if not answer:
+            return user_text
+        return _combine_clarification_answer(pending.original_text, answer)
+
+    def _remember_kaosai_clarification(self, message: discord.Message, user_text: str, question: str) -> None:
+        self._pending_kaosai_store()[self._clarification_key(message)] = _PendingKaosAIClarification(
+            original_text=user_text.strip(),
+            question=question.strip(),
+            created_at=message.created_at.astimezone(KST),
+        )
 
     async def _answer_with_kaosai_plan(
         self,
@@ -786,6 +846,7 @@ class BrainBot(discord.Client):
         if str(plan.get("intent") or "").strip() == "clarify":
             parameters = plan.get("parameters")
             question = str(parameters.get("question") or "").strip() if isinstance(parameters, dict) else ""
+            self._remember_kaosai_clarification(message, user_text, question or "조금 더 자세히 말해줘요.")
             return (question or "조금 더 자세히 말해줘요.", None)
         try:
             guarded = adapt_kaosai_plan(
