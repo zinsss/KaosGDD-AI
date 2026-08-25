@@ -225,9 +225,17 @@ def discover_mailboxes(client: imaplib.IMAP4_SSL, roots: tuple[str, ...]) -> lis
         if not parsed:
             continue
         delimiter, mailbox = parsed
-        if any(mailbox.display_name == root or (delimiter and mailbox.display_name.startswith(f"{root}{delimiter}")) for root in roots):
+        if any(_mailbox_matches_root(mailbox.display_name, root, delimiter) for root in roots):
             found.append(mailbox)
     return sorted(found, key=lambda item: item.display_name)
+
+
+def _mailbox_matches_root(display_name: str, root: str, delimiter: str) -> bool:
+    if display_name == root or (delimiter and display_name.startswith(f"{root}{delimiter}")):
+        return True
+    if not delimiter:
+        return False
+    return root in [part for part in display_name.split(delimiter) if part]
 
 
 def format_sender(value: object) -> str:
@@ -379,6 +387,52 @@ class NaverMailPoller:
             self.runtime.last_scan_at = _utc_timestamp()
             self.runtime.last_error = type(exc).__name__
             return 0
+
+    def list_messages(self, *, limit: int = 50) -> dict[str, object]:
+        if not self.config.configured:
+            raise NaverMailError("naver_not_configured")
+        client = self.imap_factory(self.config.host, self.config.port, timeout=self.config.timeout_seconds)
+        messages: list[MailMessage] = []
+        mailbox_count = 0
+        try:
+            status, _data = client.login(self.config.username, self.config.password)
+            if status != "OK":
+                raise NaverMailError("imap_login_failed")
+            mailboxes = discover_mailboxes(client, self.config.folder_roots)
+            mailbox_count = len(mailboxes)
+            for mailbox in mailboxes:
+                status, _data = client.select(quoted_mailbox(mailbox.raw_name), readonly=True)
+                if status != "OK":
+                    raise NaverMailError("imap_select_failed")
+                for uid in reversed(self._search_uids(client)):
+                    messages.append(self._fetch_message(client, mailbox, uid))
+                    if len(messages) >= limit:
+                        break
+                client.close()
+            messages.sort(key=lambda item: item.received_at, reverse=True)
+            return {
+                "mailboxCount": mailbox_count,
+                "folders": list(self.config.folder_roots),
+                "messages": [
+                    {
+                        "kind": "mail",
+                        "direction": "incoming",
+                        "mailbox": message.mailbox,
+                        "uid": message.uid,
+                        "sender": message.sender,
+                        "subject": message.subject,
+                        "preview": message.preview,
+                        "receivedAt": message.received_at,
+                        "attachmentCount": len(message.attachments),
+                    }
+                    for message in messages[:limit]
+                ],
+            }
+        finally:
+            try:
+                client.logout()
+            except (imaplib.IMAP4.error, OSError):
+                pass
 
     def _poll(
         self,

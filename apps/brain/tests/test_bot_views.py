@@ -159,6 +159,22 @@ class FakeGovernorTools:
             return {"tasks": [{"title": "토프라민", "date": "2026-08-21", "due": "2026-08-21"}]}
         return {"tasks": [{"title": "로운이 제로이드", "due": "2026-08-22", "dueTime": "10:00"}]}
 
+    async def mail_messages(self, *, limit: int = 50):
+        return {
+            "messages": [
+                {
+                    "kind": "mail",
+                    "subject": "세무사 안내",
+                    "sender": "tax@example.test",
+                    "mailbox": "세무사",
+                    "receivedAt": "2026-08-22 09:00 KST",
+                    "preview": "신고 안내입니다.",
+                    "detail": "2026-08-22 09:00 · tax@example.test · 세무사",
+                }
+            ],
+            "count": 1,
+        }
+
     async def documents(self, query: str = "", *, page: int = 1, limit: int = 10):
         return {
             "query": query,
@@ -553,7 +569,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         interaction.response.defer.assert_awaited_once()
         content = interaction.followup.send.await_args.args[0]
         self.assertIn(f"## {FAX_MAIL_TITLE}", content)
-        self.assertIn("### Incoming Fax Mail", content)
+        self.assertIn("### Incoming Fax", content)
         self.assertIn("- total: 1", content)
         self.assertNotIn("Naver organizer digests", content)
         self.assertIn("- Fax jobs tracked: 1", content)
@@ -586,8 +602,35 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(f"Fax job {FAX_MAIL_PAGE_SIZE + 1:02d}", content)
         self.assertEqual(
             [getattr(item, "label", "") for item in view.children if getattr(item, "label", "")],
-            ["←", "Page 1/2", "→", "Incoming", "Close"],
+            ["←", "Page 1/2", "→", "Incoming Fax", "Outgoing Fax", "Mail", "Close"],
         )
+
+    async def test_fax_mail_mail_mode_lists_target_naver_mail(self) -> None:
+        view = BrainFaxMailView(
+            FakeGovernorTools(),  # type: ignore[arg-type]
+            200,
+            self.active_control_settings(),
+            [],
+            mode="incoming_fax",
+        )
+        button = next(item for item in view.children if getattr(item, "label", "") == "Mail")
+        interaction = SimpleNamespace(
+            user=SimpleNamespace(id=200),
+            response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+            followup=SimpleNamespace(send=AsyncMock()),
+            edit_original_response=AsyncMock(),
+        )
+
+        await button.callback(interaction)  # type: ignore[attr-defined]
+
+        interaction.response.defer.assert_awaited_once()
+        content = interaction.edit_original_response.await_args.kwargs["content"]
+        self.assertIn("### Mail", content)
+        self.assertIn("세무사 안내", content)
+        self.assertIn("세무사", content)
+        next_view = interaction.edit_original_response.await_args.kwargs["view"]
+        self.assertIsInstance(next_view, BrainFaxMailView)
+        self.assertEqual(next_view.mode, "mail")
 
     async def test_supplies_select_calls_up_named_shopping_list_without_dates(self) -> None:
         view = BrainServiceMenuView(

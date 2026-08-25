@@ -43,6 +43,7 @@ class ToolKind(StrEnum):
     UPCOMING_EVENTS = "upcoming_events"
     CALENDAR_MONTH_IMAGE = "calendar_month_image"
     RECENT_IMPORTS = "recent_imports"
+    MAIL_MESSAGES = "mail_messages"
     ACTIVE_TASKS = "active_tasks"
     COMPLETED_TASKS = "completed_tasks"
     MEMO_SEARCH = "memo_search"

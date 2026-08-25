@@ -810,6 +810,44 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await client.close()
 
+    async def test_naver_mail_list_returns_provider_messages(self) -> None:
+        server = BrainToolServer(
+            "127.0.0.1",
+            8098,
+            governor_api_token="governor-secret",
+            calendar_adapter=self.calendar,  # type: ignore[arg-type]
+            memos=self.memos,  # type: ignore[arg-type]
+            paperless=self.paperless,  # type: ignore[arg-type]
+            mail_messages_provider=lambda limit: {
+                "mailboxCount": 2,
+                "folders": ["세무사", "영덕군보건소"],
+                "messages": [
+                    {
+                        "subject": "세무사 안내",
+                        "sender": "tax@example.test",
+                        "mailbox": "세무사",
+                        "receivedAt": "2026-08-22 09:00 KST",
+                        "preview": "신고 안내입니다.",
+                        "uid": 7,
+                    }
+                ],
+            },
+            today_provider=lambda: date(2026, 8, 14),
+        )
+        client = TestClient(TestServer(server.application()))
+        await client.start_server()
+        try:
+            response = await client.get("/tools/mail/naver/list?limit=20", headers=self.headers())
+            self.assertEqual(response.status, 200)
+            payload = await response.json()
+            self.assertEqual(payload["source"], "naver-imap-live")
+            self.assertEqual(payload["mailboxCount"], 2)
+            self.assertEqual(payload["folders"], ["세무사", "영덕군보건소"])
+            self.assertEqual(payload["messages"][0]["subject"], "세무사 안내")
+            self.assertEqual(payload["messages"][0]["detail"], "2026-08-22 09:00 · tax@example.test · 세무사")
+        finally:
+            await client.close()
+
     async def test_active_tasks_returns_sorted_non_completed_tasks(self) -> None:
         response = await self.client.get("/tools/tasks/active?profile=main", headers=self.headers())
 

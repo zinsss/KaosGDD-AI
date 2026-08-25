@@ -2620,7 +2620,7 @@ class BrainServiceMenuView(discord.ui.View):
             int(interaction.user.id),
             self.settings,
             imports,
-            mode="incoming",
+            mode="incoming_fax",
         )
         await _send_single_service_message(self.settings, interaction, view.content(), view=view, allowed_mentions=NO_MENTIONS)
 
@@ -2882,17 +2882,19 @@ class BrainFaxMailView(discord.ui.View):
         governor_tools: GovernorToolClient,
         actor_id: int,
         settings: Settings,
-        imports: list[dict[str, Any]],
+        items: list[dict[str, Any]],
         *,
-        mode: str = "incoming",
+        mode: str = "incoming_fax",
         page: int = 0,
     ) -> None:
         super().__init__(timeout=None)
         self.governor_tools = governor_tools
         self.actor_id = actor_id
         self.settings = settings
-        self.imports = imports
-        self.mode = "outgoing" if mode == "outgoing" else "incoming"
+        self.items = items
+        self.mode = {"incoming": "incoming_fax", "outgoing": "outgoing_fax"}.get(mode, mode)
+        if self.mode not in {"incoming_fax", "outgoing_fax", "mail"}:
+            self.mode = "incoming_fax"
         self.page = max(0, page)
         self._rebuild_items()
 
@@ -2903,29 +2905,31 @@ class BrainFaxMailView(discord.ui.View):
         return False
 
     @property
-    def page_imports(self) -> list[dict[str, Any]]:
+    def page_items(self) -> list[dict[str, Any]]:
         start = self.page * FAX_MAIL_PAGE_SIZE
-        return self.imports[start : start + FAX_MAIL_PAGE_SIZE]
+        return self.items[start : start + FAX_MAIL_PAGE_SIZE]
 
     @property
     def max_page(self) -> int:
-        if not self.imports:
+        if not self.items:
             return 0
-        return (len(self.imports) - 1) // FAX_MAIL_PAGE_SIZE
+        return (len(self.items) - 1) // FAX_MAIL_PAGE_SIZE
 
     def content(self) -> str:
-        return _render_fax_mail_service_message(self.imports, mode=self.mode, page=self.page)
+        return _render_fax_mail_service_message(self.items, mode=self.mode, page=self.page)
 
     def _rebuild_items(self) -> None:
         self.clear_items()
         if self.page > self.max_page:
             self.page = self.max_page
-        if self.page_imports:
+        if self.page_items:
             self.add_item(BrainFaxMailSelect(self))
         self.add_item(BrainFaxMailPageButton("←", -1, disabled=self.page <= 0))
         self.add_item(BrainFaxMailPageStatusButton(self.page, self.max_page))
         self.add_item(BrainFaxMailPageButton("→", 1, disabled=self.page >= self.max_page))
-        self.add_item(BrainFaxMailModeButton("Outgoing Fax" if self.mode == "incoming" else "Incoming"))
+        self.add_item(BrainFaxMailModeButton("Incoming Fax", "incoming_fax", active=self.mode == "incoming_fax"))
+        self.add_item(BrainFaxMailModeButton("Outgoing Fax", "outgoing_fax", active=self.mode == "outgoing_fax"))
+        self.add_item(BrainFaxMailModeButton("Mail", "mail", active=self.mode == "mail"))
         self.add_item(BrainFaxMailCloseButton())
 
     async def edit_message(self, interaction: discord.Interaction) -> None:
@@ -2933,14 +2937,19 @@ class BrainFaxMailView(discord.ui.View):
         await interaction.edit_original_response(content=self.content(), view=self)
 
     async def refresh(self, *, mode: str, page: int = 0) -> "BrainFaxMailView":
-        payload = await self.governor_tools.fetch(
-            ToolRequest(ToolKind.RECENT_IMPORTS, profile=self.settings.governor_tools_profile)
-        )
+        if mode == "mail":
+            payload = await self.governor_tools.mail_messages(limit=50)
+            items = _mail_message_results(payload)
+        else:
+            payload = await self.governor_tools.fetch(
+                ToolRequest(ToolKind.RECENT_IMPORTS, profile=self.settings.governor_tools_profile)
+            )
+            items = _fax_mail_results(payload, mode="outgoing" if mode == "outgoing_fax" else "incoming")
         return BrainFaxMailView(
             self.governor_tools,
             self.actor_id,
             self.settings,
-            _fax_mail_results(payload, mode=mode),
+            items,
             mode=mode,
             page=page,
         )
@@ -2951,25 +2960,25 @@ class BrainFaxMailSelect(discord.ui.Select):
         self.parent_view = parent
         options = [
             discord.SelectOption(
-                label=_import_option_label(item),
-                description=_import_option_description(item) or None,
+                label=_fax_mail_option_label(item),
+                description=_fax_mail_option_description(item) or None,
                 value=str(index),
             )
-            for index, item in enumerate(parent.page_imports)
+            for index, item in enumerate(parent.page_items)
         ]
         start = parent.page * FAX_MAIL_PAGE_SIZE + 1
-        end = start + len(parent.page_imports) - 1
-        label = "Outgoing Fax" if parent.mode == "outgoing" else "Incoming Fax Mail"
+        end = start + len(parent.page_items) - 1
+        label = _fax_mail_mode_label(parent.mode)
         super().__init__(placeholder=f"{label} {start}-{end}", min_values=1, max_values=1, options=options, row=0)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         try:
-            item = self.parent_view.page_imports[int(self.values[0])]
+            item = self.parent_view.page_items[int(self.values[0])]
         except (IndexError, TypeError, ValueError) as exc:
             LOGGER.warning("Fax Mail selection failed: %s", exc)
             await interaction.response.send_message(_tool_failed("Fax Mail 선택"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
-        await interaction.response.send_message(_render_import_selection(item), ephemeral=True, allowed_mentions=NO_MENTIONS)
+        await interaction.response.send_message(_render_fax_mail_selection(item), ephemeral=True, allowed_mentions=NO_MENTIONS)
 
 
 class BrainFaxMailPageButton(discord.ui.Button):
@@ -2998,12 +3007,14 @@ class BrainFaxMailPageStatusButton(discord.ui.Button):
 
 
 class BrainFaxMailModeButton(discord.ui.Button):
-    def __init__(self, label: str) -> None:
+    def __init__(self, label: str, mode: str, *, active: bool = False) -> None:
         super().__init__(
             label=label,
-            style=discord.ButtonStyle.primary if label == "Incoming" else discord.ButtonStyle.secondary,
+            style=discord.ButtonStyle.primary if active else discord.ButtonStyle.secondary,
             row=2,
+            disabled=active,
         )
+        self.mode = mode
 
     async def callback(self, interaction: discord.Interaction) -> None:
         view = self.view
@@ -3011,9 +3022,8 @@ class BrainFaxMailModeButton(discord.ui.Button):
             await interaction.response.send_message("View unavailable.", ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         await interaction.response.defer()
-        mode = "incoming" if self.label == "Incoming" else "outgoing"
         try:
-            next_view = await view.refresh(mode=mode, page=0)
+            next_view = await view.refresh(mode=self.mode, page=0)
         except GovernorToolError as exc:
             LOGGER.warning("Fax Mail mode switch failed: %s", exc)
             await interaction.followup.send(_tool_failed("Fax Mail 불러오기"), ephemeral=True, allowed_mentions=NO_MENTIONS)
@@ -3868,6 +3878,11 @@ def _fax_mail_results(payload: dict[str, Any], *, mode: str) -> list[dict[str, A
     return [item for item in imports if _import_kind(item) == "fax" and _import_direction(item) != "outgoing"]
 
 
+def _mail_message_results(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    value = payload.get("messages")
+    return [dict(item) for item in value if isinstance(item, dict)] if isinstance(value, list) else []
+
+
 async def _active_control_month_file_for(
     governor_tools: GovernorToolClient | None,
     *,
@@ -3927,24 +3942,63 @@ def _render_import_selection(item: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _render_fax_mail_selection(item: dict[str, Any]) -> str:
+    if _import_kind(item) != "mail":
+        return _render_import_selection(item)
+    title = str(item.get("subject") or item.get("title") or "(No subject)").strip() or "(No subject)"
+    sender = str(item.get("sender") or "").strip()
+    mailbox = str(item.get("mailbox") or "").strip()
+    received = str(item.get("receivedAt") or "").strip()
+    preview = str(item.get("preview") or "").strip()
+    lines = [f"## {_safe_discord_line(title)}"]
+    for label, value in (("date", received), ("from", sender), ("folder", mailbox)):
+        if value:
+            lines.append(f"- {label}: {_safe_discord_line(value)}")
+    if preview:
+        lines.append("")
+        lines.append(_safe_discord_line(preview)[:1000])
+    return "\n".join(lines)[:1900]
+
+
 def _render_fax_mail_service_message(imports: list[dict[str, Any]], *, mode: str, page: int) -> str:
     start = page * FAX_MAIL_PAGE_SIZE
     page_imports = imports[start : start + FAX_MAIL_PAGE_SIZE]
     showing_start = start + 1 if page_imports else 0
     showing_end = start + len(page_imports)
-    subtitle = "Outgoing Fax" if mode == "outgoing" else "Incoming Fax Mail"
-    empty = "no outgoing fax" if mode == "outgoing" else "no incoming fax"
+    subtitle = _fax_mail_mode_label(mode)
+    empty = {"incoming_fax": "no incoming fax", "outgoing_fax": "no outgoing fax", "mail": "no target mail"}.get(mode, "no items")
     lines = [f"## {FAX_MAIL_TITLE}", f"### {subtitle}", f"- total: {len(imports)}"]
     if page_imports:
         lines.append(f"- showing: {showing_start}-{showing_end}")
     for item in page_imports:
-        title = _safe_discord_line(str(item.get("title") or "Import").strip() or "Import")
+        title = _safe_discord_line(str(item.get("subject") or item.get("title") or "Import").strip() or "Import")
         detail = _safe_discord_line(str(item.get("detail") or "").strip())
         suffix = f" · {detail}" if detail else ""
         lines.append(f"- {title}{suffix}")
     if not page_imports:
         lines.append(f"- {empty}")
     return "\n".join(lines)
+
+
+def _fax_mail_mode_label(mode: str) -> str:
+    return {
+        "incoming_fax": "Incoming Fax",
+        "outgoing_fax": "Outgoing Fax",
+        "mail": "Mail",
+    }.get(mode, "Incoming Fax")
+
+
+def _fax_mail_option_label(item: dict[str, Any]) -> str:
+    return _compact_select_text(str(item.get("subject") or item.get("title") or "Import"), 100)
+
+
+def _fax_mail_option_description(item: dict[str, Any]) -> str:
+    if _import_kind(item) == "mail":
+        received = str(item.get("receivedAt") or "").strip()[:16]
+        sender = str(item.get("sender") or "").strip()
+        mailbox = str(item.get("mailbox") or "").strip()
+        return _compact_select_text(" · ".join(part for part in (received, sender, mailbox) if part), 100)
+    return _import_option_description(item)
 
 
 def _render_active_task_selection(title: str, task: dict[str, Any], *, supplies: bool) -> str:

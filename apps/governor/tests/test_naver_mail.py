@@ -124,6 +124,23 @@ def config(state_path: Path) -> NaverMailConfig:
     )
 
 
+def target_config(state_path: Path) -> NaverMailConfig:
+    return NaverMailConfig(
+        enabled=True,
+        host="imap.naver.com",
+        port=993,
+        username="user",
+        password="password",
+        folder_roots=("세무사", "영덕군보건소"),
+        state_path=state_path,
+        poll_seconds=60,
+        timeout_seconds=20,
+        max_attachment_bytes=20 * 1024 * 1024,
+        preview_characters=2200,
+        mark_existing_on_first_run=True,
+    )
+
+
 class NaverMailTests(unittest.TestCase):
     def test_modified_utf7_round_trip(self) -> None:
         value = "각종공문/하위 폴더 & test"
@@ -157,6 +174,25 @@ class NaverMailTests(unittest.TestCase):
         self.assertEqual([item.filename for item in attachments], ["notice.pdf"])
         self.assertTrue(all(server.last_client.readonly_values))
         self.assertEqual(server.fetch_specs, ["(BODY.PEEK[])"])
+
+    def test_list_messages_reads_configured_mailboxes_by_date(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            server = FakeMailboxServer()
+            child = encode_modified_utf7("각종공문/영덕군보건소")
+            tax = encode_modified_utf7("세무사")
+            server.mailboxes[child]["messages"][2] = server.message("영덕군 안내")
+            server.mailboxes[tax]["messages"][3] = server.message("세무사 안내")
+            poller = NaverMailPoller(target_config(Path(tmp) / "state.json"), server.factory)
+
+            payload = poller.list_messages(limit=10)
+
+        self.assertEqual(payload["mailboxCount"], 2)
+        self.assertEqual(payload["folders"], ["세무사", "영덕군보건소"])
+        self.assertEqual(
+            [item["subject"] for item in payload["messages"]],
+            ["영덕군 안내", "세무사 안내"],
+        )
+        self.assertTrue(all(server.last_client.readonly_values))
 
     def test_progress_prevents_duplicate_summary_after_attachment_retry(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

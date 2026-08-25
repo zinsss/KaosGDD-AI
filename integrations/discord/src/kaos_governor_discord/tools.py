@@ -221,6 +221,7 @@ class BrainToolServer:
         calendar_refresh_callback: Callable[[], Awaitable[None]] | None = None,
         import_status_provider: Callable[[], Mapping[str, object]] | None = None,
         import_items_provider: Callable[[], list[Mapping[str, object]]] | None = None,
+        mail_messages_provider: Callable[[int], Mapping[str, object]] | None = None,
         today_provider: Callable[[], date] | None = None,
         durable_store: MemoryDurableGovernorStore | None = None,
         imaging_second_look: ImagingSecondLookClient | None = None,
@@ -236,6 +237,7 @@ class BrainToolServer:
         self._calendar_refresh_callback = calendar_refresh_callback or task_refresh_callback
         self._import_status_provider = import_status_provider
         self._import_items_provider = import_items_provider
+        self._mail_messages_provider = mail_messages_provider
         self._today_provider = today_provider or date.today
         self._durable = durable_store or MemoryDurableGovernorStore()
         self._imaging_second_look_client = imaging_second_look or ImagingSecondLookClient(ImagingSecondLookConfig())
@@ -264,6 +266,7 @@ class BrainToolServer:
         app.router.add_get("/tools/calendar/week", self._calendar_week)
         app.router.add_get("/tools/calendar/month-image", self._calendar_month_image)
         app.router.add_get("/tools/imports/recent", self._recent_imports)
+        app.router.add_get("/tools/mail/naver/list", self._list_naver_mail)
         app.router.add_get("/tools/tasks/active", self._active_tasks)
         app.router.add_get("/tools/tasks/completed", self._completed_tasks)
         app.router.add_get("/tools/memos/list", self._list_memos)
@@ -420,6 +423,32 @@ class BrainToolServer:
                 "count": len(imports),
                 "imports": imports,
                 "source": "governor-runtime-items" if detailed_imports else "governor-runtime-status",
+            }
+        )
+
+    async def _list_naver_mail(self, request: web.Request) -> web.Response:
+        profile = _profile(request)
+        current = _request_date(request, default=self._today_provider())
+        limit = _limit(request, default=50)
+        if self._mail_messages_provider is None:
+            return web.json_response({"error": "mail_list_disabled"}, status=503)
+        try:
+            payload = await asyncio.to_thread(self._mail_messages_provider, limit)
+        except Exception as exc:
+            LOGGER.warning("Naver mail list failed: %s", exc)
+            return web.json_response({"error": "mail_list_failed"}, status=502)
+        messages = payload.get("messages") if isinstance(payload, Mapping) else None
+        normalized = [_normalize_mail_list_item(item) for item in messages if isinstance(item, Mapping)] if isinstance(messages, list) else []
+        return web.json_response(
+            {
+                "date": current.isoformat(),
+                "profile": profile,
+                "count": len(normalized),
+                "totalCount": len(normalized),
+                "mailboxCount": int(payload.get("mailboxCount") or 0) if isinstance(payload, Mapping) else 0,
+                "folders": list(payload.get("folders") or []) if isinstance(payload, Mapping) else [],
+                "messages": normalized,
+                "source": "naver-imap-live",
             }
         )
 
@@ -2465,6 +2494,27 @@ def _normalize_recent_import_item(item: Mapping[str, object]) -> dict[str, objec
     return payload
 
 
+def _normalize_mail_list_item(item: Mapping[str, object]) -> dict[str, object]:
+    subject = str(item.get("subject") or item.get("title") or "(No subject)").strip() or "(No subject)"
+    sender = str(item.get("sender") or "").strip()
+    mailbox = str(item.get("mailbox") or item.get("folder") or "").strip()
+    received_at = str(item.get("receivedAt") or item.get("received_at") or "").strip()
+    detail = " · ".join(part for part in (received_at[:16], sender, mailbox) if part)
+    return {
+        "kind": "mail",
+        "direction": "incoming",
+        "title": subject[:120],
+        "subject": subject[:120],
+        "sender": sender[:120],
+        "mailbox": mailbox[:120],
+        "receivedAt": received_at[:120],
+        "preview": str(item.get("preview") or "").strip()[:1000],
+        "attachmentCount": _safe_int(item.get("attachmentCount")),
+        "uid": _safe_int(item.get("uid")),
+        "detail": detail[:180],
+    }
+
+
 def _merge_recent_import_payloads(
     detailed: list[dict[str, object]],
     summary: list[dict[str, object]],
@@ -2488,6 +2538,13 @@ def _mapping_value(payload: Mapping[str, object], key: str) -> Mapping[str, obje
 def _int_value(payload: Mapping[str, object], key: str) -> int:
     try:
         return max(0, int(payload.get(key, 0)))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _safe_int(value: object) -> int:
+    try:
+        return max(0, int(value or 0))
     except (TypeError, ValueError):
         return 0
 

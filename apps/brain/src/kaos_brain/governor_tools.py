@@ -83,6 +83,8 @@ class GovernorToolClient:
             return await self.calendar_month_image(profile=request.profile)
         if request.kind is ToolKind.RECENT_IMPORTS:
             return await self._get("/tools/imports/recent", {"profile": self._profile(request.profile)})
+        if request.kind is ToolKind.MAIL_MESSAGES:
+            return await self.mail_messages(limit=50)
         if request.kind is ToolKind.ACTIVE_TASKS:
             return await self._get("/tools/tasks/active", self._task_params(request.profile, request.collection_id))
         if request.kind is ToolKind.COMPLETED_TASKS:
@@ -104,6 +106,9 @@ class GovernorToolClient:
         if query:
             params["query"] = query
         return await self._get(path, params)
+
+    async def mail_messages(self, *, limit: int = 50) -> dict[str, Any]:
+        return await self._get("/tools/mail/naver/list", {"limit": str(limit)})
 
     async def completed_tasks(self, request: ToolRequest, *, limit: int = 25) -> dict[str, Any]:
         params = {**self._task_params(request.profile, request.collection_id), "limit": str(limit)}
