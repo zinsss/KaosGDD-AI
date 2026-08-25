@@ -951,6 +951,11 @@ def _render_memos(query: str, payload: dict[str, Any]) -> str:
     if result_count > len(results):
         lines.append(f"- Showing first {len(results)} results.")
     if len(results) > 1:
+        lines.append("### Memos")
+        for index, item in enumerate(results[:SEARCH_RESULT_LIMIT], start=1):
+            tags = _memo_tags_text(item)
+            suffix = f" · {tags}" if tags else ""
+            lines.append(_truncate(f"{index}. {_memo_title(item)}{suffix}", 180))
         return "\n".join(lines)
     lines.extend(_memo_line(item) for item in results[:5])
     return "\n".join(lines)
@@ -1032,6 +1037,13 @@ def _memo_line(item: dict[str, Any]) -> str:
 
 
 def _memo_title(item: dict[str, Any]) -> str:
+    for source in (str(item.get("content") or ""), str(item.get("snippet") or "")):
+        for raw in source.splitlines():
+            stripped = raw.strip()
+            if stripped.startswith("#"):
+                title = stripped.lstrip("#").strip()
+                if title:
+                    return _truncate(title, 80)
     for source in (str(item.get("title") or ""), str(item.get("content") or ""), str(item.get("snippet") or "")):
         for raw in source.splitlines():
             title = raw.strip().lstrip("#").strip()

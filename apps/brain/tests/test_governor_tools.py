@@ -167,7 +167,7 @@ class GovernorToolRenderingTests(unittest.TestCase):
         self.assertIn("Searched..\n## rustdesk\n1 results in 1 memos", context)
         self.assertIn("### Rustdesk\n# Rustdesk\nUse Tailscale.", context)
 
-    def test_render_multiple_memos_context_uses_compact_summary(self) -> None:
+    def test_render_multiple_memos_context_lists_titles(self) -> None:
         context = render_tool_context(
             ToolRequest(ToolKind.MEMO_SEARCH, "training"),
             {
@@ -181,7 +181,9 @@ class GovernorToolRenderingTests(unittest.TestCase):
             },
         )
         self.assertIn("Searched..\n## training\n2 results in 213 memos", context)
-        self.assertNotIn("### Online training", context)
+        self.assertIn("### Memos", context)
+        self.assertIn("1. Online training", context)
+        self.assertIn("2. Long mandatory training list", context)
         self.assertNotIn("Memos search:", context)
 
     def test_memo_option_description_stays_within_discord_limit(self) -> None:
@@ -210,6 +212,17 @@ class GovernorToolRenderingTests(unittest.TestCase):
 
         self.assertEqual(memo_option_label(item), "Online training ID/PW")
         self.assertEqual(memo_option_description(item), "#education, #work")
+
+    def test_memo_dropdown_prefers_h1_over_payload_title(self) -> None:
+        item = {
+            "name": "memos/abc",
+            "title": "Fallback title",
+            "snippet": "# H1 memo title\nmatched body text",
+            "tags": ["education"],
+        }
+
+        self.assertEqual(memo_option_label(item), "H1 memo title")
+        self.assertEqual(memo_option_description(item), "#education")
 
     def test_render_opened_memo_uses_original_markdown(self) -> None:
         content = render_memo_opened(
