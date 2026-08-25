@@ -52,6 +52,13 @@ class ToolIntentTests(unittest.TestCase):
         self.assertEqual(request.query, "부산")
         self.assertEqual(request.collection_id, "busan")
 
+    def test_weather_overseas_location_sets_lookup_city(self) -> None:
+        request = parse_tool_request("런던 날씨 알려줘")
+        assert request is not None
+        self.assertEqual(request.kind, ToolKind.WEATHER)
+        self.assertEqual(request.query, "런던")
+        self.assertEqual(request.collection_id, "london")
+
     def test_weather_current_location_uses_default_city(self) -> None:
         request = parse_tool_request("여기 날씨는?")
         assert request is not None
@@ -60,11 +67,11 @@ class ToolIntentTests(unittest.TestCase):
         self.assertEqual(request.collection_id, "")
 
     def test_weather_unknown_location_is_not_treated_as_default(self) -> None:
-        request = parse_tool_request("런던 날씨 알려줘")
+        request = parse_tool_request("베를린 날씨 알려줘")
         assert request is not None
         self.assertEqual(request.kind, ToolKind.WEATHER)
-        self.assertEqual(request.query, "런던")
-        self.assertEqual(request.collection_id, "unsupported:런던")
+        self.assertEqual(request.query, "베를린")
+        self.assertEqual(request.collection_id, "unsupported:베를린")
 
     def test_active_task_korean_request(self) -> None:
         request = parse_tool_request("뭐 해야 돼?")
