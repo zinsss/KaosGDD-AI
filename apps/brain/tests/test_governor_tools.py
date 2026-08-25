@@ -95,12 +95,12 @@ class GovernorToolRenderingTests(unittest.TestCase):
         )
         self.assertEqual(
             context,
-            "## 포항 날씨\n"
+            "## 포항 날씨 • 2026-08-14\n"
             "- ⛅️ 23-28℃\n"
-            "- 강수확률 70% · 강수량 2.5mm · 습도 81% · 바람 13.2km/h\n"
+            "- 강수확률 70% · 강수량 2.5mm · 바람 13.2km/h\n"
             "### 시간대\n"
-            "- 오전 🌧️ 23-25℃ · 강수확률 80% · 강수량 1.2mm · 습도 88% · 바람 11km/h\n"
-            "- 2026-08-14",
+            "- 오전 🌧️ 23-25℃\n"
+            "· 강수확률 80% · 강수량 1.2mm · 습도 88% · 바람 11km/h",
         )
 
     def test_render_empty_tasks_context(self) -> None:

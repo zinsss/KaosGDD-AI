@@ -832,11 +832,13 @@ def _render_weather(request: ToolRequest, payload: dict[str, Any]) -> str:
     date_text = str(payload.get("date") or "").strip()
     location = request.query.strip() or "날씨"
     title = f"## {location} 날씨" if location != "날씨" else "## 날씨"
+    if date_text:
+        title = f"{title} • {date_text}"
     weather = payload.get("weather")
     if not isinstance(weather, dict) or not weather.get("summary"):
         return f"{title}\n- 조회 결과 없음"
     lines = [title, f"- {weather['summary']}"]
-    detail = _weather_detail_line(weather)
+    detail = _weather_detail_line(weather, include_humidity=False)
     if detail:
         lines.append(f"- {detail}")
     dayparts = weather.get("dayparts")
@@ -844,15 +846,12 @@ def _render_weather(request: ToolRequest, payload: dict[str, Any]) -> str:
         lines.append("### 시간대")
         for part in dayparts:
             if isinstance(part, dict):
-                part_line = _weather_daypart_line(part)
-                if part_line:
-                    lines.append(f"- {part_line}")
-    if date_text:
-        lines.append(f"- {date_text}")
+                part_lines = _weather_daypart_lines(part)
+                lines.extend(part_lines)
     return "\n".join(lines)
 
 
-def _weather_detail_line(weather: dict[str, Any]) -> str:
+def _weather_detail_line(weather: dict[str, Any], *, include_humidity: bool = True) -> str:
     parts = []
     precip_prob = _compact_weather_number(weather.get("precipitationProbability"))
     precip = _compact_weather_number(weather.get("precipitationMm"))
@@ -862,20 +861,25 @@ def _weather_detail_line(weather: dict[str, Any]) -> str:
         parts.append(f"강수확률 {precip_prob}%")
     if precip:
         parts.append(f"강수량 {precip}mm")
-    if humidity:
+    if include_humidity and humidity:
         parts.append(f"습도 {humidity}%")
     if wind:
         parts.append(f"바람 {wind}km/h")
     return " · ".join(parts)
 
 
-def _weather_daypart_line(part: dict[str, Any]) -> str:
+def _weather_daypart_lines(part: dict[str, Any]) -> list[str]:
     label = _weather_daypart_label(str(part.get("label") or ""))
     glyph = str(part.get("glyph") or "").strip()
     temp = _weather_temp_range(part)
     details = _weather_detail_line(part)
     head = " ".join(value for value in (label, glyph, temp) if value)
-    return f"{head} · {details}" if details else head
+    if not head:
+        return []
+    lines = [f"- {head}"]
+    if details:
+        lines.append(f"· {details}")
+    return lines
 
 
 def _weather_daypart_label(label: str) -> str:

@@ -135,7 +135,7 @@ class BrainToolResponseTests(unittest.IsolatedAsyncioTestCase):
             actor_id=200,
         )
 
-        self.assertEqual(reply, "## 포항 날씨\n- ⛅️ 23-28℃\n- 강수확률 70% · 습도 81% · 바람 13.2km/h\n- 2026-08-14")
+        self.assertEqual(reply, "## 포항 날씨 • 2026-08-14\n- ⛅️ 23-28℃\n- 강수확률 70% · 바람 13.2km/h")
         self.assertIsNone(view)
 
     async def test_single_memo_search_opens_original_memo_with_actions(self) -> None:
