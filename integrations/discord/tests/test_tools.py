@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -13,7 +13,7 @@ from aiohttp.test_utils import TestClient, TestServer
 from kaos_governor import MemoryDurableGovernorStore
 from kaos_governor.documents import PaperlessDocument, PaperlessSearchPage, PaperlessSearchResult, PaperlessTag
 from kaos_governor.memos import Memo, MemoSearchPage, MemoSearchResult
-from kaos_governor_discord.tools import BrainToolServer, ImagingSecondLookClient, ImagingSecondLookConfig
+from kaos_governor_discord.tools import BrainToolServer, ImagingSecondLookClient, ImagingSecondLookConfig, kst_today
 
 
 class FakeCalendarAdapter:
@@ -139,6 +139,11 @@ class FakeCalendarAdapter:
         self.deleted.append((profile, uid, collection_id))
         self.tasks = [task for task in self.tasks if task.get("uid") != uid]
         return {"uid": uid}
+
+
+class TimezoneTests(unittest.TestCase):
+    def test_kst_today_uses_korea_date_when_container_is_utc_previous_day(self) -> None:
+        self.assertEqual(kst_today(datetime(2026, 8, 25, 23, 0, tzinfo=timezone.utc)), date(2026, 8, 26))
 
 
 class FakeMemos:

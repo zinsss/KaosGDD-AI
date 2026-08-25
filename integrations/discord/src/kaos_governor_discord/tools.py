@@ -5,7 +5,7 @@ import base64
 import binascii
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 import hashlib
 import hmac
 import json
@@ -28,6 +28,14 @@ LOGGER = logging.getLogger(__name__)
 SECOND_LOOK_RATE_LIMIT_WINDOW = timedelta(minutes=10)
 SECOND_LOOK_RATE_LIMIT_COUNT = 6
 SECOND_LOOK_RESPONSE_CACHE_TTL = timedelta(minutes=30)
+KST = timezone(timedelta(hours=9), "KST")
+
+
+def kst_today(now: datetime | None = None) -> date:
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    return current.astimezone(KST).date()
 
 
 @dataclass(frozen=True)
@@ -238,7 +246,7 @@ class BrainToolServer:
         self._import_status_provider = import_status_provider
         self._import_items_provider = import_items_provider
         self._mail_messages_provider = mail_messages_provider
-        self._today_provider = today_provider or date.today
+        self._today_provider = today_provider or kst_today
         self._durable = durable_store or MemoryDurableGovernorStore()
         self._imaging_second_look_client = imaging_second_look or ImagingSecondLookClient(ImagingSecondLookConfig())
         self._second_look_rate: dict[str, list[datetime]] = {}
