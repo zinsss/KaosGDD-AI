@@ -3503,23 +3503,23 @@ h3 {
 }
 
 .rounyTimelineHour i:nth-child(1) {
-  top: 8px;
+  top: 16.6667%;
 }
 
 .rounyTimelineHour i:nth-child(2) {
-  top: 16px;
+  top: 33.3333%;
 }
 
 .rounyTimelineHour i:nth-child(3) {
-  top: 24px;
+  top: 50%;
 }
 
 .rounyTimelineHour i:nth-child(4) {
-  top: 32px;
+  top: 66.6667%;
 }
 
 .rounyTimelineHour i:nth-child(5) {
-  top: 40px;
+  top: 83.3333%;
 }
 
 .rounyTimelineDropMarker {
