@@ -225,6 +225,17 @@ class GovernorToolRenderingTests(unittest.TestCase):
         self.assertEqual(memo_option_label(item), "온라인 의무교육 ID/PW")
         self.assertEqual(memo_option_description(item), "#의무교육, #아이디, #직원")
 
+    def test_memo_dropdown_title_ignores_flattened_bullet_body(self) -> None:
+        item = {
+            "name": "memos/abc",
+            "title": "영해 선한 가정의학과의원 기본정보 * 사업자 등록 번호: 454-92-00293 * 주소: 경북 영덕군",
+            "snippet": "영해 선한 가정의학과의원 기본정보 * 사업자 등록 번호: 454-92-00293 * 주소: 경북 영덕군",
+            "tags": ["영해선한가정의학과", "기본정보", "YHSHFM"],
+        }
+
+        self.assertEqual(memo_option_label(item), "영해 선한 가정의학과의원 기본정보")
+        self.assertEqual(memo_option_description(item), "#영해선한가정의학과, #기본정보, #YHSHFM")
+
     def test_memo_dropdown_prefers_h1_over_payload_title(self) -> None:
         item = {
             "name": "memos/abc",

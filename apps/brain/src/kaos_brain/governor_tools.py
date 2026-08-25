@@ -1061,7 +1061,7 @@ def _clean_memo_title_candidate(value: str) -> str:
         if title.startswith(prefix):
             title = title[len(prefix) :].strip()
             break
-    for marker in (" ### ", " ## ", " #"):
+    for marker in (" ### ", " ## ", " * ", " #"):
         if marker in title:
             title = title.split(marker, 1)[0].strip()
     return title.strip()
