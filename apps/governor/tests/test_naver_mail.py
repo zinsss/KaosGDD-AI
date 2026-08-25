@@ -97,7 +97,10 @@ class FakeIMAP:
         if command == "fetch":
             self.last_fetch_spec = args[1]
             self.server.fetch_specs.append(args[1])
-            return "OK", [(b"message", mailbox["messages"][int(args[0])])]
+            raw = mailbox["messages"][int(args[0])]
+            if args[1] == "(BODY.PEEK[HEADER])":
+                raw = raw.split(b"\r\n\r\n", 1)[0] + b"\r\n\r\n"
+            return "OK", [(b"message", raw)]
         raise AssertionError(command)
 
     def close(self):
@@ -193,6 +196,7 @@ class NaverMailTests(unittest.TestCase):
             ["영덕군 안내", "세무사 안내"],
         )
         self.assertTrue(all(server.last_client.readonly_values))
+        self.assertEqual(server.fetch_specs, ["(BODY.PEEK[HEADER])", "(BODY.PEEK[HEADER])"])
 
     def test_progress_prevents_duplicate_summary_after_attachment_retry(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

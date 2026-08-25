@@ -318,6 +318,19 @@ def parse_message(raw: bytes, mailbox: str, uid: int, preview_characters: int = 
     )
 
 
+def parse_message_header(raw: bytes, mailbox: str, uid: int) -> MailMessage:
+    message = BytesParser(policy=policy.default).parsebytes(raw)
+    return MailMessage(
+        mailbox=mailbox,
+        uid=uid,
+        sender=format_sender(message.get("from", "")),
+        subject=str(message.get("subject", "")).strip() or "(No subject)",
+        preview="",
+        attachments=(),
+        received_at=format_received_at(message.get("date", "")),
+    )
+
+
 class NaverMailPoller:
     def __init__(self, config: NaverMailConfig, imap_factory=None) -> None:
         self.config = config
@@ -401,11 +414,13 @@ class NaverMailPoller:
             mailboxes = discover_mailboxes(client, self.config.folder_roots)
             mailbox_count = len(mailboxes)
             for mailbox in mailboxes:
+                if len(messages) >= limit:
+                    break
                 status, _data = client.select(quoted_mailbox(mailbox.raw_name), readonly=True)
                 if status != "OK":
                     raise NaverMailError("imap_select_failed")
                 for uid in reversed(self._search_uids(client)):
-                    messages.append(self._fetch_message(client, mailbox, uid))
+                    messages.append(self._fetch_message_header(client, mailbox, uid))
                     if len(messages) >= limit:
                         break
                 client.close()
@@ -507,6 +522,19 @@ class NaverMailPoller:
         if not raw:
             raise NaverMailError("imap_message_empty")
         return parse_message(raw, mailbox.display_name, uid, self.config.preview_characters)
+
+    def _fetch_message_header(self, client, mailbox: Mailbox, uid: int) -> MailMessage:
+        status, rows = client.uid("fetch", str(uid), "(BODY.PEEK[HEADER])")
+        if status != "OK":
+            raise NaverMailError("imap_fetch_message_failed")
+        raw = b"".join(
+            row[1]
+            for row in rows or []
+            if isinstance(row, tuple) and len(row) > 1 and isinstance(row[1], bytes)
+        )
+        if not raw:
+            raise NaverMailError("imap_message_empty")
+        return parse_message_header(raw, mailbox.display_name, uid)
 
     def _deliver(
         self,
