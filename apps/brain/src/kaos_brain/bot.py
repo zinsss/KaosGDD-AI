@@ -29,6 +29,7 @@ from .governor_tools import (
     document_public_url,
     document_option_description,
     document_option_label,
+    memo_public_url,
     memo_option_description,
     memo_option_label,
     render_memo_create_completed,
