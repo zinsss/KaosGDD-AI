@@ -744,15 +744,13 @@ def render_memo_deleted(content: str, deleted_at: str) -> str:
 
 def render_document_opened(query: str, item: dict[str, Any]) -> str:
     title = document_display_title(item, 80)
-    created = str(item.get("created") or item.get("createdDate") or "").strip()
-    correspondent = str(item.get("correspondent") or "").strip()
-    details = [value for value in (created[:10], correspondent) if value]
     lines = [f"## {title}"]
-    if details:
-        lines.append(f"- {_truncate(' · '.join(details), 180)}")
-    url = str(item.get("url") or item.get("publicUrl") or "").strip()
-    if url:
-        lines.append(url)
+    tags = _document_tags_text(item)
+    if tags:
+        lines.append(f"- {tags}")
+    document_id = _document_id(item.get("id"))
+    if document_id:
+        lines.append(f"- document no `{document_id}`")
     return "\n".join(lines)[:1900]
 
 
@@ -1131,9 +1129,23 @@ def _document_line(item: dict[str, Any]) -> str:
 
 def _document_link_line(item: dict[str, Any]) -> str:
     title = document_display_title(item, 120)
-    url = str(item.get("url") or item.get("publicUrl") or "").strip()
-    suffix = f" · [open]({url})" if url else ""
-    return f"- {title}{suffix}"
+    return f"- {title}"
+
+
+def _document_tags_text(item: dict[str, Any]) -> str:
+    tags = item.get("tags")
+    if not isinstance(tags, list):
+        return ""
+    cleaned: list[str] = []
+    for tag in tags:
+        if isinstance(tag, dict):
+            value = str(tag.get("name") or tag.get("slug") or "").strip()
+        else:
+            value = str(tag).strip()
+        value = value.lstrip("#").strip()
+        if value and value not in cleaned:
+            cleaned.append(value)
+    return " ".join(f"#{tag}" for tag in cleaned)
 
 
 def _memo_id(name: str) -> str:

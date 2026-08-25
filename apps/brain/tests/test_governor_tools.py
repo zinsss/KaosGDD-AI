@@ -323,12 +323,13 @@ class GovernorToolRenderingTests(unittest.TestCase):
                 "filename": "receipt.pdf",
                 "correspondent": "Clinic",
                 "url": "https://paperless.example/documents/42/details",
+                "tags": ["medical", {"name": "receipt"}],
             },
         )
 
         self.assertEqual(
             content,
-            "## Insurance receipt\n- 2026-08-14 · Clinic\nhttps://paperless.example/documents/42/details",
+            "## Insurance receipt\n- #medical #receipt\n- document no `42`",
         )
 
     def test_document_display_title_uses_filename_only_as_fallback(self) -> None:
@@ -377,7 +378,8 @@ class GovernorToolRenderingTests(unittest.TestCase):
         )
         self.assertIn("Searched..\n## insurance\n13 results in 213 documents", context)
         self.assertIn("Page 1 / 7", context)
-        self.assertIn("- Insurance receipt · [open](https://paperless.example/documents/42/details)", context)
+        self.assertIn("- Insurance receipt", context)
+        self.assertNotIn("[open]", context)
         self.assertIn("- Insurance form", context)
         self.assertNotIn("### Insurance receipt", context)
         self.assertNotIn("Document search:", context)

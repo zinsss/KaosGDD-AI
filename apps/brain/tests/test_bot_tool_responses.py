@@ -35,6 +35,7 @@ class DocumentGovernorTools:
                     "filename": "receipt.pdf",
                     "correspondent": "Clinic",
                     "url": "https://paperless.example/documents/42/details",
+                    "tags": ["medical", {"name": "receipt"}],
                     "full": True,
                 }
             ],
@@ -138,7 +139,10 @@ class BrainToolResponseTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(view)
 
     async def test_single_memo_search_opens_original_memo_with_actions(self) -> None:
-        brain = SimpleNamespace(governor_tools=MemoGovernorTools())
+        brain = SimpleNamespace(
+            governor_tools=MemoGovernorTools(),
+            settings=SimpleNamespace(memos_public_url="https://memos.example"),
+        )
 
         reply, view = await BrainBot._answer_with_governor_tool(  # type: ignore[arg-type]
             brain,
@@ -150,9 +154,9 @@ class BrainToolResponseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reply, "# Rustdesk\nUse Tailscale.")
         self.assertIsNotNone(view)
         assert view is not None
-        self.assertEqual([item.label for item in view.children], ["Close", "More..."])
+        self.assertEqual([item.label for item in view.children], ["Close", "More...", "Open memo"])
 
-    async def test_single_document_search_returns_link_list_window(self) -> None:
+    async def test_single_document_search_returns_plain_list_window(self) -> None:
         brain = SimpleNamespace(
             governor_tools=DocumentGovernorTools(),
             settings=SimpleNamespace(paperless_public_url="https://paperless.example"),
@@ -171,7 +175,7 @@ class BrainToolResponseTests(unittest.IsolatedAsyncioTestCase):
             "## 보험\n"
             "1 results in 1 documents\n"
             "Page 1 / 1\n"
-            "- Insurance receipt · [open](https://paperless.example/documents/42/details)",
+            "- Insurance receipt",
         )
         self.assertIsNotNone(view)
         assert view is not None

@@ -81,6 +81,7 @@ class FakeGovernorTools:
                 "title": "Insurance receipt",
                 "filename": "receipt.pdf",
                 "correspondent": "Clinic",
+                "tags": ["medical", {"name": "receipt"}],
             }
         }
 
@@ -537,10 +538,12 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         await select.callback(interaction)  # type: ignore[arg-type]
 
         calls = interaction.followup.send.await_args_list
-        self.assertEqual(calls[0].args[0], "")
-        self.assertEqual(calls[0].kwargs["embed"].title, "Paperless · ..")
-        self.assertIn("26 results in 26 documents", calls[0].kwargs["embed"].description)
-        self.assertIn("Page 1 / 3", calls[0].kwargs["embed"].description)
+        self.assertIn("Searched..", calls[0].args[0])
+        self.assertIn("## ..", calls[0].args[0])
+        self.assertIn("26 results in 26 documents", calls[0].args[0])
+        self.assertIn("Page 1 / 3", calls[0].args[0])
+        self.assertNotIn("[open]", calls[0].args[0])
+        self.assertNotIn("embed", calls[0].kwargs)
         self.assertIsInstance(calls[0].kwargs["view"], BrainDocumentSearchView)
         self.assertIn("Close", [getattr(child, "label", "") for child in calls[0].kwargs["view"].children])
         self.assertIn("Searched..", calls[1].args[0])
@@ -744,6 +747,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             200,
             "rustdesk",
             [{"name": "memos/42", "snippet": "# Rustdesk", "tags": ["server"]}],
+            memos_public_url="https://memos.example",
         )
         search_message = SimpleNamespace(id=900, edit=AsyncMock())
         view.bind_message(search_message)  # type: ignore[arg-type]
@@ -760,12 +764,9 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         interaction.response.defer.assert_awaited_once()
         content = interaction.followup.send.await_args.args[0]
         self.assertEqual(content, "# Rustdesk\nUse Tailscale.")
-        self.assertIn("view", interaction.followup.send.await_args.kwargs)
-        search_message.edit.assert_awaited_once_with(
-            content="Memos searched.",
-            view=None,
-            allowed_mentions=NO_MENTIONS,
-        )
+        opened_view = interaction.followup.send.await_args.kwargs["view"]
+        self.assertEqual([item.label for item in opened_view.children], ["Close", "More...", "Open memo"])
+        search_message.edit.assert_not_awaited()
 
     async def test_document_search_select_opens_selected_document_as_new_message(self) -> None:
         view = BrainDocumentSearchView(
@@ -790,18 +791,16 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         interaction.response.defer.assert_awaited_once()
         content = interaction.followup.send.await_args.args[0]
         self.assertIn("## Insurance receipt", content)
+        self.assertIn("- #medical #receipt", content)
+        self.assertIn("- document no `42`", content)
         self.assertNotIn("Documents search", content)
         self.assertIn("Insurance receipt", content)
         opened_view = interaction.followup.send.await_args.kwargs["view"]
         self.assertIsInstance(opened_view, BrainOpenedDocumentView)
         self.assertEqual([item.label for item in opened_view.children], ["Close", "Open document"])
-        search_message.edit.assert_awaited_once_with(
-            content="Paperless searched.",
-            view=None,
-            allowed_mentions=NO_MENTIONS,
-        )
+        search_message.edit.assert_not_awaited()
 
-    async def test_combined_paperless_button_switches_to_embed_list(self) -> None:
+    async def test_combined_paperless_button_switches_to_text_list(self) -> None:
         view = BrainCombinedSearchView(
             FakeGovernorTools(),  # type: ignore[arg-type]
             200,
@@ -824,11 +823,13 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
 
         interaction.response.edit_message.assert_awaited_once()
         kwargs = interaction.response.edit_message.await_args.kwargs
-        self.assertEqual(kwargs["content"], "")
-        self.assertEqual(kwargs["embed"].title, "Paperless · 보험")
-        self.assertIn("30 results in 30 documents", kwargs["embed"].description)
-        self.assertIn("Page 1 / 3", kwargs["embed"].description)
-        self.assertIn("[open](https://paperless.example/documents/1/details)", kwargs["embed"].fields[0].value)
+        self.assertIn("Searched..", kwargs["content"])
+        self.assertIn("## 보험", kwargs["content"])
+        self.assertIn("30 results in 30 documents", kwargs["content"])
+        self.assertIn("Page 1 / 3", kwargs["content"])
+        self.assertIn("- Document 1", kwargs["content"])
+        self.assertNotIn("[open]", kwargs["content"])
+        self.assertNotIn("embed", kwargs)
         self.assertIsInstance(kwargs["view"], BrainDocumentSearchView)
         self.assertIn("Close", [getattr(child, "label", "") for child in kwargs["view"].children])
 
@@ -860,8 +861,9 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         interaction.response.defer.assert_awaited_once()
         interaction.edit_original_response.assert_awaited_once()
         kwargs = interaction.edit_original_response.await_args.kwargs
-        self.assertIn("Page 2 / 3", kwargs["embed"].description)
-        self.assertIn("11. Document page 2", kwargs["embed"].fields[0].value)
+        self.assertIn("Page 2 / 3", kwargs["content"])
+        self.assertIn("- Document page 2", kwargs["content"])
+        self.assertNotIn("embed", kwargs)
         self.assertIsInstance(kwargs["view"], BrainDocumentSearchView)
 
     async def test_brain_search_window_shows_expired_notice_on_timeout(self) -> None:

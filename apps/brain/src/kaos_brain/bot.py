@@ -1066,7 +1066,6 @@ class BrainBot(discord.Client):
             ]
             document_payload = {**document_payload, "results": document_results}
             memo_results = search_results(memo_payload)
-            memo_results = search_results(memo_payload)
             view = (
                 BrainCombinedSearchView(
                     self.governor_tools,
@@ -1096,7 +1095,13 @@ class BrainBot(discord.Client):
             if len(results) == 1:
                 item = results[0]
                 content = render_memo_opened(tool_request.query, item)
-                view = BrainOpenedMemoView(self.governor_tools, actor_id, str(item.get("name") or ""), content)
+                view = BrainOpenedMemoView(
+                    self.governor_tools,
+                    actor_id,
+                    str(item.get("name") or ""),
+                    content,
+                    memo_public_url(_settings_value(self, "memos_public_url"), str(item.get("name") or "")),
+                )
                 return content, view
             view = (
                 BrainMemoSearchView(
@@ -1650,10 +1655,14 @@ class BrainMemoSearchSelect(discord.ui.Select):
         await _followup_with_bound_view(
             interaction,
             content,
-            view=BrainOpenedMemoView(self.parent_view.governor_tools, self.parent_view.actor_id, str(item.get("name") or ""), content),
+            view=BrainOpenedMemoView(
+                self.parent_view.governor_tools,
+                self.parent_view.actor_id,
+                str(item.get("name") or ""),
+                content,
+                memo_public_url(self.parent_view.memos_public_url, str(item.get("name") or "")),
+            ),
         )
-        await self.parent_view.delete_message()
-        self.parent_view.stop()
 
 
 class BrainSearchCloseButton(discord.ui.Button):
@@ -1749,10 +1758,14 @@ class BrainCombinedMemoSearchSelect(discord.ui.Select):
         await _followup_with_bound_view(
             interaction,
             content,
-            view=BrainOpenedMemoView(self.parent_view.governor_tools, self.parent_view.actor_id, str(item.get("name") or ""), content),
+            view=BrainOpenedMemoView(
+                self.parent_view.governor_tools,
+                self.parent_view.actor_id,
+                str(item.get("name") or ""),
+                content,
+                memo_public_url(self.parent_view.memos_public_url, str(item.get("name") or "")),
+            ),
         )
-        await self.parent_view.delete_message()
-        self.parent_view.stop()
 
 
 class BrainCombinedDocumentSearchSelect(discord.ui.Select):
@@ -1788,8 +1801,6 @@ class BrainCombinedDocumentSearchSelect(discord.ui.Select):
                 document_public_url(self.parent_view.paperless_public_url, item.get("id")) if "item" in locals() else "",
             ),
         )
-        await self.parent_view.delete_message()
-        self.parent_view.stop()
 
 
 class BrainCombinedSearchFullButton(discord.ui.Button):
@@ -1816,8 +1827,7 @@ class BrainCombinedSearchFullButton(discord.ui.Button):
             )
             view.bind_message(interaction.message)  # type: ignore[arg-type]
             await interaction.response.edit_message(
-                content="",
-                embed=view.embed(),
+                content=view.content(),  # type: ignore[attr-defined]
                 view=view,
                 allowed_mentions=NO_MENTIONS,
             )
@@ -1843,39 +1853,6 @@ class BrainCombinedSearchFullButton(discord.ui.Button):
         parent.stop()
 
 
-def _document_search_embed(
-    query: str,
-    results: list[dict[str, Any]],
-    *,
-    result_count: int,
-    total_count: int,
-    page: int = 1,
-    page_size: int = SEARCH_RESULT_LIMIT,
-    paperless_public_url: str,
-) -> discord.Embed:
-    title = f"Paperless · {query or '..'}"
-    normalized_page = max(1, page)
-    normalized_page_size = max(1, page_size)
-    page_total = max(1, (result_count + normalized_page_size - 1) // normalized_page_size)
-    embed = discord.Embed(
-        title=title[:256],
-        description=f"{result_count} results in {total_count} documents\nPage {normalized_page} / {page_total}",
-        color=0x88C0D0,
-    )
-    lines: list[str] = []
-    visible_results = results[:normalized_page_size]
-    start_index = (normalized_page - 1) * normalized_page_size + 1
-    for offset, item in enumerate(visible_results):
-        label = document_option_label(item)
-        url = str(item.get("url") or item.get("publicUrl") or document_public_url(paperless_public_url, item.get("id"))).strip()
-        line = f"{start_index + offset}. {label}"
-        if url:
-            line = f"{line} · [open]({url})"
-        lines.append(_discord_embed_line(line, 180))
-    embed.add_field(name="Documents", value="\n".join(lines)[:1024] if lines else "No matching documents.", inline=False)
-    return embed
-
-
 def _linked_document_results(results: list[dict[str, Any]], paperless_public_url: str) -> list[dict[str, Any]]:
     return [
         {
@@ -1886,20 +1863,21 @@ def _linked_document_results(results: list[dict[str, Any]], paperless_public_url
     ]
 
 
-def _discord_embed_line(value: str, limit: int) -> str:
-    stripped = " ".join(value.split())
-    if len(stripped) <= limit:
-        return stripped
-    return f"{stripped[: max(0, limit - 3)].rstrip()}..."
+def _settings_value(target: object, name: str) -> str:
+    settings = getattr(target, "settings", None)
+    return str(getattr(settings, name, "") or "")
 
 
 class BrainOpenedMemoView(BrainAutoClosingView):
-    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, name: str, content: str) -> None:
+    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, name: str, content: str, url: str = "") -> None:
         super().__init__(timeout=600)
         self.governor_tools = governor_tools
         self.actor_id = actor_id
         self.name = name
         self.content = content
+        self.url = url
+        if url:
+            self.add_item(discord.ui.Button(label="Open memo", style=discord.ButtonStyle.link, url=url))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if int(interaction.user.id) == self.actor_id:
@@ -1917,19 +1895,20 @@ class BrainOpenedMemoView(BrainAutoClosingView):
 
     @discord.ui.button(label="More...", style=discord.ButtonStyle.secondary)
     async def more(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        view = BrainOpenedMemoActionsView(self.governor_tools, self.actor_id, self.name, self.content)
+        view = BrainOpenedMemoActionsView(self.governor_tools, self.actor_id, self.name, self.content, self.url)
         _bind_view_message(view, interaction.message)
         await interaction.response.edit_message(view=view, allowed_mentions=NO_MENTIONS)
         self.stop()
 
 
 class BrainOpenedMemoActionsView(BrainAutoClosingView):
-    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, name: str, content: str) -> None:
+    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, name: str, content: str, url: str = "") -> None:
         super().__init__(timeout=600)
         self.governor_tools = governor_tools
         self.actor_id = actor_id
         self.name = name
         self.content = content
+        self.url = url
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if int(interaction.user.id) == self.actor_id:
@@ -1947,26 +1926,27 @@ class BrainOpenedMemoActionsView(BrainAutoClosingView):
 
     @discord.ui.button(label="Edit", style=discord.ButtonStyle.primary)
     async def edit(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        view = BrainMemoEditConfirmView(self.governor_tools, self.actor_id, self.name, self.content)
+        view = BrainMemoEditConfirmView(self.governor_tools, self.actor_id, self.name, self.content, self.url)
         _bind_view_message(view, interaction.message)
         await interaction.response.edit_message(view=view, allowed_mentions=NO_MENTIONS)
         self.stop()
 
     @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger)
     async def delete(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        view = BrainMemoDeleteConfirmView(self.governor_tools, self.actor_id, self.name, self.content)
+        view = BrainMemoDeleteConfirmView(self.governor_tools, self.actor_id, self.name, self.content, self.url)
         _bind_view_message(view, interaction.message)
         await interaction.response.edit_message(view=view, allowed_mentions=NO_MENTIONS)
         self.stop()
 
 
 class BrainMemoEditConfirmView(BrainAutoClosingView):
-    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, name: str, content: str) -> None:
+    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, name: str, content: str, url: str = "") -> None:
         super().__init__(timeout=600)
         self.governor_tools = governor_tools
         self.actor_id = actor_id
         self.name = name
         self.content = content
+        self.url = url
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if int(interaction.user.id) == self.actor_id:
@@ -1977,12 +1957,12 @@ class BrainMemoEditConfirmView(BrainAutoClosingView):
     @discord.ui.button(label="Edit Memo", style=discord.ButtonStyle.primary)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(
-            BrainMemoEditModal(self.governor_tools, self.actor_id, self.name, self.content, interaction.message)
+            BrainMemoEditModal(self.governor_tools, self.actor_id, self.name, self.content, interaction.message, self.url)
         )
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        view = BrainOpenedMemoView(self.governor_tools, self.actor_id, self.name, self.content)
+        view = BrainOpenedMemoView(self.governor_tools, self.actor_id, self.name, self.content, self.url)
         _bind_view_message(view, interaction.message)
         await interaction.response.edit_message(view=view, allowed_mentions=NO_MENTIONS)
         self.stop()
@@ -1996,12 +1976,14 @@ class BrainMemoEditModal(discord.ui.Modal, title="Edit memo"):
         name: str,
         content: str,
         source_message: discord.Message | None,
+        url: str = "",
     ) -> None:
         super().__init__(timeout=600)
         self.governor_tools = governor_tools
         self.actor_id = actor_id
         self.name = name
         self.source_message = source_message
+        self.url = url
         self.content_input = discord.ui.TextInput(
             label="Memo",
             style=discord.TextStyle.paragraph,
@@ -2033,24 +2015,25 @@ class BrainMemoEditModal(discord.ui.Modal, title="Edit memo"):
             await interaction.followup.send(_tool_failed("메모 수정"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         if self.source_message is not None:
-            view = BrainOpenedMemoView(self.governor_tools, self.actor_id, self.name, content)
+            view = BrainOpenedMemoView(self.governor_tools, self.actor_id, self.name, content, self.url)
             await self.source_message.edit(content=content[:1900], view=view, allowed_mentions=NO_MENTIONS)
             return
         await interaction.followup.send(
             content[:1900],
-            view=BrainOpenedMemoView(self.governor_tools, self.actor_id, self.name, content),
+            view=BrainOpenedMemoView(self.governor_tools, self.actor_id, self.name, content, self.url),
             ephemeral=True,
             allowed_mentions=NO_MENTIONS,
         )
 
 
 class BrainMemoDeleteConfirmView(BrainAutoClosingView):
-    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, name: str, content: str) -> None:
+    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, name: str, content: str, url: str = "") -> None:
         super().__init__(timeout=600)
         self.governor_tools = governor_tools
         self.actor_id = actor_id
         self.name = name
         self.content = content
+        self.url = url
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if int(interaction.user.id) == self.actor_id:
@@ -2079,7 +2062,7 @@ class BrainMemoDeleteConfirmView(BrainAutoClosingView):
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        view = BrainOpenedMemoView(self.governor_tools, self.actor_id, self.name, self.content)
+        view = BrainOpenedMemoView(self.governor_tools, self.actor_id, self.name, self.content, self.url)
         await interaction.response.edit_message(view=view, allowed_mentions=NO_MENTIONS)
         self.stop()
 
@@ -2160,15 +2143,17 @@ class BrainDocumentSearchView(BrainTemporarySearchView):
     def page_total(self) -> int:
         return max(1, (self.result_count + self.page_size - 1) // self.page_size)
 
-    def embed(self) -> discord.Embed:
-        return _document_search_embed(
-            self.query,
-            self.results,
-            result_count=self.result_count,
-            total_count=self.total_count,
-            page=self.page,
-            page_size=self.page_size,
-            paperless_public_url=self.paperless_public_url,
+    def content(self) -> str:
+        return render_tool_context(
+            ToolRequest(ToolKind.DOCUMENT_SEARCH, self.query),
+            {
+                "query": self.query,
+                "results": self.results,
+                "resultCount": self.result_count,
+                "totalCount": self.total_count,
+                "page": self.page,
+                "pageSize": self.page_size,
+            },
         )
 
     def _rebuild_items(self) -> None:
@@ -2232,11 +2217,9 @@ class BrainDocumentSearchSelect(discord.ui.Select):
             content,
             view=BrainOpenedDocumentView(
                 self.parent_view.actor_id,
-                document_public_url(self.parent_view.paperless_public_url, item.get("id")),
+                document_public_url(self.parent_view.paperless_public_url, item.get("id")) if "item" in locals() else "",
             ),
         )
-        await self.parent_view.delete_message()
-        self.parent_view.stop()
 
 
 class BrainDocumentPageButton(discord.ui.Button):
@@ -2258,7 +2241,7 @@ class BrainDocumentPageButton(discord.ui.Button):
             return
         if interaction.message is not None:
             next_view.bind_message(interaction.message)
-        await interaction.edit_original_response(content="", embed=next_view.embed(), view=next_view, allowed_mentions=NO_MENTIONS)
+        await interaction.edit_original_response(content=next_view.content(), view=next_view, allowed_mentions=NO_MENTIONS)
         parent.stop()
 
 
@@ -2561,15 +2544,18 @@ class BrainServiceMenuView(discord.ui.View):
         await _send_single_service_message(
             self.settings,
             interaction,
-            "",
-            embed=_document_search_embed(
-                "",
-                results,
-                result_count=result_count,
-                total_count=total_count,
-                page=page,
-                page_size=page_size,
-                paperless_public_url=self.settings.paperless_public_url,
+            view.content()
+            if view is not None
+            else render_tool_context(
+                ToolRequest(ToolKind.DOCUMENT_SEARCH, ""),
+                {
+                    "query": "",
+                    "results": results,
+                    "resultCount": result_count,
+                    "totalCount": total_count,
+                    "page": page,
+                    "pageSize": page_size,
+                },
             ),
             view=view,
             allowed_mentions=NO_MENTIONS,
