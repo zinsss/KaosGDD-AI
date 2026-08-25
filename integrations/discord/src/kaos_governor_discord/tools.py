@@ -528,8 +528,9 @@ class BrainToolServer:
     async def _search_documents(self, request: web.Request) -> web.Response:
         query = " ".join(request.query.get("query", "").split())
         limit = _limit(request, default=5)
+        page_number = _optional_int_query(request, "page", 1)
         try:
-            page = await asyncio.to_thread(self._paperless.search_page, query, limit=limit)
+            page = await asyncio.to_thread(self._paperless.search_page, query, limit=limit, page=page_number)
         except DocumentIntakeError as exc:
             return _document_error(exc)
         except Exception:
@@ -539,8 +540,9 @@ class BrainToolServer:
 
     async def _list_documents(self, request: web.Request) -> web.Response:
         limit = _limit(request, default=20)
+        page_number = _optional_int_query(request, "page", 1)
         try:
-            page = await asyncio.to_thread(self._paperless.list_page, limit=limit)
+            page = await asyncio.to_thread(self._paperless.list_page, limit=limit, page=page_number)
         except DocumentIntakeError as exc:
             return _document_error(exc)
         except Exception:

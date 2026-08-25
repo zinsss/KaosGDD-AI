@@ -190,22 +190,26 @@ class FakePaperless:
         self.update_calls = []
         self.existing_tag_calls = []
 
-    def search_page(self, query, *, limit):
-        self.search_calls.append((query, limit))
+    def search_page(self, query, *, limit, page=1):
+        self.search_calls.append((query, limit, page))
         return PaperlessSearchPage(
             query,
             (PaperlessSearchResult(42, "Rustdesk setup", "2026-08-14", "rustdesk.pdf"),),
             1,
             12,
+            page=page,
+            page_size=limit,
         )
 
-    def list_page(self, *, limit):
-        self.search_calls.append(("", limit))
+    def list_page(self, *, limit, page=1):
+        self.search_calls.append(("", limit, page))
         return PaperlessSearchPage(
             "",
             (PaperlessSearchResult(42, "Rustdesk setup", "2026-08-14", "rustdesk.pdf"),),
             12,
             12,
+            page=page,
+            page_size=limit,
         )
 
     def get(self, document_id):
@@ -1147,25 +1151,27 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.memos.update_calls, [])
 
     async def test_document_search_returns_paperless_results(self) -> None:
-        response = await self.client.get("/tools/documents/search?query=rust%20desk", headers=self.headers())
+        response = await self.client.get("/tools/documents/search?query=rust%20desk&page=3", headers=self.headers())
 
         self.assertEqual(response.status, 200)
         payload = await response.json()
         self.assertEqual(payload["source"], "paperless-live")
+        self.assertEqual(payload["page"], 3)
         self.assertEqual(payload["results"][0]["title"], "Rustdesk setup")
-        self.assertEqual(self.paperless.search_calls, [("rust desk", 5)])
+        self.assertEqual(self.paperless.search_calls, [("rust desk", 5, 3)])
 
     async def test_document_list_returns_recent_paperless_documents(self) -> None:
-        response = await self.client.get("/tools/documents/list", headers=self.headers())
+        response = await self.client.get("/tools/documents/list?page=2", headers=self.headers())
 
         self.assertEqual(response.status, 200)
         payload = await response.json()
         self.assertEqual(payload["source"], "paperless-live")
         self.assertEqual(payload["query"], "")
+        self.assertEqual(payload["page"], 2)
         self.assertEqual(payload["resultCount"], 12)
         self.assertEqual(payload["totalCount"], 12)
         self.assertEqual(payload["results"][0]["title"], "Rustdesk setup")
-        self.assertEqual(self.paperless.search_calls, [("", 20)])
+        self.assertEqual(self.paperless.search_calls, [("", 20, 2)])
 
     async def test_document_get_returns_paperless_document(self) -> None:
         response = await self.client.get("/tools/documents/42", headers=self.headers())

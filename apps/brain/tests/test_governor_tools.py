@@ -736,7 +736,7 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             client.calls,
             [
-                ("/tools/documents/search", {"query": "rustdesk", "limit": "20"}),
+                ("/tools/documents/search", {"query": "rustdesk", "limit": "20", "page": "1"}),
             ],
         )
         self.assertEqual(payload["results"][0]["title"], "Rustdesk")
@@ -763,7 +763,7 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         payload = await client.fetch(ToolRequest(ToolKind.DOCUMENT_SEARCH, "rustdesk"))
-        self.assertEqual(client.calls, [("/tools/documents/search", {"query": "rustdesk", "limit": "20"})])
+        self.assertEqual(client.calls, [("/tools/documents/search", {"query": "rustdesk", "limit": "20", "page": "1"})])
         self.assertNotIn("full", payload["results"][0])
 
     async def test_fetch_empty_document_search_uses_list_route(self) -> None:
@@ -787,8 +787,56 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         payload = await client.fetch(ToolRequest(ToolKind.DOCUMENT_SEARCH, ""))
-        self.assertEqual(client.calls, [("/tools/documents/list", {"limit": "20"})])
+        self.assertEqual(client.calls, [("/tools/documents/list", {"limit": "20", "page": "1"})])
         self.assertEqual(payload["results"][0]["title"], "One")
+
+    async def test_document_list_page_uses_page_route_param(self) -> None:
+        from kaos_brain.governor_tools import GovernorToolClient, GovernorToolConfig
+
+        class FakeClient(GovernorToolClient):
+            def __init__(self, config: GovernorToolConfig) -> None:
+                super().__init__(config)
+                self.calls = []
+
+            async def _get(self, path: str, params: dict[str, str]):
+                self.calls.append((path, params))
+                return {"query": "", "resultCount": 26, "page": 2, "results": [{"id": 99, "title": "Two"}]}
+
+        client = FakeClient(
+            GovernorToolConfig(
+                base_url="http://127.0.0.1:8098",
+                api_token="token",
+                profile="main",
+                timeout_seconds=1,
+            )
+        )
+        payload = await client.documents("", page=2)
+        self.assertEqual(client.calls, [("/tools/documents/list", {"limit": "20", "page": "2"})])
+        self.assertEqual(payload["page"], 2)
+
+    async def test_document_search_page_uses_page_route_param(self) -> None:
+        from kaos_brain.governor_tools import GovernorToolClient, GovernorToolConfig
+
+        class FakeClient(GovernorToolClient):
+            def __init__(self, config: GovernorToolConfig) -> None:
+                super().__init__(config)
+                self.calls = []
+
+            async def _get(self, path: str, params: dict[str, str]):
+                self.calls.append((path, params))
+                return {"query": "rustdesk", "resultCount": 26, "page": 3, "results": [{"id": 99, "title": "Three"}]}
+
+        client = FakeClient(
+            GovernorToolConfig(
+                base_url="http://127.0.0.1:8098",
+                api_token="token",
+                profile="main",
+                timeout_seconds=1,
+            )
+        )
+        payload = await client.documents("rustdesk", page=3)
+        self.assertEqual(client.calls, [("/tools/documents/search", {"limit": "20", "page": "3", "query": "rustdesk"})])
+        self.assertEqual(payload["page"], 3)
 
     async def test_propose_document_tags_posts_contract(self) -> None:
         from kaos_brain.governor_tools import GovernorToolClient, GovernorToolConfig

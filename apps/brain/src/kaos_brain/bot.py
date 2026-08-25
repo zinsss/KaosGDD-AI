@@ -1112,16 +1112,24 @@ class BrainBot(discord.Client):
             return context, view
         if tool_request.kind is ToolKind.DOCUMENT_SEARCH:
             results = search_results(payload)
-            linked_results = [
-                {
-                    **item,
-                    "url": item.get("url") or item.get("publicUrl") or document_public_url(self.settings.paperless_public_url, item.get("id")),
-                }
-                for item in results
-            ]
+            linked_results = _linked_document_results(results, self.settings.paperless_public_url)
             payload = {**payload, "results": linked_results}
             context = render_tool_context(tool_request, payload)
-            view = BrainTemporarySearchView(tool_request.query) if linked_results else None
+            view = (
+                BrainDocumentSearchView(
+                    self.governor_tools,
+                    actor_id,
+                    tool_request.query,
+                    linked_results,
+                    result_count=_payload_count(payload, "resultCount", "count", fallback=len(linked_results)),
+                    total_count=_payload_count(payload, "totalCount", "total", fallback=len(linked_results)),
+                    page=_payload_count(payload, "page", fallback=1),
+                    page_size=_payload_count(payload, "pageSize", "page_size", fallback=SEARCH_RESULT_LIMIT),
+                    paperless_public_url=self.settings.paperless_public_url,
+                )
+                if linked_results
+                else None
+            )
             return context, view
         context = render_tool_context(tool_request, payload)
         if tool_request.kind is ToolKind.COMPLETED_TASKS:
@@ -1779,18 +1787,16 @@ class BrainCombinedSearchFullButton(discord.ui.Button):
                 parent.actor_id,
                 parent.query,
                 parent.document_results,
+                result_count=parent.document_count,
+                total_count=parent.document_total,
+                page=1,
+                page_size=SEARCH_RESULT_LIMIT,
                 paperless_public_url=parent.paperless_public_url,
             )
             view.bind_message(interaction.message)  # type: ignore[arg-type]
             await interaction.response.edit_message(
                 content="",
-                embed=_document_search_embed(
-                    parent.query,
-                    parent.document_results,
-                    result_count=parent.document_count,
-                    total_count=parent.document_total,
-                    paperless_public_url=parent.paperless_public_url,
-                ),
+                embed=view.embed(),
                 view=view,
                 allowed_mentions=NO_MENTIONS,
             )
@@ -1822,27 +1828,41 @@ def _document_search_embed(
     *,
     result_count: int,
     total_count: int,
+    page: int = 1,
+    page_size: int = SEARCH_RESULT_LIMIT,
     paperless_public_url: str,
 ) -> discord.Embed:
     title = f"Paperless · {query or '..'}"
+    normalized_page = max(1, page)
+    normalized_page_size = max(1, page_size)
+    page_total = max(1, (result_count + normalized_page_size - 1) // normalized_page_size)
     embed = discord.Embed(
         title=title[:256],
-        description=f"{result_count} results in {total_count} documents",
+        description=f"{result_count} results in {total_count} documents\nPage {normalized_page} / {page_total}",
         color=0x88C0D0,
     )
     lines: list[str] = []
-    visible_results = results[:SEARCH_RESULT_LIMIT]
-    for index, item in enumerate(visible_results, start=1):
+    visible_results = results[:normalized_page_size]
+    start_index = (normalized_page - 1) * normalized_page_size + 1
+    for offset, item in enumerate(visible_results):
         label = document_option_label(item)
         url = str(item.get("url") or item.get("publicUrl") or document_public_url(paperless_public_url, item.get("id"))).strip()
-        line = f"{index}. {label}"
+        line = f"{start_index + offset}. {label}"
         if url:
             line = f"{line} · [open]({url})"
         lines.append(_discord_embed_line(line, 180))
-    if result_count > len(visible_results):
-        lines.append(f"Showing first {len(visible_results)}. Press search in Paperless for the full backend result set.")
     embed.add_field(name="Documents", value="\n".join(lines)[:1024] if lines else "No matching documents.", inline=False)
     return embed
+
+
+def _linked_document_results(results: list[dict[str, Any]], paperless_public_url: str) -> list[dict[str, Any]]:
+    return [
+        {
+            **item,
+            "url": item.get("url") or item.get("publicUrl") or document_public_url(paperless_public_url, item.get("id")),
+        }
+        for item in results
+    ]
 
 
 def _discord_embed_line(value: str, limit: int) -> str:
@@ -2097,15 +2117,61 @@ class BrainDocumentSearchView(BrainTemporarySearchView):
         query: str,
         results: list[dict[str, Any]],
         *,
+        result_count: int = 0,
+        total_count: int = 0,
+        page: int = 1,
+        page_size: int = SEARCH_RESULT_LIMIT,
         paperless_public_url: str = "",
     ) -> None:
         super().__init__(query, searched_from="Paperless")
         self.governor_tools = governor_tools
         self.actor_id = actor_id
         self.query = query
-        self.results = results[:SEARCH_RESULT_LIMIT]
+        self.page = max(1, page)
+        self.page_size = max(1, page_size)
+        self.result_count = result_count or len(results)
+        self.total_count = total_count or self.result_count
+        self.results = results[: self.page_size]
         self.paperless_public_url = paperless_public_url
+        self._rebuild_items()
+
+    @property
+    def page_total(self) -> int:
+        return max(1, (self.result_count + self.page_size - 1) // self.page_size)
+
+    def embed(self) -> discord.Embed:
+        return _document_search_embed(
+            self.query,
+            self.results,
+            result_count=self.result_count,
+            total_count=self.total_count,
+            page=self.page,
+            page_size=self.page_size,
+            paperless_public_url=self.paperless_public_url,
+        )
+
+    def _rebuild_items(self) -> None:
+        self.clear_items()
         self.add_item(BrainDocumentSearchSelect(self))
+        if self.page_total > 1:
+            self.add_item(BrainDocumentPageButton("←", -1, disabled=self.page <= 1))
+            self.add_item(BrainDocumentPageStatusButton(self.page, self.page_total))
+            self.add_item(BrainDocumentPageButton("→", 1, disabled=self.page >= self.page_total))
+
+    async def fetch_page(self, page: int) -> "BrainDocumentSearchView":
+        payload = await self.governor_tools.documents(self.query, page=page, limit=self.page_size)
+        results = _linked_document_results(search_results(payload), self.paperless_public_url)
+        return BrainDocumentSearchView(
+            self.governor_tools,
+            self.actor_id,
+            self.query,
+            results,
+            result_count=_payload_count(payload, "resultCount", "count", fallback=len(results)),
+            total_count=_payload_count(payload, "totalCount", "total", fallback=len(results)),
+            page=_payload_count(payload, "page", fallback=page),
+            page_size=_payload_count(payload, "pageSize", "page_size", fallback=self.page_size),
+            paperless_public_url=self.paperless_public_url,
+        )
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if int(interaction.user.id) == self.actor_id:
@@ -2149,6 +2215,34 @@ class BrainDocumentSearchSelect(discord.ui.Select):
         )
         await self.parent_view.delete_message()
         self.parent_view.stop()
+
+
+class BrainDocumentPageButton(discord.ui.Button):
+    def __init__(self, label: str, delta: int, *, disabled: bool = False) -> None:
+        super().__init__(label=label, style=discord.ButtonStyle.secondary, disabled=disabled, row=1)
+        self.delta = delta
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        parent = self.view
+        if not isinstance(parent, BrainDocumentSearchView):
+            await interaction.response.send_message(_tool_failed("문서 목록"), ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.response.defer()
+        try:
+            next_view = await parent.fetch_page(parent.page + self.delta)
+        except GovernorToolError as exc:
+            LOGGER.warning("Document page fetch failed: %s", exc)
+            await interaction.followup.send(_tool_failed("문서 목록"), ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        if interaction.message is not None:
+            next_view.bind_message(interaction.message)
+        await interaction.edit_original_response(content="", embed=next_view.embed(), view=next_view, allowed_mentions=NO_MENTIONS)
+        parent.stop()
+
+
+class BrainDocumentPageStatusButton(discord.ui.Button):
+    def __init__(self, page: int, page_total: int) -> None:
+        super().__init__(label=f"Page {page}/{page_total}", style=discord.ButtonStyle.secondary, disabled=True, row=1)
 
 
 class BrainOpenedDocumentView(BrainAutoClosingView):
@@ -2419,26 +2513,26 @@ class BrainServiceMenuView(discord.ui.View):
     async def open_paperless(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
         try:
-            payload = await self.governor_tools.fetch(ToolRequest(ToolKind.DOCUMENT_SEARCH, ""))
+            payload = await self.governor_tools.documents("", page=1, limit=SEARCH_RESULT_LIMIT)
         except GovernorToolError as exc:
             LOGGER.warning("Paperless service message failed: %s", exc)
             await interaction.followup.send(_tool_failed("Paperless 불러오기"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
-        results = [
-            {
-                **item,
-                "url": item.get("url") or item.get("publicUrl") or document_public_url(self.settings.paperless_public_url, item.get("id")),
-            }
-            for item in search_results(payload)
-        ]
+        results = _linked_document_results(search_results(payload), self.settings.paperless_public_url)
         result_count = _payload_count(payload, "resultCount", "count", fallback=len(results))
         total_count = _payload_count(payload, "totalCount", "total", fallback=result_count)
+        page = _payload_count(payload, "page", fallback=1)
+        page_size = _payload_count(payload, "pageSize", "page_size", fallback=SEARCH_RESULT_LIMIT)
         view = (
             BrainDocumentSearchView(
                 self.governor_tools,
                 int(interaction.user.id),
                 "",
                 results,
+                result_count=result_count,
+                total_count=total_count,
+                page=page,
+                page_size=page_size,
                 paperless_public_url=self.settings.paperless_public_url,
             )
             if results
@@ -2453,6 +2547,8 @@ class BrainServiceMenuView(discord.ui.View):
                 results,
                 result_count=result_count,
                 total_count=total_count,
+                page=page,
+                page_size=page_size,
                 paperless_public_url=self.settings.paperless_public_url,
             ),
             view=view,

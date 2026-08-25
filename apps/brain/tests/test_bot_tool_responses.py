@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 import unittest
 
-from kaos_brain.bot import BrainBot, BrainCombinedSearchView
+from kaos_brain.bot import BrainBot, BrainCombinedSearchView, BrainDocumentSearchView
 from kaos_brain.governor_tools import GovernorToolError
 from kaos_brain.tool_intent import ToolKind, ToolRequest
 
@@ -175,7 +175,8 @@ class BrainToolResponseTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIsNotNone(view)
         assert view is not None
-        self.assertEqual([item.label for item in view.children], [])
+        self.assertIsInstance(view, BrainDocumentSearchView)
+        self.assertEqual([getattr(item, "placeholder", "") for item in view.children], ["Paperless: 1"])
 
     async def test_combined_search_returns_memos_and_documents(self) -> None:
         brain = SimpleNamespace(
