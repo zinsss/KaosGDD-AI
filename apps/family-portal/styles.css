@@ -3567,9 +3567,8 @@ h3 {
   justify-content: center;
   width: 32px;
   height: 32px;
-  border: 1px solid currentColor;
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.72);
+  border: 0;
+  background: transparent;
   color: inherit;
   font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Pretendard", sans-serif;
   font-size: 1.12rem;
