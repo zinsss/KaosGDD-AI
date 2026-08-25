@@ -213,6 +213,17 @@ class GovernorToolRenderingTests(unittest.TestCase):
         self.assertEqual(memo_option_label(item), "Online training ID/PW")
         self.assertEqual(memo_option_description(item), "#education, #work")
 
+    def test_memo_dropdown_title_ignores_flattened_body_and_tags(self) -> None:
+        item = {
+            "name": "memos/abc",
+            "title": "온라인 의무교육 ID/PW ## 미영샘 * GSEEK * pheco@example.com #의무교육",
+            "snippet": "온라인 의무교육 ID/PW ## 미영샘 * GSEEK * pheco@example.com #의무교육",
+            "tags": ["의무교육", "아이디", "직원"],
+        }
+
+        self.assertEqual(memo_option_label(item), "온라인 의무교육 ID/PW")
+        self.assertEqual(memo_option_description(item), "#의무교육, #아이디, #직원")
+
     def test_memo_dropdown_prefers_h1_over_payload_title(self) -> None:
         item = {
             "name": "memos/abc",
@@ -223,6 +234,11 @@ class GovernorToolRenderingTests(unittest.TestCase):
 
         self.assertEqual(memo_option_label(item), "H1 memo title")
         self.assertEqual(memo_option_description(item), "#education")
+
+    def test_memo_dropdown_can_use_checklist_line_as_title(self) -> None:
+        item = {"name": "memos/abc", "snippet": "- [ ] 마샬 스피커 2개"}
+
+        self.assertEqual(memo_option_label(item), "마샬 스피커 2개")
 
     def test_render_opened_memo_uses_original_markdown(self) -> None:
         content = render_memo_opened(

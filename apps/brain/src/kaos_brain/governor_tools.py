@@ -1041,15 +1041,29 @@ def _memo_title(item: dict[str, Any]) -> str:
         for raw in source.splitlines():
             stripped = raw.strip()
             if stripped.startswith("#"):
-                title = stripped.lstrip("#").strip()
+                title = _clean_memo_title_candidate(stripped.lstrip("#").strip())
                 if title:
                     return _truncate(title, 80)
     for source in (str(item.get("title") or ""), str(item.get("content") or ""), str(item.get("snippet") or "")):
         for raw in source.splitlines():
-            title = raw.strip().lstrip("#").strip()
+            title = _clean_memo_title_candidate(raw.strip().lstrip("#").strip())
             if title:
                 return _truncate(title, 80)
     return str(item.get("name") or "Untitled memo").strip()
+
+
+def _clean_memo_title_candidate(value: str) -> str:
+    title = value.strip()
+    if not title:
+        return ""
+    for prefix in ("- [ ] ", "- [x] ", "- [X] ", "- ", "* "):
+        if title.startswith(prefix):
+            title = title[len(prefix) :].strip()
+            break
+    for marker in (" ### ", " ## ", " #"):
+        if marker in title:
+            title = title.split(marker, 1)[0].strip()
+    return title.strip()
 
 
 def _memo_tags_text(item: dict[str, Any]) -> str:
