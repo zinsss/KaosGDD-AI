@@ -70,7 +70,7 @@ const ROUNY_TIMELINE_DEFAULT_END_HOUR = 22;
 const ROUNY_TIMELINE_HOUR_HEIGHT = 64;
 const ROUNY_TIMELINE_SLOT_MINUTES = 10;
 const ROUNY_DRAG_MOVE_THRESHOLD = 8;
-const ROUNY_DRAG_HOLD_MS = 260;
+const ROUNY_DRAG_HOLD_MS = 3000;
 const desktopMedia = window.matchMedia(DESKTOP_MEDIA_QUERY);
 let rounyPointerDrag = null;
 let suppressRounyGridClick = false;
@@ -7893,9 +7893,10 @@ document.addEventListener("pointerdown", (event) => {
     ROUNY_TIMELINE_SLOT_MINUTES,
     rounyMinutes(slot.endTime) - rounyMinutes(slot.startTime),
   );
-  block.setPointerCapture?.(event.pointerId);
   const holdTimer = window.setTimeout(() => {
-    if (rounyPointerDrag?.pointerId === event.pointerId) rounyPointerDrag.canDrag = true;
+    if (rounyPointerDrag?.pointerId !== event.pointerId) return;
+    block.setPointerCapture?.(event.pointerId);
+    rounyPointerDrag.canDrag = true;
   }, ROUNY_DRAG_HOLD_MS);
   rounyPointerDrag = {
     itemId: item.id,
@@ -7915,7 +7916,12 @@ document.addEventListener("pointerdown", (event) => {
 document.addEventListener("pointermove", (event) => {
   const drag = rounyPointerDrag;
   if (!drag || drag.pointerId !== event.pointerId) return;
-  if (!drag.canDrag) return;
+  if (!drag.canDrag) {
+    if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) >= ROUNY_DRAG_MOVE_THRESHOLD) {
+      clearRounyPointerDrag();
+    }
+    return;
+  }
   const moved =
     drag.moved ||
     Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) >= ROUNY_DRAG_MOVE_THRESHOLD;

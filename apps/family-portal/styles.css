@@ -3556,7 +3556,7 @@ h3 {
   text-align: left;
   box-shadow: none;
   cursor: grab;
-  touch-action: none;
+  touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
 }
