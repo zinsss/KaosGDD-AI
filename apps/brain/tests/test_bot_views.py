@@ -158,7 +158,7 @@ class FakeGovernorTools:
             return {"tasks": [{"title": "토프라민", "date": "2026-08-21", "due": "2026-08-21"}]}
         return {"tasks": [{"title": "로운이 제로이드", "due": "2026-08-22", "dueTime": "10:00"}]}
 
-    async def documents(self, query: str = "", *, page: int = 1, limit: int = 20):
+    async def documents(self, query: str = "", *, page: int = 1, limit: int = 10):
         return {
             "query": query,
             "results": [
@@ -520,7 +520,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls[0].args[0], "")
         self.assertEqual(calls[0].kwargs["embed"].title, "Paperless · ..")
         self.assertIn("26 results in 26 documents", calls[0].kwargs["embed"].description)
-        self.assertIn("Page 1 / 2", calls[0].kwargs["embed"].description)
+        self.assertIn("Page 1 / 3", calls[0].kwargs["embed"].description)
         self.assertIsInstance(calls[0].kwargs["view"], BrainDocumentSearchView)
         self.assertIn("Searched..", calls[1].args[0])
         self.assertIn("## ..", calls[1].args[0])
@@ -778,7 +778,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(kwargs["content"], "")
         self.assertEqual(kwargs["embed"].title, "Paperless · 보험")
         self.assertIn("30 results in 30 documents", kwargs["embed"].description)
-        self.assertIn("Page 1 / 2", kwargs["embed"].description)
+        self.assertIn("Page 1 / 3", kwargs["embed"].description)
         self.assertIn("[open](https://paperless.example/documents/1/details)", kwargs["embed"].fields[0].value)
         self.assertIsInstance(kwargs["view"], BrainDocumentSearchView)
 
@@ -792,7 +792,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             result_count=26,
             total_count=26,
             page=1,
-            page_size=20,
+            page_size=10,
             paperless_public_url="https://paperless.example",
         )
         next_button = next(child for child in view.children if getattr(child, "label", None) == "→")
@@ -810,8 +810,8 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         interaction.response.defer.assert_awaited_once()
         interaction.edit_original_response.assert_awaited_once()
         kwargs = interaction.edit_original_response.await_args.kwargs
-        self.assertIn("Page 2 / 2", kwargs["embed"].description)
-        self.assertIn("21. Document page 2", kwargs["embed"].fields[0].value)
+        self.assertIn("Page 2 / 3", kwargs["embed"].description)
+        self.assertIn("11. Document page 2", kwargs["embed"].fields[0].value)
         self.assertIsInstance(kwargs["view"], BrainDocumentSearchView)
 
     async def test_brain_search_window_shows_expired_notice_on_timeout(self) -> None:

@@ -9,7 +9,7 @@ from .memo_intent import MemoCreateRequest, MemoDeleteRequest, MemoEditRequest
 from .task_update_intent import TaskActionRequest, TaskCreateRequest, TaskDueUpdateRequest
 from .tool_intent import ToolKind, ToolRequest
 
-SEARCH_RESULT_LIMIT = 20
+SEARCH_RESULT_LIMIT = 10
 
 
 PERSONAL_EVENT_MARKER = "𝘎𝘋𝘋𝙕𝘪𝙉"
