@@ -1611,6 +1611,7 @@ class BrainMemoSearchView(BrainTemporarySearchView):
         self.results = results[:SEARCH_RESULT_LIMIT]
         self.memos_public_url = memos_public_url
         self.add_item(BrainMemoSearchSelect(self))
+        self.add_item(BrainSearchCloseButton(row=1))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if int(interaction.user.id) == self.actor_id:
@@ -1653,6 +1654,26 @@ class BrainMemoSearchSelect(discord.ui.Select):
         )
         await self.parent_view.delete_message()
         self.parent_view.stop()
+
+
+class BrainSearchCloseButton(discord.ui.Button):
+    def __init__(self, *, row: int = 1) -> None:
+        super().__init__(label="Close", style=discord.ButtonStyle.secondary, row=row)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        parent = self.view
+        if not isinstance(parent, BrainTemporarySearchView):
+            await interaction.response.send_message("Closed.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        if interaction.message is None:
+            await interaction.response.send_message("Closed.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.response.defer()
+        try:
+            await interaction.message.delete()
+        finally:
+            parent._message = None
+            parent.stop()
 
 
 class BrainCombinedSearchView(BrainTemporarySearchView):
@@ -2157,6 +2178,7 @@ class BrainDocumentSearchView(BrainTemporarySearchView):
             self.add_item(BrainDocumentPageButton("←", -1, disabled=self.page <= 1))
             self.add_item(BrainDocumentPageStatusButton(self.page, self.page_total))
             self.add_item(BrainDocumentPageButton("→", 1, disabled=self.page >= self.page_total))
+        self.add_item(BrainSearchCloseButton(row=2))
 
     async def fetch_page(self, page: int) -> "BrainDocumentSearchView":
         payload = await self.governor_tools.documents(self.query, page=page, limit=self.page_size)

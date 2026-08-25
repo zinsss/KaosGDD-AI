@@ -522,10 +522,12 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("26 results in 26 documents", calls[0].kwargs["embed"].description)
         self.assertIn("Page 1 / 3", calls[0].kwargs["embed"].description)
         self.assertIsInstance(calls[0].kwargs["view"], BrainDocumentSearchView)
+        self.assertIn("Close", [getattr(child, "label", "") for child in calls[0].kwargs["view"].children])
         self.assertIn("Searched..", calls[1].args[0])
         self.assertIn("## ..", calls[1].args[0])
         self.assertIn("2 results in 2 memos", calls[1].args[0])
         self.assertIsInstance(calls[1].kwargs["view"], BrainMemoSearchView)
+        self.assertIn("Close", [getattr(child, "label", "") for child in calls[1].kwargs["view"].children])
 
     async def test_fax_mail_select_calls_up_incoming_service_message(self) -> None:
         view = BrainServiceMenuView(
@@ -781,6 +783,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Page 1 / 3", kwargs["embed"].description)
         self.assertIn("[open](https://paperless.example/documents/1/details)", kwargs["embed"].fields[0].value)
         self.assertIsInstance(kwargs["view"], BrainDocumentSearchView)
+        self.assertIn("Close", [getattr(child, "label", "") for child in kwargs["view"].children])
 
     async def test_document_search_view_paginates_paperless_results(self) -> None:
         tools = FakeGovernorTools()

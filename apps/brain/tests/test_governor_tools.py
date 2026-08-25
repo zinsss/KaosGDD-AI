@@ -175,15 +175,16 @@ class GovernorToolRenderingTests(unittest.TestCase):
                 "resultCount": 2,
                 "totalCount": 213,
                 "results": [
-                    {"name": "memos/1", "snippet": "# Online training\nID and password details " * 20},
-                    {"name": "memos/2", "snippet": "Long mandatory training list " * 20},
+                    {"name": "memos/1", "snippet": "# Online training\nID and password details " * 20, "tags": ["training"]},
+                    {"name": "memos/2", "snippet": "Long mandatory training list " * 20, "tags": ["work"]},
                 ],
             },
         )
         self.assertIn("Searched..\n## training\n2 results in 213 memos", context)
         self.assertIn("### Memos", context)
-        self.assertIn("1. Online training", context)
+        self.assertIn("1. Online training\n#training", context)
         self.assertIn("2. Long mandatory training list", context)
+        self.assertIn("\n#work", context)
         self.assertNotIn("Memos search:", context)
 
     def test_memo_option_description_stays_within_discord_limit(self) -> None:
