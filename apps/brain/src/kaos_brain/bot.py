@@ -4,7 +4,7 @@ import asyncio
 import base64
 import binascii
 from dataclasses import dataclass
-from datetime import date, datetime, time as datetime_time, timedelta
+from datetime import date, datetime, time as datetime_time, timedelta, timezone
 import io
 import json
 import logging
@@ -139,6 +139,19 @@ def _looks_like_date_answer(text: str) -> bool:
     if lowered in {"오늘", "내일", "모레", "today", "tomorrow"}:
         return True
     return re.fullmatch(r"(?:(?:\d{4})[-./년]\s*)?\d{1,2}[-./월]\s*\d{1,2}일?", text) is not None
+
+
+def _message_kst_datetime(message: discord.Message) -> datetime:
+    created_at = getattr(message, "created_at", None)
+    if not isinstance(created_at, datetime):
+        return datetime.now(KST)
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
+    return created_at.astimezone(KST)
+
+
+def _message_kst_date(message: discord.Message) -> date:
+    return _message_kst_datetime(message).date()
 
 
 async def _reply_with_bound_view(
@@ -696,7 +709,7 @@ class BrainBot(discord.Client):
             )
             return
         task_update = (
-            parse_task_due_update(request_text, today=message.created_at.astimezone(KST).date())
+            parse_task_due_update(request_text, today=_message_kst_date(message))
             if request.route is Route.CHAT
             else None
         )
@@ -708,7 +721,7 @@ class BrainBot(discord.Client):
             await self._propose_task_edit(message, task_edit)
             return
         task_create = (
-            parse_task_create(request_text, today=message.created_at.astimezone(KST).date())
+            parse_task_create(request_text, today=_message_kst_date(message))
             if request.route is Route.CHAT
             else None
         )
@@ -720,7 +733,7 @@ class BrainBot(discord.Client):
             await self._propose_task_action(message, task_action)
             return
         event_create = (
-            parse_event_create(request_text, today=message.created_at.astimezone(KST).date())
+            parse_event_create(request_text, today=_message_kst_date(message))
             if request.route is Route.CHAT
             else None
         )
@@ -744,7 +757,7 @@ class BrainBot(discord.Client):
             await self._propose_document_tag_suggestion(message, document_tag_suggestion)
             return
         tool_request = (
-            parse_tool_request(request_text, today=message.created_at.astimezone(KST).date())
+            parse_tool_request(request_text, today=_message_kst_date(message))
             if request.route is Route.CHAT
             else None
         )
@@ -806,7 +819,7 @@ class BrainBot(discord.Client):
         pending = store.pop(key, None)
         if pending is None:
             return user_text
-        now = message.created_at.astimezone(KST)
+        now = _message_kst_datetime(message)
         if now - pending.created_at > timedelta(seconds=KAOSAI_CLARIFY_WINDOW_SECONDS):
             return user_text
         answer = user_text.strip()
@@ -818,7 +831,7 @@ class BrainBot(discord.Client):
         self._pending_kaosai_store()[self._clarification_key(message)] = _PendingKaosAIClarification(
             original_text=user_text.strip(),
             question=question.strip(),
-            created_at=message.created_at.astimezone(KST),
+            created_at=_message_kst_datetime(message),
         )
 
     async def _answer_with_kaosai_plan(
@@ -833,7 +846,7 @@ class BrainBot(discord.Client):
                 context={
                     "actorId": str(message.author.id),
                     "channelId": str(message.channel.id),
-                    "today": message.created_at.astimezone(KST).date().isoformat(),
+                    "today": _message_kst_date(message).isoformat(),
                 },
             )
         except KaosAIError as exc:
@@ -854,7 +867,7 @@ class BrainBot(discord.Client):
                 BrainGuardContext(
                     actor_id=int(message.author.id),
                     idempotency_key=f"discord:{message.id}",
-                    today=message.created_at.astimezone(KST).date(),
+                    today=_message_kst_date(message),
                     default_profile=self.settings.governor_tools_profile,
                     supplies_collection_id=self.settings.governor_tools_supplies_collection_id,
                 ),
@@ -932,7 +945,7 @@ class BrainBot(discord.Client):
                 context={
                     "actorId": str(message.author.id),
                     "channelId": str(message.channel.id),
-                    "today": message.created_at.astimezone(KST).date().isoformat(),
+                    "today": _message_kst_date(message).isoformat(),
                 },
             )
         except KaosAIError as exc:
@@ -947,7 +960,7 @@ class BrainBot(discord.Client):
                 BrainGuardContext(
                     actor_id=int(message.author.id),
                     idempotency_key=f"discord-diagnostic:{message.id}",
-                    today=message.created_at.astimezone(KST).date(),
+                    today=_message_kst_date(message),
                     default_profile=self.settings.governor_tools_profile,
                     supplies_collection_id=self.settings.governor_tools_supplies_collection_id,
                 ),

@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock
 
-from kaos_brain.bot import BrainBot, _kaosai_planner_from_settings, parse_document_tag_suggestion
+from kaos_brain.bot import BrainBot, _kaosai_planner_from_settings, _message_kst_date, parse_document_tag_suggestion
 from kaos_brain.config import Settings
 from kaos_brain.governor_tools import GovernorToolError
 from kaos_brain.kaos_ai import DisabledKaosAIPlanner, KaosAIError, OpenClawKaosAIPlanner
@@ -61,7 +61,7 @@ class FakeGovernorTools:
 
     async def fetch(self, request):
         self.fetch_calls.append(request)
-        return {"date": "2026-08-17", "events": [], "tasks": []}
+        return {"date": request.start or "2026-08-17", "events": [], "tasks": []}
 
     async def propose_task_create(self, request, *, actor_id: int, idempotency_key: str):
         self.task_create_calls.append((request, actor_id, idempotency_key))
@@ -291,6 +291,7 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(actor_id, 200)
         self.assertEqual(idempotency_key, "discord:778")
         self.assertIn("Confirm new event", second.reply.await_args.args[0])
+        self.assertIn("- calendar: 𝘎𝘋𝘋𝙕𝘪𝙉", second.reply.await_args.args[0])
 
     async def test_kaosai_diagnostic_shows_plan_and_guard_without_governor_call(self) -> None:
         tools = FakeGovernorTools()
@@ -378,6 +379,29 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(view)
         self.assertEqual(len(tools.fetch_calls), 1)
 
+    async def test_kaosai_today_plan_preserves_requested_date(self) -> None:
+        tools = FakeGovernorTools()
+        brain = self.brain(
+            {"intent": "today.get", "scope": "personal", "parameters": {"date": "2026-08-26"}},
+            governor_tools=tools,
+        )
+
+        reply, view = await BrainBot._answer_with_kaosai_plan(  # type: ignore[arg-type]
+            brain,
+            "8/26 보여줘",
+            message=fake_message(),
+        )
+
+        self.assertEqual(reply, "## 2026-08-26\n- 없음")
+        self.assertIsNone(view)
+        self.assertEqual(tools.fetch_calls[0].start, "2026-08-26")
+
+    def test_message_kst_date_treats_naive_discord_time_as_utc(self) -> None:
+        message = fake_message()
+        message.created_at = datetime(2026, 8, 25, 15, 3)
+
+        self.assertEqual(_message_kst_date(message).isoformat(), "2026-08-26")
+
     async def test_kaosai_mutation_plan_uses_guard_and_governor_proposal(self) -> None:
         tools = FakeGovernorTools()
         brain = self.brain(
@@ -405,6 +429,29 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(request.due_time, "10:00")
         self.assertEqual(actor_id, 200)
         self.assertEqual(idempotency_key, "discord:777")
+
+    async def test_kaosai_family_task_plan_shows_family_list(self) -> None:
+        tools = FakeGovernorTools()
+        brain = self.brain(
+            {
+                "intent": "task.create",
+                "scope": "family",
+                "parameters": {"title": "로운이 준비물", "dueDate": "2026-08-26"},
+            },
+            governor_tools=tools,
+        )
+
+        reply, view = await BrainBot._answer_with_kaosai_plan(  # type: ignore[arg-type]
+            brain,
+            "가족 할일 로운이 준비물",
+            message=fake_message(),
+        )
+
+        self.assertIn("Confirm New Task", reply)
+        self.assertIn("- list: 𝘧𝘢𝘮𝘪𝘭𝘺", reply)
+        self.assertIsNotNone(view)
+        request, _, _ = tools.task_create_calls[0]
+        self.assertEqual(request.profile, "family")
 
     async def test_kaosai_supplies_plan_strips_due_before_governor(self) -> None:
         tools = FakeGovernorTools()

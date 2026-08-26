@@ -34,6 +34,7 @@ class BrainGuardTests(unittest.TestCase):
             frozenset({"taskTitle", "title", "memo", "dueDate", "dueTime", "priority"}),
         )
         self.assertEqual(INTENT_PARAMETER_KEYS["task.create"], frozenset({"title", "memo", "dueDate", "dueTime"}))
+        self.assertEqual(INTENT_PARAMETER_KEYS["today.get"], frozenset({"date", "startDate"}))
         self.assertEqual(INTENT_PARAMETER_KEYS["memo.search"], frozenset({"query"}))
         self.assertEqual(INTENT_PARAMETER_KEYS["document.search"], frozenset({"query"}))
         self.assertEqual(INTENT_PARAMETER_KEYS["document.update_tags"], frozenset({"documentId", "tags"}))
@@ -51,6 +52,22 @@ class BrainGuardTests(unittest.TestCase):
         assert isinstance(request, ToolRequest)
         self.assertEqual(request.kind, ToolKind.MEMO_SEARCH)
         self.assertEqual(request.query, "의무교육")
+
+    def test_today_plan_preserves_requested_date(self) -> None:
+        for key in ("date", "startDate"):
+            with self.subTest(key=key):
+                result = adapt_kaosai_plan(
+                    {"intent": "today.get", "parameters": {key: "2026-08-26"}},
+                    self.context(),
+                )
+
+                self.assertEqual(result.kind, BrainGuardResultKind.READONLY_TOOL)
+                self.assertFalse(result.confirmation_required)
+                self.assertIsInstance(result.request, ToolRequest)
+                request = result.request
+                assert isinstance(request, ToolRequest)
+                self.assertEqual(request.kind, ToolKind.TODAY)
+                self.assertEqual(request.start, "2026-08-26")
 
     def test_task_create_plan_requires_confirmation_and_defaults_due_time(self) -> None:
         result = adapt_kaosai_plan(

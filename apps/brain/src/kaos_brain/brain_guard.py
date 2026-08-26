@@ -67,7 +67,7 @@ ALLOWED_INTENTS = READONLY_INTENTS | MUTATION_INTENTS
 ALLOWED_SCOPES = {"personal", "family", "supplies"}
 PLAN_TOP_LEVEL_KEYS = frozenset({"intent", "scope", "parameters"})
 INTENT_PARAMETER_KEYS: dict[str, frozenset[str]] = {
-    "today.get": frozenset(),
+    "today.get": frozenset({"date", "startDate"}),
     "task.list_active": frozenset(),
     "task.list_completed": frozenset({"query", "start", "end"}),
     "memo.search": frozenset({"query"}),
@@ -125,7 +125,8 @@ def adapt_kaosai_plan(plan: Mapping[str, Any], context: BrainGuardContext) -> Br
 def _readonly_request(intent: str, parameters: Mapping[str, Any], scope: str, context: BrainGuardContext) -> ToolRequest:
     profile, collection_id = _profile_and_collection(scope, parameters, context)
     if intent == "today.get":
-        return ToolRequest(ToolKind.TODAY, profile=profile, collection_id=collection_id)
+        start = _optional_date(parameters, "date") or _optional_date(parameters, "startDate")
+        return ToolRequest(ToolKind.TODAY, start=start, profile=profile, collection_id=collection_id)
     if intent == "task.list_active":
         return ToolRequest(ToolKind.ACTIVE_TASKS, profile=profile, collection_id=collection_id)
     if intent == "task.list_completed":
