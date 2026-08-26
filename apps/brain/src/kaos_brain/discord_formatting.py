@@ -58,6 +58,18 @@ def _range_summary(start: int, count: int, total: int) -> str:
     return f"<{start}-{start + count - 1} of {total}>"
 
 
+def _payload_count(payload: dict[str, Any], *keys: str, fallback: int) -> int:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, bool):
+            continue
+        try:
+            return max(0, int(value))
+        except (TypeError, ValueError):
+            continue
+    return fallback
+
+
 def render_active_control_message(
     events: list[dict[str, Any]],
     tasks: list[dict[str, Any]],
