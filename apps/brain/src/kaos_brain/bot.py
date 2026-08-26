@@ -2867,7 +2867,7 @@ class BrainActiveControlSelect(discord.ui.Select):
         label = SUPPLIES_LABEL if kind == "supplies" else ACTIVE_TASKS_LABEL
         placeholder = f"{label}: {len(tasks)}"
         if kind == "tasks" and _has_overdue_tasks(tasks):
-            placeholder = f"{placeholder} !!!"
+            placeholder = f"{placeholder} ★"
         row = 2 if kind == "supplies" else 1
         disabled = not options
         if disabled:
@@ -3227,7 +3227,7 @@ class BrainActiveTasksSelect(discord.ui.Select):
         label = "Supplies" if parent.supplies else "Active Tasks"
         placeholder = f"{label} {start}-{end}"
         if not parent.supplies and _has_overdue_tasks(parent.tasks):
-            placeholder = f"{placeholder} !!!"
+            placeholder = f"{placeholder} ★"
         super().__init__(placeholder=placeholder, min_values=1, max_values=1, options=options, row=0)
 
     async def callback(self, interaction: discord.Interaction) -> None:

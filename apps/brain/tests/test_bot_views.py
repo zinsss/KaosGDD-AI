@@ -426,7 +426,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             if isinstance(child, BrainActiveControlSelect) and child.kind == "supplies"
         )
 
-        self.assertEqual(task_select.placeholder, f"{ACTIVE_TASKS_LABEL}: 1 !!!")
+        self.assertEqual(task_select.placeholder, f"{ACTIVE_TASKS_LABEL}: 1 ★")
         self.assertEqual(supplies_select.placeholder, f"{SUPPLIES_LABEL}: 1")
 
     async def test_service_menu_select_calls_up_active_tasks_message(self) -> None:
@@ -750,7 +750,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
                 for child in refreshed.children
                 if isinstance(child, BrainActiveControlSelect | BrainUpcomingEventsSelect)
             ],
-            [f"{UPCOMING_EVENTS_LABEL}: 1", f"{ACTIVE_TASKS_LABEL}: 1 !!!", f"{SUPPLIES_LABEL}: 1"],
+            [f"{UPCOMING_EVENTS_LABEL}: 1", f"{ACTIVE_TASKS_LABEL}: 1 ★", f"{SUPPLIES_LABEL}: 1"],
         )
         self.assertEqual(governor_tools.calendar_month_image_calls[0][:3], ("main", None, None))
         self.assertIsNotNone(governor_tools.calendar_month_image_calls[0][3])
@@ -1095,7 +1095,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         )
         select = next(child for child in view.children if isinstance(child, BrainActiveTasksSelect))
 
-        self.assertEqual(select.placeholder, "Active Tasks 1-1 !!!")
+        self.assertEqual(select.placeholder, "Active Tasks 1-1 ★")
 
     async def test_active_task_service_next_page_edits_same_message(self) -> None:
         tasks = [{"title": f"Task {index:02d}"} for index in range(1, 28)]
