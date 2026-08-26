@@ -2132,6 +2132,7 @@ def _pending_task_edit_payload(pending: PendingTaskEdit) -> dict[str, object]:
 
 def _pending_event_create_payload(pending: PendingEventCreate) -> dict[str, object]:
     payload: dict[str, object] = {
+        "profile": pending.profile,
         "title": pending.title,
         "startDate": pending.start_date,
         "endDate": pending.end_date,

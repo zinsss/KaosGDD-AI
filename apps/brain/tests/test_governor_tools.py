@@ -468,6 +468,7 @@ class GovernorToolRenderingTests(unittest.TestCase):
         proposal = render_event_create_proposal(
             {
                 "event": {
+                    "profile": "family",
                     "title": "엔소쿠료칸",
                     "startDate": "2026-08-15",
                     "allDay": True,
@@ -477,9 +478,23 @@ class GovernorToolRenderingTests(unittest.TestCase):
         )
         self.assertIn("## Confirm new event", proposal)
         self.assertIn("- event: 엔소쿠료칸", proposal)
+        self.assertIn("- calendar: 𝘧𝘢𝘮𝘪𝘭𝘺", proposal)
         self.assertIn("- date: 2026-08-15", proposal)
         self.assertIn("- memo: 포항 조사리", proposal)
         self.assertEqual(render_event_create_completed({"event": {"uid": "EVENT-1"}}), "일정 저장했어요.")
+
+    def test_render_event_create_messages_shows_personal_calendar(self) -> None:
+        proposal = render_event_create_proposal(
+            {
+                "event": {
+                    "profile": "main",
+                    "title": "당직",
+                    "startDate": "2026-08-15",
+                    "allDay": True,
+                }
+            }
+        )
+        self.assertIn("- calendar: 𝘎𝘋𝘋𝙕𝘪𝙉", proposal)
 
     def test_render_memo_completion_messages(self) -> None:
         self.assertEqual(

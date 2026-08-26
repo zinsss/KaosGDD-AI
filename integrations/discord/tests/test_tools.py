@@ -1780,6 +1780,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 201)
         payload = await response.json()
         self.assertTrue(payload["confirmationId"].startswith("conf_"))
+        self.assertEqual(payload["event"]["profile"], "family")
         self.assertEqual(payload["event"]["title"], "엔소쿠료칸")
         self.assertEqual(payload["event"]["startDate"], "2026-08-15")
         self.assertEqual(payload["event"]["memo"], "포항 조사리")
@@ -1813,6 +1814,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         payload = await response.json()
         self.assertEqual(payload["status"], "completed")
         self.assertEqual(payload["event"]["uid"], "EVENT-CREATED-1")
+        self.assertEqual(payload["event"]["profile"], "family")
         self.assertEqual(self.calendar.created_events[0][0], "family")
         self.assertEqual(
             self.calendar.created_events[0][1],

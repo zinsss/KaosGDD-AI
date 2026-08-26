@@ -594,9 +594,12 @@ def render_event_create_proposal(payload: dict[str, Any]) -> str:
     event = payload.get("event")
     if not isinstance(event, dict):
         return "Event creation requires confirmation."
+    profile = str(event.get("profile") or payload.get("profile") or "").strip().lower()
+    calendar_label = "𝘧𝘢𝘮𝘪𝘭𝘺" if profile == "family" else "𝘎𝘋𝘋𝙕𝘪𝙉"
     lines = [
         "## Confirm new event",
         f"- event: {event.get('title') or 'Untitled event'}",
+        f"- calendar: {calendar_label}",
         f"- date: {event.get('startDate') or ''}",
     ]
     if event.get("allDay"):
