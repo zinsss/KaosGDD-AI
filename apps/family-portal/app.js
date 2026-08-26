@@ -70,7 +70,6 @@ const ROUNY_TIMELINE_DEFAULT_END_HOUR = 22;
 const ROUNY_TIMELINE_HOUR_HEIGHT = 64;
 const ROUNY_TIMELINE_SLOT_MINUTES = 10;
 const ROUNY_DRAG_MOVE_THRESHOLD = 8;
-const ROUNY_DRAG_HOLD_MS = 3000;
 const desktopMedia = window.matchMedia(DESKTOP_MEDIA_QUERY);
 let rounyPointerDrag = null;
 let suppressRounyGridClick = false;
@@ -5338,7 +5337,7 @@ function renderRounyGrid(template) {
                         data-rouny-slot-id="${escapeHtml(slot.id)}"
                         title="${escapeHtml(`${item.title || uiText("common.untitled", "Untitled")} ${rounyTimeLabel(slot)}${issue ? ` · ${issue}` : ""}`)}"
                       >
-                        <span class="rounyBlockHandle" aria-hidden="true">...</span>
+                        <span class="rounyBlockHandle" data-rouny-block-handle aria-hidden="true">...</span>
                         <span class="rounyBlockIcon" aria-hidden="true">${escapeHtml(normalizeRounyIcon(item.icon))}</span>
                         <strong>${escapeHtml(item.title || uiText("common.untitled", "Untitled"))}</strong>
                       </div>
@@ -5407,7 +5406,6 @@ function updateRounyDragFeedback(target, clientX, clientY) {
 
 function clearRounyPointerDrag() {
   const drag = rounyPointerDrag;
-  if (drag?.holdTimer) window.clearTimeout(drag.holdTimer);
   if (drag?.element?.hasPointerCapture?.(drag.pointerId)) drag.element.releasePointerCapture(drag.pointerId);
   drag?.element?.classList.remove("isDragging");
   document.body.classList.remove("isRounyDragging");
@@ -7361,6 +7359,7 @@ document.addEventListener("click", async (event) => {
   const rounyGridItem = event.target.closest("[data-rouny-grid-item]");
   if (rounyGridItem) {
     event.preventDefault();
+    if (event.target.closest("[data-rouny-block-handle]")) return;
     if (suppressRounyGridClick) return;
     openRounyClassEditor(rounyGridItem.dataset.rounyGridItem);
     return;
@@ -7885,7 +7884,8 @@ document.addEventListener("keydown", (event) => {
 });
 
 document.addEventListener("pointerdown", (event) => {
-  const block = event.target.closest("[data-rouny-grid-item]");
+  const handle = event.target.closest("[data-rouny-block-handle]");
+  const block = handle?.closest("[data-rouny-grid-item]");
   if (!block || (event.pointerType === "mouse" && event.button !== 0)) return;
   const item = state.rouny.draft?.items.find((candidate) => candidate.id === block.dataset.rounyGridItem);
   const slot = item?.slots?.find((candidate) => candidate.id === block.dataset.rounySlotId);
@@ -7894,18 +7894,12 @@ document.addEventListener("pointerdown", (event) => {
     ROUNY_TIMELINE_SLOT_MINUTES,
     rounyMinutes(slot.endTime) - rounyMinutes(slot.startTime),
   );
-  const holdTimer = window.setTimeout(() => {
-    if (rounyPointerDrag?.pointerId !== event.pointerId) return;
-    block.setPointerCapture?.(event.pointerId);
-    rounyPointerDrag.canDrag = true;
-  }, ROUNY_DRAG_HOLD_MS);
+  block.setPointerCapture?.(event.pointerId);
   rounyPointerDrag = {
     itemId: item.id,
     slotId: slot.id,
     duration,
     pointerId: event.pointerId,
-    holdTimer,
-    canDrag: false,
     startX: event.clientX,
     startY: event.clientY,
     moved: false,
@@ -7917,12 +7911,6 @@ document.addEventListener("pointerdown", (event) => {
 document.addEventListener("pointermove", (event) => {
   const drag = rounyPointerDrag;
   if (!drag || drag.pointerId !== event.pointerId) return;
-  if (!drag.canDrag) {
-    if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) >= ROUNY_DRAG_MOVE_THRESHOLD) {
-      clearRounyPointerDrag();
-    }
-    return;
-  }
   const moved =
     drag.moved ||
     Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) >= ROUNY_DRAG_MOVE_THRESHOLD;
@@ -7947,15 +7935,8 @@ document.addEventListener("pointerup", (event) => {
     }
   }
   const moved = drag.moved;
-  const itemId = drag.itemId;
   clearRounyPointerDrag();
   if (!moved) {
-    event.preventDefault();
-    suppressRounyGridClick = true;
-    openRounyClassEditor(itemId);
-    window.setTimeout(() => {
-      suppressRounyGridClick = false;
-    }, 80);
     return;
   }
   suppressRounyGridClick = true;

@@ -3555,7 +3555,7 @@ h3 {
   color: #2e3440;
   text-align: left;
   box-shadow: none;
-  cursor: grab;
+  cursor: pointer;
   touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
@@ -3563,15 +3563,23 @@ h3 {
 
 .rounyBlockHandle {
   position: absolute;
-  top: 2px;
-  right: 6px;
+  top: 0;
+  right: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  width: 24px;
+  height: 24px;
+  padding: 2px 6px 0 0;
   color: rgba(46, 52, 64, 0.48);
   font-family: "Pretendard", sans-serif;
   font-size: 0.72rem;
   font-weight: 900;
   line-height: 1;
   letter-spacing: 0;
-  pointer-events: none;
+  cursor: grab;
+  pointer-events: auto;
+  touch-action: none;
 }
 
 .rounyBlockIcon {
@@ -3605,6 +3613,10 @@ h3 {
   z-index: 6;
   opacity: 0.58;
   outline: 2px solid var(--nord8);
+  cursor: grabbing;
+}
+
+.rounyBlock.isDragging .rounyBlockHandle {
   cursor: grabbing;
 }
 
