@@ -1073,7 +1073,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         await action_view.on_timeout()
         sent_message.delete.assert_awaited_once()
 
-    async def test_active_task_service_paginates_20_items(self) -> None:
+    async def test_active_task_service_paginates_10_items(self) -> None:
         tasks = [{"title": f"Task {index:02d}"} for index in range(1, 28)]
         view = BrainActiveTasksView(
             FakeGovernorTools(),  # type: ignore[arg-type]
@@ -1083,12 +1083,12 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         )
         select = next(child for child in view.children if isinstance(child, BrainActiveTasksSelect))
 
-        self.assertIn("<1-20 of 27>", view.content())
-        self.assertIn("- Task 20", view.content())
-        self.assertNotIn("- Task 21", view.content())
-        self.assertEqual(len(select.options), 20)
-        self.assertEqual(select.placeholder, "Active Tasks 1-20")
-        self.assertIn("Page 1/2", [getattr(child, "label", "") for child in view.children])
+        self.assertIn("<1-10 of 27>", view.content())
+        self.assertIn("- Task 10", view.content())
+        self.assertNotIn("- Task 11", view.content())
+        self.assertEqual(len(select.options), 10)
+        self.assertEqual(select.placeholder, "Active Tasks 1-10")
+        self.assertIn("Page 1/3", [getattr(child, "label", "") for child in view.children])
 
     async def test_active_task_service_placeholder_warns_when_overdue(self) -> None:
         view = BrainActiveTasksView(
@@ -1120,13 +1120,13 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
 
         interaction.response.defer.assert_awaited_once()
         kwargs = interaction.edit_original_response.await_args.kwargs
-        self.assertIn("<21-27 of 27>", kwargs["content"])
-        self.assertIn("- Task 21", kwargs["content"])
+        self.assertIn("<11-20 of 27>", kwargs["content"])
+        self.assertIn("- Task 11", kwargs["content"])
         refreshed = kwargs["view"]
         select = next(child for child in refreshed.children if isinstance(child, BrainActiveTasksSelect))
-        self.assertEqual(len(select.options), 7)
-        self.assertEqual(select.placeholder, "Active Tasks 21-27")
-        self.assertIn("Page 2/2", [getattr(child, "label", "") for child in refreshed.children])
+        self.assertEqual(len(select.options), 10)
+        self.assertEqual(select.placeholder, "Active Tasks 11-20")
+        self.assertIn("Page 2/3", [getattr(child, "label", "") for child in refreshed.children])
 
     async def test_task_service_history_button_loads_month_archive(self) -> None:
         tools = FakeGovernorTools()
@@ -1153,11 +1153,11 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(" • Completed: 30", kwargs["content"])
         self.assertNotIn("- completed:", kwargs["content"])
         self.assertNotIn("- showing:", kwargs["content"])
-        self.assertIn("<1-20 of 30>", kwargs["content"])
+        self.assertIn("<1-10 of 30>", kwargs["content"])
         self.assertIn("- 15.토 - ~~Done 01~~", kwargs["content"])
         refreshed = kwargs["view"]
         self.assertTrue(any(isinstance(child, BrainTaskHistorySelect) for child in refreshed.children))
-        self.assertIn("Page 1/2", [getattr(child, "label", "") for child in refreshed.children])
+        self.assertIn("Page 1/3", [getattr(child, "label", "") for child in refreshed.children])
         self.assertEqual([getattr(child, "label", "") for child in refreshed.children if getattr(child, "label", "")][-2:], ["Active", "Close"])
 
     async def test_supplies_history_service_omits_dates(self) -> None:

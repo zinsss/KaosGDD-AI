@@ -85,11 +85,11 @@ OPENAI_CALLBACK_PREFIX = "http://localhost:1455/auth/callback?"
 OPENAI_CODE_PATTERN = re.compile(r"^ac_[A-Za-z0-9_.-]+$")
 ACTIVE_CONTROL_MARKER = "# "
 SERVICE_MENU_MARKER = "### KaosGDD Services"
-ACTIVE_CONTROL_LIMIT = 25
+ACTIVE_CONTROL_LIMIT = 10
 ACTIVE_CONTROL_HISTORY_LIMIT = 20
-TASK_SERVICE_PAGE_SIZE = 20
+TASK_SERVICE_PAGE_SIZE = 10
 TASK_SERVICE_HISTORY_LIMIT = 250
-FAX_MAIL_PAGE_SIZE = 20
+FAX_MAIL_PAGE_SIZE = 10
 TASKS_SERVICE_BUTTON_LABEL = "Tasks"
 ACTIVE_TASKS_LABEL = "Active Tasks"
 CALENDAR_LABEL = "Calendar"
@@ -2393,7 +2393,7 @@ class BrainCompletedTasksView(BrainAutoClosingView):
         self.governor_tools = governor_tools
         self.actor_id = actor_id
         self.request = request
-        self.tasks = tasks[:25]
+        self.tasks = tasks[:SEARCH_RESULT_LIMIT]
         self.add_item(BrainCompletedTasksSelect(self))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -4301,7 +4301,7 @@ def _render_task_service_message(
 
 def _render_active_service_message(title: str, tasks: list[dict[str, Any]], *, supplies: bool = False) -> str:
     lines = [f"## {title}", f"- active: {len(tasks)}"]
-    for task in tasks[:25]:
+    for task in tasks[:SEARCH_RESULT_LIMIT]:
         item_title = str(task.get("title") or task.get("summary") or "Untitled task").strip()
         due = " ".join(
             part
@@ -4313,8 +4313,8 @@ def _render_active_service_message(title: str, tasks: list[dict[str, Any]], *, s
         )
         suffix = f" · {due}" if due and not supplies else ""
         lines.append(f"- {discord.utils.escape_markdown(item_title)}{suffix}")
-    if len(tasks) > 25:
-        lines.append(f"- {len(tasks) - 25} more")
+    if len(tasks) > SEARCH_RESULT_LIMIT:
+        lines.append(f"- {len(tasks) - SEARCH_RESULT_LIMIT} more")
     if not tasks:
         lines.append("- none")
     return "\n".join(lines)

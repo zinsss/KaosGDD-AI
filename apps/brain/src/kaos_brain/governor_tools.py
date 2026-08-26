@@ -102,7 +102,7 @@ class GovernorToolClient:
         if request.kind is ToolKind.ACTIVE_TASKS:
             return await self._get("/tools/tasks/active", self._task_params(request.profile, request.collection_id))
         if request.kind is ToolKind.COMPLETED_TASKS:
-            return await self.completed_tasks(request, limit=25)
+            return await self.completed_tasks(request, limit=SEARCH_RESULT_LIMIT)
         if request.kind is ToolKind.MEMO_SEARCH:
             path = "/tools/memos/search" if request.query else "/tools/memos/list"
             params = {"limit": str(SEARCH_RESULT_LIMIT)}
@@ -124,7 +124,7 @@ class GovernorToolClient:
     async def mail_messages(self, *, limit: int = 50) -> dict[str, Any]:
         return await self._get("/tools/mail/naver/list", {"limit": str(limit)})
 
-    async def completed_tasks(self, request: ToolRequest, *, limit: int = 25) -> dict[str, Any]:
+    async def completed_tasks(self, request: ToolRequest, *, limit: int = SEARCH_RESULT_LIMIT) -> dict[str, Any]:
         params = {**self._task_params(request.profile, request.collection_id), "limit": str(limit)}
         if request.query:
             params["query"] = request.query
@@ -963,7 +963,7 @@ def _render_completed_tasks(payload: dict[str, Any]) -> str:
     if not tasks:
         return f"## {title}\n- 없음"
     show_completed_date = not _task_list_is_supplies(payload)
-    return "\n".join([f"## {title}", *(_completed_task_line(item, show_date=show_completed_date) for item in tasks[:25])])
+    return "\n".join([f"## {title}", *(_completed_task_line(item, show_date=show_completed_date) for item in tasks[:SEARCH_RESULT_LIMIT])])
 
 
 def _task_list_title(payload: dict[str, Any], *, completed: bool) -> str:

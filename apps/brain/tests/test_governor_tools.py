@@ -677,7 +677,7 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
             payload["params"],
             {
                 "profile": "main",
-                "limit": "25",
+                "limit": "10",
                 "query": "엄마",
                 "from": "2026-08-02",
                 "to": "2026-08-15",
