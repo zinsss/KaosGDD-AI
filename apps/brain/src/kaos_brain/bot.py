@@ -78,6 +78,16 @@ from .discord_formatting import (
     _week_start_sunday,
     render_active_control_message,
 )
+from .discord_view_helpers import (
+    NO_MENTIONS,
+    BrainAutoClosingView,
+    BrainTemporarySearchView,
+    _bind_view_message,
+    _defer_component_update,
+    _edit_deferred_component,
+    _followup_with_bound_view,
+    _reply_with_bound_view,
+)
 from .event_intent import EventCreateRequest, parse_event_create
 from .governor_tools import (
     DocumentTagRequest,
@@ -135,9 +145,7 @@ from .task_update_intent import (
 from .tool_intent import ToolKind, ToolRequest, parse_tool_request
 
 LOGGER = logging.getLogger(__name__)
-NO_MENTIONS = discord.AllowedMentions.none()
 DOCUMENT_TAG_SUGGESTION_PATTERN = re.compile(r"\b(?:document|doc|문서)?\s*(\d{1,9})\b")
-BRAIN_SEARCH_WINDOW_SECONDS = 600
 OPENAI_CALLBACK_PREFIX = "http://localhost:1455/auth/callback?"
 OPENAI_CODE_PATTERN = re.compile(r"^ac_[A-Za-z0-9_.-]+$")
 KAOSAI_CLARIFY_WINDOW_SECONDS = 300
@@ -148,12 +156,6 @@ class _PendingKaosAIClarification:
     original_text: str
     question: str
     created_at: datetime
-
-
-def _bind_view_message(view: discord.ui.View | None, message: Any) -> None:
-    bind = getattr(view, "bind_message", None)
-    if callable(bind) and message is not None:
-        bind(message)
 
 
 def _combine_clarification_answer(original_text: str, answer: str) -> str:
@@ -185,50 +187,6 @@ def _message_kst_datetime(message: discord.Message) -> datetime:
 
 def _message_kst_date(message: discord.Message) -> date:
     return _message_kst_datetime(message).date()
-
-
-async def _reply_with_bound_view(
-    message: discord.Message,
-    content: str,
-    *,
-    view: discord.ui.View,
-) -> None:
-    sent = await message.reply(
-        content,
-        view=view,
-        mention_author=False,
-        allowed_mentions=NO_MENTIONS,
-    )
-    _bind_view_message(view, sent)
-
-
-async def _followup_with_bound_view(
-    interaction: discord.Interaction,
-    content: str,
-    *,
-    view: discord.ui.View,
-) -> None:
-    sent = await interaction.followup.send(
-        content,
-        view=view,
-        allowed_mentions=NO_MENTIONS,
-        wait=True,
-    )
-    _bind_view_message(view, sent)
-
-
-async def _defer_component_update(interaction: discord.Interaction) -> None:
-    await interaction.response.defer()
-
-
-async def _edit_deferred_component(
-    interaction: discord.Interaction,
-    *,
-    content: str,
-    view: discord.ui.View | None,
-) -> None:
-    _bind_view_message(view, getattr(interaction, "message", None))
-    await interaction.edit_original_response(content=content, view=view, allowed_mentions=NO_MENTIONS)
 
 
 async def _delete_open_service_message(settings: Settings, interaction: discord.Interaction) -> None:
@@ -1638,71 +1596,6 @@ class BrainBot(discord.Client):
             render_memo_edit_proposal(payload),
             view=MemoEditConfirmationView(self.governor_tools, int(message.author.id), str(payload.get("confirmationId") or "")),
         )
-
-
-class BrainTemporarySearchView(discord.ui.View):
-    def __init__(self, search_title: str, *, searched_from: str = "") -> None:
-        super().__init__(timeout=BRAIN_SEARCH_WINDOW_SECONDS)
-        self.search_title = search_title.strip() or "search"
-        self.searched_from = searched_from.strip()
-        self._message: discord.Message | None = None
-
-    def bind_message(self, message: discord.Message) -> None:
-        self._message = message
-
-    def _search_source_label(self) -> str:
-        if self.searched_from == "Paperless and Memos":
-            return "Paperless/Memos"
-        return self.searched_from or "Search"
-
-    def _closed_notice(self) -> str:
-        return f"{self._search_source_label()} searched."
-
-    def _expired_notice(self) -> str:
-        return f"{self._search_source_label()} search expired."
-
-    async def delete_message(self) -> None:
-        if self._message is None:
-            return
-        try:
-            await self._message.edit(content=self._closed_notice(), view=None, allowed_mentions=NO_MENTIONS)
-        except discord.HTTPException:
-            LOGGER.info("Could not close Brain search window %s", getattr(self._message, "id", ""))
-        finally:
-            self._message = None
-
-    async def on_timeout(self) -> None:
-        if self._message is None:
-            return
-        try:
-            await self._message.edit(
-                content=self._expired_notice(),
-                view=None,
-                allowed_mentions=NO_MENTIONS,
-            )
-        except discord.HTTPException:
-            LOGGER.info("Could not expire Brain search window %s", getattr(self._message, "id", ""))
-        finally:
-            self._message = None
-
-
-class BrainAutoClosingView(discord.ui.View):
-    def __init__(self, *, timeout: float | None = 600) -> None:
-        super().__init__(timeout=timeout)
-        self._message: Any | None = None
-
-    def bind_message(self, message: Any) -> None:
-        self._message = message
-
-    async def on_timeout(self) -> None:
-        if self._message is None:
-            return
-        try:
-            await self._message.delete()
-        except discord.HTTPException:
-            LOGGER.info("Could not auto-close Brain temporary message %s", getattr(self._message, "id", ""))
-        finally:
-            self._message = None
 
 
 class KaosAIReauthView(discord.ui.View):
