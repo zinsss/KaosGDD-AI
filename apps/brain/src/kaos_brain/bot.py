@@ -14,7 +14,6 @@ from .config import Settings
 from .discord_active_control_views import (
     BrainActiveControlSelect,
     BrainActiveControlView,
-    BrainCalendarMonthView,
     BrainImportSelect,
     BrainServiceMenuSelect,
     BrainServiceMenuView,
@@ -23,6 +22,14 @@ from .discord_active_control_views import (
     _read_active_control_service_message_id,
     _read_open_service_message_id,
     _write_active_control_message_id,
+)
+from .discord_calendar_views import BrainCalendarMonthView
+from .discord_confirmation_views import (
+    DocumentTagConfirmationView,
+    EventCreateConfirmationView,
+    MemoCreateConfirmationView,
+    MemoDeleteConfirmationView,
+    MemoEditConfirmationView,
 )
 from .discord_content_views import (
     BrainCombinedSearchFullButton,
@@ -85,11 +92,7 @@ from .discord_formatting import (
     _range_summary,
     _render_active_service_message,
     _render_active_task_selection,
-    _render_calendar_weekly,
-    _render_document_list_message,
-    _render_memo_list_message,
     _safe_discord_line,
-    _payload_count,
     _shift_date_month,
     _task_option_description,
     _task_option_label,
@@ -98,12 +101,7 @@ from .discord_formatting import (
 )
 from .discord_view_helpers import (
     NO_MENTIONS,
-    BrainAutoClosingView,
-    BrainTemporarySearchView,
     _bind_view_message,
-    _defer_component_update,
-    _edit_deferred_component,
-    _followup_with_bound_view,
     _reply_with_bound_view,
 )
 from .event_intent import EventCreateRequest, parse_event_create
@@ -113,15 +111,10 @@ from .governor_tools import (
     GovernorToolConfig,
     GovernorToolError,
     TaskEditRequest as GovernorTaskEditRequest,
-    render_memo_create_completed,
     render_memo_create_proposal,
-    render_memo_delete_completed,
     render_memo_delete_proposal,
-    render_memo_edit_completed,
     render_memo_edit_proposal,
-    render_document_tags_completed,
     render_document_tags_proposal,
-    render_event_create_completed,
     render_event_create_proposal,
     render_task_action_proposal,
     render_task_create_proposal,
@@ -215,10 +208,6 @@ def _tool_unavailable() -> str:
 
 def _tool_failed(action: str) -> str:
     return f"{action} 실패했어요."
-
-
-def _tool_cancelled(action: str) -> str:
-    return f"{action} 취소했어요."
 
 
 def _is_transient_brain_message(content: str) -> bool:
@@ -1356,174 +1345,3 @@ class KaosAIReauthView(discord.ui.View):
         await interaction.response.defer()
         content = await _start_reauth_message(self.reauth)
         await interaction.edit_original_response(content=content, view=None, allowed_mentions=NO_MENTIONS)
-
-
-class EventCreateConfirmationView(BrainAutoClosingView):
-    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, confirmation_id: str) -> None:
-        super().__init__(timeout=600)
-        self.governor_tools = governor_tools
-        self.actor_id = actor_id
-        self.confirmation_id = confirmation_id
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if int(interaction.user.id) == self.actor_id:
-            return True
-        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
-        return False
-
-    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.success)
-    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await _defer_component_update(interaction)
-        try:
-            payload = await self.governor_tools.approve_confirmation(self.confirmation_id, actor_id=self.actor_id)
-            content = render_event_create_completed(payload)
-        except GovernorToolError as exc:
-            LOGGER.warning("Event creation approval failed: %s", exc)
-            content = _tool_failed("일정 저장")
-        for item in self.children:
-            item.disabled = True
-        await _edit_deferred_component(interaction, content=content, view=self)
-        self.stop()
-
-    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
-    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        for item in self.children:
-            item.disabled = True
-        await interaction.response.edit_message(content=_tool_cancelled("일정 저장"), view=self, allowed_mentions=NO_MENTIONS)
-        self.stop()
-
-
-class MemoCreateConfirmationView(BrainAutoClosingView):
-    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, confirmation_id: str) -> None:
-        super().__init__(timeout=600)
-        self.governor_tools = governor_tools
-        self.actor_id = actor_id
-        self.confirmation_id = confirmation_id
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if int(interaction.user.id) == self.actor_id:
-            return True
-        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
-        return False
-
-    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.success)
-    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await _defer_component_update(interaction)
-        try:
-            payload = await self.governor_tools.approve_confirmation(self.confirmation_id, actor_id=self.actor_id)
-            content = render_memo_create_completed(payload)
-        except GovernorToolError as exc:
-            LOGGER.warning("Memo creation approval failed: %s", exc)
-            content = _tool_failed("메모 저장")
-        for item in self.children:
-            item.disabled = True
-        await _edit_deferred_component(interaction, content=content, view=self)
-        self.stop()
-
-    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
-    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        for item in self.children:
-            item.disabled = True
-        await interaction.response.edit_message(content=_tool_cancelled("메모 저장"), view=self, allowed_mentions=NO_MENTIONS)
-        self.stop()
-
-
-class MemoDeleteConfirmationView(BrainAutoClosingView):
-    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, confirmation_id: str) -> None:
-        super().__init__(timeout=600)
-        self.governor_tools = governor_tools
-        self.actor_id = actor_id
-        self.confirmation_id = confirmation_id
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if int(interaction.user.id) == self.actor_id:
-            return True
-        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
-        return False
-
-    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.danger)
-    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await _defer_component_update(interaction)
-        try:
-            payload = await self.governor_tools.approve_confirmation(self.confirmation_id, actor_id=self.actor_id)
-            content = render_memo_delete_completed(payload)
-        except GovernorToolError as exc:
-            LOGGER.warning("Memo delete approval failed: %s", exc)
-            content = _tool_failed("메모 삭제")
-        for item in self.children:
-            item.disabled = True
-        await _edit_deferred_component(interaction, content=content, view=self)
-        self.stop()
-
-    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
-    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        for item in self.children:
-            item.disabled = True
-        await interaction.response.edit_message(content=_tool_cancelled("메모 삭제"), view=self, allowed_mentions=NO_MENTIONS)
-        self.stop()
-
-
-class MemoEditConfirmationView(BrainAutoClosingView):
-    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, confirmation_id: str) -> None:
-        super().__init__(timeout=600)
-        self.governor_tools = governor_tools
-        self.actor_id = actor_id
-        self.confirmation_id = confirmation_id
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if int(interaction.user.id) == self.actor_id:
-            return True
-        await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
-        return False
-
-    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.success)
-    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await _defer_component_update(interaction)
-        try:
-            payload = await self.governor_tools.approve_confirmation(self.confirmation_id, actor_id=self.actor_id)
-            content = render_memo_edit_completed(payload)
-        except GovernorToolError as exc:
-            LOGGER.warning("Memo edit approval failed: %s", exc)
-            content = _tool_failed("메모 수정")
-        for item in self.children:
-            item.disabled = True
-        await _edit_deferred_component(interaction, content=content, view=self)
-        self.stop()
-
-    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
-    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        for item in self.children:
-            item.disabled = True
-        await interaction.response.edit_message(content=_tool_cancelled("메모 수정"), view=self, allowed_mentions=NO_MENTIONS)
-        self.stop()
-
-
-class DocumentTagConfirmationView(BrainAutoClosingView):
-    def __init__(self, governor_tools: GovernorToolClient, actor_id: int, confirmation_id: str) -> None:
-        super().__init__(timeout=600)
-        self.governor_tools = governor_tools
-        self.actor_id = actor_id
-        self.confirmation_id = confirmation_id
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.actor_id:
-            await interaction.response.send_message("Only the requester can confirm this document tag change.", ephemeral=True)
-            return False
-        return True
-
-    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.success)
-    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await _defer_component_update(interaction)
-        try:
-            payload = await self.governor_tools.approve_confirmation(self.confirmation_id, actor_id=self.actor_id)
-            content = render_document_tags_completed(payload)
-        except GovernorToolError as exc:
-            LOGGER.warning("Document tag confirmation failed: %s", exc)
-            content = _tool_failed("문서 태그 수정")
-        await _edit_deferred_component(interaction, content=content, view=None)
-        self.stop()
-
-    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
-    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(content="문서 태그 수정 취소했어요.", view=None, allowed_mentions=NO_MENTIONS)
-        self.stop()
