@@ -2423,7 +2423,7 @@ class BrainActiveControlView(discord.ui.View):
         self.events = events[:ACTIVE_CONTROL_LIMIT]
         self.tasks = tasks[:ACTIVE_CONTROL_LIMIT]
         self.supplies = supplies[:ACTIVE_CONTROL_LIMIT]
-        self.imports = imports[:ACTIVE_CONTROL_LIMIT]
+        self.imports = _active_fax_mail_imports(imports)[:ACTIVE_CONTROL_LIMIT]
         self.add_item(BrainUpcomingEventsSelect(self, self.events))
         self.add_item(BrainActiveControlSelect(self, "tasks", self.tasks))
         self.add_item(BrainActiveControlSelect(self, "supplies", self.supplies))
@@ -3922,6 +3922,29 @@ def _fax_mail_results(payload: dict[str, Any], *, mode: str) -> list[dict[str, A
     if mode == "outgoing":
         return [item for item in imports if _import_kind(item) == "fax" and _import_direction(item) == "outgoing"]
     return [item for item in imports if _import_kind(item) == "fax" and _import_direction(item) != "outgoing"]
+
+
+def _active_fax_mail_imports(imports: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [item for item in imports if _is_active_fax_mail_import(item)]
+
+
+def _is_active_fax_mail_import(item: dict[str, Any]) -> bool:
+    kind = _import_kind(item)
+    direction = _import_direction(item)
+    if kind not in {"fax", "mail"} or direction != "incoming":
+        return False
+    return not _import_is_user_checked(item)
+
+
+def _import_is_user_checked(item: dict[str, Any]) -> bool:
+    for key in ("checked", "read", "seen", "handled", "dismissed"):
+        value = item.get(key)
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str) and value.strip().lower() in {"true", "yes", "1"}:
+            return True
+    state = str(item.get("userState") or item.get("user_state") or "").strip().lower()
+    return state in {"checked", "read", "seen", "handled", "dismissed"}
 
 
 def _mail_message_results(payload: dict[str, Any]) -> list[dict[str, Any]]:

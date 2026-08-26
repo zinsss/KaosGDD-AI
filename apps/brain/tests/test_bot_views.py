@@ -19,6 +19,7 @@ from kaos_brain.bot import (
     BrainCalendarMonthView,
     BrainDeletedMemoView,
     BrainCompletedTaskActionsView,
+    BrainImportSelect,
     BrainTaskEditModal,
     BrainCompletedTasksSelect,
     BrainCompletedTasksView,
@@ -345,13 +346,37 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
                 f"{UPCOMING_EVENTS_LABEL}: 1",
                 f"{ACTIVE_TASKS_LABEL}: 1",
                 f"{SUPPLIES_LABEL}: 1",
-                f"{FAX_MAIL_LABEL}: 1",
+                f"{FAX_MAIL_LABEL}: 0",
             ],
         )
         self.assertEqual(
             [getattr(child, "label", "") for child in view.children if getattr(child, "label", "")],
             ["Reload"],
         )
+
+    async def test_active_control_fax_mail_counts_only_unchecked_incoming_items(self) -> None:
+        view = BrainActiveControlView(
+            FakeGovernorTools(),  # type: ignore[arg-type]
+            self.active_control_settings(),
+            [],
+            [],
+            [],
+            [
+                {"kind": "mail", "direction": "incoming", "title": "Unread target mail"},
+                {"kind": "fax", "direction": "incoming", "title": "Incoming fax", "status": "archived"},
+                {"kind": "fax", "direction": "outgoing", "title": "Sent fax"},
+                {"kind": "documents", "title": "Documents accepted: 1"},
+                {"kind": "mail", "direction": "incoming", "title": "Read mail", "read": True},
+                {"kind": "fax", "direction": "incoming", "title": "Checked fax", "checked": "true"},
+                {"kind": "mail", "title": "Naver organizer digests: 1"},
+            ],
+        )
+
+        import_select = next(child for child in view.children if isinstance(child, BrainImportSelect))
+
+        self.assertEqual(import_select.placeholder, f"{FAX_MAIL_LABEL}: 2")
+        self.assertFalse(import_select.disabled)
+        self.assertEqual([option.label for option in import_select.options], ["Unread target mail", "Incoming fax"])
 
     async def test_active_control_dropdown_descriptions_only_show_task_due_dates(self) -> None:
         view = BrainActiveControlView(
