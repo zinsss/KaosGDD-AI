@@ -502,14 +502,14 @@ def render_task_due_update_proposal(payload: dict[str, Any]) -> str:
     title = str(task.get("title") or "Untitled task")
     old_due = _due_text(str(task.get("oldDue") or ""), str(task.get("oldDueTime") or ""))
     new_due = _due_text(str(task.get("newDue") or ""), str(task.get("newDueTime") or ""))
-    return "\n".join(
-        [
-            "## Confirm task edit",
-            f"- task: {title}",
-            f"- from: {old_due or 'none'}",
-            f"- to: {new_due}",
-        ]
-    )
+    lines = [
+        "## Confirm task edit",
+        f"- task: {title}",
+    ]
+    if owner_label := _task_owner_label(payload):
+        lines.append(f"- list: {owner_label}")
+    lines.extend([f"- from: {old_due or 'none'}", f"- to: {new_due}"])
+    return "\n".join(lines)
 
 
 def render_task_due_update_completed(payload: dict[str, Any]) -> str:
@@ -525,6 +525,8 @@ def render_task_edit_proposal(payload: dict[str, Any]) -> str:
     old_due = _due_text(str(task.get("oldDue") or ""), str(task.get("oldDueTime") or ""))
     due = _due_text(str(task.get("due") or ""), str(task.get("dueTime") or ""))
     lines = ["## Confirm task edit", f"- from: {old_title}", f"- to: {title}"]
+    if owner_label := _task_owner_label(payload):
+        lines.append(f"- list: {owner_label}")
     if old_due or due:
         lines.append(f"- due: {old_due or 'none'} -> {due or 'none'}")
     return "\n".join(lines)
@@ -546,6 +548,8 @@ def render_task_create_proposal(payload: dict[str, Any]) -> str:
         f"Confirm New {subject}",
         f"## {title}",
     ]
+    if owner_label := _task_owner_label(payload):
+        lines.append(f"- list: {owner_label}")
     if due:
         lines.append(f"- due: {due}")
     memo = str(task.get("memo") or "").strip()
@@ -567,6 +571,8 @@ def render_task_action_proposal(payload: dict[str, Any]) -> str:
     label = {"complete": "complete", "delete": "delete", "reopen": "reopen"}.get(action, "update")
     due = _due_text(str(task.get("due") or ""), str(task.get("dueTime") or ""))
     lines = ["## Confirm task action", f"- action: {label}", f"- task: {title}"]
+    if owner_label := _task_owner_label(payload):
+        lines.append(f"- list: {owner_label}")
     if due:
         lines.append(f"- due: {due}")
     return "\n".join(lines)
@@ -692,6 +698,18 @@ def _task_noun(payload: dict[str, Any]) -> str:
     profile = str(task_payload.get("profile") or payload.get("profile") or "").strip().lower()
     collection_id = str(task_payload.get("collectionId") or payload.get("collectionId") or "").strip().lower()
     return "비품" if profile == "supplies" or "supplies" in collection_id else "할 일"
+
+
+def _task_owner_label(payload: dict[str, Any]) -> str:
+    if _task_noun(payload) == "비품":
+        return ""
+    task = payload.get("task")
+    task_payload = task if isinstance(task, dict) else payload
+    profile = str(task_payload.get("profile") or payload.get("profile") or "").strip().lower()
+    collection_id = str(task_payload.get("collectionId") or payload.get("collectionId") or "").strip().lower()
+    if profile == "family" or collection_id.startswith("family:"):
+        return "𝘧𝘢𝘮𝘪𝘭𝘺"
+    return "𝘎𝘋𝘋𝙕𝘪𝙉"
 
 
 def _memo_preview(content: str) -> str:

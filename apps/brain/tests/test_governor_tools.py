@@ -21,6 +21,7 @@ from kaos_brain.governor_tools import (
     render_document_tags_completed,
     render_document_tags_proposal,
     render_task_action_completed,
+    render_task_action_proposal,
     render_task_create_completed,
     render_task_create_proposal,
     render_task_edit_completed,
@@ -441,7 +442,27 @@ class GovernorToolRenderingTests(unittest.TestCase):
             {"task": {"title": "엄마한테 전화", "memo": "병원 끝나고", "due": "2026-08-18", "dueTime": "10:00"}}
         )
 
-        self.assertEqual(content, "Confirm New Task\n## 엄마한테 전화\n- due: 2026-08-18 10:00\n- memo: 병원 끝나고")
+        self.assertEqual(
+            content,
+            "Confirm New Task\n## 엄마한테 전화\n- list: 𝘎𝘋𝘋𝙕𝘪𝙉\n- due: 2026-08-18 10:00\n- memo: 병원 끝나고",
+        )
+
+    def test_render_task_create_proposal_shows_family_list(self) -> None:
+        content = render_task_create_proposal({"task": {"profile": "family", "title": "로운이 준비물"}})
+
+        self.assertEqual(content, "Confirm New Task\n## 로운이 준비물\n- list: 𝘧𝘢𝘮𝘪𝘭𝘺")
+
+    def test_render_task_action_proposal_shows_owner_list(self) -> None:
+        content = render_task_action_proposal({"task": {"profile": "family", "title": "로운이 준비물", "action": "complete"}})
+
+        self.assertIn("- list: 𝘧𝘢𝘮𝘪𝘭𝘺", content)
+
+    def test_render_task_edit_proposal_shows_owner_list(self) -> None:
+        content = render_task_edit_proposal(
+            {"task": {"profile": "main", "oldTitle": "엄마한테 전화", "title": "엄마한테 전화하기"}}
+        )
+
+        self.assertIn("- list: 𝘎𝘋𝘋𝙕𝘪𝙉", content)
 
     def test_render_supplies_task_completed_messages_use_supplies_label(self) -> None:
         payload = {"task": {"title": "Soap", "collectionId": "supplies:main"}}

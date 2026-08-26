@@ -2079,6 +2079,7 @@ def _within_optional_range(value: date | None, start: date | None, end: date | N
 
 def _pending_task_payload(pending: PendingTaskDueUpdate) -> dict[str, object]:
     return {
+        "profile": pending.profile,
         "uid": pending.uid,
         "collectionId": pending.collection_id,
         "title": pending.title,
@@ -2091,6 +2092,7 @@ def _pending_task_payload(pending: PendingTaskDueUpdate) -> dict[str, object]:
 
 def _pending_task_create_payload(pending: PendingTaskCreate) -> dict[str, object]:
     payload: dict[str, object] = {
+        "profile": pending.profile,
         "title": pending.title,
         "memo": pending.memo,
         "due": pending.due,
@@ -2103,6 +2105,7 @@ def _pending_task_create_payload(pending: PendingTaskCreate) -> dict[str, object
 
 def _pending_task_action_payload(pending: PendingTaskAction) -> dict[str, object]:
     return {
+        "profile": pending.profile,
         "uid": pending.uid,
         "collectionId": pending.collection_id,
         "title": pending.title,
@@ -2114,6 +2117,7 @@ def _pending_task_action_payload(pending: PendingTaskAction) -> dict[str, object
 
 def _pending_task_edit_payload(pending: PendingTaskEdit) -> dict[str, object]:
     return {
+        "profile": pending.profile,
         "uid": pending.uid,
         "collectionId": pending.collection_id,
         "oldTitle": pending.old_title,
