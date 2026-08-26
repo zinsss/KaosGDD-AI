@@ -450,7 +450,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         interaction.response.defer.assert_awaited_once()
         content = interaction.followup.send.await_args.args[0]
         self.assertIn(f"## {ACTIVE_TASKS_TITLE}", content)
-        self.assertIn("### Total: 1", content)
+        self.assertIn("<1-1 of 1>", content)
         self.assertIn("- 로운이 제로이드 · 2026-08-22 10:00", content)
         service_view = interaction.followup.send.await_args.kwargs["view"]
         self.assertIsInstance(service_view, BrainActiveTasksView)
@@ -590,15 +590,17 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
 
         calls = interaction.followup.send.await_args_list
         self.assertIn("Searched..", calls[0].args[0])
-        self.assertIn("## ..", calls[0].args[0])
+        self.assertIn(f"## {PAPERLESS_TITLE}", calls[0].args[0])
+        self.assertIn("<1-1 of 26>", calls[0].args[0])
         self.assertIn("26 results in 26 documents", calls[0].args[0])
-        self.assertIn("Page 1 / 3", calls[0].args[0])
+        self.assertNotIn("Page 1 / 3", calls[0].args[0])
         self.assertNotIn("[open]", calls[0].args[0])
         self.assertNotIn("embed", calls[0].kwargs)
         self.assertIsInstance(calls[0].kwargs["view"], BrainDocumentSearchView)
         self.assertIn("Close", [getattr(child, "label", "") for child in calls[0].kwargs["view"].children])
         self.assertIn("Searched..", calls[1].args[0])
-        self.assertIn("## ..", calls[1].args[0])
+        self.assertIn(f"## {MEMOS_TITLE}", calls[1].args[0])
+        self.assertIn("<1-2 of 2>", calls[1].args[0])
         self.assertIn("2 results in 2 memos", calls[1].args[0])
         self.assertIsInstance(calls[1].kwargs["view"], BrainMemoSearchView)
         self.assertIn("Close", [getattr(child, "label", "") for child in calls[1].kwargs["view"].children])
@@ -625,7 +627,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         content = interaction.followup.send.await_args.args[0]
         self.assertIn(f"## {FAX_MAIL_TITLE}", content)
         self.assertIn("### Incoming Fax", content)
-        self.assertIn("- total: 1", content)
+        self.assertIn("<1-1 of 1>", content)
         self.assertNotIn("Naver organizer digests", content)
         self.assertIn("- Fax jobs tracked: 1", content)
         self.assertNotIn("Documents accepted", content)
@@ -652,7 +654,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn(f"## {FAX_MAIL_TITLE}", content)
         self.assertIn("### Outgoing Fax", content)
-        self.assertIn(f"- showing: 1-{FAX_MAIL_PAGE_SIZE}", content)
+        self.assertIn(f"<1-{FAX_MAIL_PAGE_SIZE} of {FAX_MAIL_PAGE_SIZE + 1}>", content)
         self.assertIn("Fax job 01", content)
         self.assertNotIn(f"Fax job {FAX_MAIL_PAGE_SIZE + 1:02d}", content)
         self.assertEqual(
@@ -711,7 +713,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         interaction.response.defer.assert_awaited_once()
         content = interaction.followup.send.await_args.args[0]
         self.assertIn(f"## {SUPPLIES_TITLE}", content)
-        self.assertIn("### Total: 1", content)
+        self.assertIn("<1-1 of 1>", content)
         self.assertIn("- 토프라민", content)
         self.assertNotIn("2026-", content)
         service_view = interaction.followup.send.await_args.kwargs["view"]
@@ -879,8 +881,9 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         kwargs = interaction.response.edit_message.await_args.kwargs
         self.assertIn("Searched..", kwargs["content"])
         self.assertIn("## 보험", kwargs["content"])
+        self.assertIn("<1-10 of 30>", kwargs["content"])
         self.assertIn("30 results in 30 documents", kwargs["content"])
-        self.assertIn("Page 1 / 3", kwargs["content"])
+        self.assertNotIn("Page 1 / 3", kwargs["content"])
         self.assertIn("- Document 1", kwargs["content"])
         self.assertNotIn("[open]", kwargs["content"])
         self.assertNotIn("embed", kwargs)
@@ -915,7 +918,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         interaction.response.defer.assert_awaited_once()
         interaction.edit_original_response.assert_awaited_once()
         kwargs = interaction.edit_original_response.await_args.kwargs
-        self.assertIn("Page 2 / 3", kwargs["content"])
+        self.assertIn("<11-11 of 26>", kwargs["content"])
         self.assertIn("- Document page 2", kwargs["content"])
         self.assertNotIn("embed", kwargs)
         self.assertIsInstance(kwargs["view"], BrainDocumentSearchView)
@@ -1070,7 +1073,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         await action_view.on_timeout()
         sent_message.delete.assert_awaited_once()
 
-    async def test_active_task_service_paginates_25_items(self) -> None:
+    async def test_active_task_service_paginates_20_items(self) -> None:
         tasks = [{"title": f"Task {index:02d}"} for index in range(1, 28)]
         view = BrainActiveTasksView(
             FakeGovernorTools(),  # type: ignore[arg-type]
@@ -1080,10 +1083,11 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         )
         select = next(child for child in view.children if isinstance(child, BrainActiveTasksSelect))
 
-        self.assertIn("### Total: 27", view.content())
-        self.assertIn("- Task 25", view.content())
-        self.assertEqual(len(select.options), 25)
-        self.assertEqual(select.placeholder, "Active Tasks 1-25")
+        self.assertIn("<1-20 of 27>", view.content())
+        self.assertIn("- Task 20", view.content())
+        self.assertNotIn("- Task 21", view.content())
+        self.assertEqual(len(select.options), 20)
+        self.assertEqual(select.placeholder, "Active Tasks 1-20")
         self.assertIn("Page 1/2", [getattr(child, "label", "") for child in view.children])
 
     async def test_active_task_service_placeholder_warns_when_overdue(self) -> None:
@@ -1116,12 +1120,12 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
 
         interaction.response.defer.assert_awaited_once()
         kwargs = interaction.edit_original_response.await_args.kwargs
-        self.assertIn("### Total: 27", kwargs["content"])
-        self.assertIn("- Task 26", kwargs["content"])
+        self.assertIn("<21-27 of 27>", kwargs["content"])
+        self.assertIn("- Task 21", kwargs["content"])
         refreshed = kwargs["view"]
         select = next(child for child in refreshed.children if isinstance(child, BrainActiveTasksSelect))
-        self.assertEqual(len(select.options), 2)
-        self.assertEqual(select.placeholder, "Active Tasks 26-27")
+        self.assertEqual(len(select.options), 7)
+        self.assertEqual(select.placeholder, "Active Tasks 21-27")
         self.assertIn("Page 2/2", [getattr(child, "label", "") for child in refreshed.children])
 
     async def test_task_service_history_button_loads_month_archive(self) -> None:
@@ -1149,6 +1153,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(" • Completed: 30", kwargs["content"])
         self.assertNotIn("- completed:", kwargs["content"])
         self.assertNotIn("- showing:", kwargs["content"])
+        self.assertIn("<1-20 of 30>", kwargs["content"])
         self.assertIn("- 15.토 - ~~Done 01~~", kwargs["content"])
         refreshed = kwargs["view"]
         self.assertTrue(any(isinstance(child, BrainTaskHistorySelect) for child in refreshed.children))

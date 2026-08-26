@@ -87,7 +87,7 @@ ACTIVE_CONTROL_MARKER = "# "
 SERVICE_MENU_MARKER = "### KaosGDD Services"
 ACTIVE_CONTROL_LIMIT = 25
 ACTIVE_CONTROL_HISTORY_LIMIT = 20
-TASK_SERVICE_PAGE_SIZE = 25
+TASK_SERVICE_PAGE_SIZE = 20
 TASK_SERVICE_HISTORY_LIMIT = 250
 FAX_MAIL_PAGE_SIZE = 20
 TASKS_SERVICE_BUTTON_LABEL = "Tasks"
@@ -108,6 +108,12 @@ MEMOS_TITLE = "𝓜𝓮𝓶𝓸𝓼"
 FAX_MAIL_TITLE = "𝓕𝓪𝔁 𝓜𝓪𝓲𝓵"
 KOREAN_SHORT_WEEKDAYS = ("월", "화", "수", "목", "금", "토", "일")
 KAOSAI_CLARIFY_WINDOW_SECONDS = 300
+
+
+def _range_summary(start: int, count: int, total: int) -> str:
+    if count <= 0 or total <= 0:
+        return "<0 of 0>"
+    return f"<{start}-{start + count - 1} of {total}>"
 
 
 @dataclass(frozen=True)
@@ -1184,17 +1190,20 @@ class BrainBot(discord.Client):
                     actor_id,
                     tool_request.query,
                     results,
+                    result_count=_payload_count(payload, "resultCount", "count", fallback=len(results)),
+                    total_count=_payload_count(payload, "totalCount", fallback=len(results)),
                     memos_public_url=self.settings.memos_public_url,
                 )
                 if len(results) > 1
                 else None
             )
+            if view is not None:
+                context = view.content(searched=True)
             return context, view
         if tool_request.kind is ToolKind.DOCUMENT_SEARCH:
             results = search_results(payload)
             linked_results = _linked_document_results(results, self.settings.paperless_public_url)
             payload = {**payload, "results": linked_results}
-            context = render_tool_context(tool_request, payload)
             view = (
                 BrainDocumentSearchView(
                     self.governor_tools,
@@ -1205,10 +1214,24 @@ class BrainBot(discord.Client):
                     total_count=_payload_count(payload, "totalCount", "total", fallback=len(linked_results)),
                     page=_payload_count(payload, "page", fallback=1),
                     page_size=_payload_count(payload, "pageSize", "page_size", fallback=SEARCH_RESULT_LIMIT),
+                    searched=True,
                     paperless_public_url=self.settings.paperless_public_url,
                 )
                 if linked_results
                 else None
+            )
+            context = (
+                view.content(searched=True)
+                if view is not None
+                else _render_document_list_message(
+                    tool_request.query,
+                    linked_results,
+                    result_count=_payload_count(payload, "resultCount", "count", fallback=len(linked_results)),
+                    total_count=_payload_count(payload, "totalCount", "total", fallback=len(linked_results)),
+                    page=_payload_count(payload, "page", fallback=1),
+                    page_size=_payload_count(payload, "pageSize", "page_size", fallback=SEARCH_RESULT_LIMIT),
+                    searched=True,
+                )
             )
             return context, view
         context = render_tool_context(tool_request, payload)
@@ -1682,6 +1705,8 @@ class BrainMemoSearchView(BrainTemporarySearchView):
         query: str,
         results: list[dict[str, Any]],
         *,
+        result_count: int = 0,
+        total_count: int = 0,
         memos_public_url: str = "",
     ) -> None:
         super().__init__(query, searched_from="Memos")
@@ -1689,9 +1714,20 @@ class BrainMemoSearchView(BrainTemporarySearchView):
         self.actor_id = actor_id
         self.query = query
         self.results = results[:SEARCH_RESULT_LIMIT]
+        self.result_count = result_count or len(results)
+        self.total_count = total_count or self.result_count
         self.memos_public_url = memos_public_url
         self.add_item(BrainMemoSearchSelect(self))
         self.add_item(BrainSearchCloseButton(row=1))
+
+    def content(self, *, searched: bool = False) -> str:
+        return _render_memo_list_message(
+            self.query,
+            self.results,
+            result_count=self.result_count,
+            total_count=self.total_count,
+            searched=searched,
+        )
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if int(interaction.user.id) == self.actor_id:
@@ -1898,6 +1934,7 @@ class BrainCombinedSearchFullButton(discord.ui.Button):
                 total_count=parent.document_total,
                 page=1,
                 page_size=SEARCH_RESULT_LIMIT,
+                searched=True,
                 paperless_public_url=parent.paperless_public_url,
             )
             view.bind_message(interaction.message)  # type: ignore[arg-type]
@@ -1909,18 +1946,20 @@ class BrainCombinedSearchFullButton(discord.ui.Button):
             parent.stop()
             return
         else:
-            payload = {
-                "query": parent.query,
-                "results": parent.memo_results,
-                "resultCount": parent.memo_count,
-                "totalCount": parent.memo_total,
-            }
-            content = render_tool_context(ToolRequest(ToolKind.MEMO_SEARCH, parent.query), payload)
+            content = _render_memo_list_message(
+                parent.query,
+                parent.memo_results,
+                result_count=parent.memo_count,
+                total_count=parent.memo_total,
+                searched=True,
+            )
             view = BrainMemoSearchView(
                 parent.governor_tools,
                 parent.actor_id,
                 parent.query,
                 parent.memo_results,
+                result_count=parent.memo_count,
+                total_count=parent.memo_total,
                 memos_public_url=parent.memos_public_url,
             )
         view.bind_message(interaction.message)  # type: ignore[arg-type]
@@ -2200,6 +2239,7 @@ class BrainDocumentSearchView(BrainTemporarySearchView):
         total_count: int = 0,
         page: int = 1,
         page_size: int = SEARCH_RESULT_LIMIT,
+        searched: bool = False,
         paperless_public_url: str = "",
     ) -> None:
         super().__init__(query, searched_from="Paperless")
@@ -2211,6 +2251,7 @@ class BrainDocumentSearchView(BrainTemporarySearchView):
         self.result_count = result_count or len(results)
         self.total_count = total_count or self.result_count
         self.results = results[: self.page_size]
+        self.searched = searched
         self.paperless_public_url = paperless_public_url
         self._rebuild_items()
 
@@ -2218,17 +2259,15 @@ class BrainDocumentSearchView(BrainTemporarySearchView):
     def page_total(self) -> int:
         return max(1, (self.result_count + self.page_size - 1) // self.page_size)
 
-    def content(self) -> str:
-        return render_tool_context(
-            ToolRequest(ToolKind.DOCUMENT_SEARCH, self.query),
-            {
-                "query": self.query,
-                "results": self.results,
-                "resultCount": self.result_count,
-                "totalCount": self.total_count,
-                "page": self.page,
-                "pageSize": self.page_size,
-            },
+    def content(self, *, searched: bool | None = None) -> str:
+        return _render_document_list_message(
+            self.query,
+            self.results,
+            result_count=self.result_count,
+            total_count=self.total_count,
+            page=self.page,
+            page_size=self.page_size,
+            searched=self.searched if searched is None else searched,
         )
 
     def _rebuild_items(self) -> None:
@@ -2252,6 +2291,7 @@ class BrainDocumentSearchView(BrainTemporarySearchView):
             total_count=_payload_count(payload, "totalCount", "total", fallback=len(results)),
             page=_payload_count(payload, "page", fallback=page),
             page_size=_payload_count(payload, "pageSize", "page_size", fallback=self.page_size),
+            searched=self.searched,
             paperless_public_url=self.paperless_public_url,
         )
 
@@ -2621,16 +2661,14 @@ class BrainServiceMenuView(discord.ui.View):
             interaction,
             view.content()
             if view is not None
-            else render_tool_context(
-                ToolRequest(ToolKind.DOCUMENT_SEARCH, ""),
-                {
-                    "query": "",
-                    "results": results,
-                    "resultCount": result_count,
-                    "totalCount": total_count,
-                    "page": page,
-                    "pageSize": page_size,
-                },
+            else _render_document_list_message(
+                "",
+                results,
+                result_count=result_count,
+                total_count=total_count,
+                page=page,
+                page_size=page_size,
+                searched=False,
             ),
             view=view,
             allowed_mentions=NO_MENTIONS,
@@ -2652,6 +2690,8 @@ class BrainServiceMenuView(discord.ui.View):
                 int(interaction.user.id),
                 "",
                 results,
+                result_count=_payload_count(payload, "resultCount", "count", fallback=len(results)),
+                total_count=_payload_count(payload, "totalCount", fallback=len(results)),
                 memos_public_url=self.settings.memos_public_url,
             )
             if results
@@ -2660,7 +2700,13 @@ class BrainServiceMenuView(discord.ui.View):
         await _send_single_service_message(
             self.settings,
             interaction,
-            render_tool_context(request, payload),
+            view.content() if view is not None else _render_memo_list_message(
+                "",
+                results,
+                result_count=_payload_count(payload, "resultCount", "count", fallback=len(results)),
+                total_count=_payload_count(payload, "totalCount", fallback=len(results)),
+                searched=False,
+            ),
             view=view,
             allowed_mentions=NO_MENTIONS,
         )
@@ -4047,16 +4093,67 @@ def _render_fax_mail_selection(item: dict[str, Any]) -> str:
     return "\n".join(lines)[:1900]
 
 
+def _render_memo_list_message(
+    query: str,
+    results: list[dict[str, Any]],
+    *,
+    result_count: int,
+    total_count: int,
+    searched: bool = False,
+) -> str:
+    start = 1 if results else 0
+    display_title = MEMOS_TITLE if not query.strip() else query.strip()
+    lines = []
+    if searched:
+        lines.append("Searched..")
+    lines.extend([
+        f"## {display_title}",
+        _range_summary(start, len(results), result_count),
+        f"{result_count} results in {total_count} memos",
+        "",
+    ])
+    for index, item in enumerate(results[:SEARCH_RESULT_LIMIT], start=start):
+        lines.append(f"- {index}. {_safe_discord_line(memo_option_label(item))}")
+    if not results:
+        lines.append("- No matching memos.")
+    return "\n".join(lines)[:1900]
+
+
+def _render_document_list_message(
+    query: str,
+    results: list[dict[str, Any]],
+    *,
+    result_count: int,
+    total_count: int,
+    page: int,
+    page_size: int,
+    searched: bool = False,
+) -> str:
+    start = (max(1, page) - 1) * max(1, page_size) + 1 if results else 0
+    display_title = PAPERLESS_TITLE if not query.strip() else query.strip()
+    lines = []
+    if searched:
+        lines.append("Searched..")
+    lines.extend([
+        f"## {display_title}",
+        _range_summary(start, len(results), result_count),
+        f"{result_count} results in {total_count} documents",
+        "",
+    ])
+    for index, item in enumerate(results[:page_size], start=start):
+        lines.append(f"- {index}. {_safe_discord_line(document_option_label(item))}")
+    if not results:
+        lines.append("- No matching documents.")
+    return "\n".join(lines)[:1900]
+
+
 def _render_fax_mail_service_message(imports: list[dict[str, Any]], *, mode: str, page: int) -> str:
     start = page * FAX_MAIL_PAGE_SIZE
     page_imports = imports[start : start + FAX_MAIL_PAGE_SIZE]
     showing_start = start + 1 if page_imports else 0
-    showing_end = start + len(page_imports)
     subtitle = _fax_mail_mode_label(mode)
     empty = {"incoming_fax": "no incoming fax", "outgoing_fax": "no outgoing fax", "mail": "no target mail"}.get(mode, "no items")
-    lines = [f"## {FAX_MAIL_TITLE}", f"### {subtitle}", f"- total: {len(imports)}"]
-    if page_imports:
-        lines.append(f"- showing: {showing_start}-{showing_end}")
+    lines = [f"## {FAX_MAIL_TITLE}", f"### {subtitle}", _range_summary(showing_start, len(page_imports), len(imports)), ""]
     for item in page_imports:
         lines.append(f"- {_fax_mail_list_line(item)}")
     if not page_imports:
@@ -4168,9 +4265,9 @@ def _render_task_service_message(
     page_tasks = tasks[start : start + TASK_SERVICE_PAGE_SIZE]
     if history:
         month_label = f"{month:%Y.%m}" if month else ""
-        lines = [f"## {title}", f"### {month_label} • Completed: {len(tasks)}"]
+        lines = [f"## {title}", f"### {month_label} • Completed: {len(tasks)}", _range_summary(start + 1, len(page_tasks), len(tasks)), ""]
     else:
-        lines = [f"## {title}", f"### Total: {len(tasks)}", ""]
+        lines = [f"## {title}", _range_summary(start + 1, len(page_tasks), len(tasks)), ""]
     for task in page_tasks:
         item_title = str(task.get("title") or task.get("summary") or "Untitled task").strip()
         if history:

@@ -165,7 +165,7 @@ class GovernorToolRenderingTests(unittest.TestCase):
                 "results": [{"name": "memos/42", "content": "# Rustdesk\nUse Tailscale.", "full": True}],
             },
         )
-        self.assertIn("Searched..\n## rustdesk\n1 results in 1 memos", context)
+        self.assertIn("Searched..\n## rustdesk\n<1-1 of 1>\n1 results in 1 memos", context)
         self.assertIn("### Rustdesk\n# Rustdesk\nUse Tailscale.", context)
 
     def test_render_multiple_memos_context_lists_titles(self) -> None:
@@ -181,10 +181,10 @@ class GovernorToolRenderingTests(unittest.TestCase):
                 ],
             },
         )
-        self.assertIn("Searched..\n## training\n2 results in 213 memos", context)
-        self.assertIn("### Memos", context)
-        self.assertIn("1. Online training", context)
-        self.assertIn("2. Long mandatory training list", context)
+        self.assertIn("Searched..\n## training\n<1-2 of 2>\n2 results in 213 memos", context)
+        self.assertNotIn("### Memos", context)
+        self.assertIn("- 1. Online training", context)
+        self.assertIn("- 2. Long mandatory training list", context)
         self.assertNotIn("#training", context)
         self.assertNotIn("#work", context)
         self.assertNotIn("Memos search:", context)
@@ -309,8 +309,8 @@ class GovernorToolRenderingTests(unittest.TestCase):
                 ],
             },
         )
-        self.assertIn("Searched..\n## rustdesk\n1 results in 12 documents", context)
-        self.assertIn("Page 1 / 1", context)
+        self.assertIn("Searched..\n## rustdesk\n<1-1 of 1>\n1 results in 12 documents", context)
+        self.assertNotIn("Page 1 / 1", context)
         self.assertIn("- Rustdesk setup", context)
         self.assertNotIn("rustdesk.pdf", context)
 
@@ -377,8 +377,8 @@ class GovernorToolRenderingTests(unittest.TestCase):
                 ],
             },
         )
-        self.assertIn("Searched..\n## insurance\n13 results in 213 documents", context)
-        self.assertIn("Page 1 / 7", context)
+        self.assertIn("Searched..\n## insurance\n<1-2 of 13>\n13 results in 213 documents", context)
+        self.assertNotIn("Page 1 / 7", context)
         self.assertIn("- Insurance receipt", context)
         self.assertNotIn("[open]", context)
         self.assertIn("- Insurance form", context)

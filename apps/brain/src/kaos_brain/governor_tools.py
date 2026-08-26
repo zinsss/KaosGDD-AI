@@ -985,20 +985,20 @@ def _render_memos(query: str, payload: dict[str, Any]) -> str:
     results = _items(payload.get("results"))
     result_count = _count(payload, "resultCount", "count", fallback=len(results))
     total_count = _count(payload, "totalCount", fallback=result_count)
+    shown = min(len(results), SEARCH_RESULT_LIMIT)
     lines = [
         "Searched..",
         f"## {query or '..'}",
+        _range_summary(1 if shown else 0, shown, result_count),
         f"{result_count} results in {total_count} memos",
+        "",
     ]
     if not results:
         lines.append("- No matching memos.")
         return "\n".join(lines)
-    if result_count > len(results):
-        lines.append(f"- Showing first {len(results)} results.")
     if len(results) > 1:
-        lines.append("### Memos")
         for index, item in enumerate(results[:SEARCH_RESULT_LIMIT], start=1):
-            lines.append(_truncate(f"{index}. {_memo_title(item)}", 180))
+            lines.append(_truncate(f"- {index}. {_memo_title(item)}", 180))
         return "\n".join(lines)
     lines.extend(_memo_line(item) for item in results[:5])
     return "\n".join(lines)
@@ -1010,18 +1010,26 @@ def _render_documents(query: str, payload: dict[str, Any]) -> str:
     total_count = _count(payload, "totalCount", "total", fallback=result_count)
     page = _count(payload, "page", fallback=1)
     page_size = _count(payload, "pageSize", "page_size", fallback=max(1, len(results) or SEARCH_RESULT_LIMIT))
-    page_total = max(1, (result_count + page_size - 1) // page_size)
+    shown = min(len(results), page_size, SEARCH_RESULT_LIMIT)
+    start = (max(1, page) - 1) * max(1, page_size) + 1 if shown else 0
     lines = [
         "Searched..",
         f"## {query or '..'}",
+        _range_summary(start, shown, result_count),
         f"{result_count} results in {total_count} documents",
-        f"Page {page} / {page_total}",
+        "",
     ]
     if not results:
         lines.append("- No matching documents.")
         return "\n".join(lines)
     lines.extend(_document_link_line(item) for item in results[:SEARCH_RESULT_LIMIT])
     return "\n".join(lines)[:1900]
+
+
+def _range_summary(start: int, count: int, total: int) -> str:
+    if count <= 0 or total <= 0:
+        return "<0 of 0>"
+    return f"<{start}-{start + count - 1} of {total}>"
 
 
 def _items(value: object) -> list[dict[str, Any]]:

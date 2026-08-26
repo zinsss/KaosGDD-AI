@@ -173,8 +173,9 @@ class BrainToolResponseTests(unittest.IsolatedAsyncioTestCase):
             reply,
             "Searched..\n"
             "## 보험\n"
+            "<1-1 of 1>\n"
             "1 results in 1 documents\n"
-            "Page 1 / 1\n"
+            "\n"
             "- Insurance receipt",
         )
         self.assertIsNotNone(view)
