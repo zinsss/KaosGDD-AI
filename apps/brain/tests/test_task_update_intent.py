@@ -280,6 +280,16 @@ class TaskUpdateIntentTests(unittest.TestCase):
         assert request is not None
         self.assertEqual(request.title, "엔소쿠료칸")
         self.assertEqual(request.start_date, "2026-08-15")
+        self.assertTrue(request.all_day)
+
+    def test_prefixed_event_create_defaults_date_only_to_all_day_family(self) -> None:
+        request = parse_event_create("일정, 9/5 오월드 가족", today=date(2026, 8, 26))
+        assert request is not None
+        self.assertEqual(request.title, "오월드")
+        self.assertEqual(request.start_date, "2026-09-05")
+        self.assertEqual(request.end_date, "2026-09-05")
+        self.assertTrue(request.all_day)
+        self.assertEqual(request.profile, "family")
 
     def test_prefixed_event_create_accepts_today_as_all_day(self) -> None:
         request = parse_event_create("일정, 오늘 미영샘 월차", today=date(2026, 8, 26))

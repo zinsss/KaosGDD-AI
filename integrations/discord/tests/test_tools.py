@@ -1774,7 +1774,6 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
                 "endDate": "2026-08-15",
                 "allDay": True,
                 "memo": "포항 조사리",
-                "collectionId": "family:events",
             },
         )
 
@@ -1784,7 +1783,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["event"]["title"], "엔소쿠료칸")
         self.assertEqual(payload["event"]["startDate"], "2026-08-15")
         self.assertEqual(payload["event"]["memo"], "포항 조사리")
-        self.assertEqual(payload["event"]["collectionId"], "family:events")
+        self.assertNotIn("collectionId", payload["event"])
         self.assertEqual(self.calendar.created_events, [])
 
     async def test_event_create_approval_creates_family_event(self) -> None:
@@ -1800,7 +1799,6 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
                 "endDate": "2026-08-15",
                 "allDay": True,
                 "memo": "포항 조사리",
-                "collectionId": "family:events",
             },
         )
         confirmation_id = (await proposal.json())["confirmationId"]
@@ -1824,7 +1822,6 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
                 "endDate": "2026-08-15",
                 "allDay": True,
                 "memo": "포항 조사리",
-                "collectionId": "family:events",
             },
         )
         self.assertEqual(self.calendar_refresh_count, 1)

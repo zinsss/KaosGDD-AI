@@ -1541,8 +1541,6 @@ class BrainToolServer:
         memo = str(body.get("memo") or "").strip()
         all_day = bool(body.get("allDay", True))
         collection_id = str(body.get("collectionId") or "").strip()
-        if not collection_id and profile == "family":
-            collection_id = "family:events"
         if not actor_id or not idempotency_key or not title or not start_date:
             return web.json_response({"error": "event_create_missing_required_field"}, status=400)
         if not _valid_date(start_date) or not _valid_date(end_date):

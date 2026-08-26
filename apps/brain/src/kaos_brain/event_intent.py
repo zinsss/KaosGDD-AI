@@ -43,7 +43,7 @@ def parse_event_create(content: str, *, today: date) -> EventCreateRequest | Non
     if memo_match is not None:
         memo = memo_match.group("memo").strip(" .,")
         rest = rest[: memo_match.start()].strip(" .,")
-    all_day = relative_default_all_day or "종일" in rest
+    all_day = relative_default_all_day or "종일" in rest or not _has_time_hint(rest)
     profile = "family" if "가족" in rest else "main"
     title = rest
     title = re.sub(r"(?:을|를)?\s*종일\s*일정으로", " ", title)
@@ -106,3 +106,7 @@ def _is_view_only_title(title: str) -> bool:
     for marker in ("보여줘", "보여", "알려줘", "알려", "일정", "스케줄", "캘린더", "calendar", "show", "?"):
         cleaned = cleaned.replace(marker, " ")
     return not " ".join(cleaned.split())
+
+
+def _has_time_hint(text: str) -> bool:
+    return bool(re.search(r"(?<!\d)(?:[01]?\d|2[0-3])(?::|시)\s*(?:[0-5]\d|반)?", text))
