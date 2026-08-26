@@ -5338,6 +5338,7 @@ function renderRounyGrid(template) {
                         data-rouny-slot-id="${escapeHtml(slot.id)}"
                         title="${escapeHtml(`${item.title || uiText("common.untitled", "Untitled")} ${rounyTimeLabel(slot)}${issue ? ` · ${issue}` : ""}`)}"
                       >
+                        <span class="rounyBlockHandle" aria-hidden="true">...</span>
                         <span class="rounyBlockIcon" aria-hidden="true">${escapeHtml(normalizeRounyIcon(item.icon))}</span>
                         <strong>${escapeHtml(item.title || uiText("common.untitled", "Untitled"))}</strong>
                       </div>
