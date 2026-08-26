@@ -414,15 +414,12 @@ class NaverMailPoller:
             mailboxes = discover_mailboxes(client, self.config.folder_roots)
             mailbox_count = len(mailboxes)
             for mailbox in mailboxes:
-                if len(messages) >= limit:
-                    break
                 status, _data = client.select(quoted_mailbox(mailbox.raw_name), readonly=True)
                 if status != "OK":
                     raise NaverMailError("imap_select_failed")
-                for uid in reversed(self._search_uids(client)):
+                uids = self._search_uids(client)
+                for uid in reversed(uids[-limit:]):
                     messages.append(self._fetch_message_header(client, mailbox, uid))
-                    if len(messages) >= limit:
-                        break
                 client.close()
             messages.sort(key=lambda item: item.received_at, reverse=True)
             return {

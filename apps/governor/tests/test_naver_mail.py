@@ -25,12 +25,18 @@ class FakeMailboxServer:
         }
         self.fetch_specs: list[str] = []
     @staticmethod
-    def message(subject: str, *, attachment: bool = False, html_only: bool = False) -> bytes:
+    def message(
+        subject: str,
+        *,
+        attachment: bool = False,
+        html_only: bool = False,
+        date: str = "Tue, 11 Aug 2026 06:30:00 +0000",
+    ) -> bytes:
         body = (
             'From: "\\"박득수\\"" <sender@example.test>\r\n'
             "To: clinic@example.test\r\n"
             f"Subject: {subject}\r\n"
-            "Date: Tue, 11 Aug 2026 06:30:00 +0000\r\n"
+            f"Date: {date}\r\n"
             "MIME-Version: 1.0\r\n"
         )
         if attachment:
@@ -197,6 +203,31 @@ class NaverMailTests(unittest.TestCase):
         )
         self.assertTrue(all(server.last_client.readonly_values))
         self.assertEqual(server.fetch_specs, ["(BODY.PEEK[HEADER])", "(BODY.PEEK[HEADER])"])
+
+    def test_list_messages_merges_mailboxes_before_applying_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            server = FakeMailboxServer()
+            child = encode_modified_utf7("각종공문/영덕군보건소")
+            tax = encode_modified_utf7("세무사")
+            server.mailboxes[tax]["messages"] = {
+                3: server.message("세무사 이전", date="Mon, 10 Aug 2026 00:00:00 +0000"),
+                4: server.message("세무사 최신", date="Tue, 11 Aug 2026 00:00:00 +0000"),
+            }
+            server.mailboxes[child]["messages"] = {
+                5: server.message("영덕군 최신", date="Wed, 12 Aug 2026 00:00:00 +0000"),
+            }
+            poller = NaverMailPoller(target_config(Path(tmp) / "state.json"), server.factory)
+
+            payload = poller.list_messages(limit=2)
+
+        self.assertEqual(
+            [(item["mailbox"], item["subject"]) for item in payload["messages"]],
+            [("각종공문/영덕군보건소", "영덕군 최신"), ("세무사", "세무사 최신")],
+        )
+        self.assertEqual(
+            server.fetch_specs,
+            ["(BODY.PEEK[HEADER])", "(BODY.PEEK[HEADER])", "(BODY.PEEK[HEADER])"],
+        )
 
     def test_progress_prevents_duplicate_summary_after_attachment_retry(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
