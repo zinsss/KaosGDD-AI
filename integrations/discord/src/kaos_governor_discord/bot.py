@@ -209,6 +209,8 @@ class GovernorBot(discord.Client):
                 state_path=settings.task_due_notification_state_path,
                 adapter=self.calendar_adapter,
                 messages_enabled=False,
+                repeat_due_notifications=settings.task_due_repeat_notifications_enabled,
+                repeat_interval_minutes=settings.task_due_repeat_interval_minutes,
             )
             if settings.task_due_notifications_enabled and settings.task_due_notification_channel_id is not None
             else None

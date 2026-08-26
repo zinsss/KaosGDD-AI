@@ -160,6 +160,8 @@ class SettingsTests(unittest.TestCase):
             str(settings.task_due_notification_state_path),
             "/data/discord-tasks/due-notifications.json",
         )
+        self.assertFalse(settings.task_due_repeat_notifications_enabled)
+        self.assertEqual(settings.task_due_repeat_interval_minutes, 30)
 
     def test_tasks_surface_requires_allowed_channel_when_enabled(self) -> None:
         with self.assertRaises(ConfigurationError):
@@ -196,6 +198,19 @@ class SettingsTests(unittest.TestCase):
         self.assertTrue(settings.task_due_notifications_enabled)
         self.assertEqual(settings.task_due_notification_channel_id, 301)
         self.assertEqual(str(settings.task_due_notification_state_path), "/tmp/task-due.json")
+
+    def test_task_due_repeat_notifications_are_configurable(self) -> None:
+        settings = Settings.from_env(
+            {
+                **BASE_ENV,
+                "DISCORD_TASK_DUE_NOTIFICATIONS_ENABLED": "true",
+                "DISCORD_TASK_DUE_REPEAT_NOTIFICATIONS_ENABLED": "true",
+                "DISCORD_TASK_DUE_REPEAT_INTERVAL_MINUTES": "30",
+            }
+        )
+
+        self.assertTrue(settings.task_due_repeat_notifications_enabled)
+        self.assertEqual(settings.task_due_repeat_interval_minutes, 30)
 
     def test_task_due_notifications_require_allowed_channel(self) -> None:
         with self.assertRaises(ConfigurationError):

@@ -18,6 +18,7 @@ from kaos_governor_discord.tasks import (
     RecentSuppliesView,
     RememberedSupplyConfirmationView,
     TaskEditModal,
+    TaskRepeatNotificationView,
     TaskView,
     active_tasks,
     completed_tasks_for_month,
@@ -29,6 +30,7 @@ from kaos_governor_discord.tasks import (
     render_due_notification_message,
     render_recent_supplies_message,
     render_remembered_supply_confirmation,
+    repeat_notification_id,
     render_task_message,
     task_key,
     task_payload,
@@ -158,6 +160,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
         path: Path,
         channel: FakeChannel | None = None,
         adapter: FakeAdapter | None = None,
+        **kwargs,
     ) -> DiscordTasksSurface:
         channel = channel or FakeChannel()
         surface = DiscordTasksSurface(
@@ -167,6 +170,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             profile="main",
             state_path=path,
             adapter=adapter or FakeAdapter(),  # type: ignore[arg-type]
+            **kwargs,
         )
         surface.message_refresh_delay_seconds = 0
         return surface
@@ -837,6 +841,197 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(await surface.notify_due_tasks(now=datetime(2026, 8, 13, 8, 30)), 0)
             self.assertEqual(len(channel.sent), 1)
+
+    async def test_normal_due_notification_remains_one_shot_without_buttons(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            surface = self.make_surface(Path(temporary) / "tasks.json", channel, FakeAdapter())
+
+            self.assertEqual(await surface.notify_due_tasks(now=datetime(2026, 8, 13, 8, 0)), 1)
+            self.assertEqual(await surface.notify_due_tasks(now=datetime(2026, 8, 13, 8, 31)), 0)
+
+            self.assertEqual(len(channel.sent), 1)
+            self.assertNotIn("view", channel.sent[0])
+            self.assertFalse(surface.repeat_due_notifications)
+            self.assertEqual(surface.state.repeat_notifications, {})
+
+    async def test_repeat_due_notification_initially_contains_ok_and_stop_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            surface = self.make_surface(
+                Path(temporary) / "tasks.json",
+                channel,
+                FakeAdapter(),
+                repeat_due_notifications=True,
+            )
+
+            self.assertEqual(await surface.notify_due_tasks(now=datetime(2026, 8, 13, 8, 0)), 1)
+
+            view = channel.sent[0]["view"]
+            self.assertIsInstance(view, TaskRepeatNotificationView)
+            self.assertEqual([item.label for item in view.children], ["OK", "Stop"])
+            self.assertEqual([item.custom_id for item in view.children], ["tasks:repeat:ok", "tasks:repeat:stop"])
+            self.assertEqual(len(view.children), 2)
+            self.assertNotIn("Snooze", [item.label for item in view.children])
+
+    async def test_repeat_due_notification_repeats_after_interval_but_not_before(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            surface = self.make_surface(
+                Path(temporary) / "tasks.json",
+                channel,
+                FakeAdapter(),
+                repeat_due_notifications=True,
+            )
+
+            self.assertEqual(await surface.notify_due_tasks(now=datetime(2026, 8, 13, 8, 0)), 1)
+            self.assertEqual(await surface.notify_due_tasks(now=datetime(2026, 8, 13, 8, 29)), 0)
+            self.assertEqual(await surface.notify_due_tasks(now=datetime(2026, 8, 13, 8, 30)), 1)
+
+            self.assertEqual(len(channel.sent), 2)
+            self.assertIsNone(channel.messages[700].view)
+            self.assertIsInstance(channel.messages[701].view, TaskRepeatNotificationView)
+
+    async def test_repeat_due_notification_ok_stops_without_completing_task(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            adapter = FakeAdapter()
+            surface = self.make_surface(
+                Path(temporary) / "tasks.json",
+                channel,
+                adapter,
+                repeat_due_notifications=True,
+            )
+            await surface.notify_due_tasks(now=datetime(2026, 8, 13, 8, 0))
+            view = channel.sent[0]["view"]
+            interaction = SimpleNamespace(
+                guild_id=100,
+                channel_id=300,
+                user=SimpleNamespace(id=200),
+                message=channel.messages[700],
+                response=SimpleNamespace(defer=AsyncMock(), is_done=lambda: True),
+                followup=SimpleNamespace(send=AsyncMock()),
+            )
+
+            await view.children[0].callback(interaction)  # type: ignore[misc]
+            self.assertEqual(await surface.notify_due_tasks(now=datetime(2026, 8, 13, 8, 30)), 0)
+
+            record = surface.state.repeat_notifications[repeat_notification_id(TASKS[0])]
+            self.assertEqual(record["status"], "acknowledged")
+            self.assertTrue(record["acknowledgedAt"])
+            self.assertEqual(adapter.updated, [])
+            self.assertIsNone(channel.messages[700].view)
+            interaction.followup.send.assert_not_called()
+
+    async def test_repeat_due_notification_stop_stops_without_acknowledging_or_completing_task(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            adapter = FakeAdapter()
+            surface = self.make_surface(
+                Path(temporary) / "tasks.json",
+                channel,
+                adapter,
+                repeat_due_notifications=True,
+            )
+            await surface.notify_due_tasks(now=datetime(2026, 8, 13, 8, 0))
+            view = channel.sent[0]["view"]
+            interaction = SimpleNamespace(
+                guild_id=100,
+                channel_id=300,
+                user=SimpleNamespace(id=200),
+                message=channel.messages[700],
+                response=SimpleNamespace(defer=AsyncMock(), is_done=lambda: True),
+                followup=SimpleNamespace(send=AsyncMock()),
+            )
+
+            await view.children[1].callback(interaction)  # type: ignore[misc]
+            self.assertEqual(await surface.notify_due_tasks(now=datetime(2026, 8, 13, 8, 30)), 0)
+
+            record = surface.state.repeat_notifications[repeat_notification_id(TASKS[0])]
+            self.assertEqual(record["status"], "stopped")
+            self.assertFalse(record["acknowledgedAt"])
+            self.assertTrue(record["stoppedAt"])
+            self.assertEqual(adapter.updated, [])
+            self.assertIsNone(channel.messages[700].view)
+
+    async def test_repeat_due_notification_new_message_removes_previous_buttons_globally(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            tasks = [
+                {**TASKS[0], "uid": "TASK-1", "summary": "First"},
+                {**TASKS[0], "uid": "TASK-3", "summary": "Second"},
+            ]
+            surface = self.make_surface(
+                Path(temporary) / "tasks.json",
+                channel,
+                FakeAdapter(tasks=tasks),
+                repeat_due_notifications=True,
+            )
+
+            self.assertEqual(await surface.notify_due_tasks(now=datetime(2026, 8, 13, 8, 0)), 2)
+
+            self.assertEqual(len(channel.sent), 2)
+            self.assertIsNone(channel.messages[700].view)
+            self.assertIsInstance(channel.messages[701].view, TaskRepeatNotificationView)
+            self.assertEqual(surface.state.latest_task_notifier_message_id, 701)
+
+    async def test_repeat_due_notification_stale_callback_is_rejected_safely(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            surface = self.make_surface(
+                Path(temporary) / "tasks.json",
+                channel,
+                FakeAdapter(),
+                repeat_due_notifications=True,
+            )
+            await surface.notify_due_tasks(now=datetime(2026, 8, 13, 8, 0))
+            stale_view = channel.sent[0]["view"]
+            await surface.notify_due_tasks(now=datetime(2026, 8, 13, 8, 30))
+            interaction = SimpleNamespace(
+                guild_id=100,
+                channel_id=300,
+                user=SimpleNamespace(id=200),
+                message=channel.messages[700],
+                response=SimpleNamespace(defer=AsyncMock(), is_done=lambda: True),
+                followup=SimpleNamespace(send=AsyncMock()),
+            )
+
+            await stale_view.children[0].callback(interaction)  # type: ignore[misc]
+
+            record = surface.state.repeat_notifications[repeat_notification_id(TASKS[0])]
+            self.assertEqual(record["status"], "pending")
+            interaction.followup.send.assert_awaited_once()
+
+    async def test_repeat_due_notification_duplicate_scheduler_execution_does_not_duplicate(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            surface = self.make_surface(
+                Path(temporary) / "tasks.json",
+                channel,
+                FakeAdapter(),
+                repeat_due_notifications=True,
+            )
+
+            self.assertEqual(await surface.notify_due_tasks(now=datetime(2026, 8, 13, 8, 0)), 1)
+            self.assertEqual(await surface.notify_due_tasks(now=datetime(2026, 8, 13, 8, 0)), 0)
+
+            self.assertEqual(len(channel.sent), 1)
+
+    async def test_repeat_due_notification_pending_state_resumes_after_restart(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            state_path = Path(temporary) / "tasks.json"
+            channel = FakeChannel()
+            adapter = FakeAdapter()
+            surface = self.make_surface(state_path, channel, adapter, repeat_due_notifications=True)
+
+            self.assertEqual(await surface.notify_due_tasks(now=datetime(2026, 8, 13, 8, 0)), 1)
+            restarted = self.make_surface(state_path, channel, adapter, repeat_due_notifications=True)
+
+            self.assertEqual(await restarted.notify_due_tasks(now=datetime(2026, 8, 13, 8, 30)), 1)
+
+            self.assertEqual(len(channel.sent), 2)
+            self.assertIsNone(channel.messages[700].view)
+            self.assertIsInstance(channel.messages[701].view, TaskRepeatNotificationView)
 
     async def test_notify_due_tasks_sends_late_once_on_due_date_after_restart(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

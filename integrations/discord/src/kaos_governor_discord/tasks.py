@@ -22,6 +22,10 @@ MAX_RECENT_SUPPLIES = 25
 TASK_PRIORITIES = {"", "1", "5", "9"}
 DUE_LINE_PATTERN = re.compile(r"^:(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}))?$")
 MESSAGE_REFRESH_DELAY_SECONDS = 0.35
+TASK_REPEAT_NOTIFICATION_TYPE = "task_repeat"
+TASK_REPEAT_STATUS_PENDING = "pending"
+TASK_REPEAT_STATUS_ACKNOWLEDGED = "acknowledged"
+TASK_REPEAT_STATUS_STOPPED = "stopped"
 KST = timezone(timedelta(hours=9))
 
 
@@ -33,6 +37,9 @@ class DiscordTasksState:
     recent_supplies_message_id: int = 0
     recent_supplies: list[str] = field(default_factory=list)
     due_notification_keys: set[str] = field(default_factory=set)
+    repeat_notifications: dict[str, dict[str, Any]] = field(default_factory=dict)
+    latest_task_notifier_channel_id: int = 0
+    latest_task_notifier_message_id: int = 0
     legacy_message_id: int = 0
 
 
@@ -58,6 +65,8 @@ class DiscordTasksSurface:
         collection_id: str = "",
         show_due: bool = True,
         messages_enabled: bool = True,
+        repeat_due_notifications: bool = False,
+        repeat_interval_minutes: int = 30,
     ) -> None:
         self.bot = bot
         self.policy = policy
@@ -70,9 +79,12 @@ class DiscordTasksSurface:
         self.collection_id = collection_id
         self.show_due = show_due
         self.messages_enabled = messages_enabled
+        self.repeat_due_notifications = repeat_due_notifications
+        self.repeat_interval_minutes = repeat_interval_minutes
         self.message_refresh_delay_seconds = MESSAGE_REFRESH_DELAY_SECONDS
         self.state = self._load_state()
         self._tasks_by_key: dict[str, dict[str, Any]] = {}
+        self._repeat_notification_lock = asyncio.Lock()
 
     async def ensure_message(self) -> None:
         if not self.messages_enabled:
@@ -152,6 +164,8 @@ class DiscordTasksSurface:
         if not self.show_due:
             return 0
         current = now or datetime.now(KST).replace(tzinfo=None)
+        if self.repeat_due_notifications:
+            return await self._notify_repeat_due_tasks(current)
         tasks = await asyncio.to_thread(self.adapter.list_tasks, self.profile)
         active = active_tasks(tasks, collection_id=self.collection_id)
         self._tasks_by_key.update({task_key(item): item for item in active})
@@ -184,6 +198,22 @@ class DiscordTasksSurface:
         if sent or previous_keys != self.state.due_notification_keys:
             self._save_state()
         return sent
+
+    async def acknowledge_repeat_notification(self, notification_id: str, *, message_id: int = 0) -> bool:
+        return await self._finish_repeat_notification(
+            notification_id,
+            status=TASK_REPEAT_STATUS_ACKNOWLEDGED,
+            timestamp_field="acknowledgedAt",
+            message_id=message_id,
+        )
+
+    async def stop_repeat_notification(self, notification_id: str, *, message_id: int = 0) -> bool:
+        return await self._finish_repeat_notification(
+            notification_id,
+            status=TASK_REPEAT_STATUS_STOPPED,
+            timestamp_field="stoppedAt",
+            message_id=message_id,
+        )
 
     async def handle_message(self, message: discord.Message) -> bool:
         if message.channel.id != self.channel_id:
@@ -358,6 +388,9 @@ class DiscordTasksSurface:
             "recentSuppliesMessageId": str(self.state.recent_supplies_message_id),
             "recentSuppliesCount": len(self.state.recent_supplies),
             "dueNotificationCount": len(self.state.due_notification_keys),
+            "repeatDueNotifications": self.repeat_due_notifications,
+            "repeatDueNotificationCount": len(self.state.repeat_notifications),
+            "latestTaskNotifierMessageId": str(self.state.latest_task_notifier_message_id),
         }
 
     async def channel(self) -> discord.abc.Messageable:
@@ -446,6 +479,13 @@ class DiscordTasksSurface:
                     for item in list(raw.get("dueNotificationKeys") or [])
                     if str(item).strip()
                 },
+                repeat_notifications={
+                    str(key): dict(value)
+                    for key, value in dict(raw.get("repeatNotifications") or {}).items()
+                    if str(key).strip() and isinstance(value, Mapping)
+                },
+                latest_task_notifier_channel_id=int(raw.get("latestTaskNotifierChannelId") or 0),
+                latest_task_notifier_message_id=int(raw.get("latestTaskNotifierMessageId") or 0),
                 legacy_message_id=int(raw.get("messageId") or 0),
             )
         except (TypeError, ValueError):
@@ -460,6 +500,9 @@ class DiscordTasksSurface:
             "recentSuppliesMessageId": self.state.recent_supplies_message_id,
             "recentSupplies": self.state.recent_supplies[:MAX_RECENT_SUPPLIES],
             "dueNotificationKeys": sorted(self.state.due_notification_keys),
+            "repeatNotifications": self.state.repeat_notifications,
+            "latestTaskNotifierChannelId": self.state.latest_task_notifier_channel_id,
+            "latestTaskNotifierMessageId": self.state.latest_task_notifier_message_id,
         }
         temporary = self.state_path.with_suffix(f"{self.state_path.suffix}.tmp")
         temporary.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
@@ -480,6 +523,127 @@ class DiscordTasksSurface:
             await message.delete()
         except (discord.NotFound, discord.HTTPException):
             LOGGER.info("Could not delete stale %s message %s", self.surface_name, message_id)
+
+    async def _notify_repeat_due_tasks(self, current: datetime) -> int:
+        async with self._repeat_notification_lock:
+            tasks = await asyncio.to_thread(self.adapter.list_tasks, self.profile)
+            active = active_tasks(tasks, collection_id=self.collection_id)
+            self._tasks_by_key.update({task_key(item): item for item in active})
+            sent = 0
+            for task in active:
+                due_at = due_notification_time(task)
+                if due_at is None or due_at.date() != current.date():
+                    continue
+                if current < due_at - timedelta(hours=1):
+                    continue
+                notification_id = repeat_notification_id(task)
+                record = self._repeat_notification_record(notification_id, task, due_at, current)
+                if str(record.get("status") or "") != TASK_REPEAT_STATUS_PENDING:
+                    continue
+                next_send_at = _parse_datetime(str(record.get("nextSendAt") or "")) or current
+                if current < next_send_at:
+                    continue
+                record["lastSendAttemptAt"] = _datetime_text(current)
+                record["nextSendAt"] = _datetime_text(current + timedelta(minutes=self.repeat_interval_minutes))
+                self._save_state()
+                channel = await self.channel()
+                await self._remove_latest_task_notifier_buttons()
+                view = TaskRepeatNotificationView(self, notification_id)
+                message = await channel.send(
+                    content=render_due_notification_message(task),
+                    view=view,
+                    allowed_mentions=NO_MENTIONS,
+                )
+                message_id = int(message.id)
+                record["lastSentAt"] = _datetime_text(current)
+                record["latestMessageId"] = message_id
+                record["channelId"] = int(self.channel_id)
+                self.state.latest_task_notifier_channel_id = int(self.channel_id)
+                self.state.latest_task_notifier_message_id = message_id
+                self._register_view(view, message_id)
+                sent += 1
+                self._save_state()
+                await self._pace_message_refresh()
+            return sent
+
+    def _repeat_notification_record(
+        self,
+        notification_id: str,
+        task: Mapping[str, Any],
+        due_at: datetime,
+        current: datetime,
+    ) -> dict[str, Any]:
+        record = self.state.repeat_notifications.get(notification_id)
+        if record is None:
+            record = {
+                "notificationId": notification_id,
+                "taskId": str(task.get("uid") or ""),
+                "taskKey": task_key(task),
+                "notificationType": TASK_REPEAT_NOTIFICATION_TYPE,
+                "status": TASK_REPEAT_STATUS_PENDING,
+                "repeatIntervalMinutes": int(self.repeat_interval_minutes),
+                "dueAt": _datetime_text(due_at),
+                "createdAt": _datetime_text(current),
+                "lastSentAt": "",
+                "nextSendAt": _datetime_text(current),
+                "latestMessageId": 0,
+                "channelId": int(self.channel_id),
+                "acknowledgedAt": "",
+                "stoppedAt": "",
+            }
+            self.state.repeat_notifications[notification_id] = record
+        else:
+            record["taskId"] = str(task.get("uid") or "")
+            record["taskKey"] = task_key(task)
+            record["notificationType"] = TASK_REPEAT_NOTIFICATION_TYPE
+            record["repeatIntervalMinutes"] = int(self.repeat_interval_minutes)
+            record["dueAt"] = _datetime_text(due_at)
+            record["channelId"] = int(record.get("channelId") or self.channel_id)
+            if not str(record.get("nextSendAt") or ""):
+                record["nextSendAt"] = _datetime_text(current)
+        return record
+
+    async def _finish_repeat_notification(
+        self,
+        notification_id: str,
+        *,
+        status: str,
+        timestamp_field: str,
+        message_id: int = 0,
+    ) -> bool:
+        async with self._repeat_notification_lock:
+            record = self.state.repeat_notifications.get(notification_id)
+            if record is None or str(record.get("status") or "") != TASK_REPEAT_STATUS_PENDING:
+                return False
+            latest_message_id = int(record.get("latestMessageId") or 0)
+            if message_id and latest_message_id and message_id != latest_message_id:
+                return False
+            record["status"] = status
+            record[timestamp_field] = _datetime_text(datetime.now(KST).replace(tzinfo=None))
+            record["nextSendAt"] = ""
+            self._save_state()
+        if message_id:
+            await self._remove_message_buttons(message_id, int(record.get("channelId") or self.channel_id))
+        return True
+
+    async def _remove_latest_task_notifier_buttons(self) -> None:
+        message_id = int(self.state.latest_task_notifier_message_id or 0)
+        channel_id = int(self.state.latest_task_notifier_channel_id or self.channel_id)
+        if not message_id:
+            return
+        await self._remove_message_buttons(message_id, channel_id)
+
+    async def _remove_message_buttons(self, message_id: int, channel_id: int) -> None:
+        if not message_id:
+            return
+        try:
+            channel = self.bot.get_channel(channel_id) or await self.bot.fetch_channel(channel_id)
+            if not hasattr(channel, "fetch_message"):
+                return
+            message = await channel.fetch_message(message_id)
+            await message.edit(view=None, allowed_mentions=NO_MENTIONS)
+        except (discord.NotFound, discord.HTTPException, KeyError):
+            LOGGER.info("Could not remove task notifier buttons from message %s", message_id)
 
     async def _delete_completed_messages(self, key: str, channel: discord.abc.Messageable) -> bool:
         message_ids = self.state.completed_message_ids.pop(key, [])
@@ -661,6 +825,56 @@ class TaskView(discord.ui.View):
                     ephemeral=True,
                     allowed_mentions=NO_MENTIONS,
                 )
+
+        return callback
+
+
+class TaskRepeatNotificationView(discord.ui.View):
+    def __init__(self, surface: DiscordTasksSurface, notification_id: str) -> None:
+        super().__init__(timeout=None)
+        self.surface = surface
+        self.notification_id = notification_id
+        ok = discord.ui.Button(
+            label="OK",
+            style=discord.ButtonStyle.success,
+            custom_id=f"{surface.button_prefix}:repeat:ok",
+        )
+        stop = discord.ui.Button(
+            label="Stop",
+            style=discord.ButtonStyle.danger,
+            custom_id=f"{surface.button_prefix}:repeat:stop",
+        )
+        ok.callback = self._ok_callback()
+        stop.callback = self._stop_callback()
+        self.add_item(ok)
+        self.add_item(stop)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if self.surface.policy.allows(interaction.guild_id, interaction.channel_id, interaction.user.id):
+            return True
+        if interaction.response.is_done():
+            await interaction.followup.send("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        else:
+            await interaction.response.send_message("Access denied.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return False
+
+    def _ok_callback(self):
+        async def callback(interaction: discord.Interaction) -> None:
+            await interaction.response.defer(ephemeral=True)
+            message_id = int(getattr(getattr(interaction, "message", None), "id", 0) or 0)
+            if await self.surface.acknowledge_repeat_notification(self.notification_id, message_id=message_id):
+                return
+            await interaction.followup.send("This reminder is no longer active.", ephemeral=True, allowed_mentions=NO_MENTIONS)
+
+        return callback
+
+    def _stop_callback(self):
+        async def callback(interaction: discord.Interaction) -> None:
+            await interaction.response.defer(ephemeral=True)
+            message_id = int(getattr(getattr(interaction, "message", None), "id", 0) or 0)
+            if await self.surface.stop_repeat_notification(self.notification_id, message_id=message_id):
+                return
+            await interaction.followup.send("This reminder is no longer active.", ephemeral=True, allowed_mentions=NO_MENTIONS)
 
         return callback
 
@@ -1137,6 +1351,10 @@ def due_notification_key(task: Mapping[str, Any]) -> str:
     return f"{task_key(task)}|{due_date}T{due_time}|{due_date}"
 
 
+def repeat_notification_id(task: Mapping[str, Any]) -> str:
+    return f"{TASK_REPEAT_NOTIFICATION_TYPE}|{due_notification_key(task)}"
+
+
 def task_payload(task: Mapping[str, Any], *, status: str) -> dict[str, Any]:
     due = str(task.get("due") or "")
     return {
@@ -1253,3 +1471,16 @@ def _select_option_label(value: str) -> str:
 def _button_label(value: str) -> str:
     label = value.strip() or "Untitled"
     return label[:80]
+
+
+def _datetime_text(value: datetime) -> str:
+    return value.replace(microsecond=0).isoformat()
+
+
+def _parse_datetime(value: str) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None

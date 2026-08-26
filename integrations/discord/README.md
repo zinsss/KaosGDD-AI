@@ -39,4 +39,9 @@ HylaFAX completion files read-only, mirrors lifecycle notifications, archives
 received/sent PDFs, and deletes Discord source messages only after confirmed
 transmission. Existing files and jobs are baselined on first start.
 
+Task due notifications remain one-shot by default. When
+`DISCORD_TASK_DUE_REPEAT_NOTIFICATIONS_ENABLED=true`, task reminders resend every
+30 minutes until the newest reminder message is acknowledged with `OK` or
+cancelled with `Stop`; normal notifications are unchanged.
+
 See [the deployment runbook](../../docs/operations/discord-governor-bot.md).

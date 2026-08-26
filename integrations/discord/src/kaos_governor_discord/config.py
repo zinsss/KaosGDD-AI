@@ -106,6 +106,8 @@ class Settings:
     task_due_notifications_enabled: bool
     task_due_notification_channel_id: int | None
     task_due_notification_state_path: Path
+    task_due_repeat_notifications_enabled: bool
+    task_due_repeat_interval_minutes: int
     supplies_enabled: bool
     supplies_channel_id: int | None
     supplies_profile: Literal["main", "family", "supplies"]
@@ -255,6 +257,11 @@ class Settings:
             ).strip()
             or "/data/discord-tasks/due-notifications.json"
         )
+        task_due_repeat_notifications_enabled = _boolean(source, "DISCORD_TASK_DUE_REPEAT_NOTIFICATIONS_ENABLED")
+        task_due_repeat_interval_minutes = _positive_int(
+            source.get("DISCORD_TASK_DUE_REPEAT_INTERVAL_MINUTES", "30"),
+            "DISCORD_TASK_DUE_REPEAT_INTERVAL_MINUTES",
+        )
         supplies_enabled = _boolean(source, "DISCORD_SUPPLIES_ENABLED")
         raw_supplies_channel = source.get("DISCORD_SUPPLIES_CHANNEL_ID", "").strip()
         supplies_channel_id = (
@@ -375,6 +382,8 @@ class Settings:
             task_due_notifications_enabled=task_due_notifications_enabled,
             task_due_notification_channel_id=task_due_notification_channel_id,
             task_due_notification_state_path=task_due_notification_state_path,
+            task_due_repeat_notifications_enabled=task_due_repeat_notifications_enabled,
+            task_due_repeat_interval_minutes=task_due_repeat_interval_minutes,
             supplies_enabled=supplies_enabled,
             supplies_channel_id=supplies_channel_id,
             supplies_profile=supplies_profile,  # type: ignore[arg-type]
