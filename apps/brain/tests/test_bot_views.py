@@ -589,7 +589,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         await select.callback(interaction)  # type: ignore[arg-type]
 
         calls = interaction.followup.send.await_args_list
-        self.assertIn("Searched..", calls[0].args[0])
+        self.assertNotIn("Searched..", calls[0].args[0])
         self.assertIn(f"## {PAPERLESS_TITLE}", calls[0].args[0])
         self.assertIn("<1-1 of 26>", calls[0].args[0])
         self.assertIn("26 results in 26 documents", calls[0].args[0])
@@ -598,7 +598,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("embed", calls[0].kwargs)
         self.assertIsInstance(calls[0].kwargs["view"], BrainDocumentSearchView)
         self.assertIn("Close", [getattr(child, "label", "") for child in calls[0].kwargs["view"].children])
-        self.assertIn("Searched..", calls[1].args[0])
+        self.assertNotIn("Searched..", calls[1].args[0])
         self.assertIn(f"## {MEMOS_TITLE}", calls[1].args[0])
         self.assertIn("<1-2 of 2>", calls[1].args[0])
         self.assertIn("2 results in 2 memos", calls[1].args[0])

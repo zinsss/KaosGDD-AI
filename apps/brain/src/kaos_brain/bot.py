@@ -4112,8 +4112,8 @@ def _render_memo_list_message(
         f"{result_count} results in {total_count} memos",
         "",
     ])
-    for index, item in enumerate(results[:SEARCH_RESULT_LIMIT], start=start):
-        lines.append(f"- {index}. {_safe_discord_line(memo_option_label(item))}")
+    for item in results[:SEARCH_RESULT_LIMIT]:
+        lines.append(f"- {_safe_discord_line(memo_option_label(item))}")
     if not results:
         lines.append("- No matching memos.")
     return "\n".join(lines)[:1900]
@@ -4140,8 +4140,8 @@ def _render_document_list_message(
         f"{result_count} results in {total_count} documents",
         "",
     ])
-    for index, item in enumerate(results[:page_size], start=start):
-        lines.append(f"- {index}. {_safe_discord_line(document_option_label(item))}")
+    for item in results[:page_size]:
+        lines.append(f"- {_safe_discord_line(document_option_label(item))}")
     if not results:
         lines.append("- No matching documents.")
     return "\n".join(lines)[:1900]
