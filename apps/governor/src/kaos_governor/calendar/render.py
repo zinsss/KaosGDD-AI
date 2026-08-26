@@ -31,6 +31,7 @@ class MonthDayMarkers:
     family_events: int = 0
     zin_events: int = 0
     tasks: int = 0
+    overdue_tasks: int = 0
 
 
 @dataclass(frozen=True)
@@ -53,6 +54,7 @@ class MonthRenderTheme:
     family: str = NORD["nord15"]
     zin: str = NORD["nord14"]
     task: str = NORD["nord13"]
+    overdue_task: str = NORD["nord11"]
 
 
 def render_month_png(
@@ -148,7 +150,7 @@ def render_month_png(
             if in_month and item.zin_events:
                 markers_to_draw.append((str(item.zin_events), theme.zin))
             if in_month and item.tasks:
-                markers_to_draw.append((str(item.tasks), theme.task))
+                markers_to_draw.append((str(item.tasks), _task_marker_color(item, theme)))
 
             marker_width = sum(28 if value == "dot" else 36 for value, _color in markers_to_draw)
             marker_x = x + cell_width // 2 - marker_width // 2
@@ -174,6 +176,10 @@ def _day_number_color(value: date, in_month: bool, item: MonthDayMarkers, theme:
     if value.weekday() == 5:
         return theme.saturday
     return theme.text
+
+
+def _task_marker_color(item: MonthDayMarkers, theme: MonthRenderTheme) -> str:
+    return theme.overdue_task if item.overdue_tasks else theme.task
 
 
 def _load_font(image_font, path: Path, size: int):

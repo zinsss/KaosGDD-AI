@@ -158,15 +158,32 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
         )
 
     def test_month_markers_follow_legacy_marker_contract(self) -> None:
-        markers = {item.value: item for item in month_markers(BOOTSTRAP)}
+        markers = {item.value: item for item in month_markers(BOOTSTRAP, now=datetime(2026, 8, 13, 9, 0))}
 
         self.assertTrue(markers[date(2026, 8, 10)].market_day)
         self.assertTrue(markers[date(2026, 8, 13)].duty)
         self.assertEqual(markers[date(2026, 8, 13)].family_events, 1)
         self.assertEqual(markers[date(2026, 8, 13)].zin_events, 1)
         self.assertEqual(markers[date(2026, 8, 13)].tasks, 1)
+        self.assertEqual(markers[date(2026, 8, 13)].overdue_tasks, 0)
         self.assertEqual(markers[date(2026, 8, 13)].weather, "🌧️")
         self.assertTrue(markers[date(2026, 8, 15)].public_holiday)
+
+    def test_month_markers_count_overdue_active_tasks(self) -> None:
+        bootstrap = {
+            **BOOTSTRAP,
+            "tasks": [
+                {"summary": "Past", "due": "2026-08-13", "dueTime": "08:00", "status": "NEEDS-ACTION"},
+                {"summary": "Later", "due": "2026-08-13", "dueTime": "11:00", "status": "NEEDS-ACTION"},
+                {"summary": "No time today", "due": "2026-08-13", "status": "NEEDS-ACTION"},
+                {"summary": "Done", "due": "2026-08-12", "status": "COMPLETED"},
+            ],
+        }
+
+        markers = {item.value: item for item in month_markers(bootstrap, now=datetime(2026, 8, 13, 9, 0))}
+
+        self.assertEqual(markers[date(2026, 8, 13)].tasks, 3)
+        self.assertEqual(markers[date(2026, 8, 13)].overdue_tasks, 1)
 
     def test_weather_marker_uses_emoji_or_simple_condition_symbol(self) -> None:
         self.assertEqual(weather_marker({"emoji": "☀", "condition": "rain"}), "☀️")

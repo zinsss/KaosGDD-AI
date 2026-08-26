@@ -405,6 +405,30 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(task_select.options[1].description, "2026-08-22 10:00")
         self.assertIsNone(supplies_select.options[0].description)
 
+    async def test_active_control_task_placeholder_warns_when_overdue(self) -> None:
+        view = BrainActiveControlView(
+            FakeGovernorTools(),  # type: ignore[arg-type]
+            self.active_control_settings(),
+            [],
+            [{"title": "Past due", "due": "1999-01-01", "dueTime": "10:00"}],
+            [{"title": "Supply with date", "due": "1999-01-01", "dueTime": "10:00"}],
+            [],
+        )
+
+        task_select = next(
+            child
+            for child in view.children
+            if isinstance(child, BrainActiveControlSelect) and child.kind == "tasks"
+        )
+        supplies_select = next(
+            child
+            for child in view.children
+            if isinstance(child, BrainActiveControlSelect) and child.kind == "supplies"
+        )
+
+        self.assertEqual(task_select.placeholder, f"{ACTIVE_TASKS_LABEL}: 1 !!!")
+        self.assertEqual(supplies_select.placeholder, f"{SUPPLIES_LABEL}: 1")
+
     async def test_service_menu_select_calls_up_active_tasks_message(self) -> None:
         view = BrainServiceMenuView(
             FakeGovernorTools(),  # type: ignore[arg-type]
@@ -726,7 +750,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
                 for child in refreshed.children
                 if isinstance(child, BrainActiveControlSelect | BrainUpcomingEventsSelect)
             ],
-            [f"{UPCOMING_EVENTS_LABEL}: 1", f"{ACTIVE_TASKS_LABEL}: 1", f"{SUPPLIES_LABEL}: 1"],
+            [f"{UPCOMING_EVENTS_LABEL}: 1", f"{ACTIVE_TASKS_LABEL}: 1 !!!", f"{SUPPLIES_LABEL}: 1"],
         )
         self.assertEqual(governor_tools.calendar_month_image_calls[0][:3], ("main", None, None))
         self.assertIsNotNone(governor_tools.calendar_month_image_calls[0][3])
@@ -1061,6 +1085,17 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(select.options), 25)
         self.assertEqual(select.placeholder, "Active Tasks 1-25")
         self.assertIn("Page 1/2", [getattr(child, "label", "") for child in view.children])
+
+    async def test_active_task_service_placeholder_warns_when_overdue(self) -> None:
+        view = BrainActiveTasksView(
+            FakeGovernorTools(),  # type: ignore[arg-type]
+            200,
+            ToolRequest(ToolKind.ACTIVE_TASKS),
+            [{"title": "Past due", "due": "1999-01-01", "dueTime": "10:00"}],
+        )
+        select = next(child for child in view.children if isinstance(child, BrainActiveTasksSelect))
+
+        self.assertEqual(select.placeholder, "Active Tasks 1-1 !!!")
 
     async def test_active_task_service_next_page_edits_same_message(self) -> None:
         tasks = [{"title": f"Task {index:02d}"} for index in range(1, 28)]

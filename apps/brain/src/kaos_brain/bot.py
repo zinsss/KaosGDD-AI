@@ -4,7 +4,7 @@ import asyncio
 import base64
 import binascii
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time as datetime_time, timedelta
 import io
 import json
 import logging
@@ -2866,6 +2866,8 @@ class BrainActiveControlSelect(discord.ui.Select):
         ]
         label = SUPPLIES_LABEL if kind == "supplies" else ACTIVE_TASKS_LABEL
         placeholder = f"{label}: {len(tasks)}"
+        if kind == "tasks" and _has_overdue_tasks(tasks):
+            placeholder = f"{placeholder} !!!"
         row = 2 if kind == "supplies" else 1
         disabled = not options
         if disabled:
@@ -3223,7 +3225,10 @@ class BrainActiveTasksSelect(discord.ui.Select):
         start = parent.page * TASK_SERVICE_PAGE_SIZE + 1
         end = start + len(parent.page_tasks) - 1
         label = "Supplies" if parent.supplies else "Active Tasks"
-        super().__init__(placeholder=f"{label} {start}-{end}", min_values=1, max_values=1, options=options, row=0)
+        placeholder = f"{label} {start}-{end}"
+        if not parent.supplies and _has_overdue_tasks(parent.tasks):
+            placeholder = f"{placeholder} !!!"
+        super().__init__(placeholder=placeholder, min_values=1, max_values=1, options=options, row=0)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         try:
@@ -4338,6 +4343,44 @@ def _task_option_description(
     due_text = " ".join(part for part in (due, due_time) if part)
     parts = [part for part in (completed, due_text) if part]
     return _compact_select_text(" · ".join(parts), 100)
+
+
+def _has_overdue_tasks(tasks: list[dict[str, Any]], *, now: datetime | None = None) -> bool:
+    current = now or datetime.now(KST)
+    return any(_is_overdue_task(task, now=current) for task in tasks)
+
+
+def _is_overdue_task(task: dict[str, Any], *, now: datetime | None = None) -> bool:
+    if str(task.get("status") or "").strip().upper() == "COMPLETED":
+        return False
+    due = str(task.get("due") or task.get("dueDate") or "").strip()
+    if not due:
+        return False
+    try:
+        due_date = date.fromisoformat(due[:10])
+    except ValueError:
+        return False
+    current = now or datetime.now(KST)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=KST)
+    today = current.date()
+    if due_date < today:
+        return True
+    if due_date > today:
+        return False
+    due_time = _parse_due_time(str(task.get("dueTime") or "").strip())
+    if due_time is None:
+        return False
+    return datetime.combine(due_date, due_time, tzinfo=KST) <= current
+
+
+def _parse_due_time(value: str) -> datetime_time | None:
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value[:5], "%H:%M").time()
+    except ValueError:
+        return None
 
 
 def _compact_select_text(value: str, limit: int) -> str:

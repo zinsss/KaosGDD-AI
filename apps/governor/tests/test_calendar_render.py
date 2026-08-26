@@ -8,6 +8,7 @@ from kaos_governor.calendar.render import (
     MonthDayMarkers,
     MonthRenderTheme,
     _day_number_color,
+    _task_marker_color,
     render_month_png,
     weather_glyph,
 )
@@ -96,6 +97,15 @@ class CalendarRenderTests(unittest.TestCase):
             )
             self.assertEqual(image.getpixel((72, 830)), (52, 59, 73))
             self.assertEqual(image.getpixel((72, 860)), (59, 66, 82))
+
+    def test_overdue_tasks_use_overdue_marker_color(self) -> None:
+        theme = MonthRenderTheme(task="#ffff00", overdue_task="#ff0000")
+
+        self.assertEqual(_task_marker_color(MonthDayMarkers(date(2026, 8, 13), tasks=1), theme), "#ffff00")
+        self.assertEqual(
+            _task_marker_color(MonthDayMarkers(date(2026, 8, 13), tasks=1, overdue_tasks=1), theme),
+            "#ff0000",
+        )
 
     def test_weather_glyph_uses_nerd_font_weather_symbols(self) -> None:
         self.assertEqual(weather_glyph("☀️"), "\ue30d")

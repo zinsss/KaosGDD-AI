@@ -400,7 +400,7 @@ class BrainToolServer:
                 year=visible_month.year,
                 month=visible_month.month,
                 today=current,
-                markers=month_markers(bootstrap),
+                markers=month_markers(bootstrap, now=datetime.combine(current, datetime.now(KST).timetz())),
             )
         except CalendarAdapterError as exc:
             return web.json_response({"error": str(exc)}, status=502)
