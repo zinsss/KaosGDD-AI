@@ -2,9 +2,10 @@
 
 Architecture, deterministic orchestration, AI integrations, and deployment plans for the next KaosGDD platform.
 
-> Status: Governor is running side by side in production. This repository now
-> includes a supported, guarded H3+ backend deployment. It does not replace the
-> production Brain or move stateful services automatically.
+> Status (2026-08-28): H3 Governor/backends and H4 KaosBrain are in production.
+> The office Fax Connector and Fax Bridge are active beside HylaFAX. Migration
+> remains incremental: clinic services and stateful data are never moved or
+> replaced automatically.
 
 ## System Roles
 
@@ -81,6 +82,8 @@ Upstream applications will be referenced using pinned release versions or image 
 - [KaosGovernor Discord bot rollout](docs/operations/discord-governor-bot.md)
 - [Naver mail migration](docs/operations/naver-mail.md)
 - [Governor Memos search](docs/operations/memos-search.md)
+- [Current production and recovery map](docs/operations/production-recovery.md)
+- [Office Fax Connector and Bridge](deploy/office-fax-connector/README.md)
 - [H3+ backend deployment](deploy/h3-backend/README.md)
 - [H3+ stateful migration](docs/migration/h3-backend-cutover.md)
 

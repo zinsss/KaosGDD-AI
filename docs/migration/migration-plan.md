@@ -1,5 +1,27 @@
 # Migration Plan
 
+## Implementation status on 2026-08-28
+
+This remains the rollback-aware migration contract, but several phases are now
+implemented in production:
+
+- H3 networking, Governor, PostgreSQL, Radicale, Memos, family services, and
+  the service edge are active.
+- H4 KaosBrain is active with narrow Governor tools and guarded KaosAI/OpenClaw
+  chat.
+- Discord is the primary personal orchestration surface; native iOS apps remain
+  the calendar, task, and supplies clients.
+- Naver mail, Memos, Paperless inbox/search, calendar, task confirmations,
+  system status, and imaging second-look are active Governor workflows.
+- Fax uses the authenticated Office Fax Connector plus the repository-owned
+  Office Fax Bridge; HylaFAX and the modem remain at the office.
+- KaosFaxMail was never adopted as the production mailbox path and is archived.
+
+Remaining work is verification and cleanup: finish observation gates, verify a
+live inbound and outbound fax, retire proven-unused legacy workers, complete
+family AI scope, and test backup restoration. Phase descriptions below retain
+their original sequencing because they remain useful for rollback and rebuilds.
+
 ## Objectives
 
 - Build the H4 Brain and H3+ backend beside production.

@@ -41,11 +41,13 @@ load_env() {
 preflight() {
   require_command docker
   require_command curl
+  require_command faxstat
   load_env
   [[ -s "${SECRETS_DIR}/fax_connector_token" ]] || die "missing secret: ${SECRETS_DIR}/fax_connector_token"
   [[ -d /srv/kaos/data/kaosgdd/brain/fax-outgoing ]] || die "missing existing fax bridge queue"
   [[ -d /var/spool/hylafax ]] || die "missing HylaFAX spool"
   command -v tiff2pdf >/dev/null 2>&1 || die "tiff2pdf is required on Office Kaos"
+  faxstat -h localhost >/dev/null || die "HylaFAX scheduler is unavailable on localhost"
   "${COMPOSE[@]}" config --quiet
   printf 'Preflight passed.\n'
 }
@@ -57,6 +59,10 @@ test_image() {
     --file "${REPO_ROOT}/apps/office-fax-connector/Dockerfile" \
     "${REPO_ROOT}"
   docker run --rm kaos-office-fax-connector:test
+  docker build --target test \
+    --tag kaos-office-fax-bridge:test \
+    --file "${REPO_ROOT}/apps/fax-bridge/Dockerfile" \
+    "${REPO_ROOT}"
 }
 
 smoke() {
@@ -69,13 +75,15 @@ smoke() {
     if curl --fail --silent --show-error \
       -H "Authorization: Bearer ${token}" \
       "http://${address}:${FAX_CONNECTOR_PORT:-8098}/health"; then
-      printf '\n'
-      return
+      if [[ "$(docker inspect --format '{{.State.Running}}' kaosgdd-fax-bridge 2>/dev/null)" == "true" ]]; then
+        printf '\n'
+        return
+      fi
     fi
     sleep 1
   done
-  "${COMPOSE[@]}" logs --tail=80 office-fax-connector >&2 || true
-  die "Office fax connector health endpoint did not become available"
+  "${COMPOSE[@]}" logs --tail=80 office-fax-connector fax-bridge >&2 || true
+  die "Office fax connector or fax bridge did not become ready"
   printf '\n'
 }
 
@@ -83,9 +91,9 @@ case "${1:-}" in
   setup) setup ;;
   preflight) preflight ;;
   test) test_image ;;
-  up) preflight; "${COMPOSE[@]}" up --detach --build office-fax-connector; smoke ;;
+  up) preflight; "${COMPOSE[@]}" up --detach --build office-fax-connector fax-bridge; smoke ;;
   down) load_env; "${COMPOSE[@]}" down ;;
-  restart) preflight; "${COMPOSE[@]}" up --detach --build --force-recreate office-fax-connector; smoke ;;
-  logs) load_env; "${COMPOSE[@]}" logs --follow --tail=100 office-fax-connector ;;
+  restart) preflight; "${COMPOSE[@]}" up --detach --build --force-recreate office-fax-connector fax-bridge; smoke ;;
+  logs) load_env; "${COMPOSE[@]}" logs --follow --tail=100 office-fax-connector fax-bridge ;;
   *) die "usage: ${0} setup|preflight|test|up|down|restart|logs" ;;
 esac

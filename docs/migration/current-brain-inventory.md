@@ -1,5 +1,10 @@
 # Current Brain Conversion Inventory
 
+> 2026-08-28 update: H4 KaosBrain and the H3 Governor replacements are active.
+> The old KaosGDD checkout remains a rollback/reference source only where an
+> observation gate is unfinished. The production fax bridge source now belongs
+> to this repository under `apps/fax-bridge`.
+
 The existing `zinsss/KaosGDD` `apps/brain` implementation remains production
 code until replacements are verified. During the H3 migration it may be renamed
 from `kaosgdd-brain` to transitional `kaosgovernor-legacy-api` so operators do not confuse
@@ -48,7 +53,8 @@ legacy service and database can be retired.
 - obsolete notification providers
 - custom RHWP service if Polaris fully covers the remaining workflow
 - old calendar adapter container
-- old fax bridge implementation
+- legacy copy of the fax bridge in the old KaosGDD checkout, after the
+  `apps/fax-bridge` deployment passes its live observation gate
 
 Retirement requires a verified replacement, data reconciliation, rollback
 instructions, and an observation period. A renamed module is not sufficient

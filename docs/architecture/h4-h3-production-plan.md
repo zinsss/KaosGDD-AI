@@ -1,5 +1,10 @@
 # H4 Ultra + H3+ Production Plan
 
+> Implementation status (2026-08-28): the H3 application plane, H4 KaosBrain,
+> guarded KaosAI chat, and the office Fax Connector/Bridge are active. This
+> document remains the architecture and rollback contract; phase instructions
+> that describe those components as future work are retained for rebuilds.
+
 ## 1. Objective
 
 Build the next Kaos platform around two new permanent roles:
@@ -216,7 +221,7 @@ interrupt PACS, DICOM receipt, fax transport, Paperless, or RustDesk.
 | KaosAIO | Office Kaos | Stay with PACS |
 | Paperless stack | Office Kaos | Stay; Governor uses API over Tailscale |
 | Stirling-PDF | Office Kaos | Stay; optional Governor adapter |
-| HylaFAX and fax bridge | Office Kaos | Convert bridge into authenticated Fax Connector |
+| HylaFAX, Fax Connector, and Fax Bridge | Office Kaos | Connector authenticates H3; separate local bridge preserves PDF-to-TIFF and `sendfax` isolation |
 | RustDesk | Office Kaos | Stay |
 | Radicale | H3+ | Migrate data/config in controlled write freeze |
 | Memos | H3+ | Migrate SQLite/resources in controlled write freeze |
@@ -775,7 +780,7 @@ Work that can start before H4 is ready:
 4. Complete Memos read/search tools and then safe create/update tools.
 5. Implement Calendar read/search and actor scopes.
 6. Port Scheduler rules without enabling production writes.
-7. Build the Office Fax Connector API.
+7. Verify and maintain the implemented Office Fax Connector and local Fax Bridge.
 8. Prepare Family BFF auth and durable chat contracts.
 9. Document and test the Radicale collection mapping used by iOS Calendar,
    iOS Reminders, and the supplies list.
