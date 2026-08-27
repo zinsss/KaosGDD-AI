@@ -6,19 +6,22 @@ from kaos_brain.tool_intent import ToolKind, parse_tool_request
 
 class ToolIntentTests(unittest.TestCase):
     def test_today_korean_request(self) -> None:
-        request = parse_tool_request("오늘 뭐 있어?")
+        request = parse_tool_request("오늘 뭐 있어?", today=date(2026, 8, 26))
         assert request is not None
         self.assertEqual(request.kind, ToolKind.TODAY)
+        self.assertEqual(request.start, "2026-08-26")
 
     def test_today_task_request_uses_today_context(self) -> None:
-        request = parse_tool_request("오늘 할 일 알려줘")
+        request = parse_tool_request("오늘 할 일 알려줘", today=date(2026, 8, 26))
         assert request is not None
         self.assertEqual(request.kind, ToolKind.TODAY)
+        self.assertEqual(request.start, "2026-08-26")
 
     def test_today_schedule_request_uses_today_context(self) -> None:
-        request = parse_tool_request("오늘 스케줄 알려줘")
+        request = parse_tool_request("오늘 스케줄 알려줘", today=date(2026, 8, 26))
         assert request is not None
         self.assertEqual(request.kind, ToolKind.TODAY)
+        self.assertEqual(request.start, "2026-08-26")
 
     def test_slash_month_day_request_uses_current_year_and_requested_day(self) -> None:
         request = parse_tool_request("8/26 보여줘", today=date(2026, 8, 26))
@@ -51,38 +54,43 @@ class ToolIntentTests(unittest.TestCase):
         self.assertEqual(request.start, "2026-08-26")
 
     def test_weather_korean_request_uses_weather_context(self) -> None:
-        request = parse_tool_request("지금 포항날씨는?")
+        request = parse_tool_request("지금 포항날씨는?", today=date(2026, 8, 26))
         assert request is not None
         self.assertEqual(request.kind, ToolKind.WEATHER)
         self.assertEqual(request.query, "포항")
+        self.assertEqual(request.start, "2026-08-26")
         self.assertEqual(request.collection_id, "pohang")
 
     def test_weather_korean_location_sets_lookup_city(self) -> None:
-        request = parse_tool_request("부산 날씨 알려줘")
+        request = parse_tool_request("부산 날씨 알려줘", today=date(2026, 8, 26))
         assert request is not None
         self.assertEqual(request.kind, ToolKind.WEATHER)
         self.assertEqual(request.query, "부산")
+        self.assertEqual(request.start, "2026-08-26")
         self.assertEqual(request.collection_id, "busan")
 
     def test_weather_overseas_location_sets_lookup_city(self) -> None:
-        request = parse_tool_request("런던 날씨 알려줘")
+        request = parse_tool_request("런던 날씨 알려줘", today=date(2026, 8, 26))
         assert request is not None
         self.assertEqual(request.kind, ToolKind.WEATHER)
         self.assertEqual(request.query, "런던")
+        self.assertEqual(request.start, "2026-08-26")
         self.assertEqual(request.collection_id, "london")
 
     def test_weather_current_location_uses_default_city(self) -> None:
-        request = parse_tool_request("여기 날씨는?")
+        request = parse_tool_request("여기 날씨는?", today=date(2026, 8, 26))
         assert request is not None
         self.assertEqual(request.kind, ToolKind.WEATHER)
         self.assertEqual(request.query, "")
+        self.assertEqual(request.start, "2026-08-26")
         self.assertEqual(request.collection_id, "")
 
     def test_weather_unknown_location_is_not_treated_as_default(self) -> None:
-        request = parse_tool_request("베를린 날씨 알려줘")
+        request = parse_tool_request("베를린 날씨 알려줘", today=date(2026, 8, 26))
         assert request is not None
         self.assertEqual(request.kind, ToolKind.WEATHER)
         self.assertEqual(request.query, "베를린")
+        self.assertEqual(request.start, "2026-08-26")
         self.assertEqual(request.collection_id, "unsupported:베를린")
 
     def test_active_task_korean_request(self) -> None:

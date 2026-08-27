@@ -89,8 +89,31 @@ class WeatherGovernorTools:
                 "summary": "⛅️ 23-28℃",
                 "condition": "cloudy",
                 "precipitationProbability": 70,
+                "precipitationMm": 0,
                 "humidityPercent": 81,
                 "windSpeedKmh": 13.2,
+                "dayparts": [
+                    {
+                        "label": "Morning",
+                        "glyph": "🌤️",
+                        "minTemp": 23,
+                        "maxTemp": 26,
+                        "precipitationProbability": 10,
+                        "precipitationMm": 0,
+                        "humidityPercent": 88,
+                        "windSpeedKmh": 7.3,
+                    },
+                    {
+                        "label": "Afternoon",
+                        "glyph": "⛅️",
+                        "minTemp": 26,
+                        "maxTemp": 28,
+                        "precipitationProbability": 70,
+                        "precipitationMm": 0,
+                        "humidityPercent": 81,
+                        "windSpeedKmh": 13.2,
+                    },
+                ],
             },
         }
 
@@ -135,7 +158,17 @@ class BrainToolResponseTests(unittest.IsolatedAsyncioTestCase):
             actor_id=200,
         )
 
-        self.assertEqual(reply, "## 포항 날씨 • 2026-08-14\n- ⛅️ 23-28℃\n- 강수확률 70% · 바람 13.2km/h")
+        self.assertEqual(
+            reply,
+            "## 포항 날씨 • 2026-08-14\n"
+            "- ⛅️ 23-28℃\n"
+            "- 강수확률 70% · 강수량 0mm · 바람 13.2km/h\n"
+            "### 시간대\n"
+            "- 오전 🌤️ 23-26℃\n"
+            "· 강수확률 10% · 강수량 0mm · 습도 88% · 바람 7.3km/h\n"
+            "- 오후 ⛅️ 26-28℃\n"
+            "· 강수확률 70% · 강수량 0mm · 습도 81% · 바람 13.2km/h",
+        )
         self.assertIsNone(view)
 
     async def test_single_memo_search_opens_original_memo_with_actions(self) -> None:

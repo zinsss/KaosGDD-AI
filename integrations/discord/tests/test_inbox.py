@@ -658,23 +658,18 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("처방전 대리수령 신청서.pdf: already submitted", message.replies[0][0])
             self.assertNotIn("40eeb76102ae4b88.pdf", message.replies[0][0])
 
-    async def test_dotdot_message_searches_paperless_then_deletes_original(self) -> None:
+    async def test_dotdot_message_is_left_for_brain_combined_search(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             paperless = FakePaperless()
             inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
             message = self.make_message([], content="..clinic")
 
-            self.assertTrue(await inbox.handle_message(message))  # type: ignore[arg-type]
+            self.assertFalse(await inbox.handle_message(message))  # type: ignore[arg-type]
 
             self.assertEqual(paperless.submitted, [])
-            self.assertEqual(paperless.searches, [("clinic", 25)])
-            message.delete.assert_awaited_once()
-            self.assertIn("Searched..", self.channel.sent[0][0])
-            self.assertIn("## clinic", self.channel.sent[0][0])
-            self.assertIn("13 results in 213 documents", self.channel.sent[0][0])
-            self.assertIn("- Clinic bill", self.channel.sent[0][0])
-            self.assertIn("view", self.channel.sent[0][1])
-            self.assertEqual(self.channel.sent[0][1]["view"]._message.id, 998)
+            self.assertEqual(paperless.searches, [])
+            message.delete.assert_not_awaited()
+            self.assertEqual(self.channel.sent, [])
             self.assertEqual(message.replies, [])
 
     async def test_paperless_search_view_expires_on_timeout(self) -> None:
@@ -689,32 +684,29 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(message.edit.await_args.kwargs["view"])
         self.assertIn("Search result of clinic expired.", message.edit.await_args.kwargs["content"])
 
-    async def test_dotdot_all_browses_all_paperless_documents(self) -> None:
+    async def test_dotdot_all_is_left_for_brain_document_browse(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             paperless = FakePaperless()
             inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
             message = self.make_message([], content="..ALL")
 
-            self.assertTrue(await inbox.handle_message(message))  # type: ignore[arg-type]
+            self.assertFalse(await inbox.handle_message(message))  # type: ignore[arg-type]
 
-            self.assertEqual(paperless.searches, [("", 25, 1)])
-            self.assertIn("## All documents", self.channel.sent[0][0])
-            self.assertIn("52 documents", self.channel.sent[0][0])
-            self.assertIn("Page 1 / 3", self.channel.sent[0][0])
-            self.assertIn("- Clinic bill", self.channel.sent[0][0])
-            self.assertIn("view", self.channel.sent[0][1])
+            self.assertEqual(paperless.searches, [])
+            message.delete.assert_not_awaited()
+            self.assertEqual(self.channel.sent, [])
 
-    async def test_dotdot_without_all_does_not_browse_documents(self) -> None:
+    async def test_dotdot_without_all_is_left_for_brain(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             paperless = FakePaperless()
             inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
             message = self.make_message([], content="..")
 
-            self.assertTrue(await inbox.handle_message(message))  # type: ignore[arg-type]
+            self.assertFalse(await inbox.handle_message(message))  # type: ignore[arg-type]
 
             self.assertEqual(paperless.searches, [])
-            message.delete.assert_awaited_once()
-            self.assertEqual(self.channel.sent[0][0], "Use `..ALL` to browse all documents.")
+            message.delete.assert_not_awaited()
+            self.assertEqual(self.channel.sent, [])
 
     async def test_paperless_browse_view_can_page_forward(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -736,16 +728,16 @@ class DiscordInboxTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("Page 2 / 3", interaction.response.edit_message.await_args.kwargs["content"])
             self.assertIsInstance(interaction.response.edit_message.await_args.kwargs["view"], PaperlessSearchView)
 
-    async def test_dotdot_message_normalizes_multi_term_paperless_search(self) -> None:
+    async def test_dotdot_message_leaves_multi_term_search_for_brain(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             paperless = FakePaperless()
             inbox = self.make_inbox(Path(temporary) / "inbox.json", paperless)
             message = self.make_message([], content="..rust   desk setup")
 
-            self.assertTrue(await inbox.handle_message(message))  # type: ignore[arg-type]
+            self.assertFalse(await inbox.handle_message(message))  # type: ignore[arg-type]
 
-            self.assertEqual(paperless.searches, [("rust desk setup", 25)])
-            self.assertIn("## rust desk setup", self.channel.sent[0][0])
+            self.assertEqual(paperless.searches, [])
+            self.assertEqual(self.channel.sent, [])
 
     def test_opened_document_renders_link_and_details(self) -> None:
         content = render_paperless_opened(

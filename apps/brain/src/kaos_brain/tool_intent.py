@@ -112,9 +112,9 @@ def parse_tool_request(content: str, *, today: date | None = None) -> ToolReques
         return day_request
     if _asks_weather(lowered):
         label, city = _weather_location(text)
-        return ToolRequest(ToolKind.WEATHER, label, profile=profile, collection_id=city)
+        return ToolRequest(ToolKind.WEATHER, label, start=current.isoformat(), profile=profile, collection_id=city)
     if _asks_today(lowered):
-        return ToolRequest(ToolKind.TODAY, profile=profile)
+        return ToolRequest(ToolKind.TODAY, start=current.isoformat(), profile=profile)
     completed = _completed_task_request(text, lowered, current, profile=profile, collection_id=collection_id)
     if completed is not None:
         return completed

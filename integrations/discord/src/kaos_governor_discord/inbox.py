@@ -122,19 +122,8 @@ class DiscordDocumentInbox:
             return False
         if await self._handle_metadata_reply(message):
             return True
-        content = str(getattr(message, "content", "") or "").strip()
-        if not message.attachments and message.channel.id != self.channel_id:
-            return False
-        if content.startswith(".."):
-            await self._handle_search(message, content[2:].strip())
-            return True
         if not message.attachments:
-            await message.reply(
-                "Upload one PDF file to prepare it for Paperless.",
-                mention_author=False,
-                allowed_mentions=NO_MENTIONS,
-            )
-            return True
+            return False
         if len(message.attachments) != 1:
             await message.reply(
                 "Upload one PDF file per message.",

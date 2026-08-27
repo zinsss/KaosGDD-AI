@@ -89,7 +89,7 @@ class GovernorToolClient:
                         "시드니",
                     ],
                 }
-            return await self.today(profile=request.profile, city=request.collection_id)
+            return await self.today(profile=request.profile, day=request.start or None, city=request.collection_id)
         if request.kind is ToolKind.TODAY:
             return await self.today(profile=request.profile, day=request.start or None)
         if request.kind is ToolKind.UPCOMING_EVENTS:
