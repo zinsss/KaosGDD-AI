@@ -45,6 +45,7 @@ from .governor_tools import (
     render_task_edit_completed,
     render_task_edit_proposal,
 )
+from .list_formatting import page_status_label
 from .task_update_intent import TaskActionRequest, TaskCreateRequest
 from .tool_intent import ToolKind, ToolRequest
 
@@ -338,7 +339,7 @@ class BrainTaskServicePageButton(discord.ui.Button):
 class BrainTaskServicePageStatusButton(discord.ui.Button):
     def __init__(self, page: int, max_page: int) -> None:
         super().__init__(
-            label=f"Page {page + 1}/{max_page + 1}",
+            label=page_status_label(page + 1, max_page + 1),
             style=discord.ButtonStyle.secondary,
             row=1,
             disabled=True,
@@ -762,4 +763,3 @@ class TaskActionConfirmationView(BrainAutoClosingView):
             item.disabled = True
         await interaction.response.edit_message(content=_tool_cancelled("할 일 변경"), view=self, allowed_mentions=NO_MENTIONS)
         self.stop()
-

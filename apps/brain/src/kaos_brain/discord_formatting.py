@@ -21,6 +21,7 @@ from .governor_tools import (
     document_option_label,
     memo_option_label,
 )
+from .list_formatting import page_window, range_summary as _range_summary
 from .tool_intent import ToolRequest
 
 LOGGER = logging.getLogger(__name__)
@@ -50,12 +51,6 @@ PAPERLESS_TITLE = "𝓟𝓪𝓹𝓮𝓻𝓵𝓮𝓼𝓼"
 MEMOS_TITLE = "𝓜𝓮𝓶𝓸𝓼"
 FAX_MAIL_TITLE = "𝓕𝓪𝔁 𝓜𝓪𝓲𝓵"
 KOREAN_SHORT_WEEKDAYS = ("월", "화", "수", "목", "금", "토", "일")
-
-
-def _range_summary(start: int, count: int, total: int) -> str:
-    if count <= 0 or total <= 0:
-        return "<0 of 0>"
-    return f"<{start}-{start + count - 1} of {total}>"
 
 
 def _payload_count(payload: dict[str, Any], *keys: str, fallback: int) -> int:
@@ -263,15 +258,13 @@ def _render_document_list_message(
 
 
 def _render_fax_mail_service_message(imports: list[dict[str, Any]], *, mode: str, page: int) -> str:
-    start = page * FAX_MAIL_PAGE_SIZE
-    page_imports = imports[start : start + FAX_MAIL_PAGE_SIZE]
-    showing_start = start + 1 if page_imports else 0
+    window = page_window(imports, page=page, page_size=FAX_MAIL_PAGE_SIZE)
     subtitle = _fax_mail_mode_label(mode)
     empty = {"incoming_fax": "no incoming fax", "outgoing_fax": "no outgoing fax", "mail": "no target mail"}.get(mode, "no items")
-    lines = [f"## {FAX_MAIL_TITLE}", f"### {subtitle}", _range_summary(showing_start, len(page_imports), len(imports)), ""]
-    for item in page_imports:
+    lines = [f"## {FAX_MAIL_TITLE}", f"### {subtitle}", window.range_label, ""]
+    for item in window.items:
         lines.append(f"- {_fax_mail_list_line(item)}")
-    if not page_imports:
+    if not window.items:
         lines.append(f"- {empty}")
     return "\n".join(lines)
 
@@ -376,14 +369,13 @@ def _render_task_service_message(
     supplies: bool,
     month: date | None = None,
 ) -> str:
-    start = page * TASK_SERVICE_PAGE_SIZE
-    page_tasks = tasks[start : start + TASK_SERVICE_PAGE_SIZE]
+    window = page_window(tasks, page=page, page_size=TASK_SERVICE_PAGE_SIZE)
     if history:
         month_label = f"{month:%Y.%m}" if month else ""
-        lines = [f"## {title}", f"### {month_label} • Completed: {len(tasks)}", _range_summary(start + 1, len(page_tasks), len(tasks)), ""]
+        lines = [f"## {title}", f"### {month_label} • Completed: {len(tasks)}", window.range_label, ""]
     else:
-        lines = [f"## {title}", _range_summary(start + 1, len(page_tasks), len(tasks)), ""]
-    for task in page_tasks:
+        lines = [f"## {title}", window.range_label, ""]
+    for task in window.items:
         item_title = str(task.get("title") or task.get("summary") or "Untitled task").strip()
         if history:
             prefix = "~~"
@@ -409,7 +401,7 @@ def _render_task_service_message(
             lines.append(f"- {_format_month_day(completed)}{detail}")
             continue
         lines.append(f"- {prefix}{escaped_title}{suffix_marker}{detail}")
-    if not page_tasks:
+    if not window.items:
         lines.append("- none")
     return "\n".join(lines)
 

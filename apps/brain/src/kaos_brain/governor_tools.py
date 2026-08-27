@@ -8,6 +8,7 @@ from .event_intent import EventCreateRequest
 from .memo_intent import MemoCreateRequest, MemoDeleteRequest, MemoEditRequest
 from .task_update_intent import TaskActionRequest, TaskCreateRequest, TaskDueUpdateRequest
 from .tool_intent import ToolKind, ToolRequest
+from .list_formatting import range_summary as _range_summary
 
 SEARCH_RESULT_LIMIT = 10
 
@@ -1024,12 +1025,6 @@ def _render_documents(query: str, payload: dict[str, Any]) -> str:
         return "\n".join(lines)
     lines.extend(_document_link_line(item) for item in results[:SEARCH_RESULT_LIMIT])
     return "\n".join(lines)[:1900]
-
-
-def _range_summary(start: int, count: int, total: int) -> str:
-    if count <= 0 or total <= 0:
-        return "<0 of 0>"
-    return f"<{start}-{start + count - 1} of {total}>"
 
 
 def _items(value: object) -> list[dict[str, Any]]:

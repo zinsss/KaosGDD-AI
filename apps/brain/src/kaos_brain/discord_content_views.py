@@ -36,6 +36,7 @@ from .governor_tools import (
     render_memo_opened,
     search_results,
 )
+from .list_formatting import page_status_label
 from .memo_intent import MemoCreateRequest
 
 LOGGER = logging.getLogger(__name__)
@@ -710,7 +711,7 @@ class BrainDocumentPageButton(discord.ui.Button):
 
 class BrainDocumentPageStatusButton(discord.ui.Button):
     def __init__(self, page: int, page_total: int) -> None:
-        super().__init__(label=f"Page {page}/{page_total}", style=discord.ButtonStyle.secondary, disabled=True, row=1)
+        super().__init__(label=page_status_label(page, page_total), style=discord.ButtonStyle.secondary, disabled=True, row=1)
 
 
 class BrainOpenedDocumentView(BrainAutoClosingView):

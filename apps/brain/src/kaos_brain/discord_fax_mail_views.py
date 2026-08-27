@@ -18,6 +18,7 @@ from .discord_formatting import (
 )
 from .discord_view_helpers import NO_MENTIONS
 from .governor_tools import GovernorToolClient, GovernorToolError
+from .list_formatting import page_status_label
 from .tool_intent import ToolKind, ToolRequest
 
 LOGGER = logging.getLogger(__name__)
@@ -150,7 +151,7 @@ class BrainFaxMailPageButton(discord.ui.Button):
 class BrainFaxMailPageStatusButton(discord.ui.Button):
     def __init__(self, page: int, max_page: int) -> None:
         super().__init__(
-            label=f"Page {page + 1}/{max_page + 1}",
+            label=page_status_label(page + 1, max_page + 1),
             style=discord.ButtonStyle.secondary,
             row=1,
             disabled=True,
@@ -192,4 +193,3 @@ class BrainFaxMailCloseButton(discord.ui.Button):
             return
         await interaction.response.defer()
         await interaction.message.delete()
-
