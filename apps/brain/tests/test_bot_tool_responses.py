@@ -181,7 +181,7 @@ class BrainToolResponseTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(view)
         assert view is not None
         self.assertIsInstance(view, BrainDocumentSearchView)
-        self.assertIn("Paperless: 1", [getattr(item, "placeholder", "") for item in view.children])
+        self.assertIn("Paperless 1-1", [getattr(item, "placeholder", "") for item in view.children])
         self.assertIn("Close", [getattr(item, "label", "") for item in view.children])
 
     async def test_combined_search_returns_memos_and_documents(self) -> None:
@@ -211,7 +211,7 @@ class BrainToolResponseTests(unittest.IsolatedAsyncioTestCase):
         assert isinstance(view, BrainCombinedSearchView)
         self.assertEqual(
             [getattr(item, "placeholder", "") for item in view.children if getattr(item, "placeholder", "")],
-            ["Memos: 30", "Paperless: 30"],
+            ["Memos 1-10 of 30", "Paperless 1-10 of 30"],
         )
         self.assertEqual(
             [getattr(item, "label", "") for item in view.children if getattr(item, "label", "")],

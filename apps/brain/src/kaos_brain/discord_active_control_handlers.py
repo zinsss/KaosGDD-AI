@@ -38,6 +38,8 @@ def _is_transient_brain_message(content: str) -> bool:
         return True
     if "실패했어요." in normalized or "취소했어요." in normalized:
         return True
+    if normalized.endswith(("을 완료했어요.", "를 완료했어요.", "을 구매했어요.", "를 구매했어요.")):
+        return True
     return normalized in {
         "Task added.",
         "Supply added.",

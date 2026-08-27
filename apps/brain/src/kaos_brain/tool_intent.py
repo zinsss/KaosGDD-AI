@@ -96,7 +96,7 @@ class ToolRequest:
 
 
 def parse_tool_request(content: str, *, today: date | None = None) -> ToolRequest | None:
-    text = " ".join(content.strip().split())
+    text = " ".join(_normalize_date_separators(content).strip().split())
     lowered = text.lower()
     if not text:
         return None
@@ -184,6 +184,10 @@ def _parse_explicit_day(cleaned: str, *, today: date) -> date | None:
         return date(year, month, day)
     except ValueError:
         return None
+
+
+def _normalize_date_separators(value: str) -> str:
+    return value.replace("／", "/").replace("．", ".").replace("－", "-").replace("–", "-").replace("—", "-")
 
 
 def _asks_today(lowered: str) -> bool:

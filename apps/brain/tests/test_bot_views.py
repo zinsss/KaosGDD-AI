@@ -273,6 +273,8 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
     def test_rrr_transient_cleanup_filter_keeps_durable_messages(self) -> None:
         self.assertTrue(_is_transient_brain_message("Confirm New Task\n## 오도리 문고리"))
         self.assertTrue(_is_transient_brain_message("할 일 변경 실패했어요."))
+        self.assertTrue(_is_transient_brain_message("오도리 문고리을 완료했어요."))
+        self.assertTrue(_is_transient_brain_message("토프라민을 구매했어요."))
         self.assertTrue(_is_transient_brain_message("Task added."))
         self.assertFalse(_is_transient_brain_message("# 2026.08.24(Mon)"))
         self.assertFalse(_is_transient_brain_message("## Documents\n### 의료폐기물 배출자 교육"))
@@ -620,7 +622,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("Searched..", calls[0].args[0])
         self.assertIn(f"## {PAPERLESS_TITLE}", calls[0].args[0])
         self.assertIn("<1-1 of 26>", calls[0].args[0])
-        self.assertIn("26 results in 26 documents", calls[0].args[0])
+        self.assertNotIn("26 results in 26 documents", calls[0].args[0])
         self.assertNotIn("Page 1 / 3", calls[0].args[0])
         self.assertNotIn("[open]", calls[0].args[0])
         self.assertNotIn("embed", calls[0].kwargs)
@@ -629,7 +631,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("Searched..", calls[1].args[0])
         self.assertIn(f"## {MEMOS_TITLE}", calls[1].args[0])
         self.assertIn("<1-2 of 2>", calls[1].args[0])
-        self.assertIn("2 results in 2 memos", calls[1].args[0])
+        self.assertNotIn("2 results in 2 memos", calls[1].args[0])
         self.assertIsInstance(calls[1].kwargs["view"], BrainMemoSearchView)
         self.assertIn("Close", [getattr(child, "label", "") for child in calls[1].kwargs["view"].children])
 

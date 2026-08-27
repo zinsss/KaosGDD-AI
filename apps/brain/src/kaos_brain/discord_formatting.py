@@ -219,9 +219,10 @@ def _render_memo_list_message(
     lines.extend([
         f"## {display_title}",
         _range_summary(start, len(results), result_count),
-        f"{result_count} results in {total_count} memos",
-        "",
     ])
+    if query.strip() or searched:
+        lines.append(f"{result_count} results in {total_count} memos")
+    lines.append("")
     for item in results[:SEARCH_RESULT_LIMIT]:
         lines.append(f"- {_safe_discord_line(memo_option_label(item))}")
     if not results:
@@ -247,9 +248,10 @@ def _render_document_list_message(
     lines.extend([
         f"## {display_title}",
         _range_summary(start, len(results), result_count),
-        f"{result_count} results in {total_count} documents",
-        "",
     ])
+    if query.strip() or searched:
+        lines.append(f"{result_count} results in {total_count} documents")
+    lines.append("")
     for item in results[:page_size]:
         lines.append(f"- {_safe_discord_line(document_option_label(item))}")
     if not results:

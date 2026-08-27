@@ -113,7 +113,9 @@ class BrainMemoSearchSelect(discord.ui.Select):
             )
             for index, item in enumerate(parent.results)
         ]
-        super().__init__(placeholder=f"Memos: {len(parent.results)}", min_values=1, max_values=1, options=options)
+        end = len(parent.results)
+        placeholder = f"Memos {1 if end else 0}-{end}" if end else "Memos 0"
+        super().__init__(placeholder=placeholder, min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         try:
@@ -214,7 +216,9 @@ class BrainCombinedMemoSearchSelect(discord.ui.Select):
             )
             for index, item in enumerate(parent.memo_results)
         ]
-        super().__init__(placeholder=f"Memos: {parent.memo_count}", min_values=1, max_values=1, options=options)
+        end = len(parent.memo_results)
+        placeholder = f"Memos {1 if end else 0}-{end} of {parent.memo_count}" if end else "Memos 0"
+        super().__init__(placeholder=placeholder, min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         try:
@@ -253,7 +257,9 @@ class BrainCombinedDocumentSearchSelect(discord.ui.Select):
             )
             for index, item in enumerate(parent.document_results)
         ]
-        super().__init__(placeholder=f"Paperless: {parent.document_count}", min_values=1, max_values=1, options=options)
+        end = len(parent.document_results)
+        placeholder = f"Paperless {1 if end else 0}-{end} of {parent.document_count}" if end else "Paperless 0"
+        super().__init__(placeholder=placeholder, min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         try:
@@ -663,7 +669,10 @@ class BrainDocumentSearchSelect(discord.ui.Select):
             )
             for index, item in enumerate(parent.results)
         ]
-        super().__init__(placeholder=f"Paperless: {len(parent.results)}", min_values=1, max_values=1, options=options)
+        start = (parent.page - 1) * parent.page_size + 1 if parent.results else 0
+        end = start + len(parent.results) - 1 if parent.results else 0
+        placeholder = f"Paperless {start}-{end}" if parent.results else "Paperless 0"
+        super().__init__(placeholder=placeholder, min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         try:
