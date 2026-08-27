@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Any
 from urllib.parse import quote
 
@@ -124,6 +125,12 @@ class GovernorToolClient:
 
     async def mail_messages(self, *, limit: int = 50) -> dict[str, Any]:
         return await self._get("/tools/mail/naver/list", {"limit": str(limit)})
+
+    async def fax_document(self, fax_id: str) -> dict[str, Any]:
+        normalized = str(fax_id or "").strip().lower()
+        if not re.fullmatch(r"[0-9a-f]{32}", normalized):
+            raise GovernorToolError("invalid fax id")
+        return await self._get(f"/tools/imports/fax/{normalized}/document", {})
 
     async def completed_tasks(self, request: ToolRequest, *, limit: int = SEARCH_RESULT_LIMIT) -> dict[str, Any]:
         params = {**self._task_params(request.profile, request.collection_id), "limit": str(limit)}

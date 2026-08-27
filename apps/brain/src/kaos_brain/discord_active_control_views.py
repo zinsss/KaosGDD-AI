@@ -15,7 +15,7 @@ from .discord_content_views import (
     BrainMemoSearchView,
     _linked_document_results,
 )
-from .discord_fax_mail_views import BrainFaxMailView
+from .discord_fax_mail_views import BrainFaxMailView, send_fax_mail_selection
 from .discord_formatting import (
     ACTIVE_CONTROL_LIMIT,
     ACTIVE_TASKS_LABEL,
@@ -43,7 +43,6 @@ from .discord_formatting import (
     _render_active_task_selection,
     _render_document_list_message,
     _render_event_selection,
-    _render_import_selection,
     _render_memo_list_message,
     _payload_count,
     _task_option_description,
@@ -610,4 +609,4 @@ class BrainImportSelect(discord.ui.Select):
             LOGGER.warning("Import selection failed: %s", exc)
             await interaction.response.send_message(_tool_failed("Import 선택"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
-        await interaction.response.send_message(_render_import_selection(item), ephemeral=True, allowed_mentions=NO_MENTIONS)
+        await send_fax_mail_selection(self.parent_view.governor_tools, interaction, item)

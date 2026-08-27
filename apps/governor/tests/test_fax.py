@@ -1,4 +1,5 @@
 import json
+import base64
 import os
 from pathlib import Path
 import tempfile
@@ -6,6 +7,7 @@ import unittest
 from unittest import mock
 
 from kaos_governor.fax import (
+    FaxAction,
     FaxConfig,
     FaxError,
     FaxService,
@@ -280,6 +282,27 @@ class FaxTests(unittest.TestCase):
         self.assertEqual(recent[0]["pages"], "1")
         self.assertNotIn("JVBERi1jb252ZXJ0ZWQ", state_text)
 
+    def test_received_pdf_is_retained_for_authenticated_brain_selection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            service = FaxService(self.config(root))
+            incoming = FaxAction(
+                "incoming:archive:fax000000010.tif:308214:1787870178",
+                "archive",
+                filename="2026-08-28-07:32_FROM_07079664986.pdf",
+                remote="07079664986",
+                pages="1",
+                received_at="2026-08-27T22:32:00Z",
+            )
+            record = service.store_incoming_document(incoming, b"%PDF-retained")
+            service.acknowledge(incoming)
+            payload = service.incoming_document(str(record["id"]))
+            state_text = service.config.state_path.read_text(encoding="utf-8")
+
+        self.assertEqual(payload["filename"], "2026-08-28-07:32_FROM_07079664986.pdf")
+        self.assertEqual(base64.b64decode(str(payload["contentBase64"])), b"%PDF-retained")
+        self.assertNotIn(base64.b64encode(b"%PDF-retained").decode("ascii"), state_text)
+
     def test_connector_token_can_be_loaded_from_secret_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             token = Path(tmp) / "token"
@@ -354,7 +377,7 @@ class FaxTests(unittest.TestCase):
         self.assertEqual(second, [])
         self.assertGreaterEqual(delivered, 5)
 
-    def test_new_incoming_fax_archives_pdf_without_extra_notification(self) -> None:
+    def test_new_incoming_fax_carries_text_notification_for_transport(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             config = self.config(root)
@@ -375,6 +398,8 @@ class FaxTests(unittest.TestCase):
 
         self.assertEqual([action.kind for action in actions], ["archive"])
         self.assertEqual(actions[0].filename, "2026-08-12-13:55_FROM_0547337787.pdf")
+        self.assertIn("Fax received.", actions[0].content)
+        self.assertIn("Open #brain", actions[0].content)
         self.assertEqual(recent[0]["direction"], "incoming")
         self.assertEqual(recent[0]["remote"], "0547337787")
         self.assertEqual(recent[0]["pages"], "1")

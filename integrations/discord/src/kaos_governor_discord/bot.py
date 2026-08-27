@@ -327,6 +327,7 @@ class GovernorBot(discord.Client):
                 calendar_refresh_callback=self._refresh_calendar_surfaces,
                 import_status_provider=self._import_status,
                 import_items_provider=self._recent_import_items,
+                fax_document_provider=self.fax_service.incoming_document,
                 mail_messages_provider=lambda limit: self.mail_poller.list_messages(limit=limit),
                 imaging_second_look=ImagingSecondLookClient(
                     ImagingSecondLookConfig(

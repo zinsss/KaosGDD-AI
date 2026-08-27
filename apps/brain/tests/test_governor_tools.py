@@ -599,6 +599,13 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(imports["path"], "/tools/imports/recent")
         self.assertEqual(imports["params"], {"profile": "main"})
 
+        fax_document = await client.fax_document("0123456789ABCDEF0123456789ABCDEF")
+        self.assertEqual(
+            fax_document["path"],
+            "/tools/imports/fax/0123456789abcdef0123456789abcdef/document",
+        )
+        self.assertEqual(fax_document["params"], {})
+
     async def test_fetch_single_memo_search_gets_full_body(self) -> None:
         from kaos_brain.governor_tools import GovernorToolClient, GovernorToolConfig
 

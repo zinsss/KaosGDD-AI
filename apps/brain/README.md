@@ -27,6 +27,12 @@ KaosBrain belongs under `/srv/kaosgdd/kaosbrain`; KaosAI/OpenClaw belongs under
 - Durable reads and writes should go through narrow KaosGovernor APIs.
 - KaosAI must not receive Governor credentials or call Governor tools directly.
 
+For received fax documents, KaosGovernor remains the owner. A text-only
+Governor notice can trigger an active-control refresh when
+`DISCORD_NOTIFICATION_CHANNEL_ID` and `DISCORD_GOVERNOR_BOT_USER_ID` are both
+configured. KaosBrain retrieves the PDF through the authenticated narrow tool
+route only after the user selects that fax, then uploads it into `#brain`.
+
 ## Current Slice
 
 - Discord message intake for one configured `#brain` channel.
@@ -51,6 +57,8 @@ DISCORD_BOT_TOKEN_FILE=/run/secrets/kaosbrain_discord_bot_token
 DISCORD_GUILD_ID=1536016949127942164
 DISCORD_ALLOWED_USER_IDS=...
 DISCORD_BRAIN_CHANNEL_ID=1536983928337076224
+DISCORD_NOTIFICATION_CHANNEL_ID=1536016952521261190
+DISCORD_GOVERNOR_BOT_USER_ID=1536978258350837770
 OLLAMA_BASE_URL=http://127.0.0.1:11434
 KAOSBRAIN_CHAT_MODEL=gemma3:4b
 KAOSBRAIN_DEEP_MODEL=qwen3:8b

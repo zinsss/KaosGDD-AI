@@ -114,10 +114,24 @@ class DiscordFaxTransport:
     async def _archive(self, action: FaxAction) -> None:
         if action.path is None and not action.content_bytes:
             raise RuntimeError("fax_archive_path_missing")
-        channel = await self._channel(self.archive_channel_id)
         source = action.path
         temporary = None
         try:
+            if action.key.startswith("incoming:archive:"):
+                if action.content_bytes:
+                    pdf = action.content_bytes
+                else:
+                    if source is not None and source.suffix.lower() in {".tif", ".tiff"}:
+                        temporary = tempfile.TemporaryDirectory(prefix="kaos-discord-fax-")
+                        source = Path(temporary.name) / safe_filename(action.filename)
+                        await asyncio.to_thread(self._convert_tiff, action.path, source)
+                    if source is None:
+                        raise RuntimeError("fax_archive_path_missing")
+                    pdf = await asyncio.to_thread(source.read_bytes)
+                await asyncio.to_thread(self.service.store_incoming_document, action, pdf)
+                await self._notification(action)
+                return
+            channel = await self._channel(self.archive_channel_id)
             if action.content_bytes:
                 kwargs = {
                     "file": discord.File(io.BytesIO(action.content_bytes), filename=safe_filename(action.filename)),
@@ -171,7 +185,7 @@ class DiscordFaxTransport:
                         raise RuntimeError(f"unknown_fax_action:{action.kind}")
                     await asyncio.to_thread(self.service.acknowledge, action)
                     completed += 1
-                except (OSError, RuntimeError, discord.HTTPException) as exc:
+                except (FaxError, OSError, RuntimeError, discord.HTTPException) as exc:
                     self.service.record_error(exc)
                     LOGGER.exception("Fax action failed: %s", action.key)
                     break

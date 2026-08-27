@@ -128,6 +128,7 @@ from .task_update_intent import (
 from .tool_intent import ToolKind, ToolRequest, parse_tool_request
 
 LOGGER = logging.getLogger(__name__)
+FAX_RECEIVED_NOTIFICATION_PREFIX = "Fax received."
 DOCUMENT_TAG_SUGGESTION_PATTERN = re.compile(r"\b(?:document|doc|문서)?\s*(\d{1,9})\b")
 OPENAI_CALLBACK_PREFIX = "http://localhost:1455/auth/callback?"
 OPENAI_CODE_PATTERN = re.compile(r"^ac_[A-Za-z0-9_.-]+$")
@@ -463,6 +464,14 @@ class BrainBot(BrainProposalMixin, BrainActiveControlMixin, discord.Client):
 
     async def on_message(self, message: discord.Message) -> None:
         if message.author.bot:
+            if (
+                message.guild is not None
+                and message.guild.id == self.settings.guild_id
+                and message.channel.id == self.settings.notification_channel_id
+                and message.author.id == self.settings.governor_bot_user_id
+                and str(message.content or "").startswith(FAX_RECEIVED_NOTIFICATION_PREFIX)
+            ):
+                await self._ensure_active_control_message()
             return
         if not self._allowed(message):
             return

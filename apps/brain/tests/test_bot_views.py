@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -72,6 +73,16 @@ class FakeGovernorTools:
         self.approve_calls = []
         self.calendar_month_image_calls = []
         self.calendar_week_calls = []
+        self.fax_document_calls = []
+
+    async def fax_document(self, fax_id: str):
+        self.fax_document_calls.append(fax_id)
+        return {
+            "faxId": fax_id,
+            "filename": "incoming.pdf",
+            "contentType": "application/pdf",
+            "contentBase64": base64.b64encode(b"%PDF-selected").decode("ascii"),
+        }
 
     async def get_memo(self, name: str):
         return {"memo": {"name": name, "content": "# Rustdesk\nUse Tailscale."}}
@@ -385,6 +396,39 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(import_select.placeholder, f"{FAX_MAIL_LABEL}: 2")
         self.assertFalse(import_select.disabled)
         self.assertEqual([option.label for option in import_select.options], ["Unread target mail", "Incoming fax"])
+
+    async def test_active_control_incoming_fax_selection_uploads_pdf_to_brain(self) -> None:
+        governor_tools = FakeGovernorTools()
+        view = BrainActiveControlView(
+            governor_tools,  # type: ignore[arg-type]
+            self.active_control_settings(),
+            [],
+            [],
+            [],
+            [
+                {
+                    "kind": "fax",
+                    "direction": "incoming",
+                    "title": "incoming.pdf",
+                    "faxId": "0123456789abcdef0123456789abcdef",
+                }
+            ],
+        )
+        select = next(child for child in view.children if isinstance(child, BrainImportSelect))
+        select._values = ["0"]
+        interaction = SimpleNamespace(
+            response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+            followup=SimpleNamespace(send=AsyncMock()),
+        )
+
+        await select.callback(interaction)  # type: ignore[arg-type]
+
+        interaction.response.defer.assert_awaited_once()
+        interaction.response.send_message.assert_not_awaited()
+        sent = interaction.followup.send.await_args
+        self.assertFalse(sent.kwargs.get("ephemeral", False))
+        self.assertEqual(sent.kwargs["file"].filename, "incoming.pdf")
+        self.assertEqual(governor_tools.fax_document_calls, ["0123456789abcdef0123456789abcdef"])
 
     async def test_active_control_dropdown_descriptions_only_show_task_due_dates(self) -> None:
         view = BrainActiveControlView(

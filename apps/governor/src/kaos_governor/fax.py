@@ -21,6 +21,7 @@ KST = ZoneInfo("Asia/Seoul")
 UTC = ZoneInfo("UTC")
 FAX_FILENAME = re.compile(r"fax0*([0-9]+)\.tif", re.IGNORECASE)
 DOMESTIC_NUMBER = re.compile(r"^0\d{8,10}$")
+FAX_ID = re.compile(r"^[0-9a-f]{32}$")
 
 
 class FaxError(ValueError):
@@ -333,6 +334,16 @@ def _sent_time(value: str) -> str:
     return parsed.astimezone(KST).strftime("%Y-%m-%d %H:%M")
 
 
+def _incoming_notification(*, filename: str, remote: str, pages: str) -> str:
+    lines = ["Fax received."]
+    if remote:
+        lines.append(f": from {remote}")
+    if pages:
+        lines.append(f": {pages} page{'s' if pages != '1' else ''}")
+    lines.extend((f": {filename}", ": Open #brain and select it under Fax Mail."))
+    return "\n".join(lines)
+
+
 class FaxService:
     def __init__(self, config: FaxConfig, *, connector: OfficeFaxConnectorClient | None = None) -> None:
         self.config = config
@@ -507,6 +518,11 @@ class FaxService:
                 FaxAction(
                     f"incoming:archive:{key}",
                     "archive",
+                    content=_incoming_notification(
+                        filename=f"{received:%Y-%m-%d-%H:%M}_FROM_{remote}.pdf",
+                        remote=remote,
+                        pages=pages,
+                    ),
                     path=path,
                     filename=f"{received:%Y-%m-%d-%H:%M}_FROM_{remote}.pdf",
                     remote=remote,
@@ -531,6 +547,11 @@ class FaxService:
                 FaxAction(
                     f"incoming:archive:{event_id}",
                     "archive",
+                    content=_incoming_notification(
+                        filename=filename,
+                        remote=str(event.get("remote") or "").strip(),
+                        pages=str(event.get("pages") or "").strip(),
+                    ),
                     filename=filename,
                     content_bytes=pdf,
                     remote=str(event.get("remote") or "").strip(),
@@ -616,10 +637,55 @@ class FaxService:
             state["delivered"][action.key] = {"at": _timestamp(), "status": "delivered"}
             self._save(state)
 
-    @staticmethod
-    def _record_incoming_archive(state: dict, action: FaxAction) -> None:
+    def store_incoming_document(self, action: FaxAction, pdf: bytes) -> dict[str, object]:
+        if not action.key.startswith("incoming:archive:"):
+            raise FaxError("fax_incoming_action_required")
+        if not pdf.startswith(b"%PDF-") or len(pdf) > self.config.max_pdf_bytes:
+            raise FaxError("fax_document_invalid")
         incoming_id = hashlib.sha256(action.key.encode("utf-8")).hexdigest()[:32]
+        relative_path = Path("archive") / f"{incoming_id}.pdf"
+        document_path = self.config.state_path.parent / relative_path
+        with self._lock:
+            if not document_path.is_file() or document_path.read_bytes() != pdf:
+                _atomic_bytes(document_path, pdf)
+            state = self._load()
+            self._record_incoming_archive(state, action, document_path=str(relative_path))
+            self._save(state)
+            return dict(state["incoming"][incoming_id])
+
+    def incoming_document(self, fax_id: str) -> dict[str, object]:
+        normalized_id = str(fax_id or "").strip().lower()
+        if not FAX_ID.fullmatch(normalized_id):
+            raise FaxError("fax_document_not_found")
+        with self._lock:
+            state = self._load()
+            incoming = state["incoming"].get(normalized_id)
+            if not isinstance(incoming, dict):
+                raise FaxError("fax_document_not_found")
+            relative = Path(str(incoming.get("documentPath") or ""))
+            archive_root = (self.config.state_path.parent / "archive").resolve()
+            path = (self.config.state_path.parent / relative).resolve()
+            if path.parent != archive_root or not path.is_file():
+                raise FaxError("fax_document_not_found")
+            content = path.read_bytes()
+            if not content.startswith(b"%PDF-") or len(content) > self.config.max_pdf_bytes:
+                raise FaxError("fax_document_invalid")
+            return {
+                "faxId": normalized_id,
+                "filename": unicodedata.normalize(
+                    "NFC", safe_name(str(incoming.get("filename") or "incoming-fax.pdf"))
+                ),
+                "contentType": "application/pdf",
+                "contentBase64": base64.b64encode(content).decode("ascii"),
+            }
+
+    @staticmethod
+    def _record_incoming_archive(state: dict, action: FaxAction, *, document_path: str = "") -> None:
+        incoming_id = hashlib.sha256(action.key.encode("utf-8")).hexdigest()[:32]
+        existing = state["incoming"].get(incoming_id)
+        existing = existing if isinstance(existing, dict) else {}
         state["incoming"][incoming_id] = {
+            **existing,
             "id": incoming_id,
             "actionKey": action.key,
             "filename": unicodedata.normalize("NFC", safe_name(action.filename or "incoming-fax.pdf")),
@@ -629,6 +695,8 @@ class FaxService:
             "archivedAt": _timestamp(),
             "status": "archived",
         }
+        if document_path:
+            state["incoming"][incoming_id]["documentPath"] = document_path
 
     def record_error(self, exc: Exception) -> None:
         self.last_error = f"{type(exc).__name__}: {exc}"

@@ -815,6 +815,36 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await client.close()
 
+    async def test_incoming_fax_document_requires_auth_and_uses_provider(self) -> None:
+        server = BrainToolServer(
+            "127.0.0.1",
+            8098,
+            governor_api_token="governor-secret",
+            calendar_adapter=self.calendar,  # type: ignore[arg-type]
+            memos=self.memos,  # type: ignore[arg-type]
+            paperless=self.paperless,  # type: ignore[arg-type]
+            fax_document_provider=lambda fax_id: {
+                "faxId": fax_id,
+                "filename": "incoming.pdf",
+                "contentType": "application/pdf",
+                "contentBase64": "JVBERi10ZXN0",
+            },
+        )
+        client = TestClient(TestServer(server.application()))
+        await client.start_server()
+        try:
+            path = "/tools/imports/fax/0123456789abcdef0123456789abcdef/document"
+            unauthorized = await client.get(path)
+            response = await client.get(path, headers=self.headers())
+            payload = await response.json()
+        finally:
+            await client.close()
+
+        self.assertEqual(unauthorized.status, 401)
+        self.assertEqual(response.status, 200)
+        self.assertEqual(payload["faxId"], "0123456789abcdef0123456789abcdef")
+        self.assertEqual(payload["filename"], "incoming.pdf")
+
     async def test_naver_mail_list_returns_provider_messages(self) -> None:
         server = BrainToolServer(
             "127.0.0.1",

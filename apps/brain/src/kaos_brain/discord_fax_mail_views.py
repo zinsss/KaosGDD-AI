@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import base64
+import binascii
+import io
 import logging
 from typing import Any
 
@@ -26,6 +29,48 @@ LOGGER = logging.getLogger(__name__)
 
 def _tool_failed(action: str) -> str:
     return f"{action} 실패했어요."
+
+
+def _incoming_fax(item: dict[str, Any]) -> bool:
+    return (
+        str(item.get("kind") or "").strip().lower() == "fax"
+        and str(item.get("direction") or "").strip().lower() == "incoming"
+        and bool(str(item.get("faxId") or "").strip())
+    )
+
+
+async def send_fax_mail_selection(
+    governor_tools: GovernorToolClient,
+    interaction: discord.Interaction,
+    item: dict[str, Any],
+) -> None:
+    content = _render_fax_mail_selection(item)
+    if not _incoming_fax(item):
+        await interaction.response.send_message(content, ephemeral=True, allowed_mentions=NO_MENTIONS)
+        return
+    await interaction.response.defer()
+    try:
+        payload = await governor_tools.fax_document(str(item.get("faxId") or ""))
+        if str(payload.get("contentType") or "") != "application/pdf":
+            raise ValueError("fax document was not a PDF")
+        document = base64.b64decode(str(payload.get("contentBase64") or ""), validate=True)
+        if not document.startswith(b"%PDF-"):
+            raise ValueError("fax document was not a PDF")
+        filename = str(payload.get("filename") or item.get("title") or "incoming-fax.pdf").strip()
+        filename = filename if filename.lower().endswith(".pdf") else f"{filename}.pdf"
+    except (GovernorToolError, ValueError, binascii.Error) as exc:
+        LOGGER.warning("Incoming fax document selection failed: %s", exc)
+        await interaction.followup.send(
+            _tool_failed("Fax 문서 불러오기"),
+            ephemeral=True,
+            allowed_mentions=NO_MENTIONS,
+        )
+        return
+    await interaction.followup.send(
+        content,
+        file=discord.File(io.BytesIO(document), filename=filename),
+        allowed_mentions=NO_MENTIONS,
+    )
 
 
 class BrainFaxMailView(BrainServiceMessageView):
@@ -130,7 +175,7 @@ class BrainFaxMailSelect(discord.ui.Select):
             LOGGER.warning("Fax Mail selection failed: %s", exc)
             await interaction.response.send_message(_tool_failed("Fax Mail 선택"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
-        await interaction.response.send_message(_render_fax_mail_selection(item), ephemeral=True, allowed_mentions=NO_MENTIONS)
+        await send_fax_mail_selection(self.parent_view.governor_tools, interaction, item)
 
 
 class BrainFaxMailPageButton(discord.ui.Button):

@@ -51,6 +51,11 @@ def _non_negative_int(value: str, name: str) -> int:
     return parsed
 
 
+def _optional_id(env: Mapping[str, str], name: str) -> int:
+    value = env.get(name, "").strip()
+    return _positive_int(value, name) if value else 0
+
+
 def _id_set(env: Mapping[str, str], name: str) -> frozenset[int]:
     values = frozenset(
         _positive_int(part.strip(), name)
@@ -91,6 +96,8 @@ class Settings:
     guild_id: int
     allowed_user_ids: frozenset[int]
     brain_channel_id: int
+    notification_channel_id: int
+    governor_bot_user_id: int
     ollama_base_url: str
     chat_model: str
     deep_model: str
@@ -138,6 +145,12 @@ class Settings:
         guild_id = _positive_int(_required(source, "DISCORD_GUILD_ID"), "DISCORD_GUILD_ID")
         allowed_user_ids = _id_set(source, "DISCORD_ALLOWED_USER_IDS")
         brain_channel_id = _positive_int(_required(source, "DISCORD_BRAIN_CHANNEL_ID"), "DISCORD_BRAIN_CHANNEL_ID")
+        notification_channel_id = _optional_id(source, "DISCORD_NOTIFICATION_CHANNEL_ID")
+        governor_bot_user_id = _optional_id(source, "DISCORD_GOVERNOR_BOT_USER_ID")
+        if bool(notification_channel_id) != bool(governor_bot_user_id):
+            raise ConfigurationError(
+                "DISCORD_NOTIFICATION_CHANNEL_ID and DISCORD_GOVERNOR_BOT_USER_ID must be configured together"
+            )
         timeout = _positive_int(source.get("KAOSBRAIN_REQUEST_TIMEOUT_SECONDS", "90"), "KAOSBRAIN_REQUEST_TIMEOUT_SECONDS")
         governor_tools_api_token = _secret(source, "GOVERNOR_API_TOKEN")
         governor_tools_enabled = _boolean(source, "KAOSBRAIN_GOVERNOR_TOOLS_ENABLED")
@@ -201,6 +214,8 @@ class Settings:
             guild_id=guild_id,
             allowed_user_ids=allowed_user_ids,
             brain_channel_id=brain_channel_id,
+            notification_channel_id=notification_channel_id,
+            governor_bot_user_id=governor_bot_user_id,
             ollama_base_url=source.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434").strip()
             or "http://127.0.0.1:11434",
             chat_model=source.get("KAOSBRAIN_CHAT_MODEL", "gemma3:4b").strip() or "gemma3:4b",

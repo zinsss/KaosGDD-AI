@@ -54,13 +54,16 @@ generates this token and mounts it from a file.
 7. `/mail-organizer-schedule 1 09:00` preserves the current daily KST schedule.
 8. `/fax-send 022848302 document.pdf` queues through the existing fax bridge;
    it never calls the modem directly.
-9. New received and sent fax PDFs appear once in the configured archive
-   channel, while queued/sending/sent/failed notices use the configured
-   notification channel.
+9. A new received fax is retained under the Governor fax state directory and
+   posts one text-only `Fax received.` notice in `#notifications`. It does not
+   upload the PDF to `#mail-fax`.
 10. With Message Content intent enabled, a PDF uploaded without text receives
     `Reply directly to this PDF with fax:<number>.` Source upload, command, and
     prompt messages are deleted only after HylaFAX confirms success.
-11. An unauthenticated `POST /api/v1/memos/search` returns `401`; the same call
+11. KaosBrain refreshes its active selector from the authenticated Governor
+    notification. Selecting an incoming fax in `#brain` fetches the retained
+    PDF over the bearer-protected tool route and uploads it to `#brain`.
+12. An unauthenticated `POST /api/v1/memos/search` returns `401`; the same call
     with `GOVERNOR_API_TOKEN` returns creator-scoped live Memos results.
 
 It may run temporarily on the current Kaos host. The supported destination is
@@ -82,3 +85,24 @@ operations. Radicale and Paperless authority are not connected to the fax path.
 
 The Connector and Bridge deployment is maintained under
 [`deploy/office-fax-connector`](../../deploy/office-fax-connector/README.md).
+
+## Received-fax storage and Discord flow
+
+Received PDFs are retained as `/data/fax/archive/<fax-id>.pdf` inside the
+Governor fax state mount. `state.json` contains only metadata and a relative
+document path; it never contains PDF bytes. The Brain tool endpoint
+`GET /tools/imports/fax/<fax-id>/document` uses the same Governor bearer token
+as the other narrow H4 tools.
+
+The Discord flow is deliberately split:
+
+1. Office Fax Connector returns the validated received PDF to Governor.
+2. Governor stores the PDF and sends a text receipt to `#notifications`.
+3. KaosBrain accepts that refresh signal only from the configured Governor bot
+   user in the configured notification channel.
+4. KaosBrain reloads the active selector.
+5. Selecting the fax fetches and uploads it into `#brain`.
+
+Configure H4 with both `DISCORD_NOTIFICATION_CHANNEL_ID` and
+`DISCORD_GOVERNOR_BOT_USER_ID`. Leaving both blank disables event-driven
+refresh while preserving manual `Reload` and periodic refresh behavior.

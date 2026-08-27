@@ -229,6 +229,7 @@ class BrainToolServer:
         calendar_refresh_callback: Callable[[], Awaitable[None]] | None = None,
         import_status_provider: Callable[[], Mapping[str, object]] | None = None,
         import_items_provider: Callable[[], list[Mapping[str, object]]] | None = None,
+        fax_document_provider: Callable[[str], Mapping[str, object]] | None = None,
         mail_messages_provider: Callable[[int], Mapping[str, object]] | None = None,
         today_provider: Callable[[], date] | None = None,
         durable_store: MemoryDurableGovernorStore | None = None,
@@ -245,6 +246,7 @@ class BrainToolServer:
         self._calendar_refresh_callback = calendar_refresh_callback or task_refresh_callback
         self._import_status_provider = import_status_provider
         self._import_items_provider = import_items_provider
+        self._fax_document_provider = fax_document_provider
         self._mail_messages_provider = mail_messages_provider
         self._today_provider = today_provider or kst_today
         self._durable = durable_store or MemoryDurableGovernorStore()
@@ -274,6 +276,7 @@ class BrainToolServer:
         app.router.add_get("/tools/calendar/week", self._calendar_week)
         app.router.add_get("/tools/calendar/month-image", self._calendar_month_image)
         app.router.add_get("/tools/imports/recent", self._recent_imports)
+        app.router.add_get("/tools/imports/fax/{fax_id}/document", self._incoming_fax_document)
         app.router.add_get("/tools/mail/naver/list", self._list_naver_mail)
         app.router.add_get("/tools/tasks/active", self._active_tasks)
         app.router.add_get("/tools/tasks/completed", self._completed_tasks)
@@ -459,6 +462,19 @@ class BrainToolServer:
                 "source": "naver-imap-live",
             }
         )
+
+    async def _incoming_fax_document(self, request: web.Request) -> web.Response:
+        if self._fax_document_provider is None:
+            return web.json_response({"error": "fax_document_disabled"}, status=503)
+        fax_id = str(request.match_info.get("fax_id") or "").strip().lower()
+        try:
+            payload = await asyncio.to_thread(self._fax_document_provider, fax_id)
+        except Exception as exc:
+            LOGGER.info("Incoming fax document unavailable for %s: %s", fax_id, exc)
+            return web.json_response({"error": "fax_document_not_found"}, status=404)
+        if not isinstance(payload, Mapping):
+            return web.json_response({"error": "fax_document_invalid"}, status=502)
+        return web.json_response(dict(payload))
 
     def _recent_import_detail_payloads(self) -> list[dict[str, object]]:
         if self._import_items_provider is None:

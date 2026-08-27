@@ -19,6 +19,8 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.guild_id, 100)
         self.assertEqual(settings.allowed_user_ids, frozenset({200, 201}))
         self.assertEqual(settings.brain_channel_id, 300)
+        self.assertEqual(settings.notification_channel_id, 0)
+        self.assertEqual(settings.governor_bot_user_id, 0)
         self.assertEqual(settings.chat_model, "gemma3:4b")
         self.assertEqual(settings.deep_model, "qwen3:8b")
         self.assertEqual(settings.imaging_provider, "ollama")
@@ -33,6 +35,21 @@ class SettingsTests(unittest.TestCase):
         self.assertFalse(settings.imaging_enabled)
         self.assertFalse(settings.kaosai_reauth_enabled)
         self.assertEqual(settings.active_control_repost_seconds, 10800)
+
+    def test_notification_refresh_ids_are_configured_together(self) -> None:
+        with self.assertRaisesRegex(ConfigurationError, "configured together"):
+            Settings.from_env({**BASE_ENV, "DISCORD_NOTIFICATION_CHANNEL_ID": "301"})
+
+        settings = Settings.from_env(
+            {
+                **BASE_ENV,
+                "DISCORD_NOTIFICATION_CHANNEL_ID": "301",
+                "DISCORD_GOVERNOR_BOT_USER_ID": "400",
+            }
+        )
+
+        self.assertEqual(settings.notification_channel_id, 301)
+        self.assertEqual(settings.governor_bot_user_id, 400)
 
     def test_token_can_be_loaded_from_secret_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

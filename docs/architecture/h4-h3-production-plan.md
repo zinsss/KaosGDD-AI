@@ -297,8 +297,8 @@ Recommended private channels:
 | --- | --- |
 | `#brain` | Personal conversation with KaosBrain |
 | `#inbox` | Documents, Paperless intake, and temporary files |
-| `#mail-fax` | Imported target mail and fax archive/status workflows |
-| `#notifications` | Calendar/task summaries and normal notices |
+| `#mail-fax` | Target mail archive and outbound fax intake; no automatic received-fax PDF uploads |
+| `#notifications` | Calendar/task summaries and text-only received-fax notices |
 | `#alerts` | Infrastructure, backup, connector, and failed-job alerts |
 
 Do not give the Brain bot access to unrelated channels. Governor checks guild,
