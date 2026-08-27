@@ -95,7 +95,11 @@ def _fax_mail_results(payload: dict[str, Any], *, mode: str) -> list[dict[str, A
     imports = _import_results(payload)
     if mode == "outgoing":
         return [item for item in imports if _import_kind(item) == "fax" and _import_direction(item) == "outgoing"]
-    return [item for item in imports if _import_kind(item) == "fax" and _import_direction(item) != "outgoing"]
+    return [
+        item
+        for item in imports
+        if _import_kind(item) == "fax" and _import_direction(item) != "outgoing" and not _import_is_user_checked(item)
+    ]
 
 
 def _active_fax_mail_imports(imports: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -123,7 +127,12 @@ def _import_is_user_checked(item: dict[str, Any]) -> bool:
 
 def _mail_message_results(payload: dict[str, Any]) -> list[dict[str, Any]]:
     value = payload.get("messages")
-    return [dict(item) for item in value if isinstance(item, dict)] if isinstance(value, list) else []
+    messages = [dict(item) for item in value if isinstance(item, dict)] if isinstance(value, list) else []
+    return sorted(messages, key=_mail_sort_key, reverse=True)
+
+
+def _mail_sort_key(item: dict[str, Any]) -> str:
+    return str(item.get("receivedAt") or item.get("date") or item.get("createdAt") or "")
 
 
 async def _active_control_month_file_for(

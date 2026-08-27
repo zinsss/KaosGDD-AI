@@ -16,7 +16,7 @@ class EventCreateRequest:
 
 
 def parse_event_create(content: str, *, today: date) -> EventCreateRequest | None:
-    text = " ".join(content.strip().split())
+    text = " ".join(_normalize_date_separators(content).strip().split())
     prefixed_body = _prefixed_event_body(text)
     if prefixed_body:
         text = prefixed_body
@@ -64,11 +64,32 @@ def parse_event_create(content: str, *, today: date) -> EventCreateRequest | Non
     )
 
 
+def event_create_needs_date(content: str) -> str:
+    text = " ".join(_normalize_date_separators(content).strip().split())
+    prefixed_body = _prefixed_event_body(text)
+    if not prefixed_body:
+        return ""
+    if _has_explicit_date(prefixed_body) or _relative_event_date(prefixed_body, today=date(2000, 1, 1)) is not None:
+        return ""
+    body, _memo = _split_inline_memo(prefixed_body)
+    title = re.sub(r"가족(?:에|으로)?", " ", body)
+    title = " ".join(title.split()).strip(" .,")
+    return title if title and not _is_view_only_title(title) else ""
+
+
 def _prefixed_event_body(text: str) -> str:
     match = re.match(r"^(?:일정|event)\s*[,，;；:：]\s*(?P<body>.+)$", text, flags=re.IGNORECASE)
     if match is None:
         return ""
     return match.group("body").strip()
+
+
+def _normalize_date_separators(value: str) -> str:
+    return value.replace("／", "/").replace("．", ".").replace("－", "-").replace("–", "-").replace("—", "-")
+
+
+def _has_explicit_date(text: str) -> bool:
+    return re.search(r"(?<!\d)(?:(?P<year>\d{4})[-./])?(?P<month>\d{1,2})[-./](?P<day>\d{1,2})(?!\d)", text) is not None
 
 
 def _split_inline_memo(text: str) -> tuple[str, str]:

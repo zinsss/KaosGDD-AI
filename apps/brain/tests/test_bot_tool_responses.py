@@ -215,7 +215,7 @@ class BrainToolResponseTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(
             [getattr(item, "label", "") for item in view.children if getattr(item, "label", "")],
-            ["Paperless", "Memos"],
+            ["Paperless", "Memos", "Close"],
         )
 
     async def test_combined_search_omits_redundant_no_match_lines(self) -> None:

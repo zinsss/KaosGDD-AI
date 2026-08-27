@@ -137,7 +137,13 @@ class FakeGovernorTools:
             return {
                 "imports": [
                     {"kind": "mail", "title": "Naver organizer digests: 1", "detail": "2026-08-22T09:00:00Z"},
-                    {"kind": "fax", "title": "Fax jobs tracked: 1", "detail": "2026-08-22T10:00:00Z"},
+                    {"kind": "fax", "title": "Fax already checked", "detail": "2026-08-21T10:00:00Z", "checked": True},
+                    {
+                        "kind": "fax",
+                        "direction": "incoming",
+                        "title": "Fax jobs tracked: 1",
+                        "detail": "2026-08-22T10:00:00Z",
+                    },
                     {"kind": "documents", "title": "Documents accepted: 1", "detail": "OCR ready: 1"},
                 ]
             }
@@ -660,6 +666,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("<1-1 of 1>", content)
         self.assertNotIn("Naver organizer digests", content)
         self.assertIn("- Fax jobs tracked: 1", content)
+        self.assertNotIn("Fax already checked", content)
         self.assertNotIn("Documents accepted", content)
         service_view = interaction.followup.send.await_args.kwargs["view"]
         self.assertIsInstance(service_view, BrainFaxMailView)

@@ -283,7 +283,7 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
         await BrainBot.on_message(brain, second)  # type: ignore[arg-type]
 
         self.assertIn("날짜가 언제", first.reply.await_args.args[0])
-        self.assertEqual(len(brain.kaosai.calls), 1)
+        self.assertEqual(brain.kaosai.calls, [])
         request, actor_id, idempotency_key = tools.event_create_calls[0]
         self.assertEqual(request.title, "미영샘 월차")
         self.assertEqual(request.start_date, "2026-08-17")

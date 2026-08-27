@@ -1109,7 +1109,8 @@ def _clean_memo_title_candidate(value: str) -> str:
     for marker in (" ### ", " ## ", " * ", " #"):
         if marker in title:
             title = title.split(marker, 1)[0].strip()
-    return title.strip()
+    title = title.split("#", 1)[0].strip()
+    return title.rstrip("·- ").strip()
 
 
 def _memo_tags_text(item: dict[str, Any]) -> str:

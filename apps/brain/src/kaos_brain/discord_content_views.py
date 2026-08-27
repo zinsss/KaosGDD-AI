@@ -197,6 +197,7 @@ class BrainCombinedSearchView(BrainTemporarySearchView):
             self.add_item(BrainCombinedSearchFullButton("Paperless", "documents"))
         if self.memo_results:
             self.add_item(BrainCombinedSearchFullButton("Memos", "memos"))
+        self.add_item(BrainSearchCloseButton(row=3))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if int(interaction.user.id) == self.actor_id:

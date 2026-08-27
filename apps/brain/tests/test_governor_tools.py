@@ -42,6 +42,16 @@ class GovernorToolRenderingTests(unittest.TestCase):
         self.assertEqual(FAMILY_EVENT_MARKER, "𝘧𝘢𝘮𝘪𝘭𝘺")
         self.assertEqual(FAMILY_EVENT_SUFFIX, "  • 𝘧𝘢𝘮𝘪𝘭𝘺")
 
+    def test_memo_option_label_removes_inline_tags(self) -> None:
+        self.assertEqual(
+            memo_option_label({"title": "개인통관번호 P831160027811 · #통관"}),
+            "개인통관번호 P831160027811",
+        )
+        self.assertEqual(
+            memo_option_label({"snippet": "온라인 의무교육 ID/PW ## 미영샘 * GSEEK"}),
+            "온라인 의무교육 ID/PW",
+        )
+
     def test_render_today_context(self) -> None:
         context = render_tool_context(
             ToolRequest(ToolKind.TODAY),

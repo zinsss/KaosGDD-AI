@@ -102,7 +102,7 @@ from .discord_view_helpers import (
     NO_MENTIONS,
     _bind_view_message,
 )
-from .event_intent import EventCreateRequest, parse_event_create
+from .event_intent import EventCreateRequest, event_create_needs_date, parse_event_create
 from .governor_tools import (
     GovernorToolClient,
     GovernorToolConfig,
@@ -526,6 +526,19 @@ class BrainBot(BrainProposalMixin, BrainActiveControlMixin, discord.Client):
         )
         if event_create is not None:
             await self._propose_event_create(message, event_create)
+            return
+        missing_event_date = event_create_needs_date(request_text) if request.route is Route.CHAT else ""
+        if missing_event_date:
+            self._remember_kaosai_clarification(
+                message,
+                request_text,
+                f"{missing_event_date} 일정을 등록할 날짜가 언제인가요?",
+            )
+            await message.reply(
+                f"{missing_event_date} 일정을 등록할 날짜가 언제인가요?",
+                mention_author=False,
+                allowed_mentions=NO_MENTIONS,
+            )
             return
         memo_edit = parse_memo_edit(request_text) if request.route is Route.CHAT else None
         if memo_edit is not None:
