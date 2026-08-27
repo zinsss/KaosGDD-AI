@@ -110,7 +110,7 @@ class GovernorToolRenderingTests(unittest.TestCase):
             "- ⛅️ 23-28℃\n"
             "- 강수확률 70% · 강수량 2.5mm · 바람 13.2km/h\n"
             "### 시간대\n"
-            "- 오전 🌧️ 23-25℃\n"
+            "- **오전** 🌧️ 23-25℃\n"
             "· 강수확률 80% · 강수량 1.2mm · 습도 88% · 바람 11km/h",
         )
 

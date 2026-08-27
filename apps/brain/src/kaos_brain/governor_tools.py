@@ -908,6 +908,8 @@ def _weather_daypart_lines(part: dict[str, Any]) -> list[str]:
     label = _weather_daypart_label(str(part.get("label") or ""))
     glyph = str(part.get("glyph") or "").strip()
     temp = _weather_temp_range(part)
+    if label:
+        label = f"**{label}**"
     details = _weather_detail_line(part)
     head = " ".join(value for value in (label, glyph, temp) if value)
     if not head:

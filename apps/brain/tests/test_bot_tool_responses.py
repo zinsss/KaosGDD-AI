@@ -164,9 +164,9 @@ class BrainToolResponseTests(unittest.IsolatedAsyncioTestCase):
             "- ⛅️ 23-28℃\n"
             "- 강수확률 70% · 강수량 0mm · 바람 13.2km/h\n"
             "### 시간대\n"
-            "- 오전 🌤️ 23-26℃\n"
+            "- **오전** 🌤️ 23-26℃\n"
             "· 강수확률 10% · 강수량 0mm · 습도 88% · 바람 7.3km/h\n"
-            "- 오후 ⛅️ 26-28℃\n"
+            "- **오후** ⛅️ 26-28℃\n"
             "· 강수확률 70% · 강수량 0mm · 습도 81% · 바람 13.2km/h",
         )
         self.assertIsNone(view)
