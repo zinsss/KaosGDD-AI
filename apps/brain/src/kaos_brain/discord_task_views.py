@@ -29,9 +29,11 @@ from .discord_formatting import (
 from .discord_view_helpers import (
     NO_MENTIONS,
     BrainAutoClosingView,
+    BrainServiceMessageView,
     _defer_component_update,
     _edit_deferred_component,
     _followup_with_bound_view,
+    _inherit_bound_view_state,
 )
 from .governor_tools import (
     GovernorToolClient,
@@ -122,7 +124,7 @@ class BrainCompletedTasksSelect(discord.ui.Select):
         )
 
 
-class BrainActiveTasksView(discord.ui.View):
+class BrainActiveTasksView(BrainServiceMessageView):
     def __init__(
         self,
         governor_tools: GovernorToolClient,
@@ -134,7 +136,7 @@ class BrainActiveTasksView(discord.ui.View):
         page: int = 0,
         month: date | None = None,
     ) -> None:
-        super().__init__(timeout=None)
+        super().__init__()
         self.governor_tools = governor_tools
         self.actor_id = actor_id
         self.request = request
@@ -363,6 +365,7 @@ class BrainTaskServiceMonthButton(discord.ui.Button):
             LOGGER.warning("Task history month failed: %s", exc)
             await interaction.followup.send(_tool_failed("완료 목록 불러오기"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
+        _inherit_bound_view_state(view, next_view, getattr(interaction, "message", None))
         await interaction.edit_original_response(content=next_view.content(), view=next_view)
 
 
@@ -382,6 +385,7 @@ class BrainTaskServiceModeButton(discord.ui.Button):
             LOGGER.warning("Task service mode switch failed: %s", exc)
             await interaction.followup.send(_tool_failed("할 일 목록 불러오기"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
+        _inherit_bound_view_state(view, next_view, getattr(interaction, "message", None))
         await interaction.edit_original_response(content=next_view.content(), view=next_view)
 
 
@@ -394,6 +398,10 @@ class BrainTaskServiceCloseButton(discord.ui.Button):
             await interaction.response.send_message("Closed.", ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         await interaction.response.defer()
+        view = self.view
+        if isinstance(view, BrainServiceMessageView):
+            await view.close_message(interaction.message)
+            return
         await interaction.message.delete()
 
 

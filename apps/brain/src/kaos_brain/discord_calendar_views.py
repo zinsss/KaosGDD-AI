@@ -14,11 +14,11 @@ from .discord_formatting import (
     _shift_month,
     _week_start_sunday,
 )
-from .discord_view_helpers import NO_MENTIONS
+from .discord_view_helpers import NO_MENTIONS, BrainServiceMessageView
 from .governor_tools import GovernorToolClient
 
 
-class BrainCalendarMonthView(discord.ui.View):
+class BrainCalendarMonthView(BrainServiceMessageView):
     def __init__(
         self,
         governor_tools: GovernorToolClient,
@@ -29,7 +29,7 @@ class BrainCalendarMonthView(discord.ui.View):
         month: int,
         mode: str = "month",
     ) -> None:
-        super().__init__(timeout=None)
+        super().__init__()
         self.governor_tools = governor_tools
         self.settings = settings
         self.anchor_date = anchor_date
@@ -102,7 +102,7 @@ class BrainCalendarMonthView(discord.ui.View):
             await interaction.response.send_message("Closed.", ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         await interaction.response.defer()
-        await interaction.message.delete()
+        await self.close_message(interaction.message)
 
     @discord.ui.button(label="<", style=discord.ButtonStyle.secondary, row=1)
     async def previous_month(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:

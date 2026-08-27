@@ -16,7 +16,7 @@ from .discord_formatting import (
     _render_fax_mail_selection,
     _render_fax_mail_service_message,
 )
-from .discord_view_helpers import NO_MENTIONS
+from .discord_view_helpers import NO_MENTIONS, BrainServiceMessageView, _inherit_bound_view_state
 from .governor_tools import GovernorToolClient, GovernorToolError
 from .list_formatting import page_status_label
 from .tool_intent import ToolKind, ToolRequest
@@ -28,7 +28,7 @@ def _tool_failed(action: str) -> str:
     return f"{action} 실패했어요."
 
 
-class BrainFaxMailView(discord.ui.View):
+class BrainFaxMailView(BrainServiceMessageView):
     def __init__(
         self,
         governor_tools: GovernorToolClient,
@@ -39,7 +39,7 @@ class BrainFaxMailView(discord.ui.View):
         mode: str = "incoming_fax",
         page: int = 0,
     ) -> None:
-        super().__init__(timeout=None)
+        super().__init__()
         self.governor_tools = governor_tools
         self.actor_id = actor_id
         self.settings = settings
@@ -180,6 +180,7 @@ class BrainFaxMailModeButton(discord.ui.Button):
             LOGGER.warning("Fax Mail mode switch failed: %s", exc)
             await interaction.followup.send(_tool_failed("Fax Mail 불러오기"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
+        _inherit_bound_view_state(view, next_view, getattr(interaction, "message", None))
         await interaction.edit_original_response(content=next_view.content(), view=next_view)
 
 
@@ -192,4 +193,8 @@ class BrainFaxMailCloseButton(discord.ui.Button):
             await interaction.response.send_message("Closed.", ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         await interaction.response.defer()
+        view = self.view
+        if isinstance(view, BrainServiceMessageView):
+            await view.close_message(interaction.message)
+            return
         await interaction.message.delete()

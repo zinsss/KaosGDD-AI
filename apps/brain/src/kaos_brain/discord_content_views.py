@@ -20,6 +20,7 @@ from .discord_view_helpers import (
     _defer_component_update,
     _edit_deferred_component,
     _followup_with_bound_view,
+    _inherit_bound_view_state,
 )
 from .governor_tools import (
     GovernorToolClient,
@@ -72,8 +73,9 @@ class BrainMemoSearchView(BrainTemporarySearchView):
         result_count: int = 0,
         total_count: int = 0,
         memos_public_url: str = "",
+        close_on_timeout: bool = False,
     ) -> None:
-        super().__init__(query, searched_from="Memos")
+        super().__init__(query, searched_from="Memos", close_on_timeout=close_on_timeout)
         self.governor_tools = governor_tools
         self.actor_id = actor_id
         self.query = query
@@ -153,11 +155,8 @@ class BrainSearchCloseButton(discord.ui.Button):
             await interaction.response.send_message("Closed.", ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         await interaction.response.defer()
-        try:
-            await interaction.message.delete()
-        finally:
-            parent._message = None
-            parent.stop()
+        await parent.delete_message()
+        parent.stop()
 
 
 class BrainCombinedSearchView(BrainTemporarySearchView):
@@ -590,8 +589,9 @@ class BrainDocumentSearchView(BrainTemporarySearchView):
         page_size: int = SEARCH_RESULT_LIMIT,
         searched: bool = False,
         paperless_public_url: str = "",
+        close_on_timeout: bool = False,
     ) -> None:
-        super().__init__(query, searched_from="Paperless")
+        super().__init__(query, searched_from="Paperless", close_on_timeout=close_on_timeout)
         self.governor_tools = governor_tools
         self.actor_id = actor_id
         self.query = query
@@ -642,6 +642,7 @@ class BrainDocumentSearchView(BrainTemporarySearchView):
             page_size=_payload_count(payload, "pageSize", "page_size", fallback=self.page_size),
             searched=self.searched,
             paperless_public_url=self.paperless_public_url,
+            close_on_timeout=self.close_on_timeout,
         )
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -703,8 +704,7 @@ class BrainDocumentPageButton(discord.ui.Button):
             LOGGER.warning("Document page fetch failed: %s", exc)
             await interaction.followup.send(_tool_failed("문서 목록"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
-        if interaction.message is not None:
-            next_view.bind_message(interaction.message)
+        _inherit_bound_view_state(parent, next_view, interaction.message)
         await interaction.edit_original_response(content=next_view.content(), view=next_view, allowed_mentions=NO_MENTIONS)
         parent.stop()
 

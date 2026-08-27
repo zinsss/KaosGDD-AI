@@ -52,7 +52,7 @@ from .discord_formatting import (
     render_active_control_message,
 )
 from .discord_task_views import BrainActiveTaskActionsView, BrainActiveTasksView
-from .discord_view_helpers import NO_MENTIONS, _bind_view_message, _followup_with_bound_view
+from .discord_view_helpers import NO_MENTIONS, BrainCloseOnlyServiceView, _bind_view_message, _followup_with_bound_view
 from .governor_tools import GovernorToolClient, GovernorToolError, SEARCH_RESULT_LIMIT, search_results
 from .tool_intent import ToolKind, ToolRequest
 
@@ -90,7 +90,12 @@ async def _send_single_service_message(
     kwargs.setdefault("allowed_mentions", NO_MENTIONS)
     kwargs.setdefault("wait", True)
     message = await interaction.followup.send(*args, **kwargs)
-    _bind_view_message(kwargs.get("view"), message)
+    view = kwargs.get("view")
+    _bind_view_message(view, message)
+    bind_close_callback = getattr(view, "bind_close_callback", None)
+    state_path = getattr(settings, "active_control_state_path", "")
+    if callable(bind_close_callback) and state_path:
+        bind_close_callback(lambda: _write_active_control_message_id(state_path, 0, open_service_message_id=0))
     try:
         message_id = int(getattr(message, "id", 0) or 0)
     except (TypeError, ValueError):
@@ -381,26 +386,23 @@ class BrainServiceMenuView(discord.ui.View):
         total_count = _payload_count(payload, "totalCount", "total", fallback=result_count)
         page = _payload_count(payload, "page", fallback=1)
         page_size = _payload_count(payload, "pageSize", "page_size", fallback=SEARCH_RESULT_LIMIT)
-        view = (
-            BrainDocumentSearchView(
-                self.governor_tools,
-                int(interaction.user.id),
-                "",
-                results,
-                result_count=result_count,
-                total_count=total_count,
-                page=page,
-                page_size=page_size,
-                paperless_public_url=self.settings.paperless_public_url,
-            )
-            if results
-            else None
-        )
+        view: discord.ui.View = BrainDocumentSearchView(
+            self.governor_tools,
+            int(interaction.user.id),
+            "",
+            results,
+            result_count=result_count,
+            total_count=total_count,
+            page=page,
+            page_size=page_size,
+            paperless_public_url=self.settings.paperless_public_url,
+            close_on_timeout=True,
+        ) if results else BrainCloseOnlyServiceView()
         await _send_single_service_message(
             self.settings,
             interaction,
-            view.content()
-            if view is not None
+            view.content()  # type: ignore[attr-defined]
+            if isinstance(view, BrainDocumentSearchView)
             else _render_document_list_message(
                 "",
                 results,
@@ -424,23 +426,20 @@ class BrainServiceMenuView(discord.ui.View):
             await interaction.followup.send(_tool_failed("Memos 불러오기"), ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
         results = search_results(payload)
-        view = (
-            BrainMemoSearchView(
-                self.governor_tools,
-                int(interaction.user.id),
-                "",
-                results,
-                result_count=_payload_count(payload, "resultCount", "count", fallback=len(results)),
-                total_count=_payload_count(payload, "totalCount", fallback=len(results)),
-                memos_public_url=self.settings.memos_public_url,
-            )
-            if results
-            else None
-        )
+        view = BrainMemoSearchView(
+            self.governor_tools,
+            int(interaction.user.id),
+            "",
+            results,
+            result_count=_payload_count(payload, "resultCount", "count", fallback=len(results)),
+            total_count=_payload_count(payload, "totalCount", fallback=len(results)),
+            memos_public_url=self.settings.memos_public_url,
+            close_on_timeout=True,
+        ) if results else BrainCloseOnlyServiceView()
         await _send_single_service_message(
             self.settings,
             interaction,
-            view.content() if view is not None else _render_memo_list_message(
+            view.content() if isinstance(view, BrainMemoSearchView) else _render_memo_list_message(
                 "",
                 results,
                 result_count=_payload_count(payload, "resultCount", "count", fallback=len(results)),

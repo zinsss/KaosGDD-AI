@@ -454,7 +454,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("- 로운이 제로이드 · 2026-08-22 10:00", content)
         service_view = interaction.followup.send.await_args.kwargs["view"]
         self.assertIsInstance(service_view, BrainActiveTasksView)
-        self.assertIsNone(service_view.timeout)
+        self.assertEqual(service_view.timeout, 600)
 
     def test_service_menu_uses_single_services_dropdown(self) -> None:
         view = BrainServiceMenuView(
@@ -506,6 +506,34 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
             old_message.delete.assert_awaited_once()
             self.assertEqual(_read_open_service_message_id(state_path), 9002)
 
+    async def test_open_service_message_auto_closes_and_clears_state(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            state_path = str(Path(tmpdir) / "active-control.json")
+            sent_message = SimpleNamespace(id=9002, delete=AsyncMock())
+            view = BrainServiceMenuView(
+                FakeGovernorTools(),  # type: ignore[arg-type]
+                self.active_control_settings(state_path=state_path),
+            )
+            select = next(child for child in view.children if isinstance(child, BrainServiceMenuSelect))
+            select._values = ["tasks"]
+            interaction = SimpleNamespace(
+                id=705,
+                guild_id=100,
+                channel_id=300,
+                user=SimpleNamespace(id=200),
+                response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+                followup=SimpleNamespace(send=AsyncMock(return_value=sent_message)),
+            )
+
+            await select.callback(interaction)  # type: ignore[arg-type]
+            service_view = interaction.followup.send.await_args.kwargs["view"]
+
+            self.assertEqual(_read_open_service_message_id(state_path), 9002)
+            await service_view.on_timeout()
+
+            sent_message.delete.assert_awaited_once()
+            self.assertEqual(_read_open_service_message_id(state_path), 0)
+
     async def test_calendar_select_calls_up_closable_month_message(self) -> None:
         governor_tools = FakeGovernorTools()
         view = BrainServiceMenuView(
@@ -530,7 +558,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         service_view = interaction.followup.send.await_args.kwargs["view"]
         self.assertIsInstance(service_view, BrainCalendarMonthView)
         self.assertEqual(service_view.mode, "weekly")
-        self.assertIsNone(service_view.timeout)
+        self.assertEqual(service_view.timeout, 600)
         self.assertEqual([getattr(item, "label", "") for item in service_view.children], ["Month", "Weekly", "Close", "<", "Today", ">"])
         self.assertEqual(governor_tools.calendar_week_calls[0], ("main", "2026-08-23", 7))
         self.assertEqual(governor_tools.calendar_month_image_calls, [])
@@ -633,7 +661,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("Documents accepted", content)
         service_view = interaction.followup.send.await_args.kwargs["view"]
         self.assertIsInstance(service_view, BrainFaxMailView)
-        self.assertIsNone(service_view.timeout)
+        self.assertEqual(service_view.timeout, 600)
         self.assertIn("Outgoing Fax", [getattr(item, "label", "") for item in service_view.children])
         self.assertIn("Close", [getattr(item, "label", "") for item in service_view.children])
 
@@ -718,7 +746,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("2026-", content)
         service_view = interaction.followup.send.await_args.kwargs["view"]
         self.assertIsInstance(service_view, BrainActiveTasksView)
-        self.assertIsNone(service_view.timeout)
+        self.assertEqual(service_view.timeout, 600)
 
     async def test_active_control_refresh_rebuilds_dropdowns(self) -> None:
         governor_tools = FakeGovernorTools()
