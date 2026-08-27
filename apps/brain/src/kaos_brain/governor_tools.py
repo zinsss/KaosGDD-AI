@@ -922,10 +922,10 @@ def _weather_daypart_lines(part: dict[str, Any]) -> list[str]:
 
 def _weather_daypart_label(label: str) -> str:
     return {
-        "Morning": "오전",
-        "Afternoon": "오후",
-        "Evening": "저녁",
-        "Night": "밤",
+        "Morning": "Morning",
+        "Afternoon": "Afternoon",
+        "Evening": "Evening",
+        "Night": "Night",
     }.get(label, label)
 
 
