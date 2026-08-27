@@ -46,6 +46,10 @@ preflight() {
   [[ -s "${SECRETS_DIR}/fax_connector_token" ]] || die "missing secret: ${SECRETS_DIR}/fax_connector_token"
   [[ -d /srv/kaos/data/kaosgdd/brain/fax-outgoing ]] || die "missing existing fax bridge queue"
   [[ -d /var/spool/hylafax ]] || die "missing HylaFAX spool"
+  [[ -r /var/spool/hylafax/etc/setup.cache ]] \
+    || die "missing HylaFAX spool setup.cache; restore it from /etc/hylafax/setup.cache before sending"
+  [[ -r /var/spool/hylafax/etc/setup.modem ]] \
+    || die "missing HylaFAX spool setup.modem; restore it from /etc/hylafax/setup.modem before sending"
   command -v tiff2pdf >/dev/null 2>&1 || die "tiff2pdf is required on Office Kaos"
   faxstat -h localhost >/dev/null || die "HylaFAX scheduler is unavailable on localhost"
   "${COMPOSE[@]}" config --quiet

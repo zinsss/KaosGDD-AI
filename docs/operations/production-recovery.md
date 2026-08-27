@@ -110,6 +110,18 @@ Critical fax paths:
 /srv/kaos/data/kaosgdd/brain/fax-outgoing
 ```
 
+The HylaFAX spool must also contain readable generated conversion caches:
+
+```text
+/var/spool/hylafax/etc/setup.cache
+/var/spool/hylafax/etc/setup.modem
+```
+
+Their canonical sources are `/etc/hylafax/setup.cache` and
+`/etc/hylafax/setup.modem`. Missing spool copies cause document formatting to
+fail before the modem dials. They may be restored from the canonical files
+without restarting HylaFAX, followed by the Office fax `preflight` check.
+
 Critical fax services:
 
 ```text

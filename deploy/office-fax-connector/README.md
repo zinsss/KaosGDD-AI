@@ -32,7 +32,8 @@ cd /srv/projects/KaosGDD-AI
 ```
 
 `preflight` requires the existing queue, spool, conversion tools, connector
-secret, and a reachable local HylaFAX scheduler. It does not send a fax.
+secret, readable `setup.cache`/`setup.modem` files in the HylaFAX spool, and a
+reachable local scheduler. It does not send a fax.
 
 ## Verify without transmitting
 
@@ -51,6 +52,19 @@ placement, or systemd units as part of an application deployment.
 Use the address configured by `FAX_CONNECTOR_BIND_ADDRESS`. A connector bound
 to the office Tailscale address is intentionally not reachable through
 `127.0.0.1`.
+
+HylaFAX conversion helpers read the physical spool paths below even when the
+canonical generated files also exist under `/etc/hylafax`:
+
+```text
+/var/spool/hylafax/etc/setup.cache
+/var/spool/hylafax/etc/setup.modem
+```
+
+If either spool file is missing, a submitted TIFF can fail before dialing with
+`FATAL ERROR: ... setup.cache is missing`. Restore the spool copies from the
+corresponding canonical `/etc/hylafax` files with mode `0444`, then rerun
+`preflight`. This repair does not require a HylaFAX restart.
 
 ## Rollback
 
