@@ -39,7 +39,7 @@ secret, and a reachable local HylaFAX scheduler. It does not send a fax.
 ```bash
 ./deploy/office-fax-connector/kaos-office-fax preflight
 curl -H "Authorization: Bearer $(tr -d '\\r\\n' < deploy/office-fax-connector/secrets/fax_connector_token)" \
-  http://127.0.0.1:8098/health
+  http://<office-tailscale-ip>:8098/health
 docker ps --filter name=kaos-office-fax-connector --filter name=kaosgdd-fax-bridge
 faxstat -h localhost -s
 ```
@@ -47,6 +47,10 @@ faxstat -h localhost -s
 Do not perform a live outbound test without confirming the exact destination
 and document. Do not change `config.ttyACM0`, `hosts.hfaxd`, `faxrcvd`, USB
 placement, or systemd units as part of an application deployment.
+
+Use the address configured by `FAX_CONNECTOR_BIND_ADDRESS`. A connector bound
+to the office Tailscale address is intentionally not reachable through
+`127.0.0.1`.
 
 ## Rollback
 
