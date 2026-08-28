@@ -51,6 +51,13 @@ def _non_negative_int(value: str, name: str) -> int:
     return parsed
 
 
+def _hour(value: str, name: str) -> int:
+    parsed = _non_negative_int(value, name)
+    if parsed > 23:
+        raise ConfigurationError(f"{name} must be between 0 and 23")
+    return parsed
+
+
 def _optional_id(env: Mapping[str, str], name: str) -> int:
     value = env.get(name, "").strip()
     return _positive_int(value, name) if value else 0
@@ -126,6 +133,8 @@ class Settings:
     governor_tools_supplies_collection_id: str
     active_control_state_path: str
     active_control_repost_seconds: int
+    active_control_quiet_start_hour: int
+    active_control_quiet_end_hour: int
     governor_tools_timeout_seconds: int
     imaging_enabled: bool
     imaging_api_token: str
@@ -252,8 +261,16 @@ class Settings:
             ).strip()
             or "/data/kaosbrain/active-control.json",
             active_control_repost_seconds=_non_negative_int(
-                source.get("KAOSBRAIN_ACTIVE_CONTROL_REPOST_SECONDS", "10800"),
+                source.get("KAOSBRAIN_ACTIVE_CONTROL_REPOST_SECONDS", "7200"),
                 "KAOSBRAIN_ACTIVE_CONTROL_REPOST_SECONDS",
+            ),
+            active_control_quiet_start_hour=_hour(
+                source.get("KAOSBRAIN_ACTIVE_CONTROL_QUIET_START_HOUR", "0"),
+                "KAOSBRAIN_ACTIVE_CONTROL_QUIET_START_HOUR",
+            ),
+            active_control_quiet_end_hour=_hour(
+                source.get("KAOSBRAIN_ACTIVE_CONTROL_QUIET_END_HOUR", "7"),
+                "KAOSBRAIN_ACTIVE_CONTROL_QUIET_END_HOUR",
             ),
             governor_tools_timeout_seconds=_positive_int(
                 source.get("KAOSBRAIN_GOVERNOR_TOOLS_TIMEOUT_SECONDS", "10"),

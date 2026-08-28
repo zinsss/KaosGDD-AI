@@ -2,7 +2,24 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock
 
-from kaos_brain.bot import BrainBot
+from kaos_brain.bot import BrainBot, _is_active_control_quiet_hour
+
+
+class ActiveControlRepostScheduleTests(unittest.TestCase):
+    def test_midnight_to_seven_is_quiet(self) -> None:
+        self.assertTrue(_is_active_control_quiet_hour(0, 0, 7))
+        self.assertTrue(_is_active_control_quiet_hour(6, 0, 7))
+        self.assertFalse(_is_active_control_quiet_hour(7, 0, 7))
+        self.assertFalse(_is_active_control_quiet_hour(23, 0, 7))
+
+    def test_wrapped_quiet_window(self) -> None:
+        self.assertTrue(_is_active_control_quiet_hour(23, 23, 6))
+        self.assertTrue(_is_active_control_quiet_hour(5, 23, 6))
+        self.assertFalse(_is_active_control_quiet_hour(6, 23, 6))
+        self.assertFalse(_is_active_control_quiet_hour(22, 23, 6))
+
+    def test_matching_hours_disable_quiet_window(self) -> None:
+        self.assertFalse(_is_active_control_quiet_hour(0, 0, 0))
 
 
 class BrainNotificationTests(unittest.IsolatedAsyncioTestCase):

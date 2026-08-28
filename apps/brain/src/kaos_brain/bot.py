@@ -135,6 +135,14 @@ OPENAI_CODE_PATTERN = re.compile(r"^ac_[A-Za-z0-9_.-]+$")
 KAOSAI_CLARIFY_WINDOW_SECONDS = 300
 
 
+def _is_active_control_quiet_hour(hour: int, start_hour: int, end_hour: int) -> bool:
+    if start_hour == end_hour:
+        return False
+    if start_hour < end_hour:
+        return start_hour <= hour < end_hour
+    return hour >= start_hour or hour < end_hour
+
+
 @dataclass(frozen=True)
 class _PendingKaosAIClarification:
     original_text: str
@@ -443,6 +451,12 @@ class BrainBot(BrainProposalMixin, BrainActiveControlMixin, discord.Client):
             await asyncio.sleep(self.settings.active_control_repost_seconds)
             if self.is_closed():
                 return
+            if _is_active_control_quiet_hour(
+                datetime.now(KST).hour,
+                self.settings.active_control_quiet_start_hour,
+                self.settings.active_control_quiet_end_hour,
+            ):
+                continue
             await self._ensure_active_control_message(move_to_bottom=True)
 
     def _allowed(self, message: discord.Message) -> bool:

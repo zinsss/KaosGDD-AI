@@ -34,7 +34,9 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.health_port, 8099)
         self.assertFalse(settings.imaging_enabled)
         self.assertFalse(settings.kaosai_reauth_enabled)
-        self.assertEqual(settings.active_control_repost_seconds, 10800)
+        self.assertEqual(settings.active_control_repost_seconds, 7200)
+        self.assertEqual(settings.active_control_quiet_start_hour, 0)
+        self.assertEqual(settings.active_control_quiet_end_hour, 7)
 
     def test_notification_refresh_ids_are_configured_together(self) -> None:
         with self.assertRaisesRegex(ConfigurationError, "configured together"):
@@ -187,7 +189,9 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.governor_tools_profile, "family")
         self.assertEqual(settings.governor_tools_supplies_collection_id, "supplies:abc")
         self.assertEqual(settings.active_control_state_path, "/data/kaosbrain/active-control.json")
-        self.assertEqual(settings.active_control_repost_seconds, 10800)
+        self.assertEqual(settings.active_control_repost_seconds, 7200)
+        self.assertEqual(settings.active_control_quiet_start_hour, 0)
+        self.assertEqual(settings.active_control_quiet_end_hour, 7)
 
         disabled_repost = Settings.from_env(
             {
@@ -199,6 +203,23 @@ class SettingsTests(unittest.TestCase):
             }
         )
         self.assertEqual(disabled_repost.active_control_repost_seconds, 0)
+
+        custom_window = Settings.from_env(
+            {
+                **BASE_ENV,
+                "KAOSBRAIN_ACTIVE_CONTROL_QUIET_START_HOUR": "23",
+                "KAOSBRAIN_ACTIVE_CONTROL_QUIET_END_HOUR": "6",
+            }
+        )
+        self.assertEqual(custom_window.active_control_quiet_start_hour, 23)
+        self.assertEqual(custom_window.active_control_quiet_end_hour, 6)
+
+        for name, value in (
+            ("KAOSBRAIN_ACTIVE_CONTROL_QUIET_START_HOUR", "24"),
+            ("KAOSBRAIN_ACTIVE_CONTROL_QUIET_END_HOUR", "-1"),
+        ):
+            with self.subTest(name=name), self.assertRaises(ConfigurationError):
+                Settings.from_env({**BASE_ENV, name: value})
 
         magic_dns = Settings.from_env(
             {
