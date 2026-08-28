@@ -20,7 +20,7 @@ from kaos_governor.mail import (
     NaverMailOrganizer,
     NaverMailPoller,
 )
-from kaos_governor.fax import FaxConfig, FaxError, FaxService
+from kaos_governor.fax import FaxConfig, FaxError, FaxService, PushoverClient
 from kaos_governor.memos import MemosConfig, MemosService
 
 from . import __version__
@@ -275,7 +275,8 @@ class GovernorBot(discord.Client):
             if settings.mail_organizer_channel_id is not None and settings.mail_archive_channel_id is not None
             else None
         )
-        self.fax_service = FaxService(FaxConfig.from_env())
+        fax_config = FaxConfig.from_env()
+        self.fax_service = FaxService(fax_config)
         self.memos = MemosService(MemosConfig.from_env())
         self.discord_memos = (
             DiscordMemosCapture(
@@ -303,6 +304,7 @@ class GovernorBot(discord.Client):
                 self.policy,
                 settings.fax_archive_channel_id,
                 settings.fax_notification_channel_id,
+                PushoverClient(fax_config) if fax_config.pushover_enabled else None,
             )
             if self.fax_service.config.enabled
             and settings.fax_archive_channel_id is not None

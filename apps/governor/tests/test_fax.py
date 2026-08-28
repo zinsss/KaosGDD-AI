@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+import urllib.parse
 from unittest import mock
 
 from kaos_governor.fax import (
@@ -12,6 +13,7 @@ from kaos_governor.fax import (
     FaxError,
     FaxService,
     OfficeFaxConnectorClient,
+    PushoverClient,
     normalize_destination,
     parse_doneq,
     request_from_pdf,
@@ -318,6 +320,144 @@ class FaxTests(unittest.TestCase):
 
         self.assertEqual(config.transport, "connector")
         self.assertEqual(config.connector_token, "secret-token")
+
+    def test_pushover_requires_fax_and_both_credentials(self) -> None:
+        with self.assertRaisesRegex(FaxError, "FAX_DISCORD_ENABLED"):
+            FaxConfig.from_env({"FAX_PUSHOVER_ENABLED": "true"})
+        with self.assertRaisesRegex(FaxError, "FAX_PUSHOVER_APP_TOKEN"):
+            FaxConfig.from_env(
+                {
+                    "FAX_DISCORD_ENABLED": "true",
+                    "FAX_PUSHOVER_ENABLED": "true",
+                }
+            )
+
+    def test_pushover_credentials_can_be_loaded_from_secret_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app_token = Path(tmp) / "app-token"
+            user_key = Path(tmp) / "user-key"
+            app_token.write_text("app-secret\n", encoding="utf-8")
+            user_key.write_text("user-secret\n", encoding="utf-8")
+
+            config = FaxConfig.from_env(
+                {
+                    "FAX_DISCORD_ENABLED": "true",
+                    "FAX_PUSHOVER_ENABLED": "true",
+                    "FAX_PUSHOVER_APP_TOKEN_FILE": str(app_token),
+                    "FAX_PUSHOVER_USER_KEY_FILE": str(user_key),
+                    "FAX_PUSHOVER_PRIORITY": "1",
+                }
+            )
+
+        self.assertTrue(config.pushover_enabled)
+        self.assertEqual(config.pushover_app_token, "app-secret")
+        self.assertEqual(config.pushover_user_key, "user-secret")
+        self.assertEqual(config.pushover_priority, 1)
+
+        with self.assertRaisesRegex(FaxError, "between 0 and 1"):
+            FaxConfig.from_env(
+                {
+                    "FAX_DISCORD_ENABLED": "true",
+                    "FAX_PUSHOVER_ENABLED": "true",
+                    "FAX_PUSHOVER_APP_TOKEN": "app-secret",
+                    "FAX_PUSHOVER_USER_KEY": "user-secret",
+                    "FAX_PUSHOVER_PRIORITY": "2",
+                }
+            )
+
+    def test_pushover_client_posts_high_priority_watch_alert(self) -> None:
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return None
+
+            def read(self):
+                return b'{"status":1,"request":"request-id"}'
+
+        with tempfile.TemporaryDirectory() as tmp:
+            config = FaxConfig(
+                **{
+                    **self.config(Path(tmp)).__dict__,
+                    "pushover_enabled": True,
+                    "pushover_app_token": "app-secret",
+                    "pushover_user_key": "user-secret",
+                    "pushover_priority": 1,
+                }
+            )
+            urlopen = mock.Mock(return_value=Response())
+            client = PushoverClient(config, urlopen=urlopen)
+            action = FaxAction(
+                "incoming:pushover:event-1",
+                "watch_notification",
+                content="Fax received.\n: from 07079664986",
+            )
+
+            client.send(action)
+
+        request = urlopen.call_args.args[0]
+        payload = urllib.parse.parse_qs(request.data.decode("utf-8"))
+        self.assertEqual(request.full_url, PushoverClient.API_URL)
+        self.assertEqual(urlopen.call_args.kwargs["timeout"], 10)
+        self.assertEqual(payload["token"], ["app-secret"])
+        self.assertEqual(payload["user"], ["user-secret"])
+        self.assertEqual(payload["title"], ["KaosGDD Fax"])
+        self.assertEqual(payload["priority"], ["1"])
+        self.assertIn("07079664986", payload["message"][0])
+
+    def test_pushover_is_a_separate_action_for_new_incoming_fax(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = FaxConfig(
+                **{
+                    **self.config(root).__dict__,
+                    "pushover_enabled": True,
+                    "pushover_app_token": "app-secret",
+                    "pushover_user_key": "user-secret",
+                }
+            )
+            service = FaxService(config)
+            service.scan_actions()
+            config.recvq.mkdir(parents=True)
+            (config.recvq / "fax000000007.tif").write_bytes(b"TIFF")
+
+            actions = service.scan_actions()
+
+        self.assertEqual([action.kind for action in actions], ["archive", "watch_notification"])
+        self.assertTrue(actions[1].key.startswith("incoming:pushover:"))
+        self.assertFalse(actions[1].content_bytes)
+        self.assertIsNone(actions[1].path)
+
+    def test_enabling_pushover_baselines_already_archived_faxes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = self.config(root)
+            service = FaxService(config)
+            service.scan_actions()
+            config.recvq.mkdir(parents=True)
+            (config.recvq / "fax000000007.tif").write_bytes(b"TIFF")
+            archive = service.scan_actions()[0]
+            service.acknowledge(archive)
+            push_config = FaxConfig(
+                **{
+                    **config.__dict__,
+                    "pushover_enabled": True,
+                    "pushover_app_token": "app-secret",
+                    "pushover_user_key": "user-secret",
+                }
+            )
+
+            push_service = FaxService(push_config)
+            actions = push_service.scan_actions()
+            status = push_service.status()
+            state = json.loads(config.state_path.read_text(encoding="utf-8"))
+
+        push_key = archive.key.replace("incoming:archive:", "incoming:pushover:", 1)
+        self.assertEqual(actions, [])
+        self.assertTrue(status["pushoverEnabled"])
+        self.assertTrue(state["pushoverInitialized"])
+        self.assertEqual(state["delivered"][push_key]["status"], "baselined")
 
     def test_bridge_and_doneq_generate_lifecycle_archive_and_cleanup(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

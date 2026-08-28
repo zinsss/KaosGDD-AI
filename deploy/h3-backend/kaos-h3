@@ -141,7 +141,14 @@ setup() {
   fi
   load_env
   install_state_directories "$(governor_state_root)"
-  for secret in discord_bot_token memos_access_token naver_mail_password paperless_api_token fax_connector_token; do
+  for secret in \
+    discord_bot_token \
+    memos_access_token \
+    naver_mail_password \
+    paperless_api_token \
+    fax_connector_token \
+    pushover_app_token \
+    pushover_user_key; do
     [[ -e "$(secret_path "${secret}")" ]] || : > "$(secret_path "${secret}")"
   done
   if [[ ! -s "$(secret_path governor_api_token)" ]]; then
@@ -152,7 +159,9 @@ setup() {
     "${SECRETS_DIR}"/memos_access_token \
     "${SECRETS_DIR}"/naver_mail_password \
     "${SECRETS_DIR}"/paperless_api_token \
-    "${SECRETS_DIR}"/fax_connector_token
+    "${SECRETS_DIR}"/fax_connector_token \
+    "${SECRETS_DIR}"/pushover_app_token \
+    "${SECRETS_DIR}"/pushover_user_key
   info "Setup complete. Fill ${ENV_FILE} and ${SECRETS_DIR}/discord_bot_token, then run:"
   info "  ${0} test"
   info "  ${0} up"
@@ -203,6 +212,12 @@ preflight() {
       || die "H3 fax must use FAX_TRANSPORT=connector; HylaFAX stays on Office Kaos"
     [[ -n "${FAX_CONNECTOR_BASE_URL:-}" ]] || die "FAX_CONNECTOR_BASE_URL is required when fax is enabled"
     require_secret fax_connector_token
+  fi
+  if [[ "${FAX_PUSHOVER_ENABLED:-false}" == "true" ]]; then
+    [[ "${FAX_DISCORD_ENABLED:-false}" == "true" ]] \
+      || die "FAX_DISCORD_ENABLED=true is required when Pushover fax alerts are enabled"
+    require_secret pushover_app_token
+    require_secret pushover_user_key
   fi
   "${COMPOSE[@]}" config --quiet
   info "Preflight passed."

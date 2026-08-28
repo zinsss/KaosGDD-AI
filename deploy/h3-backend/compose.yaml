@@ -20,6 +20,8 @@ services:
       - naver_mail_password
       - paperless_api_token
       - fax_connector_token
+      - pushover_app_token
+      - pushover_user_key
     ports:
       - "${GOVERNOR_BIND_ADDRESS:-127.0.0.1}:${HEALTH_PORT:-8097}:8097"
       - "${GOVERNOR_BRAIN_TOOLS_BIND_ADDRESS:-127.0.0.1}:${GOVERNOR_BRAIN_TOOLS_PORT:-8098}:8098"
@@ -67,3 +69,7 @@ secrets:
     file: ./secrets/paperless_api_token
   fax_connector_token:
     file: ./secrets/fax_connector_token
+  pushover_app_token:
+    file: ./secrets/pushover_app_token
+  pushover_user_key:
+    file: ./secrets/pushover_user_key

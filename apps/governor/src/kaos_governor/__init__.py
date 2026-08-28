@@ -19,6 +19,7 @@ from .fax import (
     FaxRequest,
     FaxService,
     OfficeFaxConnectorClient,
+    PushoverClient,
     normalize_destination,
     request_from_pdf,
 )
@@ -48,6 +49,7 @@ __all__ = (
     "OperationRecord",
     "OperationRequest",
     "OfficeFaxConnectorClient",
+    "PushoverClient",
     "PaperlessConfig",
     "PaperlessDocumentService",
     "PaperlessResult",

@@ -37,6 +37,31 @@ class DiscordFaxTests(unittest.TestCase):
 
 
 class DiscordFaxTransportTests(unittest.IsolatedAsyncioTestCase):
+    async def test_watch_notification_uses_pushover_without_discord(self) -> None:
+        service = SimpleNamespace(
+            scan_actions=mock.Mock(),
+            acknowledge=mock.Mock(),
+            record_error=mock.Mock(),
+        )
+        pushover = SimpleNamespace(send=mock.Mock())
+        transport = DiscordFaxTransport(
+            SimpleNamespace(),  # type: ignore[arg-type]
+            service,  # type: ignore[arg-type]
+            SimpleNamespace(),  # type: ignore[arg-type]
+            archive_channel_id=300,
+            notification_channel_id=301,
+            pushover_client=pushover,  # type: ignore[arg-type]
+        )
+        action = FaxAction(
+            "incoming:pushover:event-1",
+            "watch_notification",
+            content="Fax received.\n: from 07079664986",
+        )
+
+        await transport._watch_notification(action)
+
+        pushover.send.assert_called_once_with(action)
+
     async def test_received_fax_is_stored_and_only_text_is_sent_to_notifications(self) -> None:
         service = SimpleNamespace(store_incoming_document=mock.Mock())
         transport = DiscordFaxTransport(

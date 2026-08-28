@@ -11,7 +11,7 @@ import tempfile
 import unicodedata
 
 import discord
-from kaos_governor.fax import FaxAction, FaxError, FaxService, request_from_pdf
+from kaos_governor.fax import FaxAction, FaxError, FaxService, PushoverClient, request_from_pdf
 from PIL import Image, UnidentifiedImageError
 
 from .access import AccessPolicy
@@ -80,12 +80,14 @@ class DiscordFaxTransport:
         policy: AccessPolicy,
         archive_channel_id: int,
         notification_channel_id: int,
+        pushover_client: PushoverClient | None = None,
     ) -> None:
         self.client = client
         self.service = service
         self.policy = policy
         self.archive_channel_id = archive_channel_id
         self.notification_channel_id = notification_channel_id
+        self.pushover_client = pushover_client
         self._cycle_lock = asyncio.Lock()
 
     async def _channel(self, channel_id: int) -> discord.abc.Messageable:
@@ -97,6 +99,11 @@ class DiscordFaxTransport:
     async def _notification(self, action: FaxAction) -> None:
         channel = await self._channel(self.notification_channel_id)
         await channel.send(action.content, allowed_mentions=NO_MENTIONS)
+
+    async def _watch_notification(self, action: FaxAction) -> None:
+        if self.pushover_client is None:
+            raise FaxError("fax_pushover_not_configured")
+        await asyncio.to_thread(self.pushover_client.send, action)
 
     @staticmethod
     def _convert_tiff(source: Path, destination: Path) -> None:
@@ -177,6 +184,8 @@ class DiscordFaxTransport:
                 try:
                     if action.kind == "notification":
                         await self._notification(action)
+                    elif action.kind == "watch_notification":
+                        await self._watch_notification(action)
                     elif action.kind == "archive":
                         await self._archive(action)
                     elif action.kind == "cleanup":

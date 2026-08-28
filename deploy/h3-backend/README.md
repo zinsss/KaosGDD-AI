@@ -46,6 +46,14 @@ The setup command generates `governor_api_token`. Add
 `memos_access_token` only when Memos search is enabled, and
 `naver_mail_password` only when Naver mail is enabled.
 
+Incoming fax alerts can also bypass Discord's desktop/mobile routing and go
+directly to an iPhone and Apple Watch through Pushover. Install Pushover on the
+iPhone and Watch, create a Pushover application, place its application token
+and the account user key in `secrets/pushover_app_token` and
+`secrets/pushover_user_key`, then set `FAX_PUSHOVER_ENABLED=true`. Governor
+sends only the fax receipt summary; it never sends the received PDF to
+Pushover.
+
 Run:
 
 ```bash
