@@ -647,11 +647,7 @@ class GovernorBot(discord.Client):
                 LOGGER.warning("Daily digest content refresh: %s", content_status["lastError"])
             last_message_id = self.daily_digest.last_message_id()
             if last_message_id and last_message_id != self._daily_digest_view_message_id:
-                self.add_view(
-                    DailyDigestView(self, self.daily_digest.last_sent_day()),
-                    message_id=last_message_id,
-                )
-                self._daily_digest_view_message_id = last_message_id
+                await self._restore_daily_digest_view(last_message_id)
             self._daily_digest_task = asyncio.create_task(
                 self._daily_digest_loop(),
                 name="governor-daily-digest",
@@ -927,6 +923,22 @@ class GovernorBot(discord.Client):
         )
         self._daily_digest_view_message_id = int(getattr(message, "id", 0) or 0)
         return True
+
+    async def _restore_daily_digest_view(self, message_id: int) -> None:
+        view = DailyDigestView(self, self.daily_digest.last_sent_day())
+        self.add_view(view, message_id=message_id)
+        self._daily_digest_view_message_id = message_id
+        channel_id = self.settings.system_channel_id
+        if channel_id is None:
+            return
+        try:
+            channel = self.get_channel(channel_id) or await self.fetch_channel(channel_id)
+            if not hasattr(channel, "fetch_message"):
+                raise DailyDigestError("daily_digest_channel_cannot_fetch_messages")
+            message = await channel.fetch_message(message_id)
+            await message.edit(view=view, allowed_mentions=NO_MENTIONS)
+        except Exception:
+            LOGGER.exception("Failed to refresh controls on existing daily digest message %s", message_id)
 
     async def _cycle_daily_content(self, interaction: discord.Interaction, kind: str) -> None:
         if interaction.message is None:

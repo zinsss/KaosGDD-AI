@@ -77,6 +77,30 @@ class GovernorBotTests(unittest.IsolatedAsyncioTestCase):
             ["Weather", "Bible", "Quote", "Close"],
         )
 
+    async def test_daily_digest_restore_replaces_controls_on_existing_message(self) -> None:
+        message = SimpleNamespace(edit=AsyncMock())
+        channel = SimpleNamespace(fetch_message=AsyncMock(return_value=message))
+        bot = SimpleNamespace(
+            daily_digest=SimpleNamespace(
+                last_sent_day=Mock(return_value=date(2026, 8, 29)),
+                weather_url=Mock(return_value="https://kaosgdd.net/#/calendar?weather=2026-08-29"),
+            ),
+            settings=SimpleNamespace(system_channel_id=301),
+            add_view=Mock(),
+            get_channel=lambda _channel_id: channel,
+            fetch_channel=AsyncMock(return_value=channel),
+            _daily_digest_view_message_id=0,
+        )
+
+        await GovernorBot._restore_daily_digest_view(bot, 701)  # type: ignore[arg-type]
+
+        bot.add_view.assert_called_once()
+        channel.fetch_message.assert_awaited_once_with(701)
+        message.edit.assert_awaited_once()
+        view = message.edit.await_args.kwargs["view"]
+        self.assertEqual(view.children[0].url, "https://kaosgdd.net/#/calendar?weather=2026-08-29")
+        self.assertEqual(bot._daily_digest_view_message_id, 701)
+
     async def test_refresh_service_status_surface_updates_messages_and_returns_count(self) -> None:
         service_status = FakeServiceStatus()
         bot = SimpleNamespace(discord_service_status=service_status)
