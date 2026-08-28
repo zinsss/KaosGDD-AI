@@ -81,6 +81,7 @@ window.KAOS_TRANSLATIONS = {
     "weather.locationDaegu": "대구",
     "weather.locationYeongcheon": "영천",
     "weather.locationYeonghae": "영해",
+    "weather.locationYeongdeok": "영덕",
     "weather.otherLocations": "다른 지역 날씨",
     "weather.allLocations": "모든 지역 날씨",
     "weather.openOtherLocations": "다른 지역 날씨 열기",

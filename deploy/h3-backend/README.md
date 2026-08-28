@@ -70,12 +70,13 @@ quotes come from the MIT-licensed Quotable data repository. The original local
 a successful web request at send time.
 
 Discord digests have `Weather`, `Bible`, `Quote`, and `Close` controls. Weather
-opens an ephemeral daypart forecast with a selector for 포항, 대구, 영천, and
-영덕. Bible and Quote replace their corresponding line with the next cached
-item; Close removes the Discord digest message. On its first deployment after
-the scheduled time, Governor baselines that day and starts the following
-morning; later restarts use the durable sent-date record to catch up a genuinely
-missed digest.
+deep-links to the existing KaosGDD calendar detailed-weather popup for that
+digest date; the shared view provides 포항, 대구, 영천, and 영덕 without a
+second Discord forecast implementation. Bible and Quote replace their
+corresponding line with the next cached item; Close removes the Discord digest
+message. On its first deployment after the scheduled time, Governor baselines
+that day and starts the following morning; later restarts use the durable
+sent-date record to catch up a genuinely missed digest.
 
 Run:
 

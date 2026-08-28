@@ -9,6 +9,7 @@ calendar/task operations go through the server-side calendar adapter.
 
 - `#/today`
 - `#/calendar`
+- `#/calendar?weather=YYYY-MM-DD` (opens the existing detailed-weather popup)
 - `#/tasks`
 - `#/services`
 

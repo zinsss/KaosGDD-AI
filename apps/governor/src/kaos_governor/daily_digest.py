@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import threading
 from typing import Any
+import urllib.parse
 from zoneinfo import ZoneInfo
 
 from .calendar import CalendarAdapterClient
@@ -53,20 +54,6 @@ ENCOURAGEMENT_ROTATION = (
     "끝까지 가는 힘은 강한 의지보다 다시 돌아오는 습관에서 생깁니다.",
     "오늘 누군가에게 건넨 작은 친절은 생각보다 오래 남습니다.",
 )
-WEATHER_LOCATIONS = (
-    ("pohang", "포항"),
-    ("daegu", "대구"),
-    ("yeongcheon", "영천"),
-    ("yeongdeok", "영덕"),
-)
-WEATHER_DAYPART_LABELS = {
-    "Morning": "아침",
-    "Afternoon": "오후",
-    "Evening": "저녁",
-    "Night": "밤",
-}
-
-
 class DailyDigestError(ValueError):
     pass
 
@@ -103,12 +90,21 @@ def _send_time(value: str) -> time:
     return parsed
 
 
+def _portal_url(value: str) -> str:
+    normalized = value.strip().rstrip("/")
+    parsed = urllib.parse.urlsplit(normalized)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+        raise DailyDigestError("DAILY_DIGEST_PORTAL_URL must be an HTTPS URL")
+    return normalized
+
+
 @dataclass(frozen=True)
 class DailyDigestConfig:
     enabled: bool = False
     send_time: time = time(7, 0)
     profile: str = "main"
     weather_city: str = "pohang"
+    portal_url: str = "https://kaosgdd.net"
     state_path: Path = Path("/data/notifications/daily-digest.json")
     content_cache_path: Path = Path("/data/notifications/daily-content.json")
     content_refresh_hours: int = 168
@@ -125,11 +121,13 @@ class DailyDigestConfig:
         weather_city = source.get("DAILY_DIGEST_WEATHER_CITY", "pohang").strip().lower()
         if not re.fullmatch(r"[a-z0-9_-]{2,40}", weather_city):
             raise DailyDigestError("DAILY_DIGEST_WEATHER_CITY invalid")
+        default_portal_url = "https://family.kaosgdd.net" if profile == "family" else "https://kaosgdd.net"
         return cls(
             enabled=_bool(source, "DAILY_DIGEST_ENABLED"),
             send_time=_send_time(source.get("DAILY_DIGEST_TIME", "07:00")),
             profile=profile,
             weather_city=weather_city,
+            portal_url=_portal_url(source.get("DAILY_DIGEST_PORTAL_URL", default_portal_url)),
             state_path=Path(
                 source.get(
                     "DAILY_DIGEST_STATE_PATH",
@@ -288,57 +286,6 @@ def digest_day(content: str) -> date:
         raise DailyDigestError("daily_digest_date_invalid") from exc
 
 
-def render_weather_detail(day: date, weather: Mapping[str, Any]) -> str:
-    city = str(weather.get("cityName") or weather.get("city") or "").strip()
-    glyph = str(weather.get("glyph") or weather.get("emoji") or "").strip()
-    condition = str(weather.get("condition") or "weather").replace("_", " ").strip()
-    low = _compact_number(weather.get("minTemp"))
-    high = _compact_number(weather.get("maxTemp"))
-    temperature = f"{low}-{high}°C" if low and high else "temperature unavailable"
-    lines = [
-        f"# {city + ' ' if city else ''}Weather — {day:%Y.%m.%d}",
-        f"{glyph} {condition} · {temperature}".strip(),
-    ]
-    probability = _compact_number(weather.get("precipitationProbability"))
-    precipitation = _compact_number(weather.get("precipitationMm"))
-    wind = _compact_number(weather.get("windSpeedKmh"))
-    summary = []
-    if probability:
-        summary.append(f"강수 {probability}%")
-    if precipitation:
-        summary.append(f"{precipitation} mm")
-    if wind:
-        summary.append(f"바람 {wind} km/h")
-    if summary:
-        lines.append(" · ".join(summary))
-    dayparts = weather.get("dayparts", [])
-    if isinstance(dayparts, list) and dayparts:
-        lines.extend(("", "### 시간대별"))
-        for item in dayparts:
-            if not isinstance(item, Mapping):
-                continue
-            label = WEATHER_DAYPART_LABELS.get(str(item.get("label") or ""), str(item.get("label") or ""))
-            marker = str(item.get("glyph") or "").strip()
-            part_condition = str(item.get("condition") or "").replace("_", " ").strip()
-            part_low = _compact_number(item.get("minTemp"))
-            part_high = _compact_number(item.get("maxTemp"))
-            chance = _compact_number(item.get("precipitationProbability"))
-            humidity = _compact_number(item.get("humidityPercent"))
-            details = [f"{part_low}-{part_high}°C" if part_low and part_high else ""]
-            if chance:
-                details.append(f"강수 {chance}%")
-            if humidity:
-                details.append(f"습도 {humidity}%")
-            lines.append(
-                f"- {label}: {marker} {part_condition} · "
-                + " · ".join(value for value in details if value)
-            )
-    source = str(weather.get("source") or "").strip()
-    if source:
-        lines.extend(("", f"Source: Open-Meteo ({source})"))
-    return "\n".join(lines)[:1024]
-
-
 class DailyDigestService:
     def __init__(self, config: DailyDigestConfig, adapter: CalendarAdapterClient) -> None:
         self.config = config
@@ -444,27 +391,8 @@ class DailyDigestService:
             return _replace_section_line(content, heading, render_quote(self.content.next_quote(current)))
         raise DailyDigestError("daily_digest_cycle_kind_invalid")
 
-    def weather_detail(self, day: date, city: str) -> str:
-        allowed = {key for key, _label in WEATHER_LOCATIONS}
-        if city not in allowed:
-            raise DailyDigestError("daily_digest_weather_city_invalid")
-        payload = self.adapter.month_weather(
-            self.config.profile,
-            start=day.isoformat(),
-            end=day.isoformat(),
-            city=city,
-        )
-        weather = next(
-            (
-                item
-                for item in payload.get("items", [])
-                if isinstance(item, Mapping) and str(item.get("date") or "") == day.isoformat()
-            ),
-            None,
-        )
-        if weather is None:
-            raise DailyDigestError("daily_digest_weather_unavailable")
-        return render_weather_detail(day, weather)
+    def weather_url(self, day: date) -> str:
+        return f"{self.config.portal_url}/#/calendar?weather={day.isoformat()}"
 
     def last_message_id(self) -> int:
         with self._lock:
@@ -473,6 +401,14 @@ class DailyDigestService:
             return int(value or 0)
         except (TypeError, ValueError):
             return 0
+
+    def last_sent_day(self) -> date | None:
+        with self._lock:
+            value = str(self._load().get("lastSentDate") or "")
+        try:
+            return date.fromisoformat(value) if value else None
+        except ValueError:
+            return None
 
     def record_sent(self, day: date, *, message_id: int = 0) -> None:
         with self._lock:
@@ -504,6 +440,7 @@ class DailyDigestService:
             "timezone": "Asia/Seoul",
             "profile": self.config.profile,
             "weatherCity": self.config.weather_city,
+            "portalUrl": self.config.portal_url,
             "statePath": str(self.config.state_path),
             "initialized": bool(state.get("initialized")),
             "lastSentDate": str(state.get("lastSentDate") or ""),

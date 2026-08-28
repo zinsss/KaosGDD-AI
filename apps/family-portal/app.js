@@ -62,7 +62,7 @@ const WEATHER_LOCATION_OPTIONS = [
   { id: "pohang", label: "Pohang", translationKey: "weather.locationPohang" },
   { id: "daegu", label: "Daegu", translationKey: "weather.locationDaegu" },
   { id: "yeongcheon", label: "Yeongcheon", translationKey: "weather.locationYeongcheon" },
-  { id: "yeonghae", label: "Yeonghae", translationKey: "weather.locationYeonghae" },
+  { id: "yeongdeok", label: "Yeongdeok", translationKey: "weather.locationYeongdeok" },
 ];
 const WEATHER_LOCATION_IDS = new Set(WEATHER_LOCATION_OPTIONS.map((location) => location.id));
 const ROUNY_TIMELINE_DEFAULT_START_HOUR = 9;
@@ -76,6 +76,7 @@ let suppressRounyGridClick = false;
 let rounyRemoteLoadPromise = null;
 let rounyRemoteSavePromise = null;
 let rounyRemoteSavePending = false;
+let openedWeatherDeepLink = "";
 
 function isDesktopLayout() {
   return desktopMedia.matches;
@@ -2748,6 +2749,14 @@ function renderTopNav(route) {
 function hashParam(name) {
   const query = window.location.hash.split("?", 2)[1] || "";
   return new URLSearchParams(query).get(name) || "";
+}
+
+function pendingWeatherDeepLinkDate() {
+  if (getRoute() !== "calendar") return "";
+  const value = hashParam("weather");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || openedWeatherDeepLink === value) return "";
+  const parsed = new Date(`${value}T00:00:00`);
+  return !Number.isNaN(parsed.getTime()) && ymd(parsed) === value ? value : "";
 }
 
 function ymd(date) {
@@ -6702,6 +6711,8 @@ function renderCaregiver() {
 
 function render() {
   const route = getRoute();
+  const weatherDeepLinkDate = pendingWeatherDeepLinkDate();
+  if (weatherDeepLinkDate) state.selectedDate = weatherDeepLinkDate;
   const view = document.getElementById("view");
   const overlayRoot = document.getElementById("overlayRoot");
   const app = document.querySelector(".app");
@@ -6757,6 +6768,10 @@ function render() {
     loadCustomEvents();
     loadMailOrganizerSettings();
     loadRecurringTasks();
+  }
+  if (weatherDeepLinkDate) {
+    openedWeatherDeepLink = weatherDeepLinkDate;
+    void openWeatherLocationPopup(weatherDeepLinkDate);
   }
   document.querySelector(".ledgerDetailsScroller")?.addEventListener("scroll", updateTopBarShadow, { passive: true });
   updateTopBarShadow();

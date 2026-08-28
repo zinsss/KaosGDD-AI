@@ -76,6 +76,8 @@ class DailyDigestTests(unittest.TestCase):
             DailyDigestConfig.from_env({"DAILY_DIGEST_PROFILE": "admin"})
         with self.assertRaisesRegex(DailyDigestError, "WEATHER_CITY"):
             DailyDigestConfig.from_env({"DAILY_DIGEST_WEATHER_CITY": "../../etc"})
+        with self.assertRaisesRegex(DailyDigestError, "HTTPS URL"):
+            DailyDigestConfig.from_env({"DAILY_DIGEST_PORTAL_URL": "http://kaosgdd.net"})
 
     def test_renderer_matches_requested_structure_and_empty_sections(self) -> None:
         rendered = render_daily_digest(
@@ -168,16 +170,13 @@ class DailyDigestTests(unittest.TestCase):
         self.assertEqual(next_bible.count("### 일일 성경 말씀"), 1)
         self.assertEqual(next_quote.count("### 일일 힘을 주는 명언"), 1)
 
-    def test_weather_detail_uses_selected_location_and_dayparts(self) -> None:
+    def test_weather_url_opens_existing_portal_detail_for_digest_date(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            adapter = Adapter()
-            service = DailyDigestService(self.config(Path(temporary)), adapter)  # type: ignore[arg-type]
+            service = DailyDigestService(self.config(Path(temporary)), Adapter())  # type: ignore[arg-type]
 
-            rendered = service.weather_detail(date(2026, 8, 29), "yeongdeok")
+            url = service.weather_url(date(2026, 8, 29))
 
-        self.assertIn("# Weather — 2026.08.29", rendered)
-        self.assertIn("🌧️ rain · 23-30°C", rendered)
-        self.assertEqual(adapter.weather_calls, [("main", "2026-08-29", "2026-08-29", "yeongdeok")])
+        self.assertEqual(url, "https://kaosgdd.net/#/calendar?weather=2026-08-29")
 
 
 if __name__ == "__main__":
