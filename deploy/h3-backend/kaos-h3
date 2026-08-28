@@ -99,7 +99,8 @@ install_state_directories() {
     "${root}/discord-tasks" \
     "${root}/discord-supplies" \
     "${root}/discord-inbox" \
-    "${root}/discord-system" 2>/dev/null; then
+    "${root}/discord-system" \
+    "${root}/notifications" 2>/dev/null; then
     chmod 0770 \
       "${root}/mail" \
       "${root}/fax" \
@@ -107,7 +108,8 @@ install_state_directories() {
       "${root}/discord-tasks" \
       "${root}/discord-supplies" \
       "${root}/discord-inbox" \
-      "${root}/discord-system"
+      "${root}/discord-system" \
+      "${root}/notifications"
     return
   fi
   require_command sudo
@@ -118,7 +120,8 @@ install_state_directories() {
     "${root}/discord-tasks" \
     "${root}/discord-supplies" \
     "${root}/discord-inbox" \
-    "${root}/discord-system"
+    "${root}/discord-system" \
+    "${root}/notifications"
 }
 
 governor_state_root() {
@@ -213,9 +216,7 @@ preflight() {
     [[ -n "${FAX_CONNECTOR_BASE_URL:-}" ]] || die "FAX_CONNECTOR_BASE_URL is required when fax is enabled"
     require_secret fax_connector_token
   fi
-  if [[ "${FAX_PUSHOVER_ENABLED:-false}" == "true" ]]; then
-    [[ "${FAX_DISCORD_ENABLED:-false}" == "true" ]] \
-      || die "FAX_DISCORD_ENABLED=true is required when Pushover fax alerts are enabled"
+  if [[ "${PUSHOVER_ENABLED:-false}" == "true" ]]; then
     require_secret pushover_app_token
     require_secret pushover_user_key
   fi

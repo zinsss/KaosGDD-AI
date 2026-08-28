@@ -15,7 +15,7 @@ They are mounted read-only into Governor and ignored by Git. Store one secret
 per file with no quotes. Empty optional files are allowed only while their
 corresponding feature is disabled.
 
-For Apple Watch fax alerts, `pushover_app_token` is the API token for the
-KaosGDD Fax application and `pushover_user_key` is the recipient key shown on
-the Pushover dashboard. Both are required only when
-`FAX_PUSHOVER_ENABLED=true`.
+For Apple Watch text alerts, `pushover_app_token` is the API token for the
+KaosGDD Notifications application and `pushover_user_key` is the recipient key
+shown on the Pushover dashboard. Both are required only when
+`PUSHOVER_ENABLED=true`.

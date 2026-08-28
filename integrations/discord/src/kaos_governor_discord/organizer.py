@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 import discord
 from kaos_governor.mail import MailOrganizerError, MailMessage, NaverMailOrganizer
+from kaos_governor.notifications import TextNotification, TextNotificationService
 
 from .access import AccessPolicy
 from .mail import render_mail_summary, safe_attachment_filename
@@ -108,6 +109,7 @@ class DiscordMailOrganizer:
         archive_channel_id: int,
         *,
         notification_channel_ids: frozenset[int] = frozenset(),
+        text_notifications: TextNotificationService | None = None,
     ) -> None:
         self.bot = bot
         self.organizer = organizer
@@ -115,6 +117,7 @@ class DiscordMailOrganizer:
         self.channel_id = channel_id
         self.archive_channel_id = archive_channel_id
         self.notification_channel_ids = notification_channel_ids
+        self.text_notifications = text_notifications
         self.restored = False
 
     async def channel(self) -> discord.abc.Messageable:
@@ -146,6 +149,19 @@ class DiscordMailOrganizer:
                 self.channel_id,
                 message.id,
             )
+            if self.text_notifications is not None:
+                try:
+                    await asyncio.to_thread(
+                        self.text_notifications.notify,
+                        TextNotification(
+                            key=f"mail:digest:{digest_id}",
+                            category="mail",
+                            title="KaosGDD Mail",
+                            message=render_digest_notification(digest),
+                        ),
+                    )
+                except Exception:
+                    LOGGER.exception("Failed to queue Apple Watch mail digest: %s", digest_id)
             return message
         except Exception:
             await self.delete_digest(digest_id)

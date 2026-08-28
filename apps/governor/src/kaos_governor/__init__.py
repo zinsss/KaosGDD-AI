@@ -19,11 +19,17 @@ from .fax import (
     FaxRequest,
     FaxService,
     OfficeFaxConnectorClient,
-    PushoverClient,
     normalize_destination,
     request_from_pdf,
 )
 from .memos import Memo, MemoSearchPage, MemoSearchResult, MemosConfig, MemosError, MemosService
+from .notifications import (
+    NotificationError,
+    PushoverClient,
+    PushoverConfig,
+    TextNotification,
+    TextNotificationService,
+)
 from .settings import CalendarSettingsRecord, GovernorSettingsError, MemoryGovernorSettingsStore
 
 __all__ = (
@@ -49,12 +55,16 @@ __all__ = (
     "OperationRecord",
     "OperationRequest",
     "OfficeFaxConnectorClient",
+    "NotificationError",
     "PushoverClient",
+    "PushoverConfig",
     "PaperlessConfig",
     "PaperlessDocumentService",
     "PaperlessResult",
     "PaperlessSearchPage",
     "PaperlessTag",
+    "TextNotification",
+    "TextNotificationService",
     "CalendarSettingsRecord",
     "normalize_destination",
     "request_from_pdf",

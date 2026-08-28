@@ -27,7 +27,7 @@ legacy service and database can be retired.
 | HWP handoff | Retire or optional Inbox adapter | Prefer Polaris for manual use unless automation is needed |
 | Mail notifier/archive/organizer | `governor/mail` | Ported to Discord with unchanged Naver IMAP authority; retire legacy workers only after live verification |
 | Fax notifier/outgoing/intake/archive | `governor/fax` plus office Fax Connector | HylaFAX remains transport authority |
-| Notification router | `governor/notifications` | Replace Telegram/Pushover/ntfy paths with Discord/Web Push as approved |
+| Notification router | `governor/notifications` | Discord remains the archive/UI path; durable Pushover text alerts mirror fax, mail, maintenance, and system events to Apple Watch while native iOS owns task reminders |
 | Telegram access/transient utilities | Retire with KaosTelegram | Reimplement only useful dedupe/cleanup semantics inside Discord/Governor; do not migrate Telegram service state |
 | Ledger | Separate Governor domain module if still required | Preserve deterministic arithmetic and XLSX import/export |
 | Rouny store | `governor/calendar` | Calendar domain owns timetable rules and changes |

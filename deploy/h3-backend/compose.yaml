@@ -33,6 +33,7 @@ services:
       - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/discord-supplies:/data/discord-supplies
       - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/discord-inbox:/data/discord-inbox
       - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/discord-system:/data/discord-system
+      - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/notifications:/data/notifications
     group_add:
       - "${KAOS_HOST_GID:-1000}"
     read_only: true

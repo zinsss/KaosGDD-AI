@@ -13,7 +13,6 @@ import time
 import unicodedata
 from typing import Mapping
 import urllib.error
-import urllib.parse
 import urllib.request
 from zoneinfo import ZoneInfo
 
@@ -49,18 +48,6 @@ def _int(env: Mapping[str, str], name: str, default: int, minimum: int) -> int:
     return max(minimum, value)
 
 
-def _bounded_int(
-    env: Mapping[str, str], name: str, default: int, minimum: int, maximum: int
-) -> int:
-    try:
-        value = int(env.get(name, str(default)))
-    except ValueError as exc:
-        raise FaxError(f"{name} must be an integer") from exc
-    if value < minimum or value > maximum:
-        raise FaxError(f"{name} must be between {minimum} and {maximum}")
-    return value
-
-
 def _secret(env: Mapping[str, str], name: str) -> str:
     value = env.get(name, "").strip()
     path = env.get(f"{name}_FILE", "").strip()
@@ -93,11 +80,6 @@ class FaxConfig:
     connector_base_url: str = ""
     connector_token: str = ""
     connector_timeout_seconds: int = 20
-    pushover_enabled: bool = False
-    pushover_app_token: str = ""
-    pushover_user_key: str = ""
-    pushover_priority: int = 1
-    pushover_timeout_seconds: int = 10
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "FaxConfig":
@@ -106,15 +88,6 @@ class FaxConfig:
         if transport not in {"local", "connector"}:
             raise FaxError("FAX_TRANSPORT must be local or connector")
         enabled = _bool(source, "FAX_DISCORD_ENABLED")
-        pushover_enabled = _bool(source, "FAX_PUSHOVER_ENABLED")
-        if pushover_enabled and not enabled:
-            raise FaxError("FAX_DISCORD_ENABLED must be true when FAX_PUSHOVER_ENABLED=true")
-        pushover_app_token = _secret(source, "FAX_PUSHOVER_APP_TOKEN") if pushover_enabled else ""
-        pushover_user_key = _secret(source, "FAX_PUSHOVER_USER_KEY") if pushover_enabled else ""
-        if pushover_enabled and (not pushover_app_token or not pushover_user_key):
-            raise FaxError(
-                "FAX_PUSHOVER_APP_TOKEN and FAX_PUSHOVER_USER_KEY are required when FAX_PUSHOVER_ENABLED=true"
-            )
         return cls(
             enabled=enabled,
             message_intake=_bool(source, "FAX_DISCORD_MESSAGE_INTAKE"),
@@ -137,11 +110,6 @@ class FaxConfig:
             connector_base_url=source.get("FAX_CONNECTOR_BASE_URL", "").strip().rstrip("/"),
             connector_token=_secret(source, "FAX_CONNECTOR_TOKEN"),
             connector_timeout_seconds=_int(source, "FAX_CONNECTOR_TIMEOUT_SECONDS", 20, 1),
-            pushover_enabled=pushover_enabled,
-            pushover_app_token=pushover_app_token,
-            pushover_user_key=pushover_user_key,
-            pushover_priority=_bounded_int(source, "FAX_PUSHOVER_PRIORITY", 1, 0, 1),
-            pushover_timeout_seconds=_int(source, "FAX_PUSHOVER_TIMEOUT_SECONDS", 10, 1),
         )
 
 
@@ -168,43 +136,6 @@ class FaxAction:
     remote: str = ""
     pages: str = ""
     received_at: str = ""
-
-
-class PushoverClient:
-    API_URL = "https://api.pushover.net/1/messages.json"
-
-    def __init__(self, config: FaxConfig, *, urlopen=None) -> None:
-        self.config = config
-        self._urlopen = urlopen or urllib.request.urlopen
-
-    def send(self, action: FaxAction) -> None:
-        if not self.config.pushover_enabled:
-            raise FaxError("fax_pushover_not_configured")
-        payload = urllib.parse.urlencode(
-            {
-                "token": self.config.pushover_app_token,
-                "user": self.config.pushover_user_key,
-                "title": "KaosGDD Fax",
-                "message": action.content[:1024],
-                "priority": str(self.config.pushover_priority),
-            }
-        ).encode("utf-8")
-        request = urllib.request.Request(
-            self.API_URL,
-            data=payload,
-            method="POST",
-            headers={
-                "Accept": "application/json",
-                "Content-Type": "application/x-www-form-urlencoded",
-            },
-        )
-        try:
-            with self._urlopen(request, timeout=self.config.pushover_timeout_seconds) as response:
-                result = json.loads(response.read().decode("utf-8"))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise FaxError("fax_pushover_delivery_failed") from exc
-        if not isinstance(result, dict) or result.get("status") != 1:
-            raise FaxError("fax_pushover_rejected")
 
 
 class OfficeFaxConnectorClient:
@@ -563,22 +494,6 @@ class FaxService:
         elif status == "sent":
             job["error"] = ""
 
-    def _incoming_delivery_actions(self, archive: FaxAction) -> list[FaxAction]:
-        actions = [archive]
-        if self.config.pushover_enabled:
-            actions.append(
-                FaxAction(
-                    archive.key.replace("incoming:archive:", "incoming:pushover:", 1),
-                    "watch_notification",
-                    content=archive.content,
-                    filename=archive.filename,
-                    remote=archive.remote,
-                    pages=archive.pages,
-                    received_at=archive.received_at,
-                )
-            )
-        return actions
-
     def _incoming_actions(self) -> list[FaxAction]:
         if self.config.transport == "connector":
             return self._connector_incoming_actions()
@@ -600,22 +515,20 @@ class FaxService:
             pages = str(info.get("pages") or "")
             received = _received_time(str(info.get("receivedAt") or ""), path)
             key = f"{path.name}:{stat.st_size}:{int(stat.st_mtime)}"
-            actions.extend(
-                self._incoming_delivery_actions(
-                    FaxAction(
-                        f"incoming:archive:{key}",
-                        "archive",
-                        content=_incoming_notification(
-                            filename=f"{received:%Y-%m-%d-%H:%M}_FROM_{remote}.pdf",
-                            remote=remote,
-                            pages=pages,
-                        ),
-                        path=path,
+            actions.append(
+                FaxAction(
+                    f"incoming:archive:{key}",
+                    "archive",
+                    content=_incoming_notification(
                         filename=f"{received:%Y-%m-%d-%H:%M}_FROM_{remote}.pdf",
                         remote=remote,
                         pages=pages,
-                        received_at=received.astimezone(UTC).isoformat().replace("+00:00", "Z"),
-                    )
+                    ),
+                    path=path,
+                    filename=f"{received:%Y-%m-%d-%H:%M}_FROM_{remote}.pdf",
+                    remote=remote,
+                    pages=pages,
+                    received_at=received.astimezone(UTC).isoformat().replace("+00:00", "Z"),
                 )
             )
         return actions
@@ -631,22 +544,20 @@ class FaxService:
                 continue
             if not event_id or not pdf.startswith(b"%PDF-"):
                 continue
-            actions.extend(
-                self._incoming_delivery_actions(
-                    FaxAction(
-                        f"incoming:archive:{event_id}",
-                        "archive",
-                        content=_incoming_notification(
-                            filename=filename,
-                            remote=str(event.get("remote") or "").strip(),
-                            pages=str(event.get("pages") or "").strip(),
-                        ),
+            actions.append(
+                FaxAction(
+                    f"incoming:archive:{event_id}",
+                    "archive",
+                    content=_incoming_notification(
                         filename=filename,
-                        content_bytes=pdf,
                         remote=str(event.get("remote") or "").strip(),
                         pages=str(event.get("pages") or "").strip(),
-                        received_at=str(event.get("receivedAt") or event.get("createdAt") or "").strip(),
-                    )
+                    ),
+                    filename=filename,
+                    content_bytes=pdf,
+                    remote=str(event.get("remote") or "").strip(),
+                    pages=str(event.get("pages") or "").strip(),
+                    received_at=str(event.get("receivedAt") or event.get("createdAt") or "").strip(),
                 )
             )
         return actions
@@ -709,20 +620,10 @@ class FaxService:
                 for action in candidates:
                     state["delivered"][action.key] = {"at": _timestamp(), "status": "baselined"}
                 state["initialized"] = True
-                if self.config.pushover_enabled:
-                    state["pushoverInitialized"] = True
                 self._save(state)
                 self.last_scan_at = _timestamp()
                 self.last_error = ""
                 return []
-            if self.config.pushover_enabled and not state.get("pushoverInitialized"):
-                for action in candidates:
-                    if action.kind != "watch_notification":
-                        continue
-                    archive_key = action.key.replace("incoming:pushover:", "incoming:archive:", 1)
-                    if archive_key in state["delivered"]:
-                        state["delivered"][action.key] = {"at": _timestamp(), "status": "baselined"}
-                state["pushoverInitialized"] = True
             state["initialized"] = True
             self._save(state)
             self.last_scan_at = _timestamp()
@@ -872,7 +773,6 @@ class FaxService:
             "enabled": self.config.enabled,
             "messageIntake": self.config.message_intake,
             "transport": self.config.transport,
-            "pushoverEnabled": self.config.pushover_enabled,
             "configured": bool(
                 self.config.state_path
                 and (

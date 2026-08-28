@@ -186,6 +186,33 @@ class DiscordOrganizerViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(kwargs["view"])
         self.assertIn("Open Brain for organizer actions", organizer_channel.send.await_args.args[0])
 
+    async def test_publish_digest_mirrors_text_to_watch_outbox(self) -> None:
+        service = SimpleNamespace(
+            active_digests=Mock(return_value=[]),
+            attach_message=Mock(),
+            attach_item_message=Mock(),
+        )
+        notifier = SimpleNamespace(notify=Mock())
+        organizer_channel = AsyncMock()
+        organizer_channel.send.return_value = SimpleNamespace(id=501)
+        coordinator = DiscordMailOrganizer(
+            SimpleNamespace(),
+            service,
+            SimpleNamespace(),
+            100,
+            200,
+            text_notifications=notifier,
+        )
+        coordinator.channel = AsyncMock(return_value=organizer_channel)
+
+        await coordinator.publish_digest(digest(2))
+
+        notifier.notify.assert_called_once()
+        mirrored = notifier.notify.call_args.args[0]
+        self.assertEqual(mirrored.key, "mail:digest:digest-1")
+        self.assertEqual(mirrored.category, "mail")
+        self.assertIn("2 unread messages", mirrored.message)
+
     async def test_publish_digest_deletes_same_day_digest_from_old_channel(self) -> None:
         old_digest = digest(1)
         old_digest["id"] = "old-digest"

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import suppress
+import hashlib
 import json
 import io
 import logging
@@ -20,8 +21,9 @@ from kaos_governor.mail import (
     NaverMailOrganizer,
     NaverMailPoller,
 )
-from kaos_governor.fax import FaxConfig, FaxError, FaxService, PushoverClient
+from kaos_governor.fax import FaxConfig, FaxError, FaxService
 from kaos_governor.memos import MemosConfig, MemosService
+from kaos_governor.notifications import PushoverConfig, TextNotification, TextNotificationService
 
 from . import __version__
 from .access import AccessPolicy
@@ -170,6 +172,8 @@ class GovernorBot(discord.Client):
         self._tasks_due_task: asyncio.Task | None = None
         self._tasks_refresh_task: asyncio.Task | None = None
         self._maintenance_reminder_task: asyncio.Task | None = None
+        self._text_notification_task: asyncio.Task | None = None
+        self.text_notifications = TextNotificationService(PushoverConfig.from_env())
         self.calendar_adapter = CalendarAdapterClient(CalendarAdapterConfig(settings.calendar_adapter_url))
         self.governor_api = (
             GovernorApiClient(GovernorApiConfig(settings.governor_api_url, settings.governor_api_token))
@@ -271,6 +275,7 @@ class GovernorBot(discord.Client):
                     )
                     if channel_id is not None
                 ),
+                text_notifications=self.text_notifications,
             )
             if settings.mail_organizer_channel_id is not None and settings.mail_archive_channel_id is not None
             else None
@@ -304,7 +309,7 @@ class GovernorBot(discord.Client):
                 self.policy,
                 settings.fax_archive_channel_id,
                 settings.fax_notification_channel_id,
-                PushoverClient(fax_config) if fax_config.pushover_enabled else None,
+                self.text_notifications,
             )
             if self.fax_service.config.enabled
             and settings.fax_archive_channel_id is not None
@@ -376,6 +381,7 @@ class GovernorBot(discord.Client):
                         f"Mail organizer: {'enabled' if self.mail_organizer.config.enabled else 'disabled'}",
                         f"Fax: {'enabled' if self.fax_service.config.enabled else 'disabled'}",
                         f"Fax message intake: {'enabled' if self.fax_service.config.message_intake else 'disabled'}",
+                        f"Apple Watch alerts: {'enabled' if self.text_notifications.config.enabled else 'disabled'}",
                         f"Memos search: {'enabled' if self.memos.config.enabled else 'disabled'}",
                         f"Calendar surface: {'enabled' if self.discord_calendar is not None else 'disabled'}",
                         f"Tasks surface: {'enabled' if self.discord_tasks is not None else 'disabled'}",
@@ -561,6 +567,11 @@ class GovernorBot(discord.Client):
     async def on_ready(self) -> None:
         LOGGER.info("Discord ready as %s (%s)", self.user, self.user.id if self.user else None)
         self._startup_complete = False
+        if self.text_notifications.config.enabled and self._text_notification_task is None:
+            self._text_notification_task = asyncio.create_task(
+                self._text_notification_loop(),
+                name="governor-text-notifications",
+            )
         if self.mail_poller.config.enabled and self._mail_task is None:
             self._mail_task = asyncio.create_task(self._mail_loop(), name="governor-naver-mail")
         if self.mail_organizer.config.enabled and self._organizer_task is None:
@@ -645,13 +656,22 @@ class GovernorBot(discord.Client):
                 channel = self.get_channel(self.settings.system_channel_id) or await self.fetch_channel(self.settings.system_channel_id)
                 if not isinstance(channel, discord.abc.Messageable):
                     raise TypeError("configured system channel is not messageable")
+                content = MarkdownMessage(
+                    title="KaosGovernor online",
+                    fields=(MarkdownField("Version", __version__),),
+                    bullets=("Discord transport: connected",),
+                ).render()
                 await channel.send(
-                    MarkdownMessage(
-                        title="KaosGovernor online",
-                        fields=(MarkdownField("Version", __version__),),
-                        bullets=("Discord transport: connected",),
-                    ).render(),
+                    content,
                     allowed_mentions=NO_MENTIONS,
+                )
+                await self._queue_text_notification(
+                    TextNotification(
+                        key=f"system:startup:{__version__}:{time.time_ns()}",
+                        category="system",
+                        title="KaosGDD System",
+                        message=content,
+                    )
                 )
             except (discord.HTTPException, TypeError):
                 LOGGER.exception("Failed to send startup notification")
@@ -718,6 +738,11 @@ class GovernorBot(discord.Client):
             with suppress(asyncio.CancelledError):
                 await self._maintenance_reminder_task
             self._maintenance_reminder_task = None
+        if self._text_notification_task is not None:
+            self._text_notification_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._text_notification_task
+            self._text_notification_task = None
         await self._health.stop()
         if self._brain_tools is not None:
             await self._brain_tools.stop()
@@ -737,6 +762,7 @@ class GovernorBot(discord.Client):
             "naverMail": self.mail_poller.status(),
             "naverMailOrganizer": self.mail_organizer.status(),
             "fax": self.fax_service.status(),
+            "textNotifications": self.text_notifications.status(),
             "memosSearch": self.memos.status(),
             "calendarSurface": (
                 self.discord_calendar.status() if self.discord_calendar is not None else {"enabled": False}
@@ -758,6 +784,27 @@ class GovernorBot(discord.Client):
                 else {"enabled": False}
             ),
         }
+
+    async def _queue_text_notification(self, notification: TextNotification) -> bool:
+        service = getattr(self, "text_notifications", None)
+        if service is None or not service.config.enabled:
+            return False
+        try:
+            return await asyncio.to_thread(service.notify, notification)
+        except Exception:
+            LOGGER.exception(
+                "Apple Watch text alert remains queued: %s",
+                notification.key,
+            )
+            return False
+
+    async def _text_notification_loop(self) -> None:
+        while not self.is_closed():
+            try:
+                await asyncio.to_thread(self.text_notifications.deliver_pending)
+            except Exception:
+                LOGGER.exception("Failed to deliver queued Apple Watch text alerts")
+            await asyncio.sleep(self.text_notifications.config.poll_seconds)
 
     async def _mail_loop(self) -> None:
         loop = asyncio.get_running_loop()
@@ -909,7 +956,17 @@ class GovernorBot(discord.Client):
         if not isinstance(channel, discord.abc.Messageable) and not hasattr(channel, "send"):
             raise TypeError("configured system channel is not messageable")
         for reminder in pending:
-            await channel.send(render_openclaw_renewal_reminder(reminder), allowed_mentions=NO_MENTIONS)
+            content = render_openclaw_renewal_reminder(reminder)
+            await channel.send(content, allowed_mentions=NO_MENTIONS)
+            await GovernorBot._queue_text_notification(
+                self,
+                TextNotification(
+                    key=f"maintenance:{reminder.key}",
+                    category="maintenance",
+                    title="KaosGDD Maintenance",
+                    message=content,
+                ),
+            )
             sent_keys.add(reminder.key)
         save_maintenance_reminder_state(state_path, sent_keys)
         return len(pending)
@@ -925,10 +982,30 @@ class GovernorBot(discord.Client):
 
     async def _send_mail_summary(self, mail: MailMessage):
         channel = await self._mail_channel()
-        return await channel.send(
+        sent = await channel.send(
             render_mail_summary(mail, self.mail_poller.config.max_attachment_bytes),
             allowed_mentions=NO_MENTIONS,
         )
+        identity = "\0".join(
+            (mail.mailbox, str(mail.uid), mail.received_at, mail.sender, mail.subject)
+        )
+        key = hashlib.sha256(identity.encode("utf-8")).hexdigest()
+        await self._queue_text_notification(
+            TextNotification(
+                key=f"mail:message:{key}",
+                category="mail",
+                title="KaosGDD Mail",
+                message="\n".join(
+                    (
+                        "New Naver mail.",
+                        f": {mail.mailbox}",
+                        f": from {mail.sender}",
+                        f": {mail.subject}",
+                    )
+                ),
+            )
+        )
+        return sent
 
     async def _send_mail_attachment(self, attachment: Attachment):
         channel = await self._mail_channel()
