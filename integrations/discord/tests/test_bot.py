@@ -48,9 +48,50 @@ class GovernorBotTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(published)
         channel.send.assert_awaited_once()
+        view = channel.send.await_args.kwargs["view"]
+        self.assertEqual([item.label for item in view.children], ["Weather", "Bible", "Quote", "Close"])
         self.assertEqual(mirrored[0].category, "daily")
         self.assertEqual(mirrored[0].key, "daily:2026-08-29")
         daily_digest.record_sent.assert_called_once_with(date(2026, 8, 29), message_id=701)
+
+    async def test_daily_digest_cycle_edits_message_with_persistent_controls(self) -> None:
+        response = SimpleNamespace(edit_message=AsyncMock(), send_message=AsyncMock())
+        interaction = SimpleNamespace(
+            message=SimpleNamespace(content="# 2026.08.29(Sat)\n### 일일 성경 말씀\nFirst"),
+            response=response,
+        )
+        daily_digest = SimpleNamespace(
+            cycle_content=Mock(return_value="# 2026.08.29(Sat)\n### 일일 성경 말씀\nSecond")
+        )
+        bot = SimpleNamespace(daily_digest=daily_digest)
+
+        await GovernorBot._cycle_daily_content(bot, interaction, "bible")  # type: ignore[arg-type]
+
+        daily_digest.cycle_content.assert_called_once()
+        response.edit_message.assert_awaited_once()
+        self.assertEqual(
+            [item.label for item in response.edit_message.await_args.kwargs["view"].children],
+            ["Weather", "Bible", "Quote", "Close"],
+        )
+
+    async def test_daily_weather_opens_detail_with_four_requested_locations(self) -> None:
+        response = SimpleNamespace(send_message=AsyncMock())
+        interaction = SimpleNamespace(
+            message=SimpleNamespace(content="# 2026.08.29(Sat)\n* rain"),
+            response=response,
+        )
+        daily_digest = SimpleNamespace(
+            config=SimpleNamespace(weather_city="pohang"),
+            weather_detail=Mock(return_value="# 포항 Weather — 2026.08.29"),
+        )
+        bot = SimpleNamespace(daily_digest=daily_digest)
+
+        await GovernorBot._show_daily_weather(bot, interaction)  # type: ignore[arg-type]
+
+        response.send_message.assert_awaited_once()
+        view = response.send_message.await_args.kwargs["view"]
+        select = view.children[0]
+        self.assertEqual([option.label for option in select.options], ["포항", "대구", "영천", "영덕"])
 
     async def test_refresh_service_status_surface_updates_messages_and_returns_count(self) -> None:
         service_status = FakeServiceStatus()

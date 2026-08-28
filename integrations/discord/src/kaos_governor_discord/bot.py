@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import suppress
-from datetime import datetime
+from datetime import date, datetime
 import hashlib
 import json
 import io
@@ -13,7 +13,14 @@ import time
 import discord
 from discord import app_commands
 from kaos_governor.calendar import CalendarAdapterClient, CalendarAdapterConfig
-from kaos_governor.daily_digest import DailyDigestConfig, DailyDigestError, DailyDigestService, KST
+from kaos_governor.daily_digest import (
+    DailyDigestConfig,
+    DailyDigestError,
+    DailyDigestService,
+    KST,
+    WEATHER_LOCATIONS,
+    digest_day,
+)
 from kaos_governor.documents import PaperlessConfig, PaperlessDocumentService
 from kaos_governor.mail import (
     Attachment,
@@ -144,6 +151,93 @@ class ConfirmationTestView(discord.ui.View):
                 LOGGER.info("Could not update expired ephemeral confirmation test")
 
 
+class DailyDigestView(discord.ui.View):
+    def __init__(self, bot: "GovernorBot") -> None:
+        super().__init__(timeout=None)
+        self.bot = bot
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if self.bot.policy.allows(interaction.guild_id, interaction.channel_id, interaction.user.id):
+            return True
+        await _deny(interaction)
+        return False
+
+    @discord.ui.button(label="Weather", style=discord.ButtonStyle.primary, custom_id="daily-digest:weather")
+    async def weather(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await self.bot._show_daily_weather(interaction)
+
+    @discord.ui.button(label="Bible", style=discord.ButtonStyle.secondary, custom_id="daily-digest:bible")
+    async def bible(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await self.bot._cycle_daily_content(interaction, "bible")
+
+    @discord.ui.button(label="Quote", style=discord.ButtonStyle.secondary, custom_id="daily-digest:quote")
+    async def quote(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await self.bot._cycle_daily_content(interaction, "quote")
+
+    @discord.ui.button(label="Close", style=discord.ButtonStyle.secondary, custom_id="daily-digest:close")
+    async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer()
+        if interaction.message is not None:
+            await interaction.message.delete()
+
+
+class WeatherDetailView(discord.ui.View):
+    def __init__(self, bot: "GovernorBot", day: date, selected_city: str) -> None:
+        super().__init__(timeout=300)
+        self.bot = bot
+        self.day = day
+        select = discord.ui.Select(
+            placeholder="지역 선택",
+            min_values=1,
+            max_values=1,
+            custom_id="daily-digest:weather:location",
+            options=[
+                discord.SelectOption(label=label, value=city, default=city == selected_city)
+                for city, label in WEATHER_LOCATIONS
+            ],
+        )
+        select.callback = self._select_callback(select)
+        close = discord.ui.Button(
+            label="Close",
+            style=discord.ButtonStyle.secondary,
+            custom_id="daily-digest:weather:close",
+        )
+        close.callback = self._close
+        self.add_item(select)
+        self.add_item(close)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if self.bot.policy.allows(interaction.guild_id, interaction.channel_id, interaction.user.id):
+            return True
+        await _deny(interaction)
+        return False
+
+    def _select_callback(self, select: discord.ui.Select):
+        async def callback(interaction: discord.Interaction) -> None:
+            city = select.values[0] if select.values else self.bot.daily_digest.config.weather_city
+            try:
+                content = await asyncio.to_thread(self.bot.daily_digest.weather_detail, self.day, city)
+            except Exception as exc:
+                LOGGER.exception("Failed to load daily digest weather detail")
+                await interaction.response.send_message(
+                    f"Weather unavailable: {type(exc).__name__}",
+                    ephemeral=True,
+                    allowed_mentions=NO_MENTIONS,
+                )
+                return
+            await interaction.response.edit_message(
+                content=content,
+                view=WeatherDetailView(self.bot, self.day, city),
+                allowed_mentions=NO_MENTIONS,
+            )
+
+        return callback
+
+    async def _close(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
+        await interaction.delete_original_response()
+
+
 class GovernorBot(discord.Client):
     def __init__(self, settings: Settings) -> None:
         intents = discord.Intents.none()
@@ -176,6 +270,7 @@ class GovernorBot(discord.Client):
         self._maintenance_reminder_task: asyncio.Task | None = None
         self._text_notification_task: asyncio.Task | None = None
         self._daily_digest_task: asyncio.Task | None = None
+        self._daily_digest_view_message_id = 0
         self.text_notifications = TextNotificationService(PushoverConfig.from_env())
         self.calendar_adapter = CalendarAdapterClient(CalendarAdapterConfig(settings.calendar_adapter_url))
         daily_digest_config = DailyDigestConfig.from_env()
@@ -584,6 +679,13 @@ class GovernorBot(discord.Client):
             )
         if self.daily_digest.config.enabled and self._daily_digest_task is None:
             await asyncio.to_thread(self.daily_digest.initialize)
+            content_status = await asyncio.to_thread(self.daily_digest.refresh_content)
+            if content_status.get("lastError"):
+                LOGGER.warning("Daily digest content refresh: %s", content_status["lastError"])
+            last_message_id = self.daily_digest.last_message_id()
+            if last_message_id and last_message_id != self._daily_digest_view_message_id:
+                self.add_view(DailyDigestView(self), message_id=last_message_id)
+                self._daily_digest_view_message_id = last_message_id
             self._daily_digest_task = asyncio.create_task(
                 self._daily_digest_loop(),
                 name="governor-daily-digest",
@@ -839,7 +941,11 @@ class GovernorBot(discord.Client):
         channel = self.get_channel(channel_id) or await self.fetch_channel(channel_id)
         if not isinstance(channel, discord.abc.Messageable) and not hasattr(channel, "send"):
             raise DailyDigestError("daily_digest_channel_not_messageable")
-        message = await channel.send(content, allowed_mentions=NO_MENTIONS)
+        message = await channel.send(
+            content,
+            view=DailyDigestView(self),
+            allowed_mentions=NO_MENTIONS,
+        )
         await self._queue_text_notification(
             TextNotification(
                 key=f"daily:{current.date().isoformat()}",
@@ -853,11 +959,73 @@ class GovernorBot(discord.Client):
             current.date(),
             message_id=int(getattr(message, "id", 0) or 0),
         )
+        self._daily_digest_view_message_id = int(getattr(message, "id", 0) or 0)
         return True
 
+    async def _show_daily_weather(self, interaction: discord.Interaction) -> None:
+        if interaction.message is None:
+            await interaction.response.send_message(
+                "Weather unavailable.",
+                ephemeral=True,
+                allowed_mentions=NO_MENTIONS,
+            )
+            return
+        try:
+            day = digest_day(interaction.message.content)
+            city = self.daily_digest.config.weather_city
+            content = await asyncio.to_thread(self.daily_digest.weather_detail, day, city)
+        except Exception as exc:
+            LOGGER.exception("Failed to load daily digest weather detail")
+            await interaction.response.send_message(
+                f"Weather unavailable: {type(exc).__name__}",
+                ephemeral=True,
+                allowed_mentions=NO_MENTIONS,
+            )
+            return
+        await interaction.response.send_message(
+            content,
+            view=WeatherDetailView(self, day, city),
+            ephemeral=True,
+            allowed_mentions=NO_MENTIONS,
+        )
+
+    async def _cycle_daily_content(self, interaction: discord.Interaction, kind: str) -> None:
+        if interaction.message is None:
+            await interaction.response.send_message(
+                "Digest unavailable.",
+                ephemeral=True,
+                allowed_mentions=NO_MENTIONS,
+            )
+            return
+        try:
+            content = await asyncio.to_thread(
+                self.daily_digest.cycle_content,
+                interaction.message.content,
+                kind,
+            )
+        except Exception as exc:
+            LOGGER.exception("Failed to cycle daily digest %s", kind)
+            await interaction.response.send_message(
+                f"Content unavailable: {type(exc).__name__}",
+                ephemeral=True,
+                allowed_mentions=NO_MENTIONS,
+            )
+            return
+        await interaction.response.edit_message(
+            content=content,
+            view=DailyDigestView(self),
+            allowed_mentions=NO_MENTIONS,
+        )
+
     async def _daily_digest_loop(self) -> None:
+        next_content_check = time.monotonic() + 3600
         while not self.is_closed():
             try:
+                if time.monotonic() >= next_content_check:
+                    content_status = await asyncio.to_thread(self.daily_digest.refresh_content)
+                    if content_status.get("lastError"):
+                        LOGGER.warning("Daily digest content refresh: %s", content_status["lastError"])
+                    next_content_check = time.monotonic() + 3600
                 await self._publish_daily_digest()
             except Exception as exc:
                 await asyncio.to_thread(self.daily_digest.record_error, exc)

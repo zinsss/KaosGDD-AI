@@ -53,6 +53,7 @@ class DailyDigestTests(unittest.TestCase):
             profile="main",
             weather_city="pohang",
             state_path=root / "daily-digest.json",
+            content_cache_path=root / "daily-content.json",
             poll_seconds=30,
             max_items=5,
         )
@@ -153,6 +154,30 @@ class DailyDigestTests(unittest.TestCase):
 
         self.assertFalse(before)
         self.assertTrue(at_time)
+
+    def test_bible_and_quote_cycle_through_available_content(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            service = DailyDigestService(self.config(Path(temporary)), Adapter())  # type: ignore[arg-type]
+            rendered = service.build(date(2026, 8, 29))
+
+            next_bible = service.cycle_content(rendered, "bible")
+            next_quote = service.cycle_content(rendered, "quote")
+
+        self.assertNotEqual(rendered, next_bible)
+        self.assertNotEqual(rendered, next_quote)
+        self.assertEqual(next_bible.count("### 일일 성경 말씀"), 1)
+        self.assertEqual(next_quote.count("### 일일 힘을 주는 명언"), 1)
+
+    def test_weather_detail_uses_selected_location_and_dayparts(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            adapter = Adapter()
+            service = DailyDigestService(self.config(Path(temporary)), adapter)  # type: ignore[arg-type]
+
+            rendered = service.weather_detail(date(2026, 8, 29), "yeongdeok")
+
+        self.assertIn("# Weather — 2026.08.29", rendered)
+        self.assertIn("🌧️ rain · 23-30°C", rendered)
+        self.assertEqual(adapter.weather_calls, [("main", "2026-08-29", "2026-08-29", "yeongdeok")])
 
 
 if __name__ == "__main__":

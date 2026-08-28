@@ -12,6 +12,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from .calendar import CalendarAdapterClient
+from .daily_content import DailyContentLibrary, render_quote
 
 
 KST = ZoneInfo("Asia/Seoul")
@@ -52,6 +53,18 @@ ENCOURAGEMENT_ROTATION = (
     "끝까지 가는 힘은 강한 의지보다 다시 돌아오는 습관에서 생깁니다.",
     "오늘 누군가에게 건넨 작은 친절은 생각보다 오래 남습니다.",
 )
+WEATHER_LOCATIONS = (
+    ("pohang", "포항"),
+    ("daegu", "대구"),
+    ("yeongcheon", "영천"),
+    ("yeongdeok", "영덕"),
+)
+WEATHER_DAYPART_LABELS = {
+    "Morning": "아침",
+    "Afternoon": "오후",
+    "Evening": "저녁",
+    "Night": "밤",
+}
 
 
 class DailyDigestError(ValueError):
@@ -97,6 +110,9 @@ class DailyDigestConfig:
     profile: str = "main"
     weather_city: str = "pohang"
     state_path: Path = Path("/data/notifications/daily-digest.json")
+    content_cache_path: Path = Path("/data/notifications/daily-content.json")
+    content_refresh_hours: int = 168
+    content_timeout_seconds: int = 30
     poll_seconds: int = 30
     max_items: int = 5
 
@@ -119,6 +135,24 @@ class DailyDigestConfig:
                     "DAILY_DIGEST_STATE_PATH",
                     "/data/notifications/daily-digest.json",
                 )
+            ),
+            content_cache_path=Path(
+                source.get(
+                    "DAILY_DIGEST_CONTENT_CACHE_PATH",
+                    "/data/notifications/daily-content.json",
+                )
+            ),
+            content_refresh_hours=_positive_int(
+                source,
+                "DAILY_DIGEST_CONTENT_REFRESH_HOURS",
+                168,
+                8760,
+            ),
+            content_timeout_seconds=_positive_int(
+                source,
+                "DAILY_DIGEST_CONTENT_TIMEOUT_SECONDS",
+                30,
+                120,
             ),
             poll_seconds=_positive_int(source, "DAILY_DIGEST_POLL_SECONDS", 30, 3600),
             max_items=_positive_int(source, "DAILY_DIGEST_MAX_ITEMS", 5, 20),
@@ -179,6 +213,8 @@ def render_daily_digest(
     events: list[Mapping[str, Any]],
     tasks: list[Mapping[str, Any]],
     max_items: int = 5,
+    bible_line: str = "",
+    quote_line: str = "",
 ) -> str:
     low = _compact_number(weather.get("minTemp"))
     high = _compact_number(weather.get("maxTemp"))
@@ -187,7 +223,8 @@ def render_daily_digest(
     weather_label = " ".join(part for part in (glyph, condition) if part) or "Weather"
     temperatures = f" {low}-{high}°C" if low and high else ""
     verse_reference, verse_text = VERSE_ROTATION[day.toordinal() % len(VERSE_ROTATION)]
-    encouragement = ENCOURAGEMENT_ROTATION[day.toordinal() % len(ENCOURAGEMENT_ROTATION)]
+    selected_bible = bible_line or f"{verse_reference} — {verse_text}"
+    selected_quote = quote_line or ENCOURAGEMENT_ROTATION[day.toordinal() % len(ENCOURAGEMENT_ROTATION)]
     content = ""
     for item_limit in range(max_items, 0, -1):
         event_lines = _item_lines(
@@ -208,10 +245,10 @@ def render_daily_digest(
                 f"* {weather_label}{temperatures}",
                 "",
                 "### 일일 성경 말씀",
-                f"{verse_reference} — {verse_text}",
+                selected_bible,
                 "",
                 "### 일일 힘을 주는 명언",
-                encouragement,
+                selected_quote,
                 "",
                 "### Events",
                 *event_lines,
@@ -225,10 +262,94 @@ def render_daily_digest(
     return f"{content[:1021]}..."
 
 
+def _replace_section_line(content: str, heading: str, value: str) -> str:
+    lines = content.splitlines()
+    try:
+        index = lines.index(heading)
+    except ValueError as exc:
+        raise DailyDigestError("daily_digest_section_missing") from exc
+    if index + 1 >= len(lines):
+        raise DailyDigestError("daily_digest_section_value_missing")
+    lines[index + 1] = value
+    rendered = "\n".join(lines)
+    if len(rendered) > 1024:
+        raise DailyDigestError("daily_digest_content_too_long")
+    return rendered
+
+
+def digest_day(content: str) -> date:
+    first_line = content.splitlines()[0] if content.splitlines() else ""
+    match = re.fullmatch(r"# (\d{4})\.(\d{2})\.(\d{2})\([A-Z][a-z]{2}\)", first_line)
+    if match is None:
+        raise DailyDigestError("daily_digest_date_missing")
+    try:
+        return date(*(int(value) for value in match.groups()))
+    except ValueError as exc:
+        raise DailyDigestError("daily_digest_date_invalid") from exc
+
+
+def render_weather_detail(day: date, weather: Mapping[str, Any]) -> str:
+    city = str(weather.get("cityName") or weather.get("city") or "").strip()
+    glyph = str(weather.get("glyph") or weather.get("emoji") or "").strip()
+    condition = str(weather.get("condition") or "weather").replace("_", " ").strip()
+    low = _compact_number(weather.get("minTemp"))
+    high = _compact_number(weather.get("maxTemp"))
+    temperature = f"{low}-{high}°C" if low and high else "temperature unavailable"
+    lines = [
+        f"# {city + ' ' if city else ''}Weather — {day:%Y.%m.%d}",
+        f"{glyph} {condition} · {temperature}".strip(),
+    ]
+    probability = _compact_number(weather.get("precipitationProbability"))
+    precipitation = _compact_number(weather.get("precipitationMm"))
+    wind = _compact_number(weather.get("windSpeedKmh"))
+    summary = []
+    if probability:
+        summary.append(f"강수 {probability}%")
+    if precipitation:
+        summary.append(f"{precipitation} mm")
+    if wind:
+        summary.append(f"바람 {wind} km/h")
+    if summary:
+        lines.append(" · ".join(summary))
+    dayparts = weather.get("dayparts", [])
+    if isinstance(dayparts, list) and dayparts:
+        lines.extend(("", "### 시간대별"))
+        for item in dayparts:
+            if not isinstance(item, Mapping):
+                continue
+            label = WEATHER_DAYPART_LABELS.get(str(item.get("label") or ""), str(item.get("label") or ""))
+            marker = str(item.get("glyph") or "").strip()
+            part_condition = str(item.get("condition") or "").replace("_", " ").strip()
+            part_low = _compact_number(item.get("minTemp"))
+            part_high = _compact_number(item.get("maxTemp"))
+            chance = _compact_number(item.get("precipitationProbability"))
+            humidity = _compact_number(item.get("humidityPercent"))
+            details = [f"{part_low}-{part_high}°C" if part_low and part_high else ""]
+            if chance:
+                details.append(f"강수 {chance}%")
+            if humidity:
+                details.append(f"습도 {humidity}%")
+            lines.append(
+                f"- {label}: {marker} {part_condition} · "
+                + " · ".join(value for value in details if value)
+            )
+    source = str(weather.get("source") or "").strip()
+    if source:
+        lines.extend(("", f"Source: Open-Meteo ({source})"))
+    return "\n".join(lines)[:1024]
+
+
 class DailyDigestService:
     def __init__(self, config: DailyDigestConfig, adapter: CalendarAdapterClient) -> None:
         self.config = config
         self.adapter = adapter
+        self.content = DailyContentLibrary(
+            cache_path=config.content_cache_path,
+            refresh_hours=config.content_refresh_hours,
+            timeout_seconds=config.content_timeout_seconds,
+            fallback_bible=VERSE_ROTATION,
+            fallback_quotes=ENCOURAGEMENT_ROTATION,
+        )
         self._lock = threading.RLock()
         self.last_error = ""
 
@@ -298,13 +419,60 @@ class DailyDigestService:
             and str(item.get("due") or "") == day.isoformat()
             and str(item.get("status") or "").upper() != "COMPLETED"
         ]
+        bible, quote = self.content.for_day(day.toordinal())
         return render_daily_digest(
             day=day,
             weather=weather,
             events=events,
             tasks=tasks,
             max_items=self.config.max_items,
+            bible_line=bible.render(),
+            quote_line=render_quote(quote),
         )
+
+    def refresh_content(self, *, force: bool = False) -> dict[str, object]:
+        return self.content.refresh(force=force)
+
+    def cycle_content(self, content: str, kind: str) -> str:
+        if kind == "bible":
+            heading = "### 일일 성경 말씀"
+            current = _section_line(content, heading)
+            return _replace_section_line(content, heading, self.content.next_bible(current).render())
+        if kind == "quote":
+            heading = "### 일일 힘을 주는 명언"
+            current = _section_line(content, heading)
+            return _replace_section_line(content, heading, render_quote(self.content.next_quote(current)))
+        raise DailyDigestError("daily_digest_cycle_kind_invalid")
+
+    def weather_detail(self, day: date, city: str) -> str:
+        allowed = {key for key, _label in WEATHER_LOCATIONS}
+        if city not in allowed:
+            raise DailyDigestError("daily_digest_weather_city_invalid")
+        payload = self.adapter.month_weather(
+            self.config.profile,
+            start=day.isoformat(),
+            end=day.isoformat(),
+            city=city,
+        )
+        weather = next(
+            (
+                item
+                for item in payload.get("items", [])
+                if isinstance(item, Mapping) and str(item.get("date") or "") == day.isoformat()
+            ),
+            None,
+        )
+        if weather is None:
+            raise DailyDigestError("daily_digest_weather_unavailable")
+        return render_weather_detail(day, weather)
+
+    def last_message_id(self) -> int:
+        with self._lock:
+            value = self._load().get("lastMessageId")
+        try:
+            return int(value or 0)
+        except (TypeError, ValueError):
+            return 0
 
     def record_sent(self, day: date, *, message_id: int = 0) -> None:
         with self._lock:
@@ -343,4 +511,16 @@ class DailyDigestService:
             "lastMessageId": str(state.get("lastMessageId") or ""),
             "lastStatus": str(state.get("lastStatus") or ""),
             "lastError": str(state.get("lastError") or self.last_error),
+            "content": self.content.status(),
         }
+
+
+def _section_line(content: str, heading: str) -> str:
+    lines = content.splitlines()
+    try:
+        index = lines.index(heading)
+    except ValueError as exc:
+        raise DailyDigestError("daily_digest_section_missing") from exc
+    if index + 1 >= len(lines):
+        raise DailyDigestError("daily_digest_section_value_missing")
+    return lines[index + 1]

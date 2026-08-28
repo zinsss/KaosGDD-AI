@@ -62,13 +62,20 @@ sender, and subject metadata.
 
 The optional daily digest is sent once at `DAILY_DIGEST_TIME` in KST. It uses
 the selected live calendar profile, today's Radicale events and active due
-tasks, and the existing calendar adapter weather location. Bible lines are
-short original Korean paraphrases identified by verse reference, and the
-encouragement lines are maintained locally so the morning message does not
-depend on another external content API. On its first deployment after the
-scheduled time, Governor baselines that day and starts the following morning;
-later restarts use the durable sent-date record to catch up a genuinely missed
-digest.
+tasks, and the existing calendar adapter weather location. The Bible and quote
+libraries refresh weekly into a durable local cache: public-domain Korean Bible
+1910 text comes from the Free Use Bible API, and short attributed motivational
+quotes come from the MIT-licensed Quotable data repository. The original local
+14-item rotations remain as the offline fallback, so delivery never depends on
+a successful web request at send time.
+
+Discord digests have `Weather`, `Bible`, `Quote`, and `Close` controls. Weather
+opens an ephemeral daypart forecast with a selector for 포항, 대구, 영천, and
+영덕. Bible and Quote replace their corresponding line with the next cached
+item; Close removes the Discord digest message. On its first deployment after
+the scheduled time, Governor baselines that day and starts the following
+morning; later restarts use the durable sent-date record to catch up a genuinely
+missed digest.
 
 Run:
 
