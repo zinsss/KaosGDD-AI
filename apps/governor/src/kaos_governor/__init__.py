@@ -11,6 +11,7 @@ from .durable import (
     OperationRequest,
     stable_hash,
 )
+from .daily_digest import DailyDigestConfig, DailyDigestError, DailyDigestService, render_daily_digest
 from .documents import DocumentIntakeError, PaperlessConfig, PaperlessDocumentService, PaperlessResult, PaperlessSearchPage, PaperlessTag
 from .fax import (
     FaxAction,
@@ -38,6 +39,9 @@ __all__ = (
     "ConfirmationRecord",
     "DurableGovernorError",
     "DocumentIntakeError",
+    "DailyDigestConfig",
+    "DailyDigestError",
+    "DailyDigestService",
     "FaxAction",
     "FaxConfig",
     "FaxError",
@@ -68,5 +72,6 @@ __all__ = (
     "CalendarSettingsRecord",
     "normalize_destination",
     "request_from_pdf",
+    "render_daily_digest",
     "stable_hash",
 )

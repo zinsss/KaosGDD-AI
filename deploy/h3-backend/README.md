@@ -52,13 +52,23 @@ iPhone and Watch, create a Pushover application, place its application token
 and the account user key in `secrets/pushover_app_token` and
 `secrets/pushover_user_key`, then set `PUSHOVER_ENABLED=true`.
 
-The durable outbox mirrors fax lifecycle and receipt alerts, new-mail summaries,
-scheduled mail digests, maintenance reminders, and enabled system-startup
-alerts. Task reminders are deliberately excluded because they already use the
-native iOS calendar/reminder notification path. Control messages, Brain
-selector refreshes, archives, document bodies, attachments, and fax PDFs are
-never sent to Pushover. New-mail watch alerts contain only folder, sender, and
-subject metadata.
+The durable outbox mirrors the morning daily digest, fax lifecycle and receipt
+alerts, new-mail summaries, scheduled mail digests, maintenance reminders, and
+enabled system-startup alerts. Task reminders are deliberately excluded because
+they already use the native iOS calendar/reminder notification path. Control
+messages, Brain selector refreshes, archives, document bodies, attachments, and
+fax PDFs are never sent to Pushover. New-mail watch alerts contain only folder,
+sender, and subject metadata.
+
+The optional daily digest is sent once at `DAILY_DIGEST_TIME` in KST. It uses
+the selected live calendar profile, today's Radicale events and active due
+tasks, and the existing calendar adapter weather location. Bible lines are
+short original Korean paraphrases identified by verse reference, and the
+encouragement lines are maintained locally so the morning message does not
+depend on another external content API. On its first deployment after the
+scheduled time, Governor baselines that day and starts the following morning;
+later restarts use the durable sent-date record to catch up a genuinely missed
+digest.
 
 Run:
 

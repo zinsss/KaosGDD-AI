@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import suppress
+from datetime import datetime
 import hashlib
 import json
 import io
@@ -12,6 +13,7 @@ import time
 import discord
 from discord import app_commands
 from kaos_governor.calendar import CalendarAdapterClient, CalendarAdapterConfig
+from kaos_governor.daily_digest import DailyDigestConfig, DailyDigestError, DailyDigestService, KST
 from kaos_governor.documents import PaperlessConfig, PaperlessDocumentService
 from kaos_governor.mail import (
     Attachment,
@@ -173,8 +175,15 @@ class GovernorBot(discord.Client):
         self._tasks_refresh_task: asyncio.Task | None = None
         self._maintenance_reminder_task: asyncio.Task | None = None
         self._text_notification_task: asyncio.Task | None = None
+        self._daily_digest_task: asyncio.Task | None = None
         self.text_notifications = TextNotificationService(PushoverConfig.from_env())
         self.calendar_adapter = CalendarAdapterClient(CalendarAdapterConfig(settings.calendar_adapter_url))
+        daily_digest_config = DailyDigestConfig.from_env()
+        if daily_digest_config.enabled and settings.system_channel_id is None:
+            raise DailyDigestError(
+                "DISCORD_SYSTEM_CHANNEL_ID is required when DAILY_DIGEST_ENABLED=true"
+            )
+        self.daily_digest = DailyDigestService(daily_digest_config, self.calendar_adapter)
         self.governor_api = (
             GovernorApiClient(GovernorApiConfig(settings.governor_api_url, settings.governor_api_token))
             if settings.governor_api_token
@@ -382,6 +391,7 @@ class GovernorBot(discord.Client):
                         f"Fax: {'enabled' if self.fax_service.config.enabled else 'disabled'}",
                         f"Fax message intake: {'enabled' if self.fax_service.config.message_intake else 'disabled'}",
                         f"Apple Watch alerts: {'enabled' if self.text_notifications.config.enabled else 'disabled'}",
+                        f"Daily digest: {'enabled' if self.daily_digest.config.enabled else 'disabled'}",
                         f"Memos search: {'enabled' if self.memos.config.enabled else 'disabled'}",
                         f"Calendar surface: {'enabled' if self.discord_calendar is not None else 'disabled'}",
                         f"Tasks surface: {'enabled' if self.discord_tasks is not None else 'disabled'}",
@@ -572,6 +582,12 @@ class GovernorBot(discord.Client):
                 self._text_notification_loop(),
                 name="governor-text-notifications",
             )
+        if self.daily_digest.config.enabled and self._daily_digest_task is None:
+            await asyncio.to_thread(self.daily_digest.initialize)
+            self._daily_digest_task = asyncio.create_task(
+                self._daily_digest_loop(),
+                name="governor-daily-digest",
+            )
         if self.mail_poller.config.enabled and self._mail_task is None:
             self._mail_task = asyncio.create_task(self._mail_loop(), name="governor-naver-mail")
         if self.mail_organizer.config.enabled and self._organizer_task is None:
@@ -743,6 +759,11 @@ class GovernorBot(discord.Client):
             with suppress(asyncio.CancelledError):
                 await self._text_notification_task
             self._text_notification_task = None
+        if self._daily_digest_task is not None:
+            self._daily_digest_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._daily_digest_task
+            self._daily_digest_task = None
         await self._health.stop()
         if self._brain_tools is not None:
             await self._brain_tools.stop()
@@ -763,6 +784,7 @@ class GovernorBot(discord.Client):
             "naverMailOrganizer": self.mail_organizer.status(),
             "fax": self.fax_service.status(),
             "textNotifications": self.text_notifications.status(),
+            "dailyDigest": self.daily_digest.status(),
             "memosSearch": self.memos.status(),
             "calendarSurface": (
                 self.discord_calendar.status() if self.discord_calendar is not None else {"enabled": False}
@@ -805,6 +827,42 @@ class GovernorBot(discord.Client):
             except Exception:
                 LOGGER.exception("Failed to deliver queued Apple Watch text alerts")
             await asyncio.sleep(self.text_notifications.config.poll_seconds)
+
+    async def _publish_daily_digest(self, now: datetime | None = None) -> bool:
+        current = now or datetime.now(KST)
+        if not self.daily_digest.is_due(current):
+            return False
+        channel_id = self.settings.system_channel_id
+        if channel_id is None:
+            raise DailyDigestError("daily_digest_channel_not_configured")
+        content = await asyncio.to_thread(self.daily_digest.build, current.date())
+        channel = self.get_channel(channel_id) or await self.fetch_channel(channel_id)
+        if not isinstance(channel, discord.abc.Messageable) and not hasattr(channel, "send"):
+            raise DailyDigestError("daily_digest_channel_not_messageable")
+        message = await channel.send(content, allowed_mentions=NO_MENTIONS)
+        await self._queue_text_notification(
+            TextNotification(
+                key=f"daily:{current.date().isoformat()}",
+                category="daily",
+                title="KaosGDD Daily",
+                message=content,
+            )
+        )
+        await asyncio.to_thread(
+            self.daily_digest.record_sent,
+            current.date(),
+            message_id=int(getattr(message, "id", 0) or 0),
+        )
+        return True
+
+    async def _daily_digest_loop(self) -> None:
+        while not self.is_closed():
+            try:
+                await self._publish_daily_digest()
+            except Exception as exc:
+                await asyncio.to_thread(self.daily_digest.record_error, exc)
+                LOGGER.exception("Failed to publish daily digest")
+            await asyncio.sleep(self.daily_digest.config.poll_seconds)
 
     async def _mail_loop(self) -> None:
         loop = asyncio.get_running_loop()

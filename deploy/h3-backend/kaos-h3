@@ -220,6 +220,10 @@ preflight() {
     require_secret pushover_app_token
     require_secret pushover_user_key
   fi
+  if [[ "${DAILY_DIGEST_ENABLED:-false}" == "true" ]]; then
+    [[ -n "${DISCORD_SYSTEM_CHANNEL_ID:-}" ]] \
+      || die "DISCORD_SYSTEM_CHANNEL_ID is required when the daily digest is enabled"
+  fi
   "${COMPOSE[@]}" config --quiet
   info "Preflight passed."
 }

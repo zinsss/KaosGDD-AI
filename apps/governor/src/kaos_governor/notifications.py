@@ -12,7 +12,7 @@ import urllib.parse
 import urllib.request
 
 
-MIRRORED_CATEGORIES = frozenset({"fax", "mail", "maintenance", "system"})
+MIRRORED_CATEGORIES = frozenset({"daily", "fax", "mail", "maintenance", "system"})
 
 
 class NotificationError(ValueError):

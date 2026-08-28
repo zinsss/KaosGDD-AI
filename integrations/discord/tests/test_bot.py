@@ -1,10 +1,12 @@
 from types import SimpleNamespace
+from datetime import date, datetime
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock
 
 from kaos_governor.mail import MailMessage
+from kaos_governor.daily_digest import KST
 from kaos_governor_discord import bot as bot_module
 from kaos_governor_discord.bot import GovernorBot
 from kaos_governor_discord.maintenance import MaintenanceReport, MaintenanceTarget
@@ -20,6 +22,36 @@ class FakeServiceStatus:
 
 
 class GovernorBotTests(unittest.IsolatedAsyncioTestCase):
+    async def test_daily_digest_posts_to_notifications_and_watch_outbox_once(self) -> None:
+        channel = SimpleNamespace(send=AsyncMock(return_value=SimpleNamespace(id=701)))
+        daily_digest = SimpleNamespace(
+            is_due=Mock(return_value=True),
+            build=Mock(return_value="# 2026.08.29(Sat)\n* 🌧️ rain 23-30°C"),
+            record_sent=Mock(),
+        )
+        mirrored = []
+
+        async def queue_text_notification(notification):
+            mirrored.append(notification)
+            return True
+
+        bot = SimpleNamespace(
+            daily_digest=daily_digest,
+            settings=SimpleNamespace(system_channel_id=301),
+            get_channel=lambda _channel_id: channel,
+            fetch_channel=AsyncMock(return_value=channel),
+            _queue_text_notification=queue_text_notification,
+        )
+        now = datetime(2026, 8, 29, 7, 0, tzinfo=KST)
+
+        published = await GovernorBot._publish_daily_digest(bot, now)  # type: ignore[arg-type]
+
+        self.assertTrue(published)
+        channel.send.assert_awaited_once()
+        self.assertEqual(mirrored[0].category, "daily")
+        self.assertEqual(mirrored[0].key, "daily:2026-08-29")
+        daily_digest.record_sent.assert_called_once_with(date(2026, 8, 29), message_id=701)
+
     async def test_refresh_service_status_surface_updates_messages_and_returns_count(self) -> None:
         service_status = FakeServiceStatus()
         bot = SimpleNamespace(discord_service_status=service_status)
