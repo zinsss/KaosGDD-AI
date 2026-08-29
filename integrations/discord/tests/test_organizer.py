@@ -211,7 +211,8 @@ class DiscordOrganizerViewTests(unittest.IsolatedAsyncioTestCase):
         mirrored = notifier.notify.call_args.args[0]
         self.assertEqual(mirrored.key, "mail:digest:digest-1")
         self.assertEqual(mirrored.category, "mail")
-        self.assertIn("2 unread messages", mirrored.message)
+        self.assertEqual(mirrored.title, "")
+        self.assertEqual(mirrored.message, "2 unread mail.")
 
     async def test_publish_digest_deletes_same_day_digest_from_old_channel(self) -> None:
         old_digest = digest(1)

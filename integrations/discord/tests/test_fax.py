@@ -12,6 +12,7 @@ from kaos_governor_discord.fax import (
     image_to_pdf,
     rejection_message,
     safe_filename,
+    watch_fax_message,
 )
 
 
@@ -34,6 +35,13 @@ class DiscordFaxTests(unittest.TestCase):
     def test_rejection_explains_reply_contract(self) -> None:
         value = rejection_message(ValueError("reply_to_pdf_required"))
         self.assertIn("Reply directly to one PDF or image", value)
+
+    def test_watch_copy_only_reports_final_fax_states(self) -> None:
+        self.assertEqual(watch_fax_message(FaxAction("incoming:archive:1", "archive")), "Fax received.")
+        self.assertEqual(watch_fax_message(FaxAction("outgoing:discord:1:sent", "notification")), "Fax sent.")
+        self.assertEqual(watch_fax_message(FaxAction("outgoing:discord:1:failed", "notification")), "Fax send failed.")
+        self.assertEqual(watch_fax_message(FaxAction("outgoing:discord:1:queued", "notification")), "")
+        self.assertEqual(watch_fax_message(FaxAction("outgoing:discord:1:sending", "notification")), "")
 
 
 class DiscordFaxTransportTests(unittest.IsolatedAsyncioTestCase):
@@ -67,7 +75,26 @@ class DiscordFaxTransportTests(unittest.IsolatedAsyncioTestCase):
         mirrored = notifier.notify.call_args.args[0]
         self.assertEqual(mirrored.category, "fax")
         self.assertEqual(mirrored.key, "fax:outgoing:discord:event-1:sent")
-        self.assertEqual(mirrored.message, "Fax successfully sent.")
+        self.assertEqual(mirrored.title, "")
+        self.assertEqual(mirrored.message, "Fax sent.")
+
+    async def test_transient_fax_progress_is_not_sent_to_watch(self) -> None:
+        notifier = SimpleNamespace(notify=mock.Mock())
+        transport = DiscordFaxTransport(
+            SimpleNamespace(),  # type: ignore[arg-type]
+            SimpleNamespace(),  # type: ignore[arg-type]
+            SimpleNamespace(),  # type: ignore[arg-type]
+            archive_channel_id=300,
+            notification_channel_id=301,
+            text_notifications=notifier,  # type: ignore[arg-type]
+        )
+        notification_channel = SimpleNamespace(send=mock.AsyncMock())
+        transport._channel = mock.AsyncMock(return_value=notification_channel)  # type: ignore[method-assign]
+
+        await transport._notification(FaxAction("outgoing:discord:event-1:queued", "notification", "Queued."))
+
+        notification_channel.send.assert_awaited_once()
+        notifier.notify.assert_not_called()
 
     async def test_received_fax_is_stored_and_only_text_is_sent_to_notifications(self) -> None:
         service = SimpleNamespace(store_incoming_document=mock.Mock())
@@ -98,7 +125,7 @@ class DiscordFaxTransportTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("file", notification_channel.send.await_args.kwargs)
         mirrored = notifier.notify.call_args.args[0]
         self.assertEqual(mirrored.category, "fax")
-        self.assertEqual(mirrored.message, action.content)
+        self.assertEqual(mirrored.message, "Fax received.")
         self.assertFalse(hasattr(mirrored, "content_bytes"))
 
 

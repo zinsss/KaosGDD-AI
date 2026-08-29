@@ -8,6 +8,7 @@ from kaos_governor.daily_digest import (
     DailyDigestError,
     DailyDigestService,
     KST,
+    digest_events,
     render_daily_digest,
 )
 
@@ -109,6 +110,23 @@ class DailyDigestTests(unittest.TestCase):
         self.assertNotIn("Tomorrow", rendered)
         self.assertIn("- 10:00 Call office", rendered)
         self.assertNotIn("Done", rendered)
+        self.assertEqual(digest_events(rendered), ["전주"])
+
+    def test_digest_events_ignores_empty_and_overflow_markers(self) -> None:
+        content = "\n".join(
+            (
+                "# 2026.12.25(Fri)",
+                "### Events",
+                "- Christmas",
+                "- 09:00 Family breakfast",
+                "- +2 more",
+                "",
+                "### Tasks",
+                "-",
+            )
+        )
+
+        self.assertEqual(digest_events(content), ["Christmas", "09:00 Family breakfast"])
 
     def test_renderer_keeps_both_sections_with_many_long_items(self) -> None:
         items = [

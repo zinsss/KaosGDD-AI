@@ -142,15 +142,15 @@ class PushoverClient:
     def send(self, notification: TextNotification) -> None:
         if not self.config.enabled:
             raise NotificationError("pushover_not_configured")
-        payload = urllib.parse.urlencode(
-            {
-                "token": self.config.app_token,
-                "user": self.config.user_key,
-                "title": notification.title[:250],
-                "message": notification.message[:1024],
-                "priority": str(self.config.priority),
-            }
-        ).encode("utf-8")
+        values = {
+            "token": self.config.app_token,
+            "user": self.config.user_key,
+            "message": notification.message[:1024],
+            "priority": str(self.config.priority),
+        }
+        if notification.title:
+            values["title"] = notification.title[:250]
+        payload = urllib.parse.urlencode(values).encode("utf-8")
         request = urllib.request.Request(
             self.API_URL,
             data=payload,
@@ -209,7 +209,7 @@ class TextNotificationService:
             raise NotificationError("notification_key_invalid")
         if category not in MIRRORED_CATEGORIES:
             raise NotificationError("notification_category_not_mirrored")
-        if not title or not message:
+        if not message:
             raise NotificationError("notification_text_required")
         with self._lock:
             state = self._load()

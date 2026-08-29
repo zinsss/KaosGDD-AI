@@ -6,6 +6,7 @@ import json
 import socket
 import tempfile
 import unittest
+from unittest.mock import Mock
 
 from kaos_governor_discord.access import AccessPolicy
 from kaos_governor_discord.system_status import (
@@ -266,6 +267,38 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(channel.sent[2]["embed"].footer.text, "Updated at 09:00")
             state = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(set(state["messageIds"]), {"summary:healthy", "issue:memos", "summary:planned"})
+
+    async def test_service_down_and_recovery_send_one_simple_watch_alert_each(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "status.json"
+            notifier = SimpleNamespace(notify=Mock())
+            surface = self.make_surface(path)
+            surface.text_notifications = notifier  # type: ignore[assignment]
+            current_state = "down"
+
+            async def fake_check_services():
+                return {
+                    item.key: ServiceProbeResult(
+                        item.key,
+                        current_state if item.key == "kaosbrain" else "healthy",
+                        "09:00",
+                        "",
+                    )
+                    for item in SERVICES
+                }
+
+            surface.check_services = fake_check_services  # type: ignore[method-assign]
+            await surface.ensure_message()
+            await surface.ensure_message()
+            current_state = "healthy"
+            await surface.ensure_message()
+
+            alerts = [call.args[0] for call in notifier.notify.call_args_list]
+            self.assertEqual([alert.message for alert in alerts], ["KaosBrain is down.", "KaosBrain is back."])
+            self.assertTrue(all(alert.title == "" for alert in alerts))
+            state = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(state["serviceStates"]["kaosbrain"], "healthy")
+            self.assertEqual(state["serviceIncidents"]["kaosbrain"], 1)
 
     async def test_restart_request_is_recorded_for_future_down_services(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

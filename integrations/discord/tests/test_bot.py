@@ -22,11 +22,16 @@ class FakeServiceStatus:
 
 
 class GovernorBotTests(unittest.IsolatedAsyncioTestCase):
-    async def test_daily_digest_posts_to_notifications_and_watch_outbox_once(self) -> None:
+    async def test_daily_digest_posts_simple_morning_and_event_watch_alerts(self) -> None:
         channel = SimpleNamespace(send=AsyncMock(return_value=SimpleNamespace(id=701)))
         daily_digest = SimpleNamespace(
             is_due=Mock(return_value=True),
-            build=Mock(return_value="# 2026.08.29(Sat)\n* 🌧️ rain 23-30°C"),
+            build=Mock(
+                return_value=(
+                    "# 2026.08.29(Sat)\n* 🌧️ rain 23-30°C\n\n"
+                    "### Events\n- Christmas\n\n### Tasks\n-"
+                )
+            ),
             record_sent=Mock(),
             weather_url=Mock(return_value="https://kaosgdd.net/#/calendar?weather=2026-08-29"),
         )
@@ -54,6 +59,10 @@ class GovernorBotTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(view.children[0].url, "https://kaosgdd.net/#/calendar?weather=2026-08-29")
         self.assertEqual(mirrored[0].category, "daily")
         self.assertEqual(mirrored[0].key, "daily:2026-08-29")
+        self.assertEqual(mirrored[0].title, "")
+        self.assertEqual(mirrored[0].message, "Good Morning.")
+        self.assertEqual(len(mirrored), 2)
+        self.assertEqual(mirrored[1].message, "Today. Christmas.")
         daily_digest.record_sent.assert_called_once_with(date(2026, 8, 29), message_id=701)
 
     async def test_daily_digest_cycle_edits_message_with_persistent_controls(self) -> None:
@@ -169,6 +178,8 @@ class GovernorBotTests(unittest.IsolatedAsyncioTestCase):
         bot.text_notifications.notify.assert_called_once()
         mirrored = bot.text_notifications.notify.call_args.args[0]
         self.assertEqual(mirrored.category, "maintenance")
+        self.assertEqual(mirrored.title, "")
+        self.assertEqual(mirrored.message, "KaosBrain auth renewal.")
 
     async def test_new_mail_watch_alert_omits_preview_and_attachments(self) -> None:
         channel = SimpleNamespace(send=AsyncMock(return_value=SimpleNamespace(id=501)))
@@ -200,7 +211,8 @@ class GovernorBotTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(mirrored), 1)
         self.assertEqual(mirrored[0].category, "mail")
-        self.assertIn("Tax document arrived", mirrored[0].message)
+        self.assertEqual(mirrored[0].message, "Mail received.")
+        self.assertNotIn("Tax document arrived", mirrored[0].message)
         self.assertNotIn("Sensitive body", mirrored[0].message)
 
 

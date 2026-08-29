@@ -19,6 +19,7 @@ from kaos_governor.daily_digest import (
     DailyDigestService,
     KST,
     digest_day,
+    digest_events,
 )
 from kaos_governor.documents import PaperlessConfig, PaperlessDocumentService
 from kaos_governor.mail import (
@@ -365,6 +366,7 @@ class GovernorBot(discord.Client):
                 self.policy,
                 channel_id=settings.service_status_channel_id,
                 state_path=settings.service_status_state_path,
+                text_notifications=self.text_notifications,
             )
             if settings.service_status_enabled and settings.service_status_channel_id is not None
             else None
@@ -749,8 +751,8 @@ class GovernorBot(discord.Client):
                     TextNotification(
                         key=f"system:startup:{__version__}:{time.time_ns()}",
                         category="system",
-                        title="KaosGDD System",
-                        message=content,
+                        title="",
+                        message="System online.",
                     )
                 )
             except (discord.HTTPException, TypeError):
@@ -912,10 +914,22 @@ class GovernorBot(discord.Client):
             TextNotification(
                 key=f"daily:{current.date().isoformat()}",
                 category="daily",
-                title="KaosGDD Daily",
-                message=content,
+                title="",
+                message="Good Morning.",
             )
         )
+        for event in digest_events(content):
+            event_text = event.strip()
+            punctuation = "" if event_text.endswith((".", "!", "?", "。", "！", "？")) else "."
+            event_key = hashlib.sha256(event.encode("utf-8")).hexdigest()[:16]
+            await self._queue_text_notification(
+                TextNotification(
+                    key=f"daily:event:{current.date().isoformat()}:{event_key}",
+                    category="daily",
+                    title="",
+                    message=f"Today. {event_text}{punctuation}",
+                )
+            )
         await asyncio.to_thread(
             self.daily_digest.record_sent,
             current.date(),
@@ -1140,8 +1154,8 @@ class GovernorBot(discord.Client):
                 TextNotification(
                     key=f"maintenance:{reminder.key}",
                     category="maintenance",
-                    title="KaosGDD Maintenance",
-                    message=content,
+                    title="",
+                    message="KaosBrain auth renewal.",
                 ),
             )
             sent_keys.add(reminder.key)
@@ -1171,15 +1185,8 @@ class GovernorBot(discord.Client):
             TextNotification(
                 key=f"mail:message:{key}",
                 category="mail",
-                title="KaosGDD Mail",
-                message="\n".join(
-                    (
-                        "New Naver mail.",
-                        f": {mail.mailbox}",
-                        f": from {mail.sender}",
-                        f": {mail.subject}",
-                    )
-                ),
+                title="",
+                message="Mail received.",
             )
         )
         return sent

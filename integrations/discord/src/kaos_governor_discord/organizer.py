@@ -156,8 +156,8 @@ class DiscordMailOrganizer:
                         TextNotification(
                             key=f"mail:digest:{digest_id}",
                             category="mail",
-                            title="KaosGDD Mail",
-                            message=render_digest_notification(digest),
+                            title="",
+                            message=f"{int(digest.get('totalUnread') or 0)} unread mail.",
                         ),
                     )
                 except Exception:

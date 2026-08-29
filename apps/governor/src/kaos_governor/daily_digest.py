@@ -286,6 +286,22 @@ def digest_day(content: str) -> date:
         raise DailyDigestError("daily_digest_date_invalid") from exc
 
 
+def digest_events(content: str) -> list[str]:
+    lines = content.splitlines()
+    try:
+        start = lines.index("### Events") + 1
+    except ValueError:
+        return []
+    events = []
+    for line in lines[start:]:
+        if line.startswith("### "):
+            break
+        value = line.removeprefix("- ").strip()
+        if value and value != "-" and not value.startswith("+"):
+            events.append(value)
+    return events
+
+
 class DailyDigestService:
     def __init__(self, config: DailyDigestConfig, adapter: CalendarAdapterClient) -> None:
         self.config = config

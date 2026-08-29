@@ -24,6 +24,16 @@ FAX_COMMAND = re.compile(r"^\s*fax\s*:\s*([+0-9][0-9\s().-]*)\s*$", re.IGNORECAS
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff", ".bmp"}
 
 
+def watch_fax_message(action: FaxAction) -> str:
+    if action.key.startswith("incoming:"):
+        return "Fax received."
+    if action.key.endswith(":failed"):
+        return "Fax send failed."
+    if action.key.endswith(":sent"):
+        return "Fax sent."
+    return ""
+
+
 def safe_filename(value: str) -> str:
     filename = unicodedata.normalize("NFC", Path(value or "fax.pdf").name)
     filename = re.sub(r'[\x00-\x1f\x7f"\\/]+', "-", filename).strip(" .-")
@@ -100,15 +110,16 @@ class DiscordFaxTransport:
     async def _notification(self, action: FaxAction) -> None:
         channel = await self._channel(self.notification_channel_id)
         await channel.send(action.content, allowed_mentions=NO_MENTIONS)
-        if self.text_notifications is not None:
+        watch_message = watch_fax_message(action)
+        if self.text_notifications is not None and watch_message:
             try:
                 await asyncio.to_thread(
                     self.text_notifications.notify,
                     TextNotification(
                         key=f"fax:{action.key}",
                         category="fax",
-                        title="KaosGDD Fax",
-                        message=action.content,
+                        title="",
+                        message=watch_message,
                     ),
                 )
             except Exception:

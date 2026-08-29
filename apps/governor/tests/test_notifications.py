@@ -95,6 +95,26 @@ class NotificationTests(unittest.TestCase):
         self.assertIn("07079664986", payload["message"][0])
         self.assertNotIn("file", payload)
 
+    def test_client_omits_optional_title_for_minimal_watch_alert(self) -> None:
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return None
+
+            def read(self):
+                return b'{"status":1}'
+
+        with tempfile.TemporaryDirectory() as temporary:
+            urlopen = mock.Mock(return_value=Response())
+            client = PushoverClient(self.config(Path(temporary)), urlopen=urlopen)
+            client.send(self.notification(title="", message="Good Morning."))
+
+        payload = urllib.parse.parse_qs(urlopen.call_args.args[0].data.decode("utf-8"))
+        self.assertNotIn("title", payload)
+        self.assertEqual(payload["message"], ["Good Morning."])
+
     def test_notify_delivers_immediately_and_deduplicates_durably(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             config = self.config(Path(temporary))
@@ -141,6 +161,17 @@ class NotificationTests(unittest.TestCase):
             service = TextNotificationService(self.config(Path(temporary)))
             with self.assertRaisesRegex(NotificationError, "category_not_mirrored"):
                 service.enqueue(self.notification(category="task", key="task:event-1"))
+
+    def test_empty_title_is_allowed_for_minimal_watch_alert(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            client = mock.Mock()
+            service = TextNotificationService(self.config(Path(temporary)), client=client)
+
+            service.notify(self.notification(title="", message="Fax received."))
+
+        delivered = client.send.call_args.args[0]
+        self.assertEqual(delivered.title, "")
+        self.assertEqual(delivered.message, "Fax received.")
 
     def test_disabled_service_does_not_create_an_outbox(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

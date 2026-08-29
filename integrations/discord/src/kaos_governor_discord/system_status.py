@@ -16,6 +16,7 @@ import urllib.error
 import urllib.request
 
 import discord
+from kaos_governor.notifications import TextNotification, TextNotificationService
 
 from .access import AccessPolicy
 from .markdown import NO_MENTIONS
@@ -76,6 +77,8 @@ class DiscordServiceStatusState:
     restart_requests: dict[str, int] | None = None
     restart_results: dict[str, str] | None = None
     restart_audit: list[dict[str, object]] | None = None
+    service_states: dict[str, str] | None = None
+    service_incidents: dict[str, int] | None = None
 
 
 SERVICES: tuple[ServiceStatusItem, ...] = (
@@ -116,6 +119,7 @@ class DiscordServiceStatusSurface:
         channel_id: int,
         state_path: Path,
         environment: Mapping[str, str] | None = None,
+        text_notifications: TextNotificationService | None = None,
     ) -> None:
         self.bot = bot
         self.policy = policy
@@ -123,6 +127,7 @@ class DiscordServiceStatusSurface:
         self.state_path = state_path
         self.state = self._load_state()
         self.environment = os.environ if environment is None else environment
+        self.text_notifications = text_notifications
         self.timeout_seconds = service_status_timeout_seconds(self.environment)
         self.refresh_seconds = service_status_refresh_seconds(self.environment)
         self.message_refresh_delay_seconds = MESSAGE_REFRESH_DELAY_SECONDS
@@ -131,6 +136,7 @@ class DiscordServiceStatusSurface:
     async def ensure_message(self) -> None:
         channel = await self.channel()
         results = await self.check_services()
+        await self._notify_service_state_changes(results)
         if self.state.legacy_message_id:
             await self._delete_message_id(channel, self.state.legacy_message_id)
             self.state.legacy_message_id = 0
@@ -260,6 +266,47 @@ class DiscordServiceStatusSurface:
     async def check_service(self, item: ServiceStatusItem) -> ServiceProbeResult:
         return await asyncio.to_thread(check_service, item, self.environment, self.timeout_seconds)
 
+    async def _notify_service_state_changes(
+        self,
+        results: Mapping[str, ServiceProbeResult],
+    ) -> None:
+        previous = dict(self.state.service_states or {})
+        incidents = dict(self.state.service_incidents or {})
+        labels = {item.key: item.label for item in SERVICES}
+        for key, result in results.items():
+            old_state = previous.get(key, "")
+            if result.state == "down" and old_state != "down":
+                incident = int(incidents.get(key, 0)) + 1
+                incidents[key] = incident
+                await self._send_text_notification(
+                    TextNotification(
+                        key=f"system:service:{key}:down:{incident}",
+                        category="system",
+                        title="",
+                        message=f"{labels.get(key, key)} is down.",
+                    )
+                )
+            elif old_state == "down" and result.state == "healthy":
+                incident = max(1, int(incidents.get(key, 0)))
+                await self._send_text_notification(
+                    TextNotification(
+                        key=f"system:service:{key}:back:{incident}",
+                        category="system",
+                        title="",
+                        message=f"{labels.get(key, key)} is back.",
+                    )
+                )
+        self.state.service_states = {key: result.state for key, result in results.items()}
+        self.state.service_incidents = incidents
+
+    async def _send_text_notification(self, notification: TextNotification) -> None:
+        if self.text_notifications is None:
+            return
+        try:
+            await asyncio.to_thread(self.text_notifications.notify, notification)
+        except Exception:
+            LOGGER.exception("Failed to queue service status text alert: %s", notification.key)
+
     async def _upsert_service_message(
         self,
         channel: discord.abc.Messageable,
@@ -350,6 +397,16 @@ class DiscordServiceStatusSurface:
                     for item in list(raw.get("restartAudit") or [])
                     if isinstance(item, dict)
                 ][-50:],
+                service_states={
+                    str(key): str(value)
+                    for key, value in dict(raw.get("serviceStates") or {}).items()
+                    if str(key)
+                },
+                service_incidents={
+                    str(key): int(value)
+                    for key, value in dict(raw.get("serviceIncidents") or {}).items()
+                    if str(key) and int(value) > 0
+                },
             )
         except (TypeError, ValueError):
             return DiscordServiceStatusState()
@@ -361,6 +418,8 @@ class DiscordServiceStatusSurface:
             "restartRequests": dict(self.state.restart_requests or {}),
             "restartResults": dict(self.state.restart_results or {}),
             "restartAudit": list(self.state.restart_audit or []),
+            "serviceStates": dict(self.state.service_states or {}),
+            "serviceIncidents": dict(self.state.service_incidents or {}),
         }
         temporary = self.state_path.with_suffix(f"{self.state_path.suffix}.tmp")
         temporary.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
