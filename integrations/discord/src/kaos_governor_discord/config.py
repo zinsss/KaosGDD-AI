@@ -130,6 +130,7 @@ class Settings:
     brain_tools_port: int
     governor_api_url: str
     governor_api_token: str
+    ios_shortcuts_token: str
     paperless_api_token: str
     paperless_base_url: str
     paperless_public_url: str
@@ -337,6 +338,11 @@ class Settings:
             raise ConfigurationError(
                 "GOVERNOR_API_TOKEN is required when Memos search, Brain tools, tasks, or supplies are enabled"
             )
+        ios_shortcuts_token = _secret(source, "IOS_SHORTCUTS_TOKEN")
+        if brain_tools_enabled and not ios_shortcuts_token:
+            raise ConfigurationError(
+                "IOS_SHORTCUTS_TOKEN or IOS_SHORTCUTS_TOKEN_FILE is required when Brain tools are enabled"
+            )
         paperless_api_token = _secret(source, "PAPERLESS_API_TOKEN")
         paperless_base_url = (
             source.get("PAPERLESS_BASE_URL", "").strip()
@@ -406,6 +412,7 @@ class Settings:
             brain_tools_port=brain_tools_port,
             governor_api_url=governor_api_url,
             governor_api_token=governor_api_token,
+            ios_shortcuts_token=ios_shortcuts_token,
             paperless_api_token=paperless_api_token,
             paperless_base_url=paperless_base_url,
             paperless_public_url=source.get("PAPERLESS_PUBLIC_URL", "").strip(),

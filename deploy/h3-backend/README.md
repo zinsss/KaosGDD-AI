@@ -42,7 +42,8 @@ Ready-made backend services keep their service-native paths under `/srv/kaos`,
 for example `/srv/kaos/data/radicale`, `/srv/kaos/data/memos`, and
 `/srv/kaos/data/vaultwarden`.
 
-The setup command generates `governor_api_token`. Add
+The setup command generates `governor_api_token` and the separate, read-only
+`ios_shortcuts_token`. Add
 `memos_access_token` only when Memos search is enabled, and
 `naver_mail_password` only when Naver mail is enabled.
 
@@ -108,9 +109,26 @@ GOVERNOR_BRAIN_TOOLS_PORT=8098
 ```
 
 The tool API requires the `GOVERNOR_API_TOKEN` bearer token and exposes only
-narrow `/tools/...` endpoints for Brain. Allow TCP 8098 only from H4 in the
-host firewall. Do not publish Governor tools through Caddy, cloudflared, or the
-public Internet.
+narrow `/tools/...` endpoints for Brain. Allow TCP 8098 only from H4 and
+personal tailnet devices that need Shortcuts access. Do not publish Governor
+tools through Caddy, cloudflared, or the public Internet.
+
+For iOS Shortcuts, add a tailnet-only HTTPS front end once (never use Funnel):
+
+```bash
+sudo tailscale serve --yes --bg http://<H3_TAILSCALE_IP>:8098
+```
+
+An iPhone with Tailscale connected can then fetch the live supplies list
+without storing the powerful Governor token:
+
+```text
+GET https://<H3_MAGICDNS_NAME>/shortcuts/supplies
+Authorization: Bearer <IOS_SHORTCUTS_TOKEN>
+```
+
+The JSON response includes `items` as an array and `text` as a ready-to-show
+bullet list. The route is fixed to the `supplies` profile and is read-only.
 
 KaosPACS-AIO temporary image second-look calls the same internal tool API:
 

@@ -399,6 +399,7 @@ class GovernorBot(discord.Client):
                 settings.brain_tools_host,
                 settings.brain_tools_port,
                 governor_api_token=settings.governor_api_token,
+                ios_shortcuts_token=settings.ios_shortcuts_token,
                 calendar_adapter=self.calendar_adapter,
                 memos=self.memos,
                 paperless=self.paperless,

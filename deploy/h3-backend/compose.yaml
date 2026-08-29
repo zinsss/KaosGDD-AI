@@ -16,6 +16,7 @@ services:
     secrets:
       - discord_bot_token
       - governor_api_token
+      - ios_shortcuts_token
       - memos_access_token
       - naver_mail_password
       - paperless_api_token
@@ -62,6 +63,8 @@ secrets:
     file: ./secrets/discord_bot_token
   governor_api_token:
     file: ./secrets/governor_api_token
+  ios_shortcuts_token:
+    file: ./secrets/ios_shortcuts_token
   memos_access_token:
     file: ./secrets/memos_access_token
   naver_mail_password:

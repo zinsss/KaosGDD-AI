@@ -236,10 +236,12 @@ class BrainToolServer:
         imaging_second_look: ImagingSecondLookClient | None = None,
         second_look_status_path: Path | None = None,
         second_look_status_callback: Callable[[], Awaitable[None]] | None = None,
+        ios_shortcuts_token: str = "",
     ) -> None:
         self._host = host
         self._port = port
         self._governor_api_token = governor_api_token
+        self._ios_shortcuts_token = ios_shortcuts_token
         self._calendar_adapter = calendar_adapter
         self._memos = memos
         self._paperless = paperless
@@ -271,6 +273,7 @@ class BrainToolServer:
     def application(self) -> web.Application:
         app = web.Application(client_max_size=32 * 1024 * 1024)
         app.middlewares.append(self._auth_middleware)
+        app.router.add_get("/shortcuts/supplies", self._shortcut_supplies)
         app.router.add_get("/tools/today", self._today)
         app.router.add_get("/tools/events/upcoming", self._upcoming_events)
         app.router.add_get("/tools/calendar/week", self._calendar_week)
@@ -321,16 +324,40 @@ class BrainToolServer:
 
     @web.middleware
     async def _auth_middleware(self, request: web.Request, handler):
-        if not self._authorized(request):
+        if request.path.startswith("/shortcuts/"):
+            if not self._authorized(request, self._ios_shortcuts_token):
+                return web.json_response({"error": "shortcuts_api_unauthorized"}, status=401)
+            return await handler(request)
+        if not self._authorized(request, self._governor_api_token):
             return web.json_response({"error": "governor_api_unauthorized"}, status=401)
         return await handler(request)
 
-    def _authorized(self, request: web.Request) -> bool:
-        if not self._governor_api_token:
+    @staticmethod
+    def _authorized(request: web.Request, token: str) -> bool:
+        if not token:
             return False
         supplied = request.headers.get("Authorization", "")
-        expected = f"Bearer {self._governor_api_token}"
+        expected = f"Bearer {token}"
         return hmac.compare_digest(supplied.encode("utf-8"), expected.encode("utf-8"))
+
+    async def _shortcut_supplies(self, _request: web.Request) -> web.Response:
+        try:
+            tasks = await asyncio.to_thread(self._calendar_adapter.list_tasks, "supplies")
+        except CalendarAdapterError as exc:
+            return web.json_response({"error": str(exc)}, status=502)
+        titles = [
+            " ".join(str(task.get("title") or "").split())
+            for task in active_task_payloads(tasks)
+        ]
+        titles = sorted((title for title in titles if title), key=str.casefold)
+        return web.json_response(
+            {
+                "title": "Supplies",
+                "count": len(titles),
+                "items": titles,
+                "text": "\n".join(f"• {title}" for title in titles) if titles else "No supplies.",
+            }
+        )
 
     async def _today(self, request: web.Request) -> web.Response:
         profile = _profile(request)

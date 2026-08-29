@@ -303,6 +303,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
             "127.0.0.1",
             8098,
             governor_api_token="governor-secret",
+            ios_shortcuts_token="shortcut-secret",
             calendar_adapter=self.calendar,  # type: ignore[arg-type]
             memos=self.memos,  # type: ignore[arg-type]
             paperless=self.paperless,  # type: ignore[arg-type]
@@ -318,11 +319,53 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
     def headers(self):
         return {"Authorization": "Bearer governor-secret"}
 
+    def shortcut_headers(self):
+        return {"Authorization": "Bearer shortcut-secret"}
+
     async def test_tools_require_bearer_token(self) -> None:
         response = await self.client.get("/tools/today")
 
         self.assertEqual(response.status, 401)
         self.assertEqual((await response.json())["error"], "governor_api_unauthorized")
+
+    async def test_shortcut_supplies_returns_ready_to_show_list(self) -> None:
+        self.calendar.tasks = [
+            {"uid": "SUPPLY-2", "summary": "  티램주  ", "status": "NEEDS-ACTION"},
+            {"uid": "SUPPLY-1", "summary": "실크포어", "status": "NEEDS-ACTION"},
+            {"uid": "SUPPLY-3", "summary": "Already bought", "status": "COMPLETED"},
+        ]
+
+        response = await self.client.get("/shortcuts/supplies", headers=self.shortcut_headers())
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(
+            await response.json(),
+            {
+                "title": "Supplies",
+                "count": 2,
+                "items": ["실크포어", "티램주"],
+                "text": "• 실크포어\n• 티램주",
+            },
+        )
+        self.assertEqual(self.calendar.bootstrap_calls[-1], "supplies")
+
+    async def test_shortcut_and_governor_tokens_are_isolated(self) -> None:
+        shortcut_with_governor_token = await self.client.get(
+            "/shortcuts/supplies",
+            headers=self.headers(),
+        )
+        tool_with_shortcut_token = await self.client.get(
+            "/tools/today",
+            headers=self.shortcut_headers(),
+        )
+
+        self.assertEqual(shortcut_with_governor_token.status, 401)
+        self.assertEqual(
+            (await shortcut_with_governor_token.json())["error"],
+            "shortcuts_api_unauthorized",
+        )
+        self.assertEqual(tool_with_shortcut_token.status, 401)
+        self.assertEqual((await tool_with_shortcut_token.json())["error"], "governor_api_unauthorized")
 
     async def test_imaging_second_look_accepts_kaosaio_temporary_preview(self) -> None:
         response = await self.client.post(
