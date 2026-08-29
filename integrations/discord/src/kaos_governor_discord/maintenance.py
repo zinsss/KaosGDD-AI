@@ -14,6 +14,7 @@ from .markdown import escape_text
 
 
 DEFAULT_MAINTENANCE_TIMEOUT_SECONDS = 12.0
+DEFAULT_MAINTENANCE_REPORT_MAX_AGE = timedelta(days=2)
 DEFAULT_TARGETS = "kaosgdd=local:/srv/projects/KaosGDD-AI,kaosbrain=ssh:zin@kaosbrain:/srv/projects/KaosGDD-AI,kaosclinic=ssh:zin@kaosclinic:"
 DEFAULT_REPORT_PATH = "/data/discord-system/maintenance.json"
 
@@ -65,14 +66,15 @@ async def collect_maintenance_reports(
 
 
 def collect_maintenance_report(target: MaintenanceTarget, timeout_seconds: float, runner: Runner) -> MaintenanceReport:
+    collected_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     try:
         completed = runner(target, maintenance_probe_script(target.repo_path), timeout_seconds)
     except (OSError, subprocess.SubprocessError) as exc:
-        return MaintenanceReport(target, False, {}, stable_error(exc))
+        return MaintenanceReport(target, False, {}, stable_error(exc), collected_at)
     if completed.returncode != 0:
         detail = (completed.stderr or completed.stdout or f"exit {completed.returncode}").strip()
-        return MaintenanceReport(target, False, {}, detail[:200])
-    return MaintenanceReport(target, True, parse_probe_output(completed.stdout))
+        return MaintenanceReport(target, False, {}, detail[:200], collected_at)
+    return MaintenanceReport(target, True, parse_probe_output(completed.stdout), collected_at=collected_at)
 
 
 def load_stored_maintenance_reports(env: Mapping[str, str]) -> list[MaintenanceReport]:
@@ -302,6 +304,64 @@ def render_maintenance_report(report: MaintenanceReport) -> str:
         )
         lines.append(f"- OpenClaw config updated: {escape_text(facts.get('openclaw_last_touched', 'unknown'))}")
     return "\n".join(lines)
+
+
+def maintenance_issues(
+    reports: list[MaintenanceReport],
+    *,
+    now: datetime | None = None,
+    max_age: timedelta = DEFAULT_MAINTENANCE_REPORT_MAX_AGE,
+) -> tuple[str, ...]:
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    issues = []
+    for report in reports:
+        checked_at = _maintenance_report_time(report)
+        if checked_at is None or current.astimezone(timezone.utc) - checked_at > max_age:
+            continue
+        target = report.target.name
+        if not report.ok:
+            issues.append(f"{target}: check failed")
+            continue
+        facts = report.facts
+        if facts.get("reboot_required", "").strip().lower() == "yes":
+            issues.append(f"{target}: reboot required")
+        for key, label in (
+            ("os_updates", "OS updates"),
+            ("docker_package_updates", "Docker package updates"),
+            ("docker_unhealthy", "unhealthy containers"),
+        ):
+            count = _nonnegative_int(facts.get(key, ""))
+            if count > 0:
+                issues.append(f"{target}: {count} {label}")
+    return tuple(issues)
+
+
+def render_system_maintenance_reminder(issues: tuple[str, ...]) -> str:
+    return "\n".join(("## System maintenance required", *(f"- {escape_text(issue)}" for issue in issues)))
+
+
+def _maintenance_report_time(report: MaintenanceReport) -> datetime | None:
+    value = str(report.collected_at or report.facts.get("checked_at") or "").strip()
+    if not value:
+        return None
+    if value.endswith("Z"):
+        value = value[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _nonnegative_int(value: object) -> int:
+    try:
+        return max(0, int(str(value).strip()))
+    except (TypeError, ValueError):
+        return 0
 
 
 def due_openclaw_renewal_reminders(

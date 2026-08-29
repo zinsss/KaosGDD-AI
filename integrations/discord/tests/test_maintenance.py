@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 import subprocess
 import tempfile
 import unittest
@@ -13,10 +13,12 @@ from kaos_governor_discord.maintenance import (
     collect_maintenance_report,
     due_openclaw_renewal_reminders,
     load_stored_maintenance_reports,
+    maintenance_issues,
     maintenance_targets,
     parse_probe_output,
     render_openclaw_renewal_reminder,
     render_maintenance_reports,
+    render_system_maintenance_reminder,
 )
 
 
@@ -129,6 +131,32 @@ class MaintenanceTests(unittest.IsolatedAsyncioTestCase):
         text = render_openclaw_renewal_reminder(reminders[0])
         self.assertIn("KaosAI ChatGPT renewal", text)
         self.assertIn("expires on: `2026-08-29`", text)
+
+    def test_fresh_actionable_report_requires_maintenance_but_stale_report_does_not(self) -> None:
+        report = MaintenanceReport(
+            MaintenanceTarget("kaosbrain", "ssh", "zin@kaosbrain", "/repo"),
+            True,
+            {
+                "os_updates": "16",
+                "docker_package_updates": "1",
+                "docker_unhealthy": "0",
+                "reboot_required": "no",
+            },
+            collected_at="2026-08-29T01:00:00Z",
+        )
+
+        fresh = maintenance_issues(
+            [report],
+            now=datetime(2026, 8, 29, 2, 0, tzinfo=timezone.utc),
+        )
+        stale = maintenance_issues(
+            [report],
+            now=datetime(2026, 9, 2, 2, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(fresh, ("kaosbrain: 16 OS updates", "kaosbrain: 1 Docker package updates"))
+        self.assertEqual(stale, ())
+        self.assertIn("System maintenance required", render_system_maintenance_reminder(fresh))
 
     def test_render_failed_report(self) -> None:
         text = render_maintenance_reports(

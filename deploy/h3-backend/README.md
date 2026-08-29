@@ -55,11 +55,12 @@ and the account user key in `secrets/pushover_app_token` and
 The durable outbox sends minimal one-line alerts: `Good Morning.`, one
 `Today. <event>.` line per daily event, final fax receipt/sent/failure states,
 `Mail received.`, unread-mail counts, service down/recovery transitions, auth
-renewal reminders, and enabled system-startup alerts. Fax queued/sending stages
-stay in Discord to avoid watch noise. Task reminders are deliberately excluded
-because they already use the native iOS calendar/reminder notification path.
-Control messages, Brain selector refreshes, archives, message details, document
-bodies, attachments, and fax PDFs are never sent to Pushover.
+renewal reminders, fresh actionable maintenance reports, and enabled
+system-startup alerts. Fax queued/sending stages stay in Discord to avoid watch
+noise. Task reminders are deliberately excluded because they already use the
+native iOS calendar/reminder notification path. Control messages, Brain selector
+refreshes, archives, message details, document bodies, attachments, and fax PDFs
+are never sent to Pushover.
 
 The optional daily digest is sent once at `DAILY_DIGEST_TIME` in KST. It uses
 the selected live calendar profile, today's Radicale events and active due

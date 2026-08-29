@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 import tempfile
 import unittest
 from pathlib import Path
@@ -180,6 +180,60 @@ class GovernorBotTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(mirrored.category, "maintenance")
         self.assertEqual(mirrored.title, "")
         self.assertEqual(mirrored.message, "KaosBrain auth renewal.")
+
+    async def test_actionable_fresh_maintenance_report_sends_simple_watch_alert_once(self) -> None:
+        class FakeChannel:
+            def __init__(self) -> None:
+                self.sent: list[str] = []
+
+            async def send(self, content, **_kwargs):
+                self.sent.append(content)
+
+        async def fake_collect():
+            return [
+                MaintenanceReport(
+                    MaintenanceTarget("kaosgdd", "local", "", "/repo"),
+                    True,
+                    {
+                        "os_updates": "2",
+                        "docker_package_updates": "0",
+                        "docker_unhealthy": "0",
+                        "reboot_required": "no",
+                    },
+                    collected_at=datetime.now(timezone.utc).isoformat(),
+                )
+            ]
+
+        original_collect = bot_module.collect_maintenance_reports
+        bot_module.collect_maintenance_reports = fake_collect
+        try:
+            with tempfile.TemporaryDirectory() as temporary:
+                channel = FakeChannel()
+                bot = SimpleNamespace(
+                    settings=SimpleNamespace(
+                        system_channel_id=1536016952521261190,
+                        service_status_state_path=Path(temporary) / "status.json",
+                    ),
+                    get_channel=lambda _channel_id: channel,
+                    fetch_channel=None,
+                    text_notifications=SimpleNamespace(
+                        config=SimpleNamespace(enabled=True),
+                        notify=Mock(),
+                    ),
+                )
+
+                first = await GovernorBot._send_due_maintenance_reminders(bot)  # type: ignore[arg-type]
+                second = await GovernorBot._send_due_maintenance_reminders(bot)  # type: ignore[arg-type]
+        finally:
+            bot_module.collect_maintenance_reports = original_collect
+
+        self.assertEqual(first, 1)
+        self.assertEqual(second, 0)
+        self.assertEqual(len(channel.sent), 1)
+        self.assertIn("System maintenance required", channel.sent[0])
+        mirrored = bot.text_notifications.notify.call_args.args[0]
+        self.assertEqual(mirrored.title, "")
+        self.assertEqual(mirrored.message, "System maintenance required.")
 
     async def test_new_mail_watch_alert_omits_preview_and_attachments(self) -> None:
         channel = SimpleNamespace(send=AsyncMock(return_value=SimpleNamespace(id=501)))

@@ -47,8 +47,10 @@ from .markdown import MarkdownField, MarkdownMessage, NO_MENTIONS
 from .maintenance import (
     collect_maintenance_reports,
     due_openclaw_renewal_reminders,
+    maintenance_issues,
     render_maintenance_reports,
     render_openclaw_renewal_reminder,
+    render_system_maintenance_reminder,
 )
 from .memos import DiscordMemosCapture
 from .organizer import DiscordMailOrganizer
@@ -1134,18 +1136,37 @@ class GovernorBot(discord.Client):
             return 0
         reports = await collect_maintenance_reports()
         reminders = due_openclaw_renewal_reminders(reports)
-        if not reminders:
-            return 0
+        issues = maintenance_issues(reports)
+        issue_key = (
+            f"system-maintenance:{hashlib.sha256(chr(0).join(issues).encode('utf-8')).hexdigest()[:20]}"
+            if issues
+            else ""
+        )
         state_path = self.settings.service_status_state_path.parent / "maintenance-reminders.json"
         sent_keys = load_maintenance_reminder_state(state_path)
         pending = [reminder for reminder in reminders if reminder.key not in sent_keys]
-        if not pending:
+        maintenance_pending = bool(issue_key and issue_key not in sent_keys)
+        if not pending and not maintenance_pending:
             return 0
         channel = self.get_channel(self.settings.system_channel_id) or await self.fetch_channel(
             self.settings.system_channel_id
         )
         if not isinstance(channel, discord.abc.Messageable) and not hasattr(channel, "send"):
             raise TypeError("configured system channel is not messageable")
+        sent_count = 0
+        if maintenance_pending:
+            await channel.send(render_system_maintenance_reminder(issues), allowed_mentions=NO_MENTIONS)
+            await GovernorBot._queue_text_notification(
+                self,
+                TextNotification(
+                    key=f"maintenance:{issue_key}",
+                    category="maintenance",
+                    title="",
+                    message="System maintenance required.",
+                ),
+            )
+            sent_keys.add(issue_key)
+            sent_count += 1
         for reminder in pending:
             content = render_openclaw_renewal_reminder(reminder)
             await channel.send(content, allowed_mentions=NO_MENTIONS)
@@ -1159,8 +1180,9 @@ class GovernorBot(discord.Client):
                 ),
             )
             sent_keys.add(reminder.key)
+            sent_count += 1
         save_maintenance_reminder_state(state_path, sent_keys)
-        return len(pending)
+        return sent_count
 
     async def _mail_channel(self) -> discord.abc.Messageable:
         channel_id = self.settings.mail_archive_channel_id
