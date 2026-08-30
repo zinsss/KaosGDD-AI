@@ -1284,6 +1284,8 @@ Phase 6 slice 2 production deployment (2026-08-30):
   was synced byte-for-byte with zero service restarts
 - follow-up commit `d7b7c2d` flattened the selector, removed its border and
   native chevron, and uses `•` as the only dropdown indicator
+- follow-up commit `a7a8643` also removes every focus/active outline, border,
+  shadow, background, and tap highlight from the selector
 
 Rollback: restore the static portal from commit `c9f1bc0` and run
 `family-portal-sync`. No data reconciliation is required.
@@ -1403,6 +1405,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | 6 | Promoted the compact personal main-menu selector | Commit `216d1ba`; both host profiles serve byte-matching versioned assets; exact menu order verified; migrated-service preflight passed; related containers retained zero restarts | Slice 2 deployed; rollback is static commit `c9f1bc0`; no backend or data change |
 | 2026-08-30 | 6 | Made the personal selector the sole visible page title | Commit `ba15c8e`; duplicate route heading and visible menu caption removed; deployed HTML/CSS match Git; portal and Governor workers retained zero restarts | Presentation-only follow-up; backend and Family behavior unchanged |
 | 2026-08-30 | 6 | Flattened the personal title selector | Commit `d7b7c2d`; transparent borderless selector with `•` indicator; versioned CSS matches production; portal retained zero restarts | Presentation-only follow-up; no backend or data change |
+| 2026-08-30 | 6 | Kept the selector borderless while focused or active | Commit `a7a8643`; focus/active outline, shadow, background, border, and tap highlight removed; versioned CSS matches production | Presentation-only follow-up; no backend or data change |
 
 ## How to Update This Tracker
 
