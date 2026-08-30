@@ -433,10 +433,23 @@ html.isAgendaSuppliesEmbed body {
 }
 
 .mainMenuPicker {
+  position: relative;
   display: grid;
   justify-self: end;
   width: min(100%, 210px);
   min-width: 148px;
+}
+
+.mainMenuPicker::after {
+  content: "•";
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  color: var(--nord8);
+  font-size: 1.2rem;
+  line-height: 1;
+  pointer-events: none;
+  transform: translateY(-50%);
 }
 
 .mainMenuPicker > span {
@@ -451,12 +464,14 @@ html.isAgendaSuppliesEmbed body {
 }
 
 .mainMenuPicker select {
+  -webkit-appearance: none;
+  appearance: none;
   width: 100%;
   min-height: 44px;
-  padding: 6px 34px 6px 10px;
-  border: 1px solid var(--line-strong);
-  border-radius: 7px;
-  background: var(--surface);
+  padding: 6px 30px 6px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--nord13);
   font: inherit;
   font-size: 1.18rem;
