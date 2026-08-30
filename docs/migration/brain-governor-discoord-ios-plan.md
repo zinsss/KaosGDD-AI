@@ -21,8 +21,8 @@ H4, office-service, and stateful-service cutovers.
   production observation. Slice 2 routes direct Discord task/supplies writers
   through Governor and completed its H3 production observation on 2026-08-30
   after correcting and replay-verifying a false terminal UI failure. Memos
-  handler slice 1 is implemented and validated locally for the confirmed
-  Brain/iOS route; it is not deployed yet.
+  handler slice 1 is deployed for the confirmed Brain/iOS route and is under
+  production observation.
 - H4 Brain correction: Korean task-create requests using `만들어` or `생성`
   were corrected and deployed in commit `99011fb` on 2026-08-30. This was an
   intent parser deployment only and did not promote the Phase 3 Governor
@@ -40,7 +40,7 @@ H4, office-service, and stateful-service cutovers.
 | 0 | Audit current architecture and flows | Complete | No change | Complete |
 | 1 | Establish the Governor operation boundary | Complete and tested | Deployed and observed 2026-08-30 | Complete |
 | 2 | Persist operations, confirmations, and pending payloads | Complete and tested | Deployed and observed 2026-08-30 | Complete |
-| 3 | Route every meaningful mutation through Governor | Task slices complete; Memos handler slice 1 validated locally | Task slices 1 and 2 observed 2026-08-30 | In progress |
+| 3 | Route every meaningful mutation through Governor | Task slices complete; Memos handler slice 1 tested | Task slices observed; Memos slice 1 deployed 2026-08-30 | Production observation |
 | 4 | Make Brain transport-neutral | Not started | Not deployed | Planned |
 | 5 | Isolate KaosDiscoord and notification delivery | Not started | Not deployed | Planned |
 | 6 | Add stable iOS APIs and lightweight clients | Pilot read endpoint only | Pilot active | Planned |
@@ -359,7 +359,7 @@ Mutation inventory and current routing:
 | Discord task/supply buttons and channel commands | `DiscordTasksSurface` to governed task execution | Yes | `TaskMutationService` | Slice 2 complete; surfaces configured inactive |
 | Portal task/event writes | Calendar adapter proxy | No | No | Later task/event slice |
 | Recurring task synchronization | Governor API recurring service to calendar adapter | Partial domain ownership, no durable operation | Recurring service only | Later task slice |
-| Memos proposals | `BrainToolServer` confirmation routes to memo handler locally | Yes | `MemoMutationService` locally | Memos slice 1 validated locally |
+| Memos proposals | `BrainToolServer` confirmation routes to memo handler | Yes | `MemoMutationService` | Memos slice 1 deployed |
 | Discord memo capture and controls | `DiscordMemosCapture` direct to `MemosService` | No | No | Memos slice 2 |
 | Paperless metadata proposals | `BrainToolServer` confirmation routes | Yes | No | Domain 3 |
 | Event proposals | `BrainToolServer` confirmation routes | Yes | No | Domain 4 |
@@ -548,7 +548,7 @@ Slice 2 observation incident and correction (2026-08-30):
   reports Governor, Discord, and Brain tools reachable. This closes slice 2's
   production observation gate.
 
-Memos slice 1 implemented locally:
+Memos slice 1 implemented and deployed:
 
 - Added transport-neutral `MemoMutationCommand`, `MemoMutationService`, and a
   narrow Memos mutation adapter protocol under the Governor Memos domain.
@@ -592,9 +592,31 @@ Memos slice 1 production gate:
 - [x] Durable memory and PostgreSQL execution/replay tests
 - [x] Governor, Discord, and Brain regression suites
 - [x] Review and commit
-- [ ] Controlled H3 deployment
+- [x] Controlled H3 deployment
 - [ ] Reconcile a normal confirmed memo with Memos and Governor audit state
 - [ ] Slice observation gate
+
+Memos slice 1 production promotion evidence (2026-08-30):
+
+- Commit `1e6a3aa` was deployed through the guarded H3 restart. The preceding
+  task-slice image is retained as
+  `kaosgdd-ai-governor-discord:rollback-7521ac0` with image ID
+  `sha256:d3d421dc9f46e69515b9fb0a6d354ce4de89085a2b147365e4be05c4b844dc40`.
+  The running Memos handler image is
+  `sha256:ebbe0fe15f8116f4fa149b5d3f6d99a9672998a5ab5f22d42dd91b6effaf9275`.
+- Installed runtime inspection confirms all three memo handlers, confirmed
+  route delegation to `MemoMutationService`, no direct Memos create/update/
+  delete call in the confirmation handler, and one shared handler owned by the
+  bot.
+- Docker is healthy with zero restarts. Discord reconnected, restored its
+  persistent views, and completed startup initialization; Memos reports healthy
+  and configured. The direct memo-capture surface remains enabled on its
+  unchanged writer.
+- All four preceding durable operations remain completed and the pending
+  payload table remains empty. H4 doctor reports Governor reachability,
+  Discord readiness, and Brain tools enabled.
+- One normal confirmed Brain memo and authoritative Memos/audit reconciliation
+  remain required to close this slice's observation gate.
 
 Risk: low to medium. This changes only final dispatch after the existing
 confirmation has been approved. The direct capture UI remains on its current
@@ -794,6 +816,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | 3 | Diagnosed a false Discord failure after the slice 2 observation task had completed | Operation completed once and authoritative UID matched; a repeated approval hit correct payload cleanup and received `operation_payload_not_found`; idempotent terminal receipt tests pass for the same actor while another actor is rejected | Task data is correct; approval-replay correction validated locally and awaiting H3 promotion |
 | 2026-08-30 | 3 | Promoted the approval-replay correction and closed task slice 2 observation | Exact completed confirmation replay returned the original UID with no second write; 4 completed operations and 0 payloads retained; container healthy with zero restarts; Discord and H4 dependencies ready | Task slices 1 and 2 complete; rollback image `kaosgdd-ai-governor-discord:rollback-f6b8257` retained; Memos is next |
 | 2026-08-30 | 3 | Added the Governor Memos handler and routed confirmed Brain/iOS memo mutations through it | 9 focused memo + 78 tool tests; 231 Governor with all 11 PostgreSQL tests passed separately; 352 Discord + 321 Brain tests passed | None; Memos slice 1 validated locally, direct Discord capture writer unchanged |
+| 2026-08-30 | 3 | Promoted Memos handler slice 1 to H3 | Commit `1e6a3aa`; installed route delegates to the shared handler with no direct confirmation write; container healthy with zero restarts; 4 completed operations retained and 0 pending payloads; H4 dependencies ready | Production observation started; direct memo-capture writer unchanged; rollback image `kaosgdd-ai-governor-discord:rollback-7521ac0` retained |
 
 ## How to Update This Tracker
 
