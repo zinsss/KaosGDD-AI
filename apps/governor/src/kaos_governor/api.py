@@ -6,6 +6,7 @@ import re
 import urllib.parse
 import urllib.request
 from datetime import UTC, datetime
+from functools import lru_cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import uuid
@@ -13,6 +14,11 @@ import uuid
 from kaos_governor import ledger
 from kaos_governor.calendar import GeneratedCalendarSettings
 from kaos_governor.database import connect, database_status, wait_for_database_and_migrate
+from kaos_governor.documents import (
+    DocumentIntakeError,
+    PaperlessConfig,
+    PaperlessDocumentService,
+)
 from kaos_governor.memos import relay as memos_relay
 from kaos_governor.tasks import PostgresRecurringTaskStore, RecurringTaskDefinition, RecurringTaskError, RecurringTaskService, validate_payload
 
@@ -79,6 +85,13 @@ def require_family_profile(headers) -> None:
         raise ValueError("family_profile_required")
 
 
+def require_main_access(headers) -> str:
+    profile, email = memos_relay.verify_cloudflare_access(headers)
+    if profile != "personal":
+        raise ValueError("main_profile_required")
+    return email
+
+
 def request_actor(headers) -> str:
     return ledger.actor_name(
         headers.get("Cf-Access-Authenticated-User-Email")
@@ -136,6 +149,86 @@ def proxy_memos(handler: BaseHTTPRequestHandler, method: str) -> None:
         body=body,
     )
     bytes_response(handler, status, content_type, response_body, private=True)
+
+
+@lru_cache(maxsize=1)
+def paperless_service() -> PaperlessDocumentService:
+    return PaperlessDocumentService(PaperlessConfig.from_env())
+
+
+def paperless_status_for_error(exc: Exception) -> int:
+    if isinstance(exc, memos_relay.MemosRelayError):
+        return exc.status
+    code = exc.code if isinstance(exc, DocumentIntakeError) else str(exc)
+    if code in {"main_profile_required", "paperless_document_not_found", "paperless_http_404"}:
+        return 404
+    if code in {
+        "paperless_limit_invalid",
+        "paperless_page_invalid",
+        "paperless_query_too_long",
+        "paperless_document_id_invalid",
+    }:
+        return 400
+    return 503
+
+
+def _paperless_query_int(params: dict[str, list[str]], name: str, default: int) -> int:
+    raw = (params.get(name) or [str(default)])[0]
+    try:
+        return int(raw)
+    except (TypeError, ValueError) as exc:
+        raise DocumentIntakeError(f"paperless_{name}_invalid") from exc
+
+
+def paperless_document_url(service: PaperlessDocumentService, document_id: int) -> str:
+    base = service.config.public_url.rstrip("/")
+    return f"{base}/documents/{document_id}/details" if base else ""
+
+
+def paperless_page_payload(
+    query_string: str,
+    service: PaperlessDocumentService | None = None,
+) -> dict[str, object]:
+    active_service = service or paperless_service()
+    params = urllib.parse.parse_qs(query_string, keep_blank_values=True)
+    query = " ".join((params.get("query") or [""])[0].split())
+    page_number = _paperless_query_int(params, "page", 1)
+    limit = _paperless_query_int(params, "limit", 20)
+    page = (
+        active_service.search_page(query, limit=limit, page=page_number)
+        if query
+        else active_service.list_page(limit=limit, page=page_number)
+    )
+    items: list[dict[str, object]] = []
+    for result in page.results:
+        item = result.as_dict()
+        item["url"] = paperless_document_url(active_service, result.document_id)
+        items.append(item)
+    return {
+        "ok": True,
+        "query": page.query,
+        "items": items,
+        "resultCount": page.result_count,
+        "totalCount": page.total_count,
+        "page": page.page,
+        "pageSize": page.page_size,
+    }
+
+
+def paperless_document_payload(
+    document_id: str,
+    service: PaperlessDocumentService | None = None,
+) -> dict[str, object]:
+    active_service = service or paperless_service()
+    document = active_service.get(document_id)
+    payload = document.as_dict()
+    payload["url"] = paperless_document_url(active_service, document.document_id)
+    return {"ok": True, "document": payload}
+
+
+def paperless_document_id(path: str) -> str:
+    match = re.fullmatch(r"/api/paperless/documents/([1-9][0-9]*)", path)
+    return match.group(1) if match else ""
 
 
 def recurring_status_for_error(exc: Exception) -> int:
@@ -666,6 +759,37 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 print(f"Ledger export failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "ledger_export_unavailable"})
+            return
+        if parsed.path == "/api/paperless/documents":
+            try:
+                require_main_access(self.headers)
+                json_response(self, 200, paperless_page_payload(parsed.query))
+            except (ValueError, DocumentIntakeError, memos_relay.MemosRelayError) as exc:
+                code = (
+                    exc.code
+                    if isinstance(exc, (DocumentIntakeError, memos_relay.MemosRelayError))
+                    else str(exc)
+                )
+                json_response(self, paperless_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Paperless browse failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "paperless_request_failed"})
+            return
+        paperless_id = paperless_document_id(parsed.path)
+        if paperless_id:
+            try:
+                require_main_access(self.headers)
+                json_response(self, 200, paperless_document_payload(paperless_id))
+            except (ValueError, DocumentIntakeError, memos_relay.MemosRelayError) as exc:
+                code = (
+                    exc.code
+                    if isinstance(exc, (DocumentIntakeError, memos_relay.MemosRelayError))
+                    else str(exc)
+                )
+                json_response(self, paperless_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Paperless detail failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "paperless_request_failed"})
             return
         if parsed.path.startswith("/api/memos/"):
             try:

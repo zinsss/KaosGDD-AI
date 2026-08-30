@@ -537,6 +537,9 @@ services_preflight() {
   if ! grep -q 'location \^~ /embed/agenda-supplies' "${root}/config/family-portal/nginx.conf"; then
     die "family portal must explicitly close retired /embed/agenda-supplies"
   fi
+  if ! grep -q 'location \^~ /api/paperless/' "${root}/config/family-portal/nginx.conf"; then
+    die "family portal must route the scoped Paperless API explicitly"
+  fi
   "${SERVICES_COMPOSE[@]}" config --quiet
   info "Migrated service preflight passed."
 }
@@ -548,6 +551,7 @@ family_portal_source_preflight() {
   require_file "${app_source}/index.html"
   require_file "${app_source}/app.js"
   require_file "${app_source}/deep-links.js"
+  require_file "${app_source}/documents.js"
   require_file "${app_source}/navigation.js"
   require_file "${app_source}/translations.js"
   if [ -d "${app_source}/app" ]; then
@@ -569,6 +573,9 @@ family_portal_source_preflight() {
   if ! grep -q 'location \^~ /embed/agenda-supplies' "${nginx_source}"; then
     die "family portal source must explicitly close retired /embed/agenda-supplies"
   fi
+  if ! grep -q 'location \^~ /api/paperless/' "${nginx_source}"; then
+    die "family portal source must route the scoped Paperless API explicitly"
+  fi
 }
 
 family_portal_sync() {
@@ -583,8 +590,8 @@ family_portal_sync() {
   rsync -a --delete --exclude '*.bak-*' "${app_source}/" "${root}/data/family-portal/"
   install -m 0644 "${nginx_source}" "${root}/config/family-portal/nginx.conf"
   if docker ps --format '{{.Names}}' | grep -qx 'family-portal'; then
+    "${SERVICES_COMPOSE[@]}" up --detach --no-deps --force-recreate family-portal
     docker exec family-portal nginx -t
-    docker exec family-portal nginx -s reload
   fi
   services_preflight
   info "Family portal synced from repository source."
@@ -598,6 +605,7 @@ family_transition_preflight() {
   require_nonempty_file "${root}/secrets/governor-postgres.env"
   require_nonempty_file "${root}/secrets/governor-api.env"
   require_nonempty_file "${root}/secrets/kaosgdd-adapters.env"
+  require_secret paperless_api_token
   require_dir "${governor_state_root}/postgres"
   require_file "${governor_state_root}/postgres/PG_VERSION"
   require_dir "${calendar_adapter_root}"
@@ -619,6 +627,9 @@ edge_preflight() {
   fi
   if grep -Eq 'reverse_proxy[[:space:]]+[^[:space:]]*8008|KAOSSUPPLIES|supplies\.kaosgdd\.net.*reverse_proxy' "${root}/config/Caddyfile"; then
     die "edge config must not proxy retired supplies web routes"
+  fi
+  if ! grep -Eq 'reverse_proxy[[:space:]]+personal-memos-web:80' "${root}/config/Caddyfile"; then
+    die "edge config must route personal Memos to the local Kaos client"
   fi
   if awk '
     /handle[[:space:]]+@(kaosgdd_documents_api|kaosgdd_hwp_handoff_api|kaosgdd_mail_organizer_api|kaosgdd_rhwp|hwp)[[:space:]]*\{/ { block = 1 }
@@ -691,8 +702,8 @@ case "${command}" in
   services-up) services_preflight; "${SERVICES_COMPOSE[@]}" up --detach memos radicale vaultwarden sftpgo family-portal ;;
   services-down) load_env; "${SERVICES_COMPOSE[@]}" stop memos radicale vaultwarden sftpgo family-portal ;;
   family-preflight) family_transition_preflight ;;
-  family-up) family_transition_preflight; COMPOSE_PROFILES=family-transition "${SERVICES_COMPOSE[@]}" up --detach --build governor-postgres governor-api calendar-adapter family-memos-web ;;
-  family-down) load_env; COMPOSE_PROFILES=family-transition "${SERVICES_COMPOSE[@]}" stop governor-api family-memos-web calendar-adapter governor-postgres ;;
+  family-up) family_transition_preflight; COMPOSE_PROFILES=family-transition "${SERVICES_COMPOSE[@]}" up --detach --build governor-postgres governor-api calendar-adapter family-memos-web personal-memos-web ;;
+  family-down) load_env; COMPOSE_PROFILES=family-transition "${SERVICES_COMPOSE[@]}" stop governor-api family-memos-web personal-memos-web calendar-adapter governor-postgres ;;
   edge-preflight) edge_preflight ;;
   edge-config) load_env; "${EDGE_COMPOSE[@]}" config | redact_config ;;
   edge-up) edge_preflight; "${EDGE_COMPOSE[@]}" up --detach caddy cloudflared ;;

@@ -106,6 +106,26 @@ services:
     networks:
       - backend
 
+  personal-memos-web:
+    image: kaosgdd-memos-web:0.1.5-trusted-host1
+    container_name: personal-memos-web
+    restart: unless-stopped
+    profiles: ["family-transition"]
+    environment:
+      APP_NAME: Kaos Memos
+      APP_MODE: personal
+      MEMOS_BASE_URL: ""
+      KAOSPRINT_URL: ""
+      DEFAULT_EDITOR_MODE: markdown
+      ALLOW_MARKDOWN_MODE: "true"
+      THEME: nord
+    ports:
+      - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:8093:80"
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
   governor-postgres:
     image: postgres:16-alpine@sha256:e013e867e712fec275706a6c51c966f0bb0c93cfa8f51000f85a15f9865a28cb
     container_name: governor-postgres
@@ -150,6 +170,14 @@ services:
       GOVERNOR_DB_STARTUP_DELAY_SECONDS: "1.5"
       CALENDAR_ADAPTER_INTERNAL_URL: "http://calendar-adapter:8091"
       MEMOS_INTERNAL_URL: "http://memos:5230"
+      PAPERLESS_API_TOKEN_FILE: "/run/secrets/paperless_api_token"
+      PAPERLESS_BASE_URL: "${PAPERLESS_BASE_URL:-}"
+      PAPERLESS_PUBLIC_URL: "${PAPERLESS_PUBLIC_URL:-}"
+      PAPERLESS_TIMEOUT_SECONDS: "${PAPERLESS_TIMEOUT_SECONDS:-60}"
+    secrets:
+      - paperless_api_token
+    group_add:
+      - "${KAOS_HOST_GID:-1000}"
     ports:
       - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:8096:8096"
     volumes:

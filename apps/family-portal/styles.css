@@ -2718,65 +2718,101 @@ h3 {
   gap: 8px;
 }
 
-.documentUploadForm {
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.paperlessSearch {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
   gap: 10px;
   padding: 12px 14px;
   border-bottom: 1px solid var(--line);
 }
 
-.documentUploadForm label {
-  min-width: 0;
-}
-
-.documentUploadForm input[type="file"] {
+.paperlessSearch input {
   width: 100%;
   min-width: 0;
+  min-height: 40px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  outline: none;
+  background: var(--surface);
+  color: var(--text);
+  padding: 8px 11px;
+  font: inherit;
 }
 
-.documentQueueNote {
-  margin: 0 0 10px;
+.paperlessSearch input:focus {
+  border-color: var(--nord8);
+  box-shadow: 0 0 0 2px rgba(136, 192, 208, 0.14);
+}
+
+.paperlessSummary {
+  margin: 0 0 8px;
   color: var(--muted);
   font-size: 0.78rem;
-  line-height: 1.45;
 }
 
-.documentQueueList {
+.paperlessList {
   display: grid;
 }
 
-.documentQueueRow {
+.paperlessRow {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 14px;
+  gap: 8px;
   min-width: 0;
-  padding: 12px 0;
   border-bottom: 1px solid var(--line);
 }
 
-.documentQueueRow:last-child {
+.paperlessRow:last-child {
   border-bottom: 0;
 }
 
-.documentQueueMain,
-.documentQueueMain strong {
+.paperlessRowMain {
+  display: grid;
+  gap: 4px;
+  width: 100%;
   min-width: 0;
+  padding: 13px 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-.documentQueueMain strong {
+.paperlessRowMain strong,
+.paperlessRowMain > span {
   display: block;
   overflow: hidden;
-  color: var(--text);
-  font-size: 0.9rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.documentQueueMeta,
-.documentQueueActions,
+.paperlessRowMain strong {
+  color: var(--text);
+  font-size: 0.92rem;
+}
+
+.paperlessRowMain > span {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.paperlessRowMeta,
+.paperlessDetailMeta,
 .documentQueueError {
   display: flex;
   align-items: center;
@@ -2784,39 +2820,36 @@ h3 {
   gap: 7px;
 }
 
-.documentQueueMeta {
-  margin-top: 5px;
-  color: var(--muted);
-  font-size: 0.72rem;
+.paperlessRowMeta {
+  color: var(--dim);
+  font-size: 0.7rem;
 }
 
-.documentSourcePill,
-.documentSubmittedPill {
-  display: inline-flex;
-  align-items: center;
-  min-height: 22px;
-  padding: 2px 7px;
-  border: 1px solid rgba(136, 192, 208, 0.34);
-  border-radius: 999px;
+.paperlessExternal {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
   color: var(--nord8);
-  text-transform: capitalize;
+  font-size: 1.1rem;
+  font-weight: 800;
 }
 
-.documentSubmittedPill {
-  border-color: rgba(163, 190, 140, 0.42);
-  color: var(--nord14);
-  text-transform: none;
+.paperlessExternal:hover,
+.paperlessRowMain:hover strong {
+  color: var(--nord13);
 }
 
-.documentQueueActions .openButton,
-.documentQueueActions .primaryButton,
-.documentQueueActions .dangerButton {
-  min-width: 62px;
-}
-
-.openButton.isDisabled {
-  cursor: default;
-  opacity: 0.58;
+.paperlessPagination {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  text-align: center;
 }
 
 .documentQueueError {
@@ -2828,19 +2861,55 @@ h3 {
   margin: 0;
 }
 
+.paperlessDetail {
+  min-width: 0;
+}
+
+.paperlessDetailBody {
+  display: grid;
+  gap: 14px;
+}
+
+.paperlessDetailMeta {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.paperlessOpenSource {
+  justify-self: start;
+}
+
+.paperlessOcr {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.paperlessOcr pre {
+  max-height: 48dvh;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: 0.78rem/1.55 "Sarasa Gothic Mono", ui-monospace, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 620px) {
-  .documentUploadForm,
-  .documentQueueRow {
-    grid-template-columns: minmax(0, 1fr);
+  .paperlessSearch {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
-  .documentUploadForm .openButton {
-    width: 100%;
+  .paperlessSearch input {
+    grid-column: 1 / -1;
   }
 
-  .documentQueueActions {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .paperlessSearch .primaryButton:last-child {
+    grid-column: -2;
   }
 }
 

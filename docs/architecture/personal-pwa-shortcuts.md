@@ -2,7 +2,9 @@
 
 Decision date: 2026-08-30
 
-Status: accepted; the selected-date deep-link slice was deployed on 2026-08-30.
+Status: accepted; selected-date navigation, the compact menu, the personal
+Memos client repair, and the read-only Paperless browser are deployed. The
+Memos/Paperless UI slice is awaiting normal user observation.
 
 ## Decision
 
@@ -53,12 +55,19 @@ of them becomes an authoritative data store.
 | Tasks | Radicale VTODO | Active/completed views and governed task actions |
 | Supplies | Dedicated Radicale VTODO collection | List and focused supply actions |
 | Fax | HylaFAX plus Governor operation/archive state | Send, recent status, and exact-result links |
-| Memos | Memos | Recent/search/create and links to the authoritative memo |
-| Documents | Paperless-ngx | Inbox/search/capture status and links to the authoritative document |
+| Memos | Memos | Embedded Kaos Memos client for recent/search/create/edit and authoritative storage |
+| Documents | Paperless-ngx | Recent/search/detail/OCR and links to the authoritative document |
 
 Advanced service-specific workflows may open the upstream Memos or Paperless
 PWA. KaosGDD does not copy their databases or reimplement every administration
 screen.
+
+The embedded Memos surface is the existing Kaos-built `kaosgdd-memos-web`
+client, not the upstream Memos application and not a new state store. Personal
+and Family run separate client containers/configurations while both use the
+profile-scoped, Cloudflare-verified Governor relay. Paperless uses a native
+KaosGDD Documents page and a narrow read-only `/api/paperless/documents`
+contract; its API token remains server-side.
 
 ## Personal and Family Isolation
 
@@ -125,3 +134,39 @@ through Governor and ETag-safe adapters.
 4. Add Share Sheet capture for Paperless and fax only after upload,
    confirmation, and cleanup contracts are tested.
 5. Observe each PWA/Shortcut replacement before retiring its Discord surface.
+
+## Memos and Paperless UI Slice — 2026-08-31
+
+Delivered:
+
+- restored the existing personal Kaos Memos client on H3 instead of rebuilding
+  or embedding the retired office service
+- retained the working Family Memos client and route unchanged
+- replaced the obsolete temporary-PDF queue screen with a KaosGDD-owned
+  Paperless recent/search/paging/detail/OCR interface
+- retained exact links to Paperless for advanced document operations
+- added a narrow Governor Paperless read API protected by verified Cloudflare
+  Access identity and restricted to the personal profile
+- kept the Paperless token, Memos tokens, and OCR access out of JavaScript and
+  Shortcuts
+
+The Paperless slice is deliberately read-only. Upload, metadata changes, and
+AI proposals will be added as governed operations with explicit confirmation
+where required. Paperless remains authoritative; KaosGDD stores no document or
+OCR copy.
+
+The current Kaos Memos client supports its established create/edit/delete
+workflow through the allow-listed Governor relay. A later hardening slice may
+move those writes onto the durable Governor operation ledger without changing
+the client or Memos authority.
+
+Production observation gate:
+
+- open Memos from the personal selector and confirm recent/search/edit behavior
+- open Documents and confirm the 26-document Paperless list, search, one detail
+  view, OCR rendering, paging, and the authoritative Paperless link
+- confirm Family Memos behavior remains unchanged
+
+Rollback requires no data migration: remove the personal Memos route/container,
+restore the previous portal assets and Governor API image, and leave Memos and
+Paperless data untouched.

@@ -66,6 +66,10 @@ H4, office-service, and stateful-service cutovers.
   one native selector for Agenda, Calendar, Tasks, Memos, Documents, Fax, Mail,
   Utils, and Settings. Family navigation is unchanged; Fax and Mail are honest
   transitional routes rather than false working controls.
+- Phase 6 slice 3 is deployed from the current `main` workstream: the existing
+  Kaos Memos client now runs locally for the personal route, and Documents is a
+  KaosGDD-owned read-only Paperless browser. Normal user UI observation is
+  pending before the slice is closed.
 - Database schema in production: additive migration `005`.
 - Working rule: finish and verify one boundary before moving another domain.
 
@@ -79,7 +83,7 @@ H4, office-service, and stateful-service cutovers.
 | 3 | Route every meaningful mutation through Governor | Task slices and Memos slices 1-2 implemented | Task slices and Memos slice 1 observed; Memos slice 2 deployed 2026-08-30 | Production observation |
 | 4 | Make Brain transport-neutral | Not started | Not deployed | Planned |
 | 5 | Retain brain-only KaosDiscoord; detach workers and notifications | Package, Pushover, digest, and fax/mail worker slices implemented | Pushover and digest observed; fax/mail observation active | In progress |
-| 6 | Retain the personal PWA and add stable iOS integrations | Selected-date deep link plus compact personal-menu selector implemented | Both slices deployed 2026-08-30 | In progress |
+| 6 | Retain the personal PWA and add stable iOS integrations | Deep link, compact menu, personal Memos repair, and Paperless browser implemented | UI slices deployed; Memos/Paperless observation active | In progress |
 | 7 | Remove compatibility debt and finish documentation/CI | Not started | Not deployed | Planned |
 | 8 | Add governed Brain system operations | Architecture accepted; current Guard remains deny-by-default | Not deployed | Planned |
 
@@ -1297,6 +1301,54 @@ Phase 6 slice 2 production deployment (2026-08-30):
 Rollback: restore the static portal from commit `c9f1bc0` and run
 `family-portal-sync`. No data reconciliation is required.
 
+Phase 6 slice 3 — reuse Kaos Memos and add a Kaos Paperless UI:
+
+- run the existing `kaosgdd-memos-web` image as a personal H3 client and point
+  only the personal `/memos-app/` route to it
+- preserve the separate working Family Memos client and configuration
+- replace the obsolete personal temporary-document queue with a read-only
+  Paperless recent/search/paging/detail/OCR interface
+- expose Paperless through a narrow same-origin `/api/paperless/documents`
+  contract on Governor API; do not expose the broad Brain tools token or the
+  Paperless API token to the browser
+- cryptographically verify the Cloudflare Access assertion and require the
+  personal profile before returning document metadata or OCR
+- keep Memos and Paperless authoritative and store no duplicate browser-side
+  state
+
+Risk: medium. This adds a sensitive read path for document OCR and changes the
+personal Memos runtime target. The read API is fail-closed without a valid
+Cloudflare assertion, Family is rejected, and no Paperless mutation is in this
+slice.
+
+Phase 6 slice 3 validation and deployment (2026-08-31):
+
+- 11 focused portal tests pass, including Paperless normalization and search
+  pagination; both JavaScript files pass syntax validation
+- six new Paperless API tests, all 15 existing Paperless adapter tests, and all
+  six Memos relay tests pass
+- the canonical container suite passes 256 Governor tests (11 PostgreSQL tests
+  skipped in the unit image) and 368 KaosDiscoord tests
+- the personal Memos client is running on H3 with `personal`/Nord configuration;
+  local edge requests return its versioned application and configuration
+- Governor API is healthy, reads its group-protected Paperless token as the
+  non-root service user, and reports 26 live Paperless documents
+- unauthenticated Paperless requests return HTTP 401 at Governor and through
+  the same-origin edge; they do not fall through to the SPA
+- the portal serves versioned `documents.js`, application JavaScript, and CSS;
+  nginx configuration and migrated-service preflight pass
+- an nginx bind-mount inode issue found during deployment was corrected by
+  recreating the stateless portal whenever its tracked nginx configuration is
+  synchronized
+
+Production observation remains open for a normal authenticated personal Memos
+session and Paperless browse/search/detail/link flow. Paperless upload, metadata
+mutation, and AI proposal/confirmation UI are follow-up slices.
+
+Rollback: restore `kaosgdd-ai-governor-api:rollback-pre-paperless-20260831`,
+restore the prior portal assets/config, and remove the personal Memos client
+route. No Memos or Paperless data reconciliation is required.
+
 ## Phase 7 — Cleanup, CI, and Deprecation
 
 Status: planned.
@@ -1414,6 +1466,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | 6 | Flattened the personal title selector | Commit `d7b7c2d`; transparent borderless selector with `•` indicator; versioned CSS matches production; portal retained zero restarts | Presentation-only follow-up; no backend or data change |
 | 2026-08-30 | 6 | Kept the selector borderless while focused or active | Commit `a7a8643`; focus/active outline, shadow, background, border, and tap highlight removed; versioned CSS matches production | Presentation-only follow-up; no backend or data change |
 | 2026-08-31 | 5 | Completed worker-owned daily-digest production observation | Organic `Good Morning.` scheduled at 07:00:12 KST and delivered by Pushover at 07:00:13 KST; outbox reached 9 delivered/0 pending; no errors; user confirmed receipt; worker and KaosDiscoord healthy with zero restarts | Slice 3 complete; no synthetic notification needed |
+| 2026-08-31 | 6 | Restored the existing personal Kaos Memos client and deployed the KaosGDD Paperless browser | 11 portal tests; 6 new API + 15 adapter + 6 relay tests; canonical 256 Governor/368 KaosDiscoord suite; Memos personal config served locally; Paperless reports 26 documents; unauthenticated edge/API reads fail HTTP 401 | Read-only Paperless and personal Memos UI deployed; authenticated user observation open; rollback API image retained |
 
 ## How to Update This Tracker
 

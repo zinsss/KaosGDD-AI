@@ -246,7 +246,11 @@ move for Radicale, Memos, Vaultwarden, SFTPGo, Family portal, Caddy, and
 cloudflared. Use their preflight commands only after data and secrets are
 staged. The `family-*` commands now start the remaining family transition
 services: Governor API, calendar adapter, Family Memos web, and the PostgreSQL
-database currently shared with migrated Governor modules. The PostgreSQL
+database currently shared with migrated Governor modules. They also run the
+separately configured personal Kaos Memos client used by the embedded personal
+PWA route. Governor API receives the Paperless token only for the narrow,
+Cloudflare-verified personal document read API; the browser never receives the
+token. The PostgreSQL
 service is named `governor-postgres` and stores data under
 `/srv/kaosgdd/kaosgovernor/postgres`.
 
@@ -273,7 +277,9 @@ the live H3 service path with:
 The sync command copies the repository assets to
 `/srv/kaos/data/family-portal`, installs the nginx config to
 `/srv/kaos/config/family-portal/nginx.conf`, validates the migrated services,
-and reloads the running `family-portal` container when present.
+and recreates the stateless `family-portal` container when present. Recreation
+is required because replacing a bind-mounted nginx config file can leave a
+running container attached to the prior inode even after an nginx reload.
 
 See [the H3 service migration prep note](../../docs/migration/h3-service-migration-prep.md).
 

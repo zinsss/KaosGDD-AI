@@ -251,7 +251,17 @@ const state = {
     checked: false,
     loading: false,
     error: "",
+    query: "",
+    appliedQuery: "",
+    page: 1,
+    pageSize: 20,
+    pageCount: 1,
+    resultCount: 0,
+    totalCount: 0,
     items: [],
+    selected: null,
+    detailLoading: false,
+    detailError: "",
   },
   holidays: {
     checked: false,
@@ -1674,76 +1684,108 @@ async function loadDocuments(options = {}) {
   if (state.documents.checked && !options.force) return;
   state.documents.loading = true;
   try {
-    const response = await fetch("/api/documents", {
+    const params = new URLSearchParams({
+      page: String(state.documents.page),
+      limit: String(state.documents.pageSize),
+    });
+    if (state.documents.appliedQuery) params.set("query", state.documents.appliedQuery);
+    const response = await fetch(`/api/paperless/documents?${params.toString()}`, {
       headers: { Accept: "application/json" },
       cache: "no-store",
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    const page = window.KAOS_PORTAL_DOCUMENTS.normalizePage(payload);
     state.documents = {
+      ...state.documents,
       checked: true,
       loading: false,
       error: "",
-      items: Array.isArray(payload.items) ? payload.items : [],
+      appliedQuery: page.query,
+      query: page.query,
+      page: page.page,
+      pageSize: page.pageSize,
+      pageCount: page.pageCount,
+      resultCount: page.resultCount,
+      totalCount: page.totalCount,
+      items: page.items,
     };
   } catch (error) {
     state.documents = {
+      ...state.documents,
       checked: true,
       loading: false,
-      error: error.message || uiText("documents.unavailable", "문서 대기열을 불러올 수 없습니다"),
+      error: error.message || "Paperless documents are unavailable",
       items: [],
     };
   }
   if (getRoute() === "documents") render();
 }
 
-async function uploadDocument(file, source = "upload") {
-  const params = new URLSearchParams({ filename: file.name || "document.pdf", source });
-  const response = await fetch(`/api/documents?${params.toString()}`, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/pdf",
-    },
-    body: file,
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+async function loadDocumentDetail(id) {
+  state.documents.detailLoading = true;
+  state.documents.detailError = "";
+  state.documents.selected = null;
+  if (getRoute() === "documents") render();
+  try {
+    const response = await fetch(`/api/paperless/documents/${encodeURIComponent(id)}`, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    state.documents.selected = window.KAOS_PORTAL_DOCUMENTS.normalizeDocument(payload.document);
+  } catch (error) {
+    state.documents.detailError = error.message || "Paperless document is unavailable";
+  } finally {
+    state.documents.detailLoading = false;
+  }
+  if (getRoute() === "documents") render();
+}
+
+async function showDocumentsPage(page) {
+  const target = Math.min(state.documents.pageCount, Math.max(1, Number(page) || 1));
+  if (target === state.documents.page && state.documents.checked) return;
+  state.documents.page = target;
   state.documents.checked = false;
+  state.documents.selected = null;
+  state.documents.detailError = "";
+  render();
   await loadDocuments({ force: true });
 }
 
-async function submitDocumentToPaperless(id) {
-  const response = await fetch(`/api/documents/${encodeURIComponent(id)}/paperless`, {
-    method: "POST",
-    headers: { Accept: "application/json" },
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+async function searchDocuments(query) {
+  state.documents.query = String(query || "").trim();
+  state.documents.appliedQuery = state.documents.query;
+  state.documents.page = 1;
   state.documents.checked = false;
+  state.documents.selected = null;
+  state.documents.detailError = "";
+  render();
   await loadDocuments({ force: true });
 }
 
-async function deleteQueuedDocument(id) {
-  const response = await fetch(`/api/documents/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-    headers: { Accept: "application/json" },
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
-  state.documents.checked = false;
-  await loadDocuments({ force: true });
+function closeDocumentDetail() {
+  state.documents.selected = null;
+  state.documents.detailLoading = false;
+  state.documents.detailError = "";
+  render();
 }
 
-function formatDocumentBytes(value) {
-  const bytes = Math.max(0, Number(value) || 0);
-  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB`;
+async function refreshDocuments() {
+  state.documents.checked = false;
+  state.documents.selected = null;
+  state.documents.detailError = "";
+  await loadDocuments({ force: true });
 }
 
 function formatDocumentDate(value) {
-  const date = new Date(value);
+  const raw = String(value || "");
+  const date = new Date(raw);
   if (Number.isNaN(date.getTime())) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return new Intl.DateTimeFormat("en-CA", { dateStyle: "medium", timeZone: "UTC" }).format(date);
+  }
   return new Intl.DateTimeFormat("en-CA", {
     month: "short",
     day: "numeric",
@@ -4416,59 +4458,106 @@ function renderCalendarTasksSuppliesEmbed() {
 }
 
 function renderDocuments() {
-  const rows = state.documents.items
+  const documents = state.documents;
+  const rows = documents.items
     .map((item) => {
-      const submitted = item.status === "submitted";
       return `
-        <div class="documentQueueRow">
-          <div class="documentQueueMain">
-            <strong>${escapeHtml(item.filename || "document.pdf")}</strong>
-            <div class="documentQueueMeta">
-              <span class="documentSourcePill">${escapeHtml(item.source || "upload")}</span>
-              <span>${escapeHtml(formatDocumentBytes(item.sizeBytes))}</span>
-              <span>${escapeHtml(formatDocumentDate(item.createdAt))}</span>
-              ${submitted ? `<span class="documentSubmittedPill">Sent to Paperless</span>` : ""}
-            </div>
-          </div>
-          <div class="documentQueueActions">
-            <a class="openButton" href="${escapeHtml(item.contentUrl)}" target="_blank" rel="noopener">View</a>
-            ${
-              submitted
-                ? `<span class="openButton isDisabled" aria-disabled="true">Sent</span>`
-                : `<button class="primaryButton" type="button" data-document-paperless="${escapeHtml(item.id)}">Paperless</button>`
-            }
-            <button class="dangerButton" type="button" data-document-delete="${escapeHtml(item.id)}">Delete</button>
-          </div>
-        </div>
+        <article class="paperlessRow">
+          <button class="paperlessRowMain" type="button" data-paperless-open="${escapeHtml(item.id)}">
+            <strong>${escapeHtml(item.title)}</strong>
+            <span>${escapeHtml(item.correspondent || item.filename || `Document ${item.id}`)}</span>
+            <span class="paperlessRowMeta">
+              <span>#${escapeHtml(item.id)}</span>
+              ${item.created ? `<span>${escapeHtml(formatDocumentDate(item.created))}</span>` : ""}
+            </span>
+          </button>
+          ${item.url ? `<a class="paperlessExternal" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" aria-label="Open in Paperless" title="Open in Paperless">↗</a>` : ""}
+        </article>
       `;
     })
     .join("");
+  const summary = documents.appliedQuery
+    ? `${documents.resultCount} matches in ${documents.totalCount} documents`
+    : `${documents.totalCount} documents`;
+  const selected = documents.selected;
+  const detail = documents.detailLoading
+    ? `
+      <section class="panel paperlessDetail">
+        <div class="panelBody"><p class="taskMeta">Loading document...</p></div>
+      </section>
+    `
+    : documents.detailError
+      ? `
+        <section class="panel paperlessDetail">
+          <div class="panelHeader">
+            <h2>Document unavailable</h2>
+            <button class="openButton" type="button" data-paperless-close>Close</button>
+          </div>
+          <div class="panelBody"><p class="documentQueueError">${escapeHtml(documents.detailError)}</p></div>
+        </section>
+      `
+      : selected
+        ? `
+          <section class="panel paperlessDetail">
+            <div class="panelHeader">
+              <div>
+                <p class="label">Paperless #${escapeHtml(selected.id)}</p>
+                <h2>${escapeHtml(selected.title)}</h2>
+              </div>
+              <button class="openButton" type="button" data-paperless-close>Close</button>
+            </div>
+            <div class="panelBody paperlessDetailBody">
+              <div class="paperlessDetailMeta">
+                ${selected.correspondent ? `<span>${escapeHtml(selected.correspondent)}</span>` : ""}
+                ${selected.created ? `<span>${escapeHtml(formatDocumentDate(selected.created))}</span>` : ""}
+                ${selected.filename ? `<span>${escapeHtml(selected.filename)}</span>` : ""}
+              </div>
+              ${selected.url ? `<a class="primaryButton paperlessOpenSource" href="${escapeHtml(selected.url)}" target="_blank" rel="noopener noreferrer">Open in Paperless</a>` : ""}
+              <div class="paperlessOcr">
+                <p class="label">OCR text</p>
+                <pre>${escapeHtml(selected.content || "No recognized text.")}</pre>
+              </div>
+            </div>
+          </section>
+        `
+        : "";
   return `
-    <section class="panel documentInbox">
+    ${detail}
+    <section class="panel paperlessLibrary">
       <div class="panelHeader">
         <div>
-          <p class="label">Brain</p>
-          <h2>Document Inbox</h2>
+          <p class="label">Paperless</p>
+          <h2>Documents</h2>
         </div>
         <button class="openButton" type="button" data-documents-refresh>Refresh</button>
       </div>
-      <form class="documentUploadForm" data-document-upload>
-        <label>
-          <span>PDF</span>
-          <input name="document" type="file" accept="application/pdf,.pdf" required />
-        </label>
-        <button class="openButton" type="submit">Upload</button>
+      <form class="paperlessSearch" data-document-search>
+        <label class="srOnly" for="paperlessQuery">Search documents</label>
+        <input id="paperlessQuery" name="query" type="search" value="${escapeHtml(documents.query)}" placeholder="Search title, correspondent, OCR..." autocomplete="off" />
+        ${documents.appliedQuery ? `<button class="openButton" type="button" data-documents-clear>Clear</button>` : ""}
+        <button class="primaryButton" type="submit">Search</button>
       </form>
       <div class="panelBody">
-        <p class="documentQueueNote">HWP conversions and Stirling results wait here until you view, archive, or delete them. Unsent files expire after 48 hours.</p>
-        ${state.documents.loading && !state.documents.checked ? `<p class="taskMeta">Loading documents...</p>` : ""}
+        ${documents.checked && !documents.error ? `<p class="paperlessSummary">${escapeHtml(summary)}</p>` : ""}
+        ${documents.loading && !documents.checked ? `<p class="taskMeta">Loading documents...</p>` : ""}
         ${
-          state.documents.error
-            ? `<div class="documentQueueError"><p>${escapeHtml(state.documents.error)}</p><button class="openButton" type="button" data-documents-refresh>${uiText("common.retry", "다시 시도")}</button></div>`
+          documents.error
+            ? `<div class="documentQueueError"><p>${escapeHtml(documents.error)}</p><button class="openButton" type="button" data-documents-refresh>${uiText("common.retry", "다시 시도")}</button></div>`
             : ""
         }
-        ${!state.documents.error && state.documents.checked && !rows ? `<p class="taskMeta">No temporary PDFs.</p>` : ""}
-        ${rows ? `<div class="documentQueueList">${rows}</div>` : ""}
+        ${!documents.error && documents.checked && !rows ? `<p class="taskMeta">No matching documents.</p>` : ""}
+        ${rows ? `<div class="paperlessList">${rows}</div>` : ""}
+        ${
+          !documents.error && documents.checked && documents.pageCount > 1
+            ? `
+              <nav class="paperlessPagination" aria-label="Document pages">
+                <button class="openButton" type="button" data-documents-page="${documents.page - 1}" ${documents.page <= 1 ? "disabled" : ""}>←</button>
+                <span>Page ${documents.page}/${documents.pageCount}</span>
+                <button class="openButton" type="button" data-documents-page="${documents.page + 1}" ${documents.page >= documents.pageCount ? "disabled" : ""}>→</button>
+              </nav>
+            `
+            : ""
+        }
       </div>
     </section>
   `;
@@ -6928,30 +7017,29 @@ document.addEventListener("click", async (event) => {
   }
 
   if (event.target.closest("[data-documents-refresh]")) {
-    state.documents.checked = false;
-    await loadDocuments({ force: true });
+    await refreshDocuments();
     return;
   }
 
-  const paperlessDocument = event.target.closest("[data-document-paperless]");
-  if (paperlessDocument) {
-    if (!window.confirm("Send this PDF to Paperless?")) return;
-    try {
-      await submitDocumentToPaperless(paperlessDocument.dataset.documentPaperless || "");
-    } catch (error) {
-      window.alert(`Could not send to Paperless: ${error.message || "unknown error"}`);
-    }
+  const openPaperless = event.target.closest("[data-paperless-open]");
+  if (openPaperless) {
+    await loadDocumentDetail(openPaperless.dataset.paperlessOpen || "");
     return;
   }
 
-  const deleteDocument = event.target.closest("[data-document-delete]");
-  if (deleteDocument) {
-    if (!window.confirm("Delete this temporary PDF?")) return;
-    try {
-      await deleteQueuedDocument(deleteDocument.dataset.documentDelete || "");
-    } catch (error) {
-      window.alert(`Could not delete PDF: ${error.message || "unknown error"}`);
-    }
+  if (event.target.closest("[data-paperless-close]")) {
+    closeDocumentDetail();
+    return;
+  }
+
+  const documentsPage = event.target.closest("[data-documents-page]");
+  if (documentsPage) {
+    await showDocumentsPage(documentsPage.dataset.documentsPage || "1");
+    return;
+  }
+
+  if (event.target.closest("[data-documents-clear]")) {
+    await searchDocuments("");
     return;
   }
 
@@ -7685,26 +7773,11 @@ document.addEventListener("submit", async (event) => {
     return;
   }
 
-  const documentUploadForm = event.target.closest("[data-document-upload]");
-  if (documentUploadForm) {
+  const documentSearchForm = event.target.closest("[data-document-search]");
+  if (documentSearchForm) {
     event.preventDefault();
-    const input = documentUploadForm.querySelector('input[type="file"]');
-    const file = input?.files?.[0];
-    if (!file) return;
-    if (file.type && file.type !== "application/pdf") {
-      window.alert("Select a PDF file.");
-      return;
-    }
-    const button = documentUploadForm.querySelector('button[type="submit"]');
-    if (button) button.disabled = true;
-    try {
-      await uploadDocument(file);
-      documentUploadForm.reset();
-    } catch (error) {
-      window.alert(`Could not upload PDF: ${error.message || "unknown error"}`);
-    } finally {
-      if (button) button.disabled = false;
-    }
+    const formData = new FormData(documentSearchForm);
+    await searchDocuments(formData.get("query"));
     return;
   }
 
