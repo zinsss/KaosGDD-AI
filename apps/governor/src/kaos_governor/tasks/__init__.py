@@ -1,5 +1,14 @@
 """Task domain rules for KaosGovernor."""
 
+from .mutations import (
+    TASK_OPERATION_TYPES,
+    TASK_PROFILES,
+    TaskMutationAdapter,
+    TaskMutationCommand,
+    TaskMutationError,
+    TaskMutationResult,
+    TaskMutationService,
+)
 from .recurring import (
     DEFAULT_TIME,
     FREQUENCIES,
@@ -30,6 +39,13 @@ __all__ = (
     "RecurringTaskError",
     "RecurringTaskPlan",
     "RecurringTaskService",
+    "TASK_OPERATION_TYPES",
+    "TASK_PROFILES",
+    "TaskMutationAdapter",
+    "TaskMutationCommand",
+    "TaskMutationError",
+    "TaskMutationResult",
+    "TaskMutationService",
     "add_months",
     "date_on_or_after",
     "next_current_date",

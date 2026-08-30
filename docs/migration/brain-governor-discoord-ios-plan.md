@@ -13,9 +13,12 @@ H4, office-service, and stateful-service cutovers.
 
 ## Current Position
 
-- Current phase: Phase 2 production observation. Durable PostgreSQL operations
-  and confirmation payloads were promoted on 2026-08-30; the observation gate
-  remains open.
+- Production phase: Phase 2 observation. Durable PostgreSQL operations and
+  confirmation payloads were promoted on 2026-08-30; the observation gate
+  remains open because only the controlled deployment smoke operation has used
+  the new store so far.
+- Active implementation: Phase 3 task-handler slice 1 is validated locally but
+  is not deployed.
 - Phase 1 was committed and deployed with Phase 2 in commit `11b18be`.
 - Production behavior: Governor/Discord uses the PostgreSQL operation store;
   public HTTP and Discord behavior remains compatible.
@@ -29,7 +32,7 @@ H4, office-service, and stateful-service cutovers.
 | 0 | Audit current architecture and flows | Complete | No change | Complete |
 | 1 | Establish the Governor operation boundary | Complete and tested | Deployed 2026-08-30 | Production observation |
 | 2 | Persist operations, confirmations, and pending payloads | Complete and tested | Deployed 2026-08-30 | Production observation |
-| 3 | Route every meaningful mutation through Governor | Not started | Not deployed | Planned |
+| 3 | Route every meaningful mutation through Governor | Task tool handler slice 1 complete and tested | Not deployed | Validated locally |
 | 4 | Make Brain transport-neutral | Not started | Not deployed | Planned |
 | 5 | Isolate KaosDiscoord and notification delivery | Not started | Not deployed | Planned |
 | 6 | Add stable iOS APIs and lightweight clients | Pilot read endpoint only | Pilot active | Planned |
@@ -312,7 +315,8 @@ Production promotion evidence (2026-08-30):
 
 ## Phase 3 — Route Mutations Through Governor
 
-Status: planned.
+Status: in progress. Task tool handler slice 1 validated locally on 2026-08-30;
+not deployed.
 
 Objective:
 
@@ -331,6 +335,59 @@ Migration order:
 Each domain moves independently. Reads may continue through existing service
 interfaces. Compatibility Discord/web handlers delegate to Governor rather
 than being deleted.
+
+Mutation inventory and current routing:
+
+| Surface | Current writer path | Governor lifecycle | Domain handler | Migration state |
+| --- | --- | --- | --- | --- |
+| Brain/iOS task proposals | `BrainToolServer` confirmation routes | Yes | `TaskMutationService` locally | Slice 1 validated locally |
+| Discord task/supply buttons and channel commands | `DiscordTasksSurface` to calendar adapter | No | No | Next task slice |
+| Portal task/event writes | Calendar adapter proxy | No | No | Later task/event slice |
+| Recurring task synchronization | Governor API recurring service to calendar adapter | Partial domain ownership, no durable operation | Recurring service only | Later task slice |
+| Memos proposals | `BrainToolServer` confirmation routes | Yes | No | Domain 2 |
+| Paperless metadata proposals | `BrainToolServer` confirmation routes | Yes | No | Domain 3 |
+| Event proposals | `BrainToolServer` confirmation routes | Yes | No | Domain 4 |
+| Fax, mail, settings, ledger, notification acknowledgements | Existing service-specific writers | Mixed | Mixed | Later domains |
+
+Slice 1 implemented locally:
+
+- Added transport-neutral `TaskMutationCommand`, `TaskMutationService`, and a
+  narrow calendar task adapter protocol under the Governor task domain.
+- Registered `create`, `update_due`, `edit`, `complete`, `reopen`, and `delete`
+  task operations to deterministic create/update/delete handlers.
+- Enforced supported profiles, required and matching task UIDs, adapter-result
+  UID consistency, and the no-schedule rule for supplies before dispatch.
+- Routed the existing confirmed Brain/iOS task and supplies proposal path
+  through the Governor-owned handler service. Authentication, actor/scope,
+  durable confirmation, response shapes, and calendar refresh behavior remain
+  unchanged.
+- Left direct Discord buttons/channel commands and portal writers unchanged so
+  the first deployment can be reconciled independently.
+
+Slice 1 files:
+
+- `apps/governor/src/kaos_governor/tasks/mutations.py`
+- `apps/governor/src/kaos_governor/tasks/__init__.py`
+- `apps/governor/tests/test_task_mutations.py`
+- `integrations/discord/src/kaos_governor_discord/tools.py`
+
+Slice 1 validation:
+
+- 8 task mutation domain tests passed.
+- 208 Governor unit/contract tests passed; 9 PostgreSQL-gated tests were then
+  run separately against an isolated PostgreSQL 16 instance and passed.
+- 349 Discord and 317 Brain regression tests passed.
+- Python compilation and `git diff --check` passed.
+
+Slice 1 production gate:
+
+- [x] Domain handler contract and transport parity tests
+- [x] Full Governor, PostgreSQL, Discord, and Brain regressions
+- [ ] Phase 2 observation has normal task/memo/event usage evidence
+- [x] Review and commit
+- [ ] Controlled H3 deployment
+- [ ] Reconcile operation audit row with the authoritative task result
+- [ ] Slice observation gate
 
 Affected areas:
 
@@ -496,6 +553,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | 2 | Started PostgreSQL operation persistence and pending-payload inventory | Implementation in progress | None |
 | 2026-08-30 | 2 | Added migration 005, PostgreSQL store, durable versioned payloads, restart recovery, expiry/interruption cleanup, production store wiring, and CI PostgreSQL coverage | 200 Governor unit/contract + 9 PostgreSQL integration + 349 Discord + 317 Brain tests; H3 preflight and Compose render passed | None; not deployed, production remains on migration 004 |
 | 2026-08-30 | 1-2 | Promoted commit `11b18be`, migration 005, and the PostgreSQL-backed Discord operation store after pre/post recovery exercises | Both custom-format backups restored into isolated PostgreSQL 16; live proposal/approval/completion/audit/payload cleanup passed; API, Discord, and PostgreSQL healthy with zero restarts | Production observation started; compatibility and memory-store rollback path retained |
+| 2026-08-30 | 3 | Extracted the first task/supplies execution slice from the Discord HTTP adapter into registered Governor task handlers | 8 focused task tests; 208 Governor unit/contract + 9 PostgreSQL integration + 349 Discord + 317 Brain tests passed | None; code is locally validated and Phase 2 observation remains open |
 
 ## How to Update This Tracker
 

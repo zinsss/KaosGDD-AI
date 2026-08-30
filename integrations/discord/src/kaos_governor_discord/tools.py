@@ -26,6 +26,7 @@ from kaos_governor import (
 from kaos_governor.calendar import CalendarAdapterClient, CalendarAdapterError, profile_host, render_month_png
 from kaos_governor.documents import DocumentIntakeError, PaperlessDocumentService
 from kaos_governor.memos import MemosError, MemosService
+from kaos_governor.tasks import TaskMutationCommand, TaskMutationError, TaskMutationService
 
 from .calendar import month_markers, visible_month_grid_range, weather_agenda_summary, weather_items_by_date
 from .tasks import TASK_PRIORITIES, is_supplies_collection, normalize_supplies_due, validate_edit_due
@@ -303,6 +304,7 @@ class BrainToolServer:
         mail_messages_provider: Callable[[int], Mapping[str, object]] | None = None,
         today_provider: Callable[[], date] | None = None,
         durable_store: DurableOperationStore | None = None,
+        task_mutations: TaskMutationService | None = None,
         imaging_second_look: ImagingSecondLookClient | None = None,
         second_look_status_path: Path | None = None,
         second_look_status_callback: Callable[[], Awaitable[None]] | None = None,
@@ -322,6 +324,7 @@ class BrainToolServer:
         self._mail_messages_provider = mail_messages_provider
         self._today_provider = today_provider or kst_today
         self._operations = GovernorOperations(durable_store)
+        self._task_mutations = task_mutations or TaskMutationService(calendar_adapter)
         self._imaging_second_look_client = imaging_second_look or ImagingSecondLookClient(ImagingSecondLookConfig())
         self._second_look_rate: dict[str, list[datetime]] = {}
         self._second_look_response_cache: dict[str, tuple[datetime, dict[str, Any]]] = {}
@@ -1763,52 +1766,22 @@ class BrainToolServer:
         pending_memo_delete = pending if isinstance(pending, PendingMemoDelete) else None
         pending_memo_edit = pending if isinstance(pending, PendingMemoEdit) else None
         pending_document_metadata = pending if isinstance(pending, PendingDocumentMetadata) else None
+        pending_task = next(
+            (
+                candidate
+                for candidate in (pending_update, pending_create, pending_action, pending_task_edit)
+                if candidate is not None
+            ),
+            None,
+        )
         try:
             actor = Actor("user", actor_id, operation.actor.scope)
             self._operations.approve(confirmation_id, actor=actor)
-            if pending_update is not None:
-                result = await asyncio.to_thread(
-                    self._calendar_adapter.update_task,
-                    pending_update.profile,
-                    pending_update.payload,
-                )
-                task = _pending_task_payload(pending_update)
-                result_uid = str(result.get("uid") or pending_update.uid)
-            elif pending_task_edit is not None:
-                result = await asyncio.to_thread(
-                    self._calendar_adapter.update_task,
-                    pending_task_edit.profile,
-                    pending_task_edit.payload,
-                )
-                task = _pending_task_edit_payload(pending_task_edit)
-                result_uid = str(result.get("uid") or pending_task_edit.uid)
-            elif pending_create is not None or pending_action is not None:
-                if pending_create is not None:
-                    result = await asyncio.to_thread(
-                        self._calendar_adapter.create_task,
-                        pending_create.profile,
-                        pending_create.payload,
-                    )
-                    result_uid = str(result.get("uid") or "")
-                    task = {**_pending_task_create_payload(pending_create), "uid": result_uid}
-                else:
-                    assert pending_action is not None
-                    if pending_action.action == "delete":
-                        result = await asyncio.to_thread(
-                            self._calendar_adapter.delete_task,
-                            pending_action.profile,
-                            pending_action.uid,
-                            pending_action.collection_id,
-                        )
-                        result_uid = str(result.get("uid") or pending_action.uid)
-                    else:
-                        result = await asyncio.to_thread(
-                            self._calendar_adapter.update_task,
-                            pending_action.profile,
-                            pending_action.payload,
-                        )
-                        result_uid = str(result.get("uid") or pending_action.uid)
-                    task = _pending_task_action_payload(pending_action)
+            if pending_task is not None:
+                command = _task_mutation_command(pending_task, operation.operation_type)
+                result = await asyncio.to_thread(self._task_mutations.execute, command)
+                result_uid = result.uid
+                task = _completed_task_mutation_payload(pending_task, result_uid)
             elif pending_event_create is not None:
                 result = await asyncio.to_thread(
                     self._calendar_adapter.create_event,
@@ -1850,6 +1823,9 @@ class BrainToolServer:
                 await self._refresh_calendar_surfaces()
         except DurableGovernorError as exc:
             return web.json_response({"error": str(exc)}, status=400)
+        except TaskMutationError as exc:
+            self._operations.fail(operation.operation_id, error_code=exc.code)
+            return web.json_response({"error": exc.code}, status=400)
         except CalendarAdapterError as exc:
             self._operations.fail(operation.operation_id, error_code="calendar_adapter_error")
             return web.json_response({"error": str(exc)}, status=502)
@@ -2188,6 +2164,53 @@ def _within_optional_range(value: date | None, start: date | None, end: date | N
     if end is not None and value > end:
         return False
     return True
+
+
+TaskPendingMutation = PendingTaskDueUpdate | PendingTaskCreate | PendingTaskAction | PendingTaskEdit
+
+
+def _task_mutation_command(
+    pending: TaskPendingMutation,
+    operation_type: str,
+) -> TaskMutationCommand:
+    if isinstance(pending, PendingTaskDueUpdate):
+        expected_operation = "update_due"
+        uid = pending.uid
+        collection_id = pending.collection_id
+    elif isinstance(pending, PendingTaskCreate):
+        expected_operation = "create"
+        uid = ""
+        collection_id = pending.collection_id
+    elif isinstance(pending, PendingTaskAction):
+        expected_operation = pending.action
+        uid = pending.uid
+        collection_id = pending.collection_id
+    else:
+        expected_operation = "edit"
+        uid = pending.uid
+        collection_id = pending.collection_id
+    if operation_type != expected_operation:
+        raise TaskMutationError("task_operation_payload_mismatch")
+    return TaskMutationCommand(
+        operation_type=operation_type,
+        profile=pending.profile,
+        payload=pending.payload,
+        uid=uid,
+        collection_id=collection_id,
+    )
+
+
+def _completed_task_mutation_payload(
+    pending: TaskPendingMutation,
+    uid: str,
+) -> dict[str, object]:
+    if isinstance(pending, PendingTaskDueUpdate):
+        return _pending_task_payload(pending)
+    if isinstance(pending, PendingTaskCreate):
+        return {**_pending_task_create_payload(pending), "uid": uid}
+    if isinstance(pending, PendingTaskAction):
+        return _pending_task_action_payload(pending)
+    return _pending_task_edit_payload(pending)
 
 
 def _pending_task_payload(pending: PendingTaskDueUpdate) -> dict[str, object]:
