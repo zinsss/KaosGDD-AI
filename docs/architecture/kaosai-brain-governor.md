@@ -1,44 +1,68 @@
-# KaosAI, KaosBrain, and KaosGovernor
+# KaosBrain, KaosGovernor, and KaosDiscoord
 
-KaosGDD separates language intelligence, request guarding, and authoritative
-state changes.
+KaosGDD separates language intelligence, deterministic authority, domain
+execution, and transport concerns.
 
 Runtime paths are defined in
 [Runtime Layout](./runtime-layout.md). In short, project-owned services live
 under `/srv/kaosgdd/{kaosai,kaosbrain,kaosgovernor}`, while ready-made backends
 such as Radicale, Memos, and Vaultwarden keep their own service names.
 
+The canonical phase and progress tracker is the
+[Brain / Governor / Discoord / iOS migration plan](../migration/brain-governor-discoord-ios-plan.md).
+
 ## Roles
 
 ```text
-KaosAI
-  understands language and drafts structured plans
-
 KaosBrain
-  owns Discord context, adapts plans, validates safety, and calls Governor
+  understands language, reasons over context, and drafts guarded structured actions
 
 KaosGovernor
-  owns confirmations, audit, durable operations, and writes to sources of truth
+  validates actions and owns confirmations, audit, operation state, and execution routing
+
+KaosDiscoord
+  owns Discord connection, IDs, attachments, controls, and response formatting
+
+KaosGDD domain services
+  execute operations and preserve each service's source of truth
 ```
 
-KaosAI is not a source of truth and does not receive Governor credentials.
-KaosBrain is the adapter and guard. KaosGovernor is the authority.
+KaosAI is the optional model/planner implementation inside the Brain role. It
+is not a source of truth. Brain may read context and propose actions, but it
+does not directly mutate Radicale, Memos, Paperless, HylaFAX, or Governor data.
+Governor is the deterministic authority and does not depend on Brain or
+Discord.
+
+The current H4 package still contains Discord views around the Brain logic, and
+the current H3 Discord package still hosts compatibility tool routes. Those
+transport pieces will be isolated incrementally; they are not the target
+ownership model.
 
 ## Request Flow
 
 ```text
 Discord user message
-  -> KaosBrain receives actor/channel/context
-  -> KaosAI returns a strict plan
-  -> KaosBrain Guard validates and adapts the plan
+  -> KaosDiscoord receives actor/channel/context
+  -> KaosBrain interprets the request and returns a strict action
   -> KaosGovernor creates a proposal or serves a read-only tool result
   -> user confirms risky writes
-  -> KaosGovernor writes and audits
+  -> KaosGovernor routes the validated operation to a domain service and audits
+  -> KaosDiscoord formats the result for Discord
+```
+
+Deterministic commands do not invoke Brain:
+
+```text
+Discord / task done
+  -> KaosDiscoord parses the command
+  -> KaosGovernor validates and executes the structured operation
+  -> KaosDiscoord formats the result
 ```
 
 ## Plan Contract
 
-KaosAI plans are small JSON objects:
+Brain actions are small JSON objects. The current KaosAI planner uses this same
+contract:
 
 ```json
 {
@@ -99,16 +123,17 @@ Allowed parameters:
 | `memo.edit` | `query`, `content` |
 | `memo.delete` | `query` |
 
-KaosAI plans must not include backend object identifiers such as
+Model-produced plans must not include backend object identifiers such as
 `collectionId`, service URLs, tokens, shell commands, or restart commands.
-KaosBrain derives internal IDs from its own configuration when needed.
+Deterministic adaptation derives internal IDs from trusted configuration when
+needed.
 
 The guard rejects system, shell, Docker, database, service restart, and any
 unknown intents.
 
 ## Guard Rules
 
-KaosBrain Guard is deterministic code. It:
+The current Brain Guard is deterministic code. It:
 
 - checks intent allowlists
 - checks scope allowlists
@@ -121,17 +146,34 @@ KaosBrain Guard is deterministic code. It:
 - strips due dates from supplies creates and edits
 - rejects supplies due-date updates
 
-The guard does not invent intent. If the plan is missing required fields or
-cannot be adapted safely, Brain must ask again or fall back to deterministic
-parsing.
+The guard does not invent intent. If a plan is missing required fields or
+cannot be adapted safely, Brain asks for clarification or falls back to a
+deterministic parser.
 
 ## Authority Boundary
 
-KaosAI may plan. It must not call Governor.
+Brain may interpret, answer, and propose. It must not directly write a source
+of truth.
 
-KaosBrain may adapt and validate. It owns the Governor tool client token but
-does not own authoritative application data.
+Governor accepts structured requests from Brain and deterministic callers. It
+must remain callable when Brain and Discord are unavailable.
 
-KaosGovernor validates again before writing. Radicale, Memos, Paperless,
-HylaFAX, and other native services remain the sources of truth for their
-domains.
+KaosDiscoord owns no domain rules. Shortcuts and Scriptable likewise remain
+clients and keep no authoritative state.
+
+Governor validates before routing writes. Radicale, Memos, Paperless, HylaFAX,
+and other native services remain the sources of truth for their domains.
+
+## Migration Status
+
+The Phase 1 operation-boundary slice was completed on 2026-08-30:
+
+- `kaos_governor.operations.GovernorOperations` is the transport-neutral
+  lifecycle boundary.
+- Existing Brain tool mutation routes delegate operation submission,
+  confirmation approval, completion, failure, and audit transitions to that
+  boundary.
+- Existing HTTP contracts, confirmation behavior, deployment processes, and
+  domain adapters are unchanged.
+- Pending normalized write payloads still live in process memory. PostgreSQL
+  persistence is a later phase and is not implied by this boundary alone.

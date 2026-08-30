@@ -1,5 +1,11 @@
 # Migration Plan
 
+This document tracks the host and stateful-service migration. The active
+application-boundary work has a separate canonical
+[Brain / Governor / Discoord / iOS implementation tracker](brain-governor-discoord-ios-plan.md).
+The two plans use independent phase numbers; always name the plan as well as
+the phase when recording progress.
+
 ## Implementation status on 2026-08-28
 
 This remains the rollback-aware migration contract, but several phases are now

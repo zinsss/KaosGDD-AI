@@ -591,6 +591,7 @@ class BrainBotViewTests(unittest.IsolatedAsyncioTestCase):
         view = BrainServiceMenuView(
             governor_tools,  # type: ignore[arg-type]
             self.active_control_settings(),
+            today_provider=lambda: datetime(2026, 8, 29).date(),
         )
         select = next(child for child in view.children if isinstance(child, BrainServiceMenuSelect))
         select._values = ["calendar"]

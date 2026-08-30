@@ -9,15 +9,16 @@ Architecture, deterministic orchestration, AI integrations, and deployment plans
 
 ## System Roles
 
-- **KaosAI**: optional smart planner layer, currently an OpenClaw/hosted-or-local model slot when explicitly enabled.
-- **KaosBrain**: lightweight Discord adapter and deterministic guard on the H4 Ultra. It handles language intake, validates planner output, and calls narrow Governor tools.
+- **KaosAI**: optional model/planner implementation used by KaosBrain, currently an OpenClaw/hosted-or-local model slot when explicitly enabled.
+- **KaosBrain**: interpretation and reasoning layer on H4. It handles natural language and proposes guarded structured actions, but does not directly mutate authoritative services.
 - **KaosGovernor**: deterministic authority on the H3+ backend. It validates operations, owns domain workflows, records audit history, and calls backend services.
+- **KaosDiscoord**: replaceable Discord transport for messages, attachments, IDs, controls, and response formatting. Current Discord code is being moved to this boundary incrementally.
 - **Family AI**: a separately scoped assistant served by H4 or a future optional worker.
 - **Authoritative backends**: Radicale, Memos, Paperless, HylaFAX, and other service-owned data stores.
 - **Family KaosGDD**: the retained family web interface and embedded family AI chat. The frontend remains in the `zinsss/KaosGDD` repository.
 - **Personal clients**: Discord for orchestration and native iOS Calendar/Reminders for calendar, tasks, and supplies. No main KaosGDD web UI is planned; it may be designed later only if a concrete need appears.
 
-KaosBrain and Family AI never become sources of truth. They call narrow KaosGovernor tools. KaosGovernor applies deterministic validation before changing an authoritative backend.
+KaosBrain and Family AI never become sources of truth. They call narrow KaosGovernor tools. KaosGovernor applies deterministic validation before changing an authoritative backend. Deterministic clients may call Governor without invoking Brain.
 
 ## Target Hardware
 
@@ -79,6 +80,7 @@ Upstream applications will be referenced using pinned release versions or image 
 - [Security and trust boundaries](docs/architecture/security-boundaries.md)
 - [Current Brain conversion inventory](docs/migration/current-brain-inventory.md)
 - [Migration strategies and phased plan](docs/migration/migration-plan.md)
+- [Brain / Governor / Discoord / iOS implementation tracker](docs/migration/brain-governor-discoord-ios-plan.md)
 - [KaosGovernor Discord bot rollout](docs/operations/discord-governor-bot.md)
 - [Naver mail migration](docs/operations/naver-mail.md)
 - [Governor Memos search](docs/operations/memos-search.md)

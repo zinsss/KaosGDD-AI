@@ -33,6 +33,7 @@ from kaos_governor.mail import (
 from kaos_governor.fax import FaxConfig, FaxError, FaxService
 from kaos_governor.memos import MemosConfig, MemosService
 from kaos_governor.notifications import PushoverConfig, TextNotification, TextNotificationService
+from kaos_governor.postgres_durable import PostgresDurableGovernorStore
 
 from . import __version__
 from .access import AccessPolicy
@@ -403,6 +404,11 @@ class GovernorBot(discord.Client):
                 calendar_adapter=self.calendar_adapter,
                 memos=self.memos,
                 paperless=self.paperless,
+                durable_store=(
+                    PostgresDurableGovernorStore()
+                    if settings.operation_store == "postgres"
+                    else None
+                ),
                 calendar_refresh_callback=self._refresh_calendar_surfaces,
                 import_status_provider=self._import_status,
                 import_items_provider=self._recent_import_items,

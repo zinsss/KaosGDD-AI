@@ -9,6 +9,7 @@ from .durable import (
     MemoryDurableGovernorStore,
     OperationRecord,
     OperationRequest,
+    PendingOperationPayload,
     stable_hash,
 )
 from .daily_content import BibleEntry, DailyContentError, DailyContentLibrary, QuoteEntry, render_quote
@@ -32,13 +33,23 @@ from .notifications import (
     TextNotification,
     TextNotificationService,
 )
+from .operations import (
+    ApprovedOperation,
+    DurableOperationStore,
+    GovernorOperations,
+    OperationProposal,
+    OperationSubmission,
+)
+from .postgres_durable import PostgresDurableGovernorStore
 from .settings import CalendarSettingsRecord, GovernorSettingsError, MemoryGovernorSettingsStore
 
 __all__ = (
     "Actor",
+    "ApprovedOperation",
     "AuditRecord",
     "ConfirmationRecord",
     "DurableGovernorError",
+    "DurableOperationStore",
     "DocumentIntakeError",
     "BibleEntry",
     "DailyContentError",
@@ -60,8 +71,12 @@ __all__ = (
     "MemosError",
     "MemosService",
     "GovernorSettingsError",
+    "GovernorOperations",
     "OperationRecord",
+    "OperationProposal",
     "OperationRequest",
+    "OperationSubmission",
+    "PendingOperationPayload",
     "OfficeFaxConnectorClient",
     "NotificationError",
     "PushoverClient",
@@ -71,6 +86,7 @@ __all__ = (
     "PaperlessResult",
     "PaperlessSearchPage",
     "PaperlessTag",
+    "PostgresDurableGovernorStore",
     "QuoteEntry",
     "TextNotification",
     "TextNotificationService",

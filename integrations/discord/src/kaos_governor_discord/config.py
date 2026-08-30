@@ -128,6 +128,7 @@ class Settings:
     brain_tools_enabled: bool
     brain_tools_host: str
     brain_tools_port: int
+    operation_store: Literal["memory", "postgres"]
     governor_api_url: str
     governor_api_token: str
     ios_shortcuts_token: str
@@ -330,6 +331,9 @@ class Settings:
         brain_tools_port = _positive_int(source.get("GOVERNOR_BRAIN_TOOLS_PORT", "8098"), "GOVERNOR_BRAIN_TOOLS_PORT")
         if brain_tools_port > 65535:
             raise ConfigurationError("GOVERNOR_BRAIN_TOOLS_PORT must be at most 65535")
+        operation_store = source.get("GOVERNOR_OPERATION_STORE", "memory").strip().lower() or "memory"
+        if operation_store not in {"memory", "postgres"}:
+            raise ConfigurationError("GOVERNOR_OPERATION_STORE must be memory or postgres")
         governor_api_url = source.get("GOVERNOR_API_INTERNAL_URL", "http://governor-api:8096").strip()
         if not governor_api_url:
             raise ConfigurationError("GOVERNOR_API_INTERNAL_URL is required")
@@ -410,6 +414,7 @@ class Settings:
             brain_tools_enabled=brain_tools_enabled,
             brain_tools_host=source.get("GOVERNOR_BRAIN_TOOLS_HOST", "0.0.0.0").strip() or "0.0.0.0",
             brain_tools_port=brain_tools_port,
+            operation_store=operation_store,  # type: ignore[arg-type]
             governor_api_url=governor_api_url,
             governor_api_token=governor_api_token,
             ios_shortcuts_token=ios_shortcuts_token,

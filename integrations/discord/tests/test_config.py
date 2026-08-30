@@ -20,6 +20,18 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.guild_id, 100)
         self.assertEqual(settings.allowed_user_ids, frozenset({200, 201}))
         self.assertFalse(settings.startup_notification)
+        self.assertEqual(settings.operation_store, "memory")
+
+    def test_postgres_operation_store_is_configurable(self) -> None:
+        settings = Settings.from_env({**BASE_ENV, "GOVERNOR_OPERATION_STORE": "postgres"})
+        self.assertEqual(settings.operation_store, "postgres")
+
+    def test_rejects_unknown_operation_store(self) -> None:
+        with self.assertRaisesRegex(
+            ConfigurationError,
+            "GOVERNOR_OPERATION_STORE must be memory or postgres",
+        ):
+            Settings.from_env({**BASE_ENV, "GOVERNOR_OPERATION_STORE": "sqlite"})
 
     def test_discord_token_can_be_loaded_from_a_secret_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

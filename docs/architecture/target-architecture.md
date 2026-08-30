@@ -4,19 +4,25 @@ The detailed host, service-placement, interaction, security, backup, and
 migration decisions are maintained in the
 [H4 Ultra + H3+ production plan](h4-h3-production-plan.md).
 
+Implementation phases and current progress are tracked in the
+[Brain / Governor / Discoord / iOS migration plan](../migration/brain-governor-discoord-ios-plan.md).
+
 ## Overview
 
 ```text
-Discord                         Family KaosGDD PWA
-   |                                    |
-   v                                    v
-KaosBrain on H4                 Family AI session on H4
-guarded KaosAI slot             separately scoped tools
-   |                                    |
-   +----------------+-------------------+
-                    |
-                    v
-           KaosGovernor on H3+ backend
+Discord       Shortcuts / Scriptable       Family KaosGDD PWA
+   |                    |                           |
+   v                    |                           |
+KaosDiscoord            |                           |
+   |                    |                           |
+   +---- deterministic calls ----------------------+
+   |                    |                           |
+   +-> KaosBrain on H4 <-+ when interpretation is needed
+          |              |                           |
+          +--------------+---------------------------+
+                         |
+                         v
+                KaosGovernor on H3+ backend
                     |
         +-----------+------------+
         |           |            |
@@ -28,7 +34,10 @@ iOS Calendar and Reminders
 (personal, family, supplies)
 ```
 
-KaosBrain communicates with backends only through KaosGovernor. Family AI receives a separate family-scoped Governor credential.
+KaosBrain communicates with backends only through KaosGovernor. KaosDiscoord,
+Shortcuts, Scriptable, and the family UI may call Governor directly for
+deterministic operations. Family AI receives a separate family-scoped Governor
+credential.
 
 Native clients may still use service-native interfaces:
 
@@ -44,9 +53,11 @@ Nextcloud is not part of the target backend. Radicale remains the CalDAV
 authority, Memos remains the memo authority, and SFTPGo remains the planned
 purpose-built file transfer service where needed.
 
-KaosGDD is the umbrella project. Under it, KaosAI is the optional smart planner
-slot, KaosBrain is the guarded adapter layer, and KaosGovernor owns
-deterministic orchestration. Ready-made backend services keep their native
+KaosGDD is the umbrella project. Under it, KaosBrain owns language
+interpretation and guarded structured action proposals, KaosGovernor owns
+deterministic orchestration, and KaosDiscoord is the replaceable Discord
+transport. KaosAI remains the optional model/planner implementation used by
+Brain. Ready-made backend services keep their native
 operational identities, such as Radicale, Memos, Vaultwarden, SFTPGo, Caddy,
 and cloudflared, rather than being renamed to `kaosgdd-*`.
 
@@ -57,6 +68,12 @@ iOS clients and Discord leave a concrete workflow unmet.
 ## KaosGovernor
 
 KaosGovernor is a modular monolith with one repository and database but several runtime processes.
+
+Its transport-neutral operation lifecycle starts at
+`kaos_governor.operations.GovernorOperations`. Transports submit normalized
+requests there for idempotency, confirmation, audit-state transitions, and
+completion. Domain execution is being moved behind this boundary
+incrementally; compatibility routes remain available during the migration.
 
 ```text
 KaosGovernor
@@ -172,7 +189,7 @@ governor-api
 governor-worker
 kaos-scheduler
 kaos-mail-worker
-governor-discord
+governor-discord  # current compatibility process; target adapter is KaosDiscoord
 governor-postgres
 ```
 

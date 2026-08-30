@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
+from collections.abc import Callable
+from datetime import date, datetime
 import json
 import logging
 from pathlib import Path
@@ -290,10 +291,17 @@ class BrainActiveControlView(discord.ui.View):
 
 
 class BrainServiceMenuView(discord.ui.View):
-    def __init__(self, governor_tools: GovernorToolClient, settings: Settings) -> None:
+    def __init__(
+        self,
+        governor_tools: GovernorToolClient,
+        settings: Settings,
+        *,
+        today_provider: Callable[[], date] | None = None,
+    ) -> None:
         super().__init__(timeout=None)
         self.governor_tools = governor_tools
         self.settings = settings
+        self._today_provider = today_provider or (lambda: datetime.now(KST).date())
         self.add_item(BrainServiceMenuSelect(self))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -308,7 +316,7 @@ class BrainServiceMenuView(discord.ui.View):
 
     async def open_calendar(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
-        current = datetime.now(KST).date()
+        current = self._today_provider()
         view = BrainCalendarMonthView(
             self.governor_tools,
             self.settings,

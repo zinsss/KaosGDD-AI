@@ -13,6 +13,12 @@ services:
     init: true
     env_file:
       - .env
+      - path: ${KAOS_ROOT:-/srv/kaos}/secrets/governor-postgres.env
+        format: raw
+    environment:
+      GOVERNOR_OPERATION_STORE: "${GOVERNOR_OPERATION_STORE:-postgres}"
+      GOVERNOR_DB_HOST: "governor-postgres"
+      GOVERNOR_DB_PORT: "5432"
     secrets:
       - discord_bot_token
       - governor_api_token

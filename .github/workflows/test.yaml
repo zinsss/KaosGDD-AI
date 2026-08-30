@@ -11,6 +11,20 @@ permissions:
 jobs:
   container-tests:
     runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: kaos_governor_test
+          POSTGRES_USER: kaos_governor_test
+          POSTGRES_PASSWORD: phase2-test-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U kaos_governor_test -d kaos_governor_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v5
       - name: Validate shell scripts
@@ -21,11 +35,15 @@ jobs:
         run: |
           cp deploy/h3-backend/.env.example deploy/h3-backend/.env
           sed -i \
+            -e "s|^KAOS_ROOT=.*|KAOS_ROOT=${GITHUB_WORKSPACE}/.ci-kaos|" \
             -e 's/^DISCORD_GUILD_ID=.*/DISCORD_GUILD_ID=900000000000000001/' \
             -e 's/^DISCORD_ALLOWED_USER_IDS=.*/DISCORD_ALLOWED_USER_IDS=900000000000000002/' \
             -e 's/^DISCORD_ALLOWED_CHANNEL_IDS=.*/DISCORD_ALLOWED_CHANNEL_IDS=900000000000000003,900000000000000004/' \
             -e 's/^DISCORD_SYSTEM_CHANNEL_ID=.*/DISCORD_SYSTEM_CHANNEL_ID=900000000000000004/' \
             deploy/h3-backend/.env
+          mkdir -p "${GITHUB_WORKSPACE}/.ci-kaos/secrets"
+          printf 'POSTGRES_DB=kaos_governor_test\nPOSTGRES_USER=kaos_governor_test\nPOSTGRES_PASSWORD=phase2-test-password\n' \
+            > "${GITHUB_WORKSPACE}/.ci-kaos/secrets/governor-postgres.env"
           printf 'test\n' > deploy/h3-backend/secrets/discord_bot_token
           printf 'test\n' > deploy/h3-backend/secrets/governor_api_token
           : > deploy/h3-backend/secrets/memos_access_token
@@ -51,6 +69,17 @@ jobs:
         run: docker build --target test --tag kaosgdd-ai-governor-discord:test --file integrations/discord/Dockerfile .
       - name: Run tests
         run: docker run --rm kaosgdd-ai-governor-discord:test
+      - name: Run PostgreSQL Governor contract tests
+        run: |
+          docker run --rm --network host \
+            -e GOVERNOR_TEST_POSTGRES=true \
+            -e GOVERNOR_DB_HOST=127.0.0.1 \
+            -e GOVERNOR_DB_PORT=5432 \
+            -e GOVERNOR_DB_NAME=kaos_governor_test \
+            -e GOVERNOR_DB_USER=kaos_governor_test \
+            -e GOVERNOR_DB_PASSWORD=phase2-test-password \
+            kaosgdd-ai-governor-discord:test \
+            sh -c 'cd /tests/governor && python -m unittest -v test_postgres_durable'
       - name: Build Office fax connector test image
         run: docker build --target test --tag kaos-office-fax-connector:test --file apps/office-fax-connector/Dockerfile .
       - name: Run Office fax connector tests

@@ -7,6 +7,7 @@ from kaos_governor.durable import (
     DurableGovernorError,
     MemoryDurableGovernorStore,
     OperationRequest,
+    validate_pending_payload,
 )
 
 
@@ -39,6 +40,7 @@ class DurableGovernorTests(unittest.TestCase):
         self.assertEqual(operation.operation_id, duplicate.operation_id)
         self.assertEqual(operation.actor.scope, "personal")
         self.assertEqual(operation.status, "pending")
+        self.assertEqual(operation.parameters, {"query": "printer", "limit": 5})
         self.assertEqual(len(audit), 1)
         self.assertEqual(audit[0].outcome, "accepted")
 
@@ -73,8 +75,14 @@ class DurableGovernorTests(unittest.TestCase):
 
     def test_expired_confirmation_expires_the_waiting_operation(self) -> None:
         store = MemoryDurableGovernorStore()
-        operation, _ = store.start_operation(self.request(requires_confirmation=True), now=NOW)
-        confirmation = store.create_confirmation(operation.operation_id, ttl=timedelta(minutes=5), now=NOW)
+        operation, _, confirmation = store.start_proposal(
+            self.request(requires_confirmation=True),
+            payload_kind="memo.edit",
+            payload={"name": "memos/42", "newContent": "updated"},
+            schema_version=1,
+            confirmation_ttl=timedelta(minutes=5),
+            now=NOW,
+        )
 
         with self.assertRaisesRegex(DurableGovernorError, "confirmation_expired"):
             store.approve_confirmation(
@@ -87,6 +95,81 @@ class DurableGovernorTests(unittest.TestCase):
         updated = store.get_operation(operation.operation_id)
         self.assertIsNotNone(updated)
         self.assertEqual(updated.status, "expired")
+        self.assertIsNone(store.get_pending_payload(operation.operation_id))
+
+    def test_pending_payload_rejects_secret_binary_and_oversize_fields(self) -> None:
+        for payload in (
+            {"apiToken": "secret"},
+            {"nested": {"attachmentBase64": "AA=="}},
+            {"password": "secret"},
+        ):
+            with self.subTest(payload=payload):
+                with self.assertRaisesRegex(DurableGovernorError, "pending_payload_prohibited_key"):
+                    validate_pending_payload("memo.create", payload)
+
+        with self.assertRaisesRegex(DurableGovernorError, "pending_payload_too_large"):
+            validate_pending_payload("memo.create", {"content": "x" * (128 * 1024)})
+
+    def test_invalid_proposal_ttl_does_not_leave_a_partial_operation(self) -> None:
+        store = MemoryDurableGovernorStore()
+        request = self.request(requires_confirmation=True)
+
+        with self.assertRaisesRegex(DurableGovernorError, "confirmation_ttl_invalid"):
+            store.start_proposal(
+                request,
+                payload_kind="memo.create",
+                payload={"content": "safe"},
+                schema_version=1,
+                confirmation_ttl=timedelta(),
+                now=NOW,
+            )
+
+        operation, created = store.start_operation(request, now=NOW)
+        self.assertTrue(created)
+        self.assertIsNone(store.get_pending_payload(operation.operation_id))
+
+    def test_stale_proposal_cleanup_removes_unapproved_sensitive_payload(self) -> None:
+        store = MemoryDurableGovernorStore()
+        operation, _, confirmation = store.start_proposal(
+            self.request(requires_confirmation=True),
+            payload_kind="memo.create",
+            payload={"content": "temporary sensitive memo"},
+            schema_version=1,
+            confirmation_ttl=timedelta(minutes=5),
+            now=NOW,
+        )
+
+        deleted = store.expire_stale_proposals(now=NOW + timedelta(minutes=5))
+
+        self.assertEqual(deleted, 1)
+        self.assertEqual(store.get_operation(operation.operation_id).status, "expired")
+        self.assertEqual(store.get_confirmation(confirmation.confirmation_id).status, "expired")
+        self.assertIsNone(store.get_pending_payload(operation.operation_id))
+
+    def test_interrupted_confirmed_execution_is_failed_and_cleaned_after_grace(self) -> None:
+        store = MemoryDurableGovernorStore()
+        operation, _, confirmation = store.start_proposal(
+            self.request(requires_confirmation=True),
+            payload_kind="memo.create",
+            payload={"content": "temporary sensitive memo"},
+            schema_version=1,
+            confirmation_ttl=timedelta(minutes=5),
+            now=NOW,
+        )
+        store.approve_confirmation(
+            confirmation.confirmation_id,
+            actor=self.actor(),
+            normalized_operation_hash=operation.request_hash,
+            now=NOW + timedelta(minutes=1),
+        )
+
+        deleted = store.expire_stale_proposals(now=NOW + timedelta(hours=1, minutes=5))
+
+        updated = store.get_operation(operation.operation_id)
+        self.assertEqual(deleted, 1)
+        self.assertEqual(updated.status, "failed")
+        self.assertEqual(updated.error_code, "execution_interrupted")
+        self.assertIsNone(store.get_pending_payload(operation.operation_id))
 
     def test_actor_and_scope_are_validated_before_persistence(self) -> None:
         with self.assertRaisesRegex(DurableGovernorError, "scope_invalid"):
@@ -124,6 +207,27 @@ class DurableGovernorTests(unittest.TestCase):
             "governor_operations_actor_idempotency_idx",
             "governor_confirmations_expiry_idx",
             "governor_audit_records_actor_idx",
+        ):
+            self.assertIn(required, migration)
+
+    def test_postgresql_payload_migration_is_additive_and_constrained(self) -> None:
+        migration_path = next(
+            (
+                parent / "migrations" / "005_durable_operation_payloads.sql"
+                for parent in Path(__file__).resolve().parents
+                if (parent / "migrations" / "005_durable_operation_payloads.sql").exists()
+            ),
+            None,
+        )
+        self.assertIsNotNone(migration_path)
+        migration = migration_path.read_text(encoding="utf-8")
+
+        for required in (
+            "ADD COLUMN IF NOT EXISTS parameters jsonb",
+            "CREATE TABLE IF NOT EXISTS governor_operation_payloads",
+            "PRIMARY KEY REFERENCES governor_operations(operation_id) ON DELETE CASCADE",
+            "CHECK (jsonb_typeof(payload) = 'object')",
+            "governor_operation_payloads_updated_idx",
         ):
             self.assertIn(required, migration)
 

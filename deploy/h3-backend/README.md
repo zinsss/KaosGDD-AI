@@ -92,6 +92,27 @@ Run:
 endpoint. It does not start Memos or Radicale and cannot touch PACS, DICOM,
 Paperless, HylaFAX, or RustDesk.
 
+Governor mutation proposals use PostgreSQL when
+`GOVERNOR_OPERATION_STORE=postgres`. This persists the operation,
+confirmation, and minimal versioned execution payload so a confirmation can be
+approved after a Discord/Governor restart. The payload is removed on
+completion, failure, or confirmation expiry; attachments and credential-like
+fields are rejected. The long-lived operation record stores hashes instead of
+memo, task, or event body text.
+
+If the process dies after consuming a confirmation but before recording the
+downstream result, Governor does not automatically replay a possibly
+non-idempotent create. It keeps the indeterminate payload for a one-hour grace
+window, then records `execution_interrupted` and removes it.
+
+PostgreSQL mode uses the existing `governor-postgres` service and
+`/srv/kaos/secrets/governor-postgres.env`. Start or verify that service before
+Governor. The Discord image applies additive Governor migrations before it
+connects to Discord, so it fails closed if the database cannot become ready.
+For a deliberately isolated installation without PostgreSQL, set
+`GOVERNOR_OPERATION_STORE=memory`; pending confirmations then do not survive a
+process restart.
+
 ## Network binding
 
 The default health binding is loopback only:
@@ -206,6 +227,17 @@ services: Governor API, calendar adapter, Family Memos web, and the PostgreSQL
 database currently shared with migrated Governor modules. The PostgreSQL
 service is named `governor-postgres` and stores data under
 `/srv/kaosgdd/kaosgovernor/postgres`.
+
+For an architecture release that changes Governor migrations, use this order:
+
+```bash
+./deploy/h3-backend/kaos-h3 family-up
+./deploy/h3-backend/kaos-h3 restart
+```
+
+Keep migration `005` in place during application rollback. Temporarily setting
+`GOVERNOR_OPERATION_STORE=memory` rolls back the application store selection
+without dropping the additive column or payload table.
 
 The Family portal static app is now repository-owned under
 `apps/family-portal`, with its nginx config under

@@ -181,6 +181,9 @@ preflight() {
   load_env
   require_secret discord_bot_token
   require_secret governor_api_token
+  if [[ "${GOVERNOR_OPERATION_STORE:-postgres}" == "postgres" ]]; then
+    require_nonempty_file "${KAOS_ROOT:-/srv/kaos}/secrets/governor-postgres.env"
+  fi
   if [[ "${GOVERNOR_BRAIN_TOOLS_ENABLED:-false}" == "true" ]]; then
     require_secret ios_shortcuts_token
   fi

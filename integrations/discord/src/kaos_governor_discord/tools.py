@@ -4,7 +4,7 @@ import asyncio
 import base64
 import binascii
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import date, datetime, timedelta, timezone
 import hashlib
 import hmac
@@ -15,7 +15,14 @@ from typing import Any
 
 import aiohttp
 from aiohttp import web
-from kaos_governor import Actor, DurableGovernorError, MemoryDurableGovernorStore, OperationRequest
+from kaos_governor import (
+    Actor,
+    DurableGovernorError,
+    DurableOperationStore,
+    GovernorOperations,
+    OperationRequest,
+    PendingOperationPayload,
+)
 from kaos_governor.calendar import CalendarAdapterClient, CalendarAdapterError, profile_host, render_month_png
 from kaos_governor.documents import DocumentIntakeError, PaperlessDocumentService
 from kaos_governor.memos import MemosError, MemosService
@@ -36,6 +43,11 @@ def kst_today(now: datetime | None = None) -> date:
     if current.tzinfo is None:
         current = current.replace(tzinfo=timezone.utc)
     return current.astimezone(KST).date()
+
+
+def _text_fingerprint(value: str) -> dict[str, object]:
+    encoded = value.encode("utf-8")
+    return {"sha256": hashlib.sha256(encoded).hexdigest(), "bytes": len(encoded)}
 
 
 @dataclass(frozen=True)
@@ -129,6 +141,64 @@ class PendingDocumentMetadata:
     title: str
     tags: tuple[str, ...]
     payload: dict[str, Any]
+
+
+PendingMutation = (
+    PendingTaskDueUpdate
+    | PendingTaskCreate
+    | PendingTaskAction
+    | PendingTaskEdit
+    | PendingEventCreate
+    | PendingMemoCreate
+    | PendingMemoDelete
+    | PendingMemoEdit
+    | PendingDocumentMetadata
+)
+
+PENDING_MUTATION_KINDS: tuple[tuple[type, str], ...] = (
+    (PendingTaskDueUpdate, "task.update_due"),
+    (PendingTaskCreate, "task.create"),
+    (PendingTaskAction, "task.action"),
+    (PendingTaskEdit, "task.edit"),
+    (PendingEventCreate, "event.create"),
+    (PendingMemoCreate, "memo.create"),
+    (PendingMemoDelete, "memo.delete"),
+    (PendingMemoEdit, "memo.edit"),
+    (PendingDocumentMetadata, "document.metadata"),
+)
+
+
+def _pending_mutation_record(pending: PendingMutation) -> tuple[str, dict[str, Any]]:
+    for pending_type, payload_kind in PENDING_MUTATION_KINDS:
+        if isinstance(pending, pending_type):
+            return payload_kind, asdict(pending)
+    raise DurableGovernorError("operation_payload_kind_unknown")
+
+
+def _pending_mutation_from_record(record: PendingOperationPayload) -> PendingMutation:
+    if record.schema_version != 1:
+        raise DurableGovernorError("operation_payload_schema_unsupported")
+    pending_type = next(
+        (candidate for candidate, payload_kind in PENDING_MUTATION_KINDS if payload_kind == record.payload_kind),
+        None,
+    )
+    if pending_type is None:
+        raise DurableGovernorError("operation_payload_kind_unknown")
+    values = dict(record.payload)
+    if "payload" in values:
+        nested_payload = values.get("payload")
+        if not isinstance(nested_payload, Mapping):
+            raise DurableGovernorError("operation_payload_invalid")
+        values["payload"] = dict(nested_payload)
+    if pending_type is PendingDocumentMetadata:
+        tags = values.get("tags")
+        if not isinstance(tags, list):
+            raise DurableGovernorError("operation_payload_invalid")
+        values["tags"] = tuple(str(tag) for tag in tags)
+    try:
+        return pending_type(**values)
+    except (TypeError, ValueError) as exc:
+        raise DurableGovernorError("operation_payload_invalid") from exc
 
 
 @dataclass
@@ -232,7 +302,7 @@ class BrainToolServer:
         fax_document_provider: Callable[[str], Mapping[str, object]] | None = None,
         mail_messages_provider: Callable[[int], Mapping[str, object]] | None = None,
         today_provider: Callable[[], date] | None = None,
-        durable_store: MemoryDurableGovernorStore | None = None,
+        durable_store: DurableOperationStore | None = None,
         imaging_second_look: ImagingSecondLookClient | None = None,
         second_look_status_path: Path | None = None,
         second_look_status_callback: Callable[[], Awaitable[None]] | None = None,
@@ -251,7 +321,7 @@ class BrainToolServer:
         self._fax_document_provider = fax_document_provider
         self._mail_messages_provider = mail_messages_provider
         self._today_provider = today_provider or kst_today
-        self._durable = durable_store or MemoryDurableGovernorStore()
+        self._operations = GovernorOperations(durable_store)
         self._imaging_second_look_client = imaging_second_look or ImagingSecondLookClient(ImagingSecondLookConfig())
         self._second_look_rate: dict[str, list[datetime]] = {}
         self._second_look_response_cache: dict[str, tuple[datetime, dict[str, Any]]] = {}
@@ -259,15 +329,6 @@ class BrainToolServer:
         self._second_look_status_callback = second_look_status_callback
         self._second_look_status_refresh_task: asyncio.Task | None = None
         self._second_look_status = self._load_second_look_status()
-        self._pending_task_due_updates: dict[str, PendingTaskDueUpdate] = {}
-        self._pending_task_creates: dict[str, PendingTaskCreate] = {}
-        self._pending_task_actions: dict[str, PendingTaskAction] = {}
-        self._pending_task_edits: dict[str, PendingTaskEdit] = {}
-        self._pending_event_creates: dict[str, PendingEventCreate] = {}
-        self._pending_memo_creates: dict[str, PendingMemoCreate] = {}
-        self._pending_memo_deletes: dict[str, PendingMemoDelete] = {}
-        self._pending_memo_edits: dict[str, PendingMemoEdit] = {}
-        self._pending_document_metadata: dict[str, PendingDocumentMetadata] = {}
         self._runner: web.AppRunner | None = None
 
     def application(self) -> web.Application:
@@ -306,6 +367,7 @@ class BrainToolServer:
         return app
 
     async def start(self) -> None:
+        await asyncio.to_thread(self._operations.expire_stale_proposals)
         self._runner = web.AppRunner(self.application(), access_log=None)
         await self._runner.setup()
         await web.TCPSite(self._runner, self._host, self._port).start()
@@ -321,6 +383,14 @@ class BrainToolServer:
         if self._runner:
             await self._runner.cleanup()
             self._runner = None
+
+    def _submit_proposal(self, request: OperationRequest, pending: PendingMutation):
+        payload_kind, payload = _pending_mutation_record(pending)
+        return self._operations.propose(
+            request,
+            pending_kind=payload_kind,
+            pending_payload=payload,
+        )
 
     @web.middleware
     async def _auth_middleware(self, request: web.Request, handler):
@@ -681,7 +751,18 @@ class BrainToolServer:
             )
             proposal = proposal_payload["proposal"]
             actor = Actor("user", actor_id, "personal")
-            operation, _created = self._durable.start_operation(
+            pending = PendingDocumentMetadata(
+                document_id=int(proposal["id"]),
+                old_title=str(proposal["oldTitle"]),
+                title=str(proposal["title"]),
+                tags=tuple(str(tag) for tag in proposal["tags"]),
+                payload={
+                    "documentId": int(proposal["id"]),
+                    "title": str(proposal["title"]),
+                    "tags": tuple(str(tag) for tag in proposal["tags"]),
+                },
+            )
+            operation_proposal = self._submit_proposal(
                 OperationRequest(
                     actor=actor,
                     idempotency_key=idempotency_key,
@@ -694,25 +775,15 @@ class BrainToolServer:
                         "tags": list(proposal["tags"]),
                     },
                     requires_confirmation=True,
-                )
+                ),
+                pending,
             )
-            confirmation = self._durable.create_confirmation(operation.operation_id, ttl=timedelta(minutes=10))
+            operation = operation_proposal.operation
+            confirmation = operation_proposal.confirmation
         except DurableGovernorError as exc:
             return web.json_response({"error": str(exc)}, status=400)
         except DocumentIntakeError as exc:
             return _document_error(exc)
-        pending = PendingDocumentMetadata(
-            document_id=int(proposal["id"]),
-            old_title=str(proposal["oldTitle"]),
-            title=str(proposal["title"]),
-            tags=tuple(str(tag) for tag in proposal["tags"]),
-            payload={
-                "documentId": int(proposal["id"]),
-                "title": str(proposal["title"]),
-                "tags": tuple(str(tag) for tag in proposal["tags"]),
-            },
-        )
-        self._pending_document_metadata[operation.operation_id] = pending
         return web.json_response(
             {
                 "operationId": operation.operation_id,
@@ -744,7 +815,18 @@ class BrainToolServer:
             )
             proposal = proposal_payload["proposal"]
             actor = Actor("user", actor_id, "personal")
-            operation, _created = self._durable.start_operation(
+            pending = PendingDocumentMetadata(
+                document_id=int(proposal["id"]),
+                old_title=str(proposal["oldTitle"]),
+                title=str(proposal["title"]),
+                tags=tuple(str(tag) for tag in proposal["tags"]),
+                payload={
+                    "documentId": int(proposal["id"]),
+                    "title": str(proposal["title"]),
+                    "tags": tuple(str(tag) for tag in proposal["tags"]),
+                },
+            )
+            operation_proposal = self._submit_proposal(
                 OperationRequest(
                     actor=actor,
                     idempotency_key=idempotency_key,
@@ -759,25 +841,15 @@ class BrainToolServer:
                         "ignoredTags": [],
                     },
                     requires_confirmation=True,
-                )
+                ),
+                pending,
             )
-            confirmation = self._durable.create_confirmation(operation.operation_id, ttl=timedelta(minutes=10))
+            operation = operation_proposal.operation
+            confirmation = operation_proposal.confirmation
         except DurableGovernorError as exc:
             return web.json_response({"error": str(exc)}, status=400)
         except DocumentIntakeError as exc:
             return _document_error(exc)
-        pending = PendingDocumentMetadata(
-            document_id=int(proposal["id"]),
-            old_title=str(proposal["oldTitle"]),
-            title=str(proposal["title"]),
-            tags=tuple(str(tag) for tag in proposal["tags"]),
-            payload={
-                "documentId": int(proposal["id"]),
-                "title": str(proposal["title"]),
-                "tags": tuple(str(tag) for tag in proposal["tags"]),
-            },
-        )
-        self._pending_document_metadata[operation.operation_id] = pending
         return web.json_response(
             {
                 "operationId": operation.operation_id,
@@ -807,21 +879,22 @@ class BrainToolServer:
             return web.json_response({"error": "memo_create_missing_required_field"}, status=400)
         try:
             actor = Actor("user", actor_id, "personal")
-            operation, _created = self._durable.start_operation(
+            pending = PendingMemoCreate(content=content)
+            operation_proposal = self._submit_proposal(
                 OperationRequest(
                     actor=actor,
                     idempotency_key=idempotency_key,
                     tool_name="memos",
                     operation_type="create",
-                    parameters={"content": content},
+                    parameters={"contentFingerprint": _text_fingerprint(content)},
                     requires_confirmation=True,
-                )
+                ),
+                pending,
             )
-            confirmation = self._durable.create_confirmation(operation.operation_id, ttl=timedelta(minutes=10))
+            operation = operation_proposal.operation
+            confirmation = operation_proposal.confirmation
         except DurableGovernorError as exc:
             return web.json_response({"error": str(exc)}, status=400)
-        pending = PendingMemoCreate(content=content)
-        self._pending_memo_creates[operation.operation_id] = pending
         return web.json_response(
             {
                 "operationId": operation.operation_id,
@@ -854,7 +927,8 @@ class BrainToolServer:
                 return match
             memo = match
             actor = Actor("user", actor_id, "personal")
-            operation, _created = self._durable.start_operation(
+            pending = PendingMemoDelete(name=memo.name, content=memo.content)
+            operation_proposal = self._submit_proposal(
                 OperationRequest(
                     actor=actor,
                     idempotency_key=idempotency_key,
@@ -862,15 +936,15 @@ class BrainToolServer:
                     operation_type="delete",
                     parameters={"name": memo.name, "query": query},
                     requires_confirmation=True,
-                )
+                ),
+                pending,
             )
-            confirmation = self._durable.create_confirmation(operation.operation_id, ttl=timedelta(minutes=10))
+            operation = operation_proposal.operation
+            confirmation = operation_proposal.confirmation
         except DurableGovernorError as exc:
             return web.json_response({"error": str(exc)}, status=400)
         except (ValueError, MemosError) as exc:
             return _memos_error(exc)
-        pending = PendingMemoDelete(name=memo.name, content=memo.content)
-        self._pending_memo_deletes[operation.operation_id] = pending
         return web.json_response(
             {
                 "operationId": operation.operation_id,
@@ -904,23 +978,28 @@ class BrainToolServer:
                 return match
             memo = match
             actor = Actor("user", actor_id, "personal")
-            operation, _created = self._durable.start_operation(
+            pending = PendingMemoEdit(name=memo.name, old_content=memo.content, new_content=content)
+            operation_proposal = self._submit_proposal(
                 OperationRequest(
                     actor=actor,
                     idempotency_key=idempotency_key,
                     tool_name="memos",
                     operation_type="edit",
-                    parameters={"name": memo.name, "query": query, "content": content},
+                    parameters={
+                        "name": memo.name,
+                        "query": query,
+                        "contentFingerprint": _text_fingerprint(content),
+                    },
                     requires_confirmation=True,
-                )
+                ),
+                pending,
             )
-            confirmation = self._durable.create_confirmation(operation.operation_id, ttl=timedelta(minutes=10))
+            operation = operation_proposal.operation
+            confirmation = operation_proposal.confirmation
         except DurableGovernorError as exc:
             return web.json_response({"error": str(exc)}, status=400)
         except (ValueError, MemosError) as exc:
             return _memos_error(exc)
-        pending = PendingMemoEdit(name=memo.name, old_content=memo.content, new_content=content)
-        self._pending_memo_edits[operation.operation_id] = pending
         return web.json_response(
             {
                 "operationId": operation.operation_id,
@@ -965,7 +1044,7 @@ class BrainToolServer:
         source = str(body.get("source") or "").strip()
         parameters = _second_look_operation_parameters(body)
         try:
-            operation, created = self._durable.start_operation(
+            submission = self._operations.submit(
                 OperationRequest(
                     actor=Actor(actor_type="service", actor_id=source, scope="clinic"),
                     idempotency_key=request_id,
@@ -974,6 +1053,8 @@ class BrainToolServer:
                     parameters=parameters,
                 )
             )
+            operation = submission.operation
+            created = submission.created
         except DurableGovernorError as exc:
             if str(exc) == "idempotency_key_conflict":
                 return web.json_response({"jobId": job_id, "error": "idempotency_key_conflict"}, status=409)
@@ -994,7 +1075,7 @@ class BrainToolServer:
             )
 
         self._record_second_look_request(job_id)
-        self._durable.record_audit(
+        self._operations.record_audit(
             actor=operation.actor,
             event_type="imaging.second-look.request",
             outcome="accepted",
@@ -1005,7 +1086,7 @@ class BrainToolServer:
             payload=parameters,
         )
         if self._second_look_rate_limited(source):
-            self._durable.fail_operation(operation.operation_id, error_code="rate_limited")
+            self._operations.fail(operation.operation_id, error_code="rate_limited")
             self._record_second_look_failure(job_id, "imaging_second_look_rate_limited", rate_limited=True)
             self._schedule_second_look_status_refresh()
             return web.json_response({"jobId": job_id, "error": "imaging_second_look_rate_limited"}, status=429)
@@ -1014,7 +1095,7 @@ class BrainToolServer:
             try:
                 provider_payload = await self._imaging_second_look_client.second_look(body)
             except RuntimeError as exc:
-                self._durable.fail_operation(
+                self._operations.fail(
                     operation.operation_id,
                     error_code=_second_look_error_code(str(exc)),
                 )
@@ -1074,7 +1155,7 @@ class BrainToolServer:
 
     def _complete_second_look_operation(self, operation_id: str, response_payload: Mapping[str, Any]) -> None:
         self._second_look_response_cache[operation_id] = (datetime.now(), dict(response_payload))
-        self._durable.complete_operation(
+        self._operations.complete(
             operation_id,
             result=_second_look_result_audit_payload(response_payload),
         )
@@ -1208,7 +1289,18 @@ class BrainToolServer:
         }
         try:
             actor = Actor("user", actor_id, "family" if profile == "family" else "personal")
-            operation, _created = self._durable.start_operation(
+            pending = PendingTaskDueUpdate(
+                profile=profile,
+                uid=payload["uid"],
+                collection_id=payload["collectionId"],
+                title=title,
+                old_due=str(task.get("due") or ""),
+                old_due_time=str(task.get("dueTime") or ""),
+                new_due=due_date,
+                new_due_time=due_time,
+                payload=payload,
+            )
+            operation_proposal = self._submit_proposal(
                 OperationRequest(
                     actor=actor,
                     idempotency_key=idempotency_key,
@@ -1225,23 +1317,13 @@ class BrainToolServer:
                         "newDueTime": due_time,
                     },
                     requires_confirmation=True,
-                )
+                ),
+                pending,
             )
-            confirmation = self._durable.create_confirmation(operation.operation_id, ttl=timedelta(minutes=10))
+            operation = operation_proposal.operation
+            confirmation = operation_proposal.confirmation
         except DurableGovernorError as exc:
             return web.json_response({"error": str(exc)}, status=400)
-        pending = PendingTaskDueUpdate(
-            profile=profile,
-            uid=payload["uid"],
-            collection_id=payload["collectionId"],
-            title=title,
-            old_due=str(task.get("due") or ""),
-            old_due_time=str(task.get("dueTime") or ""),
-            new_due=due_date,
-            new_due_time=due_time,
-            payload=payload,
-        )
-        self._pending_task_due_updates[operation.operation_id] = pending
         return web.json_response(
             {
                 "operationId": operation.operation_id,
@@ -1291,7 +1373,16 @@ class BrainToolServer:
         due_time = str(payload.get("dueTime") or "")
         try:
             actor = Actor("user", actor_id, "family" if profile == "family" else "personal")
-            operation, _created = self._durable.start_operation(
+            pending = PendingTaskCreate(
+                profile=profile,
+                collection_id=collection_id,
+                title=title,
+                memo=memo,
+                due=due_date,
+                due_time=due_time,
+                payload=payload,
+            )
+            operation_proposal = self._submit_proposal(
                 OperationRequest(
                     actor=actor,
                     idempotency_key=idempotency_key,
@@ -1300,27 +1391,19 @@ class BrainToolServer:
                     parameters={
                         "profile": profile,
                         "title": title,
-                        "memo": memo,
+                        "memoFingerprint": _text_fingerprint(memo),
                         "dueDate": due_date,
                         "dueTime": due_time,
                         "collectionId": collection_id,
                     },
                     requires_confirmation=True,
-                )
+                ),
+                pending,
             )
-            confirmation = self._durable.create_confirmation(operation.operation_id, ttl=timedelta(minutes=10))
+            operation = operation_proposal.operation
+            confirmation = operation_proposal.confirmation
         except DurableGovernorError as exc:
             return web.json_response({"error": str(exc)}, status=400)
-        pending = PendingTaskCreate(
-            profile=profile,
-            collection_id=collection_id,
-            title=title,
-            memo=memo,
-            due=due_date,
-            due_time=due_time,
-            payload=payload,
-        )
-        self._pending_task_creates[operation.operation_id] = pending
         return web.json_response(
             {
                 "operationId": operation.operation_id,
@@ -1392,7 +1475,17 @@ class BrainToolServer:
         payload = normalize_supplies_due(payload, collection_id=collection_id or profile)
         try:
             actor = Actor("user", actor_id, "family" if profile == "family" else "personal")
-            operation, _created = self._durable.start_operation(
+            pending = PendingTaskAction(
+                profile=profile,
+                action=action,
+                uid=uid,
+                collection_id=collection_id,
+                title=title,
+                due=str(task.get("due") or ""),
+                due_time=str(task.get("dueTime") or ""),
+                payload=payload,
+            )
+            operation_proposal = self._submit_proposal(
                 OperationRequest(
                     actor=actor,
                     idempotency_key=idempotency_key,
@@ -1406,22 +1499,13 @@ class BrainToolServer:
                         "action": action,
                     },
                     requires_confirmation=True,
-                )
+                ),
+                pending,
             )
-            confirmation = self._durable.create_confirmation(operation.operation_id, ttl=timedelta(minutes=10))
+            operation = operation_proposal.operation
+            confirmation = operation_proposal.confirmation
         except DurableGovernorError as exc:
             return web.json_response({"error": str(exc)}, status=400)
-        pending = PendingTaskAction(
-            profile=profile,
-            action=action,
-            uid=uid,
-            collection_id=collection_id,
-            title=title,
-            due=str(task.get("due") or ""),
-            due_time=str(task.get("dueTime") or ""),
-            payload=payload,
-        )
-        self._pending_task_actions[operation.operation_id] = pending
         return web.json_response(
             {
                 "operationId": operation.operation_id,
@@ -1513,7 +1597,23 @@ class BrainToolServer:
         priority = str(payload.get("priority") or "")
         try:
             actor = Actor("user", actor_id, "family" if profile == "family" else "personal")
-            operation, _created = self._durable.start_operation(
+            pending = PendingTaskEdit(
+                profile=profile,
+                uid=uid,
+                collection_id=collection_id,
+                old_title=old_title,
+                new_title=new_title,
+                old_memo=old_memo,
+                new_memo=new_memo,
+                old_due=old_due,
+                old_due_time=old_due_time,
+                new_due=due_date,
+                new_due_time=due_time,
+                old_priority=old_priority,
+                new_priority=priority,
+                payload=payload,
+            )
+            operation_proposal = self._submit_proposal(
                 OperationRequest(
                     actor=actor,
                     idempotency_key=idempotency_key,
@@ -1525,34 +1625,21 @@ class BrainToolServer:
                         "collectionId": collection_id,
                         "oldTitle": old_title,
                         "newTitle": new_title,
+                        "oldMemoFingerprint": _text_fingerprint(old_memo),
+                        "newMemoFingerprint": _text_fingerprint(new_memo),
                         "oldDue": old_due,
                         "oldDueTime": old_due_time,
                         "newDue": due_date,
                         "newDueTime": due_time,
                     },
                     requires_confirmation=True,
-                )
+                ),
+                pending,
             )
-            confirmation = self._durable.create_confirmation(operation.operation_id, ttl=timedelta(minutes=10))
+            operation = operation_proposal.operation
+            confirmation = operation_proposal.confirmation
         except DurableGovernorError as exc:
             return web.json_response({"error": str(exc)}, status=400)
-        pending = PendingTaskEdit(
-            profile=profile,
-            uid=uid,
-            collection_id=collection_id,
-            old_title=old_title,
-            new_title=new_title,
-            old_memo=old_memo,
-            new_memo=new_memo,
-            old_due=old_due,
-            old_due_time=old_due_time,
-            new_due=due_date,
-            new_due_time=due_time,
-            old_priority=old_priority,
-            new_priority=priority,
-            payload=payload,
-        )
-        self._pending_task_edits[operation.operation_id] = pending
         return web.json_response(
             {
                 "operationId": operation.operation_id,
@@ -1599,7 +1686,17 @@ class BrainToolServer:
             payload["collectionId"] = collection_id
         try:
             actor = Actor("user", actor_id, "family" if profile == "family" else "personal")
-            operation, _created = self._durable.start_operation(
+            pending = PendingEventCreate(
+                profile=profile,
+                title=title,
+                start_date=start_date,
+                end_date=end_date,
+                all_day=all_day,
+                memo=memo,
+                collection_id=collection_id,
+                payload=payload,
+            )
+            operation_proposal = self._submit_proposal(
                 OperationRequest(
                     actor=actor,
                     idempotency_key=idempotency_key,
@@ -1611,26 +1708,17 @@ class BrainToolServer:
                         "startDate": start_date,
                         "endDate": end_date,
                         "allDay": all_day,
-                        "memo": memo,
+                        "memoFingerprint": _text_fingerprint(memo),
                         "collectionId": collection_id,
                     },
                     requires_confirmation=True,
-                )
+                ),
+                pending,
             )
-            confirmation = self._durable.create_confirmation(operation.operation_id, ttl=timedelta(minutes=10))
+            operation = operation_proposal.operation
+            confirmation = operation_proposal.confirmation
         except DurableGovernorError as exc:
             return web.json_response({"error": str(exc)}, status=400)
-        pending = PendingEventCreate(
-            profile=profile,
-            title=title,
-            start_date=start_date,
-            end_date=end_date,
-            all_day=all_day,
-            memo=memo,
-            collection_id=collection_id,
-            payload=payload,
-        )
-        self._pending_event_creates[operation.operation_id] = pending
         return web.json_response(
             {
                 "operationId": operation.operation_id,
@@ -1653,40 +1741,31 @@ class BrainToolServer:
         actor_id = str(body.get("actorId") or "").strip()
         if not actor_id:
             return web.json_response({"error": "actor_id_required"}, status=400)
-        confirmation = self._durable.get_confirmation(confirmation_id)
+        confirmation = self._operations.get_confirmation(confirmation_id)
         if confirmation is None:
             return web.json_response({"error": "confirmation_not_found"}, status=404)
-        operation = self._durable.get_operation(confirmation.operation_id)
+        operation = self._operations.get_operation(confirmation.operation_id)
         if operation is None:
             return web.json_response({"error": "operation_not_found"}, status=404)
-        pending_update = self._pending_task_due_updates.get(operation.operation_id)
-        pending_create = self._pending_task_creates.get(operation.operation_id)
-        pending_action = self._pending_task_actions.get(operation.operation_id)
-        pending_task_edit = self._pending_task_edits.get(operation.operation_id)
-        pending_event_create = self._pending_event_creates.get(operation.operation_id)
-        pending_memo_create = self._pending_memo_creates.get(operation.operation_id)
-        pending_memo_delete = self._pending_memo_deletes.get(operation.operation_id)
-        pending_memo_edit = self._pending_memo_edits.get(operation.operation_id)
-        pending_document_metadata = self._pending_document_metadata.get(operation.operation_id)
-        if (
-            pending_update is None
-            and pending_create is None
-            and pending_action is None
-            and pending_task_edit is None
-            and pending_event_create is None
-            and pending_memo_create is None
-            and pending_memo_delete is None
-            and pending_memo_edit is None
-            and pending_document_metadata is None
-        ):
+        pending_record = self._operations.get_pending_payload(operation.operation_id)
+        if pending_record is None:
             return web.json_response({"error": "operation_payload_not_found"}, status=410)
         try:
+            pending = _pending_mutation_from_record(pending_record)
+        except DurableGovernorError as exc:
+            return web.json_response({"error": str(exc)}, status=410)
+        pending_update = pending if isinstance(pending, PendingTaskDueUpdate) else None
+        pending_create = pending if isinstance(pending, PendingTaskCreate) else None
+        pending_action = pending if isinstance(pending, PendingTaskAction) else None
+        pending_task_edit = pending if isinstance(pending, PendingTaskEdit) else None
+        pending_event_create = pending if isinstance(pending, PendingEventCreate) else None
+        pending_memo_create = pending if isinstance(pending, PendingMemoCreate) else None
+        pending_memo_delete = pending if isinstance(pending, PendingMemoDelete) else None
+        pending_memo_edit = pending if isinstance(pending, PendingMemoEdit) else None
+        pending_document_metadata = pending if isinstance(pending, PendingDocumentMetadata) else None
+        try:
             actor = Actor("user", actor_id, operation.actor.scope)
-            self._durable.approve_confirmation(
-                confirmation_id,
-                actor=actor,
-                normalized_operation_hash=operation.request_hash,
-            )
+            self._operations.approve(confirmation_id, actor=actor)
             if pending_update is not None:
                 result = await asyncio.to_thread(
                     self._calendar_adapter.update_task,
@@ -1761,7 +1840,7 @@ class BrainToolServer:
                     await asyncio.to_thread(self._memos.delete, pending_memo_delete.name)
                     result_uid = pending_memo_delete.name
                     memo_payload = _pending_memo_delete_payload(pending_memo_delete)
-            self._durable.complete_operation(operation.operation_id, result={"uid": result_uid})
+            self._operations.complete(operation.operation_id, result={"uid": result_uid})
             if (
                 pending_memo_create is None
                 and pending_memo_delete is None
@@ -1772,23 +1851,14 @@ class BrainToolServer:
         except DurableGovernorError as exc:
             return web.json_response({"error": str(exc)}, status=400)
         except CalendarAdapterError as exc:
-            self._durable.fail_operation(operation.operation_id, error_code="calendar_adapter_error")
+            self._operations.fail(operation.operation_id, error_code="calendar_adapter_error")
             return web.json_response({"error": str(exc)}, status=502)
         except (ValueError, MemosError) as exc:
-            self._durable.fail_operation(operation.operation_id, error_code=str(exc))
+            self._operations.fail(operation.operation_id, error_code=str(exc))
             return _memos_error(exc)
         except DocumentIntakeError as exc:
-            self._durable.fail_operation(operation.operation_id, error_code=exc.code)
+            self._operations.fail(operation.operation_id, error_code=exc.code)
             return _document_error(exc)
-        self._pending_task_due_updates.pop(operation.operation_id, None)
-        self._pending_task_creates.pop(operation.operation_id, None)
-        self._pending_task_actions.pop(operation.operation_id, None)
-        self._pending_task_edits.pop(operation.operation_id, None)
-        self._pending_event_creates.pop(operation.operation_id, None)
-        self._pending_memo_creates.pop(operation.operation_id, None)
-        self._pending_memo_deletes.pop(operation.operation_id, None)
-        self._pending_memo_edits.pop(operation.operation_id, None)
-        self._pending_document_metadata.pop(operation.operation_id, None)
         response_payload = {
             "operationId": operation.operation_id,
             "confirmationId": confirmation_id,

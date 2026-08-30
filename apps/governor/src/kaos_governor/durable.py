@@ -59,6 +59,21 @@ AUDIT_OUTCOMES = {
 }
 TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,127}$")
 MAX_IDEMPOTENCY_KEY_CHARS = 200
+MAX_PENDING_PAYLOAD_BYTES = 128 * 1024
+INTERRUPTED_EXECUTION_GRACE = timedelta(hours=1)
+PENDING_PAYLOAD_PROHIBITED_KEY_PARTS = {
+    "attachment",
+    "authorization",
+    "base64",
+    "binary",
+    "cookie",
+    "credential",
+    "imagebytes",
+    "password",
+    "pdfbytes",
+    "secret",
+    "token",
+}
 
 
 class DurableGovernorError(ValueError):
@@ -120,6 +135,7 @@ class OperationRecord:
     tool_name: str
     operation_type: str
     request_hash: str
+    parameters: Mapping[str, Any]
     status: OperationStatus
     created_at: datetime
     updated_at: datetime
@@ -138,6 +154,16 @@ class ConfirmationRecord:
     created_at: datetime
     expires_at: datetime
     used_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class PendingOperationPayload:
+    operation_id: str
+    payload_kind: str
+    schema_version: int
+    payload: Mapping[str, Any]
+    created_at: datetime
+    updated_at: datetime
 
 
 @dataclass(frozen=True)
@@ -178,6 +204,44 @@ def _canonical_json(value: Mapping[str, Any]) -> str:
         raise DurableGovernorError("parameters_not_json_serializable") from exc
 
 
+def normalized_json_object(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a detached JSON object with tuples and other JSON values normalized."""
+
+    return json.loads(_canonical_json(value))
+
+
+def validate_pending_payload(
+    payload_kind: str,
+    payload: Mapping[str, Any],
+    *,
+    schema_version: int = 1,
+) -> dict[str, Any]:
+    """Validate restart payloads without allowing secrets or binary material."""
+
+    if not TOKEN.fullmatch(payload_kind):
+        raise DurableGovernorError("pending_payload_kind_invalid")
+    if not isinstance(schema_version, int) or isinstance(schema_version, bool) or not 1 <= schema_version <= 1000:
+        raise DurableGovernorError("pending_payload_schema_version_invalid")
+    normalized = normalized_json_object(payload)
+    if len(_canonical_json(normalized).encode("utf-8")) > MAX_PENDING_PAYLOAD_BYTES:
+        raise DurableGovernorError("pending_payload_too_large")
+    for key in _mapping_keys(normalized):
+        compact = re.sub(r"[^a-z0-9]", "", key.lower())
+        if any(part in compact for part in PENDING_PAYLOAD_PROHIBITED_KEY_PARTS):
+            raise DurableGovernorError("pending_payload_prohibited_key")
+    return normalized
+
+
+def _mapping_keys(value: Any):
+    if isinstance(value, Mapping):
+        for key, nested in value.items():
+            yield str(key)
+            yield from _mapping_keys(nested)
+    elif isinstance(value, list):
+        for nested in value:
+            yield from _mapping_keys(nested)
+
+
 def _now() -> datetime:
     return datetime.now(UTC)
 
@@ -188,13 +252,14 @@ def _require_aware_utc(value: datetime, field_name: str) -> None:
 
 
 class MemoryDurableGovernorStore:
-    """Deterministic store used by tests and adapters until PostgreSQL wiring lands."""
+    """Deterministic store used by tests and explicitly ephemeral runtimes."""
 
     def __init__(self) -> None:
         self._lock = threading.RLock()
         self._operations: dict[str, OperationRecord] = {}
         self._idempotency: dict[tuple[str, str, str, str], str] = {}
         self._confirmations: dict[str, ConfirmationRecord] = {}
+        self._pending_payloads: dict[str, PendingOperationPayload] = {}
         self._audit: list[AuditRecord] = []
 
     def start_operation(self, request: OperationRequest, *, now: datetime | None = None) -> tuple[OperationRecord, bool]:
@@ -233,6 +298,7 @@ class MemoryDurableGovernorStore:
                 tool_name=request.tool_name,
                 operation_type=request.operation_type,
                 request_hash=request.request_hash,
+                parameters=normalized_json_object(request.parameters),
                 status=status,
                 created_at=timestamp,
                 updated_at=timestamp,
@@ -251,6 +317,56 @@ class MemoryDurableGovernorStore:
                 now=timestamp,
             )
             return operation, True
+
+    def start_proposal(
+        self,
+        request: OperationRequest,
+        *,
+        payload_kind: str,
+        payload: Mapping[str, Any],
+        schema_version: int,
+        confirmation_ttl: timedelta,
+        now: datetime | None = None,
+    ) -> tuple[OperationRecord, bool, ConfirmationRecord]:
+        timestamp = now or _now()
+        _require_aware_utc(timestamp, "now")
+        if confirmation_ttl <= timedelta():
+            raise DurableGovernorError("confirmation_ttl_invalid")
+        normalized_payload = validate_pending_payload(
+            payload_kind,
+            payload,
+            schema_version=schema_version,
+        )
+        with self._lock:
+            self.expire_stale_proposals(now=timestamp)
+            operation, created = self.start_operation(request, now=timestamp)
+            if not created:
+                existing_confirmation = next(
+                    (
+                        confirmation
+                        for confirmation in self._confirmations.values()
+                        if confirmation.operation_id == operation.operation_id
+                        and confirmation.status == "pending"
+                        and timestamp < confirmation.expires_at
+                    ),
+                    None,
+                )
+                if existing_confirmation is None:
+                    raise DurableGovernorError("operation_not_pending")
+                return operation, False, existing_confirmation
+            confirmation = self.create_confirmation(
+                operation.operation_id,
+                ttl=confirmation_ttl,
+                now=timestamp,
+            )
+            self.save_pending_payload(
+                operation.operation_id,
+                payload_kind=payload_kind,
+                payload=normalized_payload,
+                schema_version=schema_version,
+                now=timestamp,
+            )
+            return operation, created, confirmation
 
     def create_confirmation(
         self,
@@ -305,12 +421,23 @@ class MemoryDurableGovernorStore:
                 raise DurableGovernorError("confirmation_actor_mismatch")
             if confirmation.normalized_operation_hash != normalized_operation_hash:
                 raise DurableGovernorError("confirmation_operation_mismatch")
+            if confirmation.status == "expired":
+                raise DurableGovernorError("confirmation_expired")
             if confirmation.status != "pending":
                 raise DurableGovernorError("confirmation_not_pending")
             if timestamp >= confirmation.expires_at:
                 expired = replace(confirmation, status="expired")
                 self._confirmations[confirmation_id] = expired
-                self._expire_operation(expired.operation_id, timestamp)
+                has_active_confirmation = any(
+                    candidate.confirmation_id != confirmation_id
+                    and candidate.operation_id == expired.operation_id
+                    and candidate.status == "pending"
+                    and timestamp < candidate.expires_at
+                    for candidate in self._confirmations.values()
+                )
+                if not has_active_confirmation:
+                    self._expire_operation(expired.operation_id, timestamp)
+                    self._pending_payloads.pop(expired.operation_id, None)
                 self.record_audit(
                     actor=actor,
                     event_type="confirmation.expired",
@@ -349,17 +476,18 @@ class MemoryDurableGovernorStore:
     ) -> OperationRecord:
         timestamp = now or _now()
         _require_aware_utc(timestamp, "now")
-        _canonical_json(result or {})
+        normalized_result = normalized_json_object(result or {})
         with self._lock:
             operation = self._require_operation(operation_id)
             completed = replace(
                 operation,
                 status="completed",
                 updated_at=timestamp,
-                result=dict(result or {}),
+                result=normalized_result,
                 error_code="",
             )
             self._operations[operation_id] = completed
+            self._pending_payloads.pop(operation_id, None)
             self.record_audit(
                 actor=operation.actor,
                 event_type="operation.completed",
@@ -387,6 +515,7 @@ class MemoryDurableGovernorStore:
             operation = self._require_operation(operation_id)
             failed = replace(operation, status="failed", updated_at=timestamp, error_code=error_code)
             self._operations[operation_id] = failed
+            self._pending_payloads.pop(operation_id, None)
             self.record_audit(
                 actor=operation.actor,
                 event_type="operation.failed",
@@ -407,6 +536,106 @@ class MemoryDurableGovernorStore:
     def get_confirmation(self, confirmation_id: str) -> ConfirmationRecord | None:
         with self._lock:
             return self._confirmations.get(confirmation_id)
+
+    def save_pending_payload(
+        self,
+        operation_id: str,
+        *,
+        payload_kind: str,
+        payload: Mapping[str, Any],
+        schema_version: int = 1,
+        now: datetime | None = None,
+    ) -> PendingOperationPayload:
+        timestamp = now or _now()
+        _require_aware_utc(timestamp, "now")
+        normalized = validate_pending_payload(payload_kind, payload, schema_version=schema_version)
+        with self._lock:
+            self._require_operation(operation_id)
+            existing = self._pending_payloads.get(operation_id)
+            record = PendingOperationPayload(
+                operation_id=operation_id,
+                payload_kind=payload_kind,
+                schema_version=schema_version,
+                payload=normalized,
+                created_at=existing.created_at if existing is not None else timestamp,
+                updated_at=timestamp,
+            )
+            self._pending_payloads[operation_id] = record
+            return record
+
+    def get_pending_payload(self, operation_id: str) -> PendingOperationPayload | None:
+        with self._lock:
+            return self._pending_payloads.get(operation_id)
+
+    def delete_pending_payload(self, operation_id: str) -> None:
+        with self._lock:
+            self._pending_payloads.pop(operation_id, None)
+
+    def expire_stale_proposals(self, *, now: datetime | None = None) -> int:
+        timestamp = now or _now()
+        _require_aware_utc(timestamp, "now")
+        with self._lock:
+            affected_operation_ids: set[str] = set()
+            for confirmation_id, confirmation in tuple(self._confirmations.items()):
+                if confirmation.status != "pending" or timestamp < confirmation.expires_at:
+                    continue
+                expired = replace(confirmation, status="expired")
+                self._confirmations[confirmation_id] = expired
+                affected_operation_ids.add(expired.operation_id)
+                self.record_audit(
+                    actor=expired.actor,
+                    event_type="confirmation.expired",
+                    outcome="expired",
+                    operation_id=expired.operation_id,
+                    request_hash=expired.normalized_operation_hash,
+                    now=timestamp,
+                )
+
+            deleted = 0
+            for operation_id in affected_operation_ids:
+                has_active_confirmation = any(
+                    confirmation.operation_id == operation_id
+                    and confirmation.status == "pending"
+                    and timestamp < confirmation.expires_at
+                    for confirmation in self._confirmations.values()
+                )
+                if has_active_confirmation:
+                    continue
+                self._expire_operation(operation_id, timestamp)
+                if self._pending_payloads.pop(operation_id, None) is not None:
+                    deleted += 1
+
+            interrupted_operation_ids = {
+                confirmation.operation_id
+                for confirmation in self._confirmations.values()
+                if confirmation.status == "approved"
+                and confirmation.expires_at + INTERRUPTED_EXECUTION_GRACE <= timestamp
+                and (operation := self._operations.get(confirmation.operation_id)) is not None
+                and operation.status == "confirmed"
+                and confirmation.operation_id in self._pending_payloads
+            }
+            for operation_id in interrupted_operation_ids:
+                operation = self._require_operation(operation_id)
+                self._operations[operation_id] = replace(
+                    operation,
+                    status="failed",
+                    updated_at=timestamp,
+                    error_code="execution_interrupted",
+                )
+                self._pending_payloads.pop(operation_id, None)
+                deleted += 1
+                self.record_audit(
+                    actor=operation.actor,
+                    event_type="operation.failed",
+                    outcome="failed",
+                    operation_id=operation.operation_id,
+                    tool_name=operation.tool_name,
+                    idempotency_key=operation.idempotency_key,
+                    request_hash=operation.request_hash,
+                    reason="execution_interrupted",
+                    now=timestamp,
+                )
+            return deleted
 
     def audit_records(self, operation_id: str | None = None) -> tuple[AuditRecord, ...]:
         with self._lock:

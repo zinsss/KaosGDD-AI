@@ -10,10 +10,27 @@ import unittest
 
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
-from kaos_governor import MemoryDurableGovernorStore
+from kaos_governor import MemoryDurableGovernorStore, PendingOperationPayload
+from kaos_governor.durable import validate_pending_payload
 from kaos_governor.documents import PaperlessDocument, PaperlessSearchPage, PaperlessSearchResult, PaperlessTag
 from kaos_governor.memos import Memo, MemoSearchPage, MemoSearchResult
-from kaos_governor_discord.tools import BrainToolServer, ImagingSecondLookClient, ImagingSecondLookConfig, kst_today
+from kaos_governor_discord.tools import (
+    BrainToolServer,
+    ImagingSecondLookClient,
+    ImagingSecondLookConfig,
+    PendingDocumentMetadata,
+    PendingEventCreate,
+    PendingMemoCreate,
+    PendingMemoDelete,
+    PendingMemoEdit,
+    PendingTaskAction,
+    PendingTaskCreate,
+    PendingTaskDueUpdate,
+    PendingTaskEdit,
+    _pending_mutation_from_record,
+    _pending_mutation_record,
+    kst_today,
+)
 
 
 class FakeCalendarAdapter:
@@ -144,6 +161,35 @@ class FakeCalendarAdapter:
 class TimezoneTests(unittest.TestCase):
     def test_kst_today_uses_korea_date_when_container_is_utc_previous_day(self) -> None:
         self.assertEqual(kst_today(datetime(2026, 8, 25, 23, 0, tzinfo=timezone.utc)), date(2026, 8, 26))
+
+
+class PendingMutationSerializationTests(unittest.TestCase):
+    def test_every_pending_mutation_round_trips_through_json_persistence(self) -> None:
+        cases = (
+            PendingTaskDueUpdate("main", "T1", "zin:tasks", "Task", "", "", "2026-09-01", "10:00", {"uid": "T1"}),
+            PendingTaskCreate("main", "zin:tasks", "Task", "Memo", "2026-09-01", "10:00", {"title": "Task"}),
+            PendingTaskAction("main", "complete", "T1", "zin:tasks", "Task", "", "", {"uid": "T1"}),
+            PendingTaskEdit("main", "T1", "zin:tasks", "Old", "New", "Before", "After", "", "", "2026-09-01", "10:00", "", "5", {"uid": "T1"}),
+            PendingEventCreate("family", "Event", "2026-09-01", "2026-09-01", True, "Memo", "family:events", {"title": "Event"}),
+            PendingMemoCreate("Create content"),
+            PendingMemoDelete("memos/42", "Deleted content"),
+            PendingMemoEdit("memos/42", "Old content", "New content"),
+            PendingDocumentMetadata(42, "Old title", "New title", ("clinic", "receipt"), {"id": 42}),
+        )
+        timestamp = datetime(2026, 8, 30, tzinfo=timezone.utc)
+
+        for pending in cases:
+            with self.subTest(pending=type(pending).__name__):
+                payload_kind, payload = _pending_mutation_record(pending)
+                record = PendingOperationPayload(
+                    operation_id="op_test",
+                    payload_kind=payload_kind,
+                    schema_version=1,
+                    payload=validate_pending_payload(payload_kind, payload),
+                    created_at=timestamp,
+                    updated_at=timestamp,
+                )
+                self.assertEqual(_pending_mutation_from_record(record), pending)
 
 
 class FakeMemos:
@@ -1032,6 +1078,68 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["memo"]["name"], "memos/new")
         self.assertEqual(self.memos.create_calls, ["# Rustdesk\nUse Tailscale."])
         self.assertEqual(self.calendar_refresh_count, 0)
+
+    async def test_memo_create_proposal_can_be_approved_after_tool_server_restart(self) -> None:
+        durable = MemoryDurableGovernorStore()
+        first_server = BrainToolServer(
+            "127.0.0.1",
+            8098,
+            governor_api_token="governor-secret",
+            calendar_adapter=self.calendar,  # type: ignore[arg-type]
+            memos=self.memos,  # type: ignore[arg-type]
+            paperless=self.paperless,  # type: ignore[arg-type]
+            durable_store=durable,
+        )
+        first_client = TestClient(TestServer(first_server.application()))
+        await first_client.start_server()
+        try:
+            proposal = await first_client.post(
+                "/tools/memos/create/proposals",
+                headers=self.headers(),
+                json={
+                    "actorId": "994579996960104529",
+                    "idempotencyKey": "discord-message-memo-restart",
+                    "content": "# Survives restart\nPersist this proposal.",
+                },
+            )
+            self.assertEqual(proposal.status, 201)
+            proposal_payload = await proposal.json()
+            confirmation_id = proposal_payload["confirmationId"]
+            operation = durable.get_operation(proposal_payload["operationId"])
+            self.assertIsNotNone(operation)
+            self.assertNotIn("Persist this proposal", str(operation.parameters))
+            self.assertEqual(operation.parameters["contentFingerprint"]["bytes"], 41)
+        finally:
+            await first_client.close()
+
+        second_server = BrainToolServer(
+            "127.0.0.1",
+            8098,
+            governor_api_token="governor-secret",
+            calendar_adapter=self.calendar,  # type: ignore[arg-type]
+            memos=self.memos,  # type: ignore[arg-type]
+            paperless=self.paperless,  # type: ignore[arg-type]
+            durable_store=durable,
+        )
+        second_client = TestClient(TestServer(second_server.application()))
+        await second_client.start_server()
+        try:
+            response = await second_client.post(
+                f"/tools/confirmations/{confirmation_id}/approve",
+                headers=self.headers(),
+                json={"actorId": "994579996960104529"},
+            )
+            response_status = response.status
+            response_payload = await response.json()
+        finally:
+            await second_client.close()
+
+        self.assertEqual(response_status, 200)
+        self.assertEqual(response_payload["status"], "completed")
+        self.assertEqual(
+            self.memos.create_calls,
+            ["# Survives restart\nPersist this proposal."],
+        )
 
     async def test_memo_create_approval_rejects_wrong_actor(self) -> None:
         proposal = await self.client.post(
