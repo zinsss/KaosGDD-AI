@@ -13,14 +13,13 @@ H4, office-service, and stateful-service cutovers.
 
 ## Current Position
 
-- Current phase: Phase 2, durable PostgreSQL operations and confirmation
-  payloads, validated locally on 2026-08-30. Production and backup/restore
-  gates remain open.
-- Phase 1 remains implemented and validated locally; its changes have not yet
-  been committed or deployed separately.
-- Production behavior: unchanged by this architecture plan so far.
-- Database schema in production: migration `004`; additive migration `005` is
-  written and tested but has not been applied to production.
+- Current phase: Phase 2 production observation. Durable PostgreSQL operations
+  and confirmation payloads were promoted on 2026-08-30; the observation gate
+  remains open.
+- Phase 1 was committed and deployed with Phase 2 in commit `11b18be`.
+- Production behavior: Governor/Discord uses the PostgreSQL operation store;
+  public HTTP and Discord behavior remains compatible.
+- Database schema in production: additive migration `005`.
 - Working rule: finish and verify one boundary before moving another domain.
 
 ## Progress
@@ -28,8 +27,8 @@ H4, office-service, and stateful-service cutovers.
 | Phase | Objective | Implementation | Production | Status |
 | --- | --- | --- | --- | --- |
 | 0 | Audit current architecture and flows | Complete | No change | Complete |
-| 1 | Establish the Governor operation boundary | Complete and tested | Not deployed | Validated locally |
-| 2 | Persist operations, confirmations, and pending payloads | Complete and tested | Not deployed | Validated locally |
+| 1 | Establish the Governor operation boundary | Complete and tested | Deployed 2026-08-30 | Production observation |
+| 2 | Persist operations, confirmations, and pending payloads | Complete and tested | Deployed 2026-08-30 | Production observation |
 | 3 | Route every meaningful mutation through Governor | Not started | Not deployed | Planned |
 | 4 | Make Brain transport-neutral | Not started | Not deployed | Planned |
 | 5 | Isolate KaosDiscoord and notification delivery | Not started | Not deployed | Planned |
@@ -115,7 +114,8 @@ Exit evidence:
 
 ## Phase 1 — Governor Operation Boundary
 
-Status: implemented and validated locally on 2026-08-30.
+Status: deployed with Phase 2 on 2026-08-30; production observation in
+progress.
 
 Objective:
 
@@ -167,8 +167,9 @@ cutover.
 
 Rollback:
 
-- Revert the Phase 1 source and documentation changes. There is no data or
-  database rollback because no migration or deployment was performed.
+- Recreate the previous Governor/Discord image or select the retained memory
+  store compatibility path. Leave additive migration `005` in place; do not
+  perform a destructive database rollback.
 
 Release checklist:
 
@@ -177,21 +178,21 @@ Release checklist:
 - [x] Governor/Discord regression suite
 - [x] Brain regression suite
 - [x] Architecture documentation
-- [ ] Review and commit
-- [ ] Deploy through the existing H3/H4 procedure
-- [ ] Verify health and representative proposal/approval in production
+- [x] Review and commit
+- [x] Deploy through the existing H3 procedure
+- [x] Verify health and representative proposal/approval in production
 - [ ] Complete observation gate
 
 ## Phase 2 — PostgreSQL Operation Persistence
 
-Status: validated locally on 2026-08-30; not deployed.
+Status: deployed on 2026-08-30; production observation in progress.
 
 Objective:
 
 - Make operation, confirmation, and normalized pending execution state survive
   process and host restarts.
 
-Implemented locally:
+Implemented:
 
 1. Inventory every current pending payload shape for tasks, events, memos, and
    Paperless metadata.
@@ -212,8 +213,8 @@ Implemented locally:
 6. Use transactions and row locking for idempotent start, single-use approval,
    expiry, completion, and failure.
 7. Added explicit `GOVERNOR_OPERATION_STORE=postgres` H3 wiring while retaining
-   the memory store for unit tests and deliberately isolated adapters. The
-   production setting is not active until deployment.
+   the memory store for unit tests and deliberately isolated adapters. The H3
+   production setting is active as of 2026-08-30.
 8. Replaced the nine in-process pending dictionaries in the tool server with
    Governor-owned durable payload retrieval.
 9. Proved restart recovery at the HTTP adapter boundary, JSON round-trip
@@ -283,9 +284,31 @@ Exit criteria:
 - [x] PostgreSQL store passes the durable lifecycle contract tests
 - [x] Restart recovery and serialization pass for every mutation payload kind
 - [x] All relevant regressions pass
-- [ ] Backup/restore includes new operation state
-- [ ] Production promotion approved
+- [x] Backup/restore includes new operation state
+- [x] Production promotion approved
 - [ ] Observation gate completed
+
+Production promotion evidence (2026-08-30):
+
+- Commit `11b18be` was pushed to `origin/main` before deployment.
+- The pre-migration custom-format backup
+  `governor-pre-005-20260830T034533Z.dump` has SHA-256
+  `b995dfff7fa7c67f481eaa084aac40bf266748433729eec7ac3d85781496d75a`.
+  An isolated PostgreSQL 16 restore recovered migration `004`, 17 public
+  tables, and the expected Governor row counts.
+- The guarded H3 family deployment applied migration `005`; the new
+  `governor_operations.parameters` column and
+  `governor_operation_payloads` table were verified directly.
+- Governor API, PostgreSQL, and Discord were healthy with zero restart counts.
+  Discord reported `GOVERNOR_OPERATION_STORE=postgres` and completed a
+  Governor-only smoke proposal through confirmation and completion with all
+  four expected audit events and no retained pending payload.
+- The post-migration custom-format backup
+  `governor-post-005-20260830T034850Z.dump` has SHA-256
+  `fad1a6fd7f77d85ce82d2806ae2a3913f30a90e65e1f1e8535a82217d5350ff8`.
+  An isolated PostgreSQL 16 restore recovered migration `005`, 18 public
+  tables, the completed smoke operation, its four audit rows, and zero pending
+  payload rows.
 
 ## Phase 3 — Route Mutations Through Governor
 
@@ -472,6 +495,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | Plan | Added this canonical tracker and aligned architecture terminology | Documentation review and `git diff --check` | None |
 | 2026-08-30 | 2 | Started PostgreSQL operation persistence and pending-payload inventory | Implementation in progress | None |
 | 2026-08-30 | 2 | Added migration 005, PostgreSQL store, durable versioned payloads, restart recovery, expiry/interruption cleanup, production store wiring, and CI PostgreSQL coverage | 200 Governor unit/contract + 9 PostgreSQL integration + 349 Discord + 317 Brain tests; H3 preflight and Compose render passed | None; not deployed, production remains on migration 004 |
+| 2026-08-30 | 1-2 | Promoted commit `11b18be`, migration 005, and the PostgreSQL-backed Discord operation store after pre/post recovery exercises | Both custom-format backups restored into isolated PostgreSQL 16; live proposal/approval/completion/audit/payload cleanup passed; API, Discord, and PostgreSQL healthy with zero restarts | Production observation started; compatibility and memory-store rollback path retained |
 
 ## How to Update This Tracker
 
