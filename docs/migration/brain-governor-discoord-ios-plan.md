@@ -20,8 +20,9 @@ H4, office-service, and stateful-service cutovers.
 - Active implementation: Phase 3 task-handler slice 1 is validated locally but
   is not deployed.
 - H4 Brain correction: Korean task-create requests using `만들어` or `생성`
-  are locally corrected and awaiting controlled deployment. This is an intent
-  parser fix only and does not promote the Phase 3 Governor handler slice.
+  were corrected and deployed in commit `99011fb` on 2026-08-30. This was an
+  intent parser deployment only and did not promote the Phase 3 Governor
+  handler slice on H3.
 - Phase 1 was committed and deployed with Phase 2 in commit `11b18be`.
 - Production behavior: Governor/Discord uses the PostgreSQL operation store;
   public HTTP and Discord behavior remains compatible.
@@ -403,8 +404,11 @@ H4 task-create routing correction:
 - Exact parser, tool-routing, and end-to-end bot regressions verify that the
   request proposes task creation, performs no active-list fetch, and still
   requires Governor confirmation.
-- Full Brain regression: 321 tests passed. H3 remains unchanged; only the H4
-  Brain image is eligible for this corrective deployment.
+- Full Brain regression: 321 tests passed. H4 was promoted to `99011fb`; the
+  deployed parser resolves the reported phrase to title `전염병신고` with no
+  read-only route. Systemd, container, Discord gateway, and dependency checks
+  are healthy with zero container restarts. The prior H4 image remains tagged
+  `kaos-brain:rollback-e7e416f`. H3 remains unchanged.
 
 Affected areas:
 
@@ -571,7 +575,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | 2 | Added migration 005, PostgreSQL store, durable versioned payloads, restart recovery, expiry/interruption cleanup, production store wiring, and CI PostgreSQL coverage | 200 Governor unit/contract + 9 PostgreSQL integration + 349 Discord + 317 Brain tests; H3 preflight and Compose render passed | None; not deployed, production remains on migration 004 |
 | 2026-08-30 | 1-2 | Promoted commit `11b18be`, migration 005, and the PostgreSQL-backed Discord operation store after pre/post recovery exercises | Both custom-format backups restored into isolated PostgreSQL 16; live proposal/approval/completion/audit/payload cleanup passed; API, Discord, and PostgreSQL healthy with zero restarts | Production observation started; compatibility and memory-store rollback path retained |
 | 2026-08-30 | 3 | Extracted the first task/supplies execution slice from the Discord HTTP adapter into registered Governor task handlers | 8 focused task tests; 208 Governor unit/contract + 9 PostgreSQL integration + 349 Discord + 317 Brain tests passed | None; code is locally validated and Phase 2 observation remains open |
-| 2026-08-30 | 3 | Corrected Korean `만들어`/`생성` task-create routing discovered during normal H4 observation | Exact parser/tool/bot regressions and all 321 Brain tests passed | H4 corrective deployment pending; H3 unchanged |
+| 2026-08-30 | 3 | Corrected Korean `만들어`/`생성` task-create routing discovered during normal H4 observation | Exact parser/tool/bot regressions and all 321 Brain tests passed; deployed runtime parses the reported phrase as task `전염병신고` without a read-only lookup | H4 Brain deployed at `99011fb`, healthy with zero restarts; prior image tagged for rollback; H3 unchanged |
 
 ## How to Update This Tracker
 
