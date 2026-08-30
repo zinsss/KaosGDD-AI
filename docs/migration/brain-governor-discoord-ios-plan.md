@@ -21,8 +21,9 @@ H4, office-service, and stateful-service cutovers.
   production observation. Slice 2 routes direct Discord task/supplies writers
   through Governor and completed its H3 production observation on 2026-08-30
   after correcting and replay-verifying a false terminal UI failure. Memos
-  handler slice 1 is deployed for the confirmed Brain/iOS route and is under
-  production observation.
+  handler slice 1 completed production observation for the confirmed Brain/iOS
+  route on 2026-08-30. Direct Discord Memos capture remains the next Phase 3
+  slice.
 - H4 Brain correction: Korean task-create requests using `만들어` or `생성`
   were corrected and deployed in commit `99011fb` on 2026-08-30. This was an
   intent parser deployment only and did not promote the Phase 3 Governor
@@ -40,7 +41,7 @@ H4, office-service, and stateful-service cutovers.
 | 0 | Audit current architecture and flows | Complete | No change | Complete |
 | 1 | Establish the Governor operation boundary | Complete and tested | Deployed and observed 2026-08-30 | Complete |
 | 2 | Persist operations, confirmations, and pending payloads | Complete and tested | Deployed and observed 2026-08-30 | Complete |
-| 3 | Route every meaningful mutation through Governor | Task slices complete; Memos handler slice 1 tested | Task slices observed; Memos slice 1 deployed 2026-08-30 | Production observation |
+| 3 | Route every meaningful mutation through Governor | Task slices and Memos handler slice 1 complete | Task slices and Memos slice 1 observed 2026-08-30 | In progress |
 | 4 | Make Brain transport-neutral | Not started | Not deployed | Planned |
 | 5 | Isolate KaosDiscoord and notification delivery | Not started | Not deployed | Planned |
 | 6 | Add stable iOS APIs and lightweight clients | Pilot read endpoint only | Pilot active | Planned |
@@ -593,8 +594,8 @@ Memos slice 1 production gate:
 - [x] Governor, Discord, and Brain regression suites
 - [x] Review and commit
 - [x] Controlled H3 deployment
-- [ ] Reconcile a normal confirmed memo with Memos and Governor audit state
-- [ ] Slice observation gate
+- [x] Reconcile a normal confirmed memo with Memos and Governor audit state
+- [x] Slice observation gate
 
 Memos slice 1 production promotion evidence (2026-08-30):
 
@@ -616,7 +617,12 @@ Memos slice 1 production promotion evidence (2026-08-30):
   payload table remains empty. H4 doctor reports Governor reachability,
   Discord readiness, and Brain tools enabled.
 - One normal confirmed Brain memo and authoritative Memos/audit reconciliation
-  remain required to close this slice's observation gate.
+  completed on 2026-08-30. Operation
+  `op_1f205a716d8b0ef61cd143d8890d83c3` completed once and returned
+  `memos/LZ44eThP6c4NjmWCK8s2AK`. The authoritative private memo contains the
+  exact 42-byte observation text, exact-content search returns one memo, four
+  ordered lifecycle audit records are present, and the pending-payload count is
+  zero. This closes Memos slice 1's production observation gate.
 
 Risk: low to medium. This changes only final dispatch after the existing
 confirmation has been approved. The direct capture UI remains on its current
@@ -834,6 +840,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | 3 | Promoted the approval-replay correction and closed task slice 2 observation | Exact completed confirmation replay returned the original UID with no second write; 4 completed operations and 0 payloads retained; container healthy with zero restarts; Discord and H4 dependencies ready | Task slices 1 and 2 complete; rollback image `kaosgdd-ai-governor-discord:rollback-f6b8257` retained; Memos is next |
 | 2026-08-30 | 3 | Added the Governor Memos handler and routed confirmed Brain/iOS memo mutations through it | 9 focused memo + 78 tool tests; 231 Governor with all 11 PostgreSQL tests passed separately; 352 Discord + 321 Brain tests passed | None; Memos slice 1 validated locally, direct Discord capture writer unchanged |
 | 2026-08-30 | 3 | Promoted Memos handler slice 1 to H3 | Commit `1e6a3aa`; installed route delegates to the shared handler with no direct confirmation write; container healthy with zero restarts; 4 completed operations retained and 0 pending payloads; H4 dependencies ready | Production observation started; direct memo-capture writer unchanged; rollback image `kaosgdd-ai-governor-discord:rollback-7521ac0` retained |
+| 2026-08-30 | 3 | Completed Memos handler slice 1 production observation | Normal Brain confirmation created authoritative memo `memos/LZ44eThP6c4NjmWCK8s2AK`; exact content count 1; operation completed with four ordered audit records and zero pending payloads; container healthy with zero restarts | Slice 1 complete; direct Discord Memos capture remains the next slice |
 | 2026-08-30 | 6 | Recorded deferred Shortcut deep-link support for opening a selected Memos item | Existing Memos route and ID mapping verified as `/m/{memo-id}`; iOS external-link/PWA limitation documented | None; planning only |
 
 ## How to Update This Tracker
