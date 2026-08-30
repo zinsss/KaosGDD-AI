@@ -2,10 +2,21 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import secrets
 from datetime import datetime
 
 import discord
-from kaos_governor.memos import Memo, MemoSearchPage, MemoSearchResult, MemosError, MemosService
+from kaos_governor import Actor, GovernorOperations
+from kaos_governor.memos import (
+    Memo,
+    MemoMutationCommand,
+    MemoMutationExecution,
+    MemoMutationService,
+    MemoSearchPage,
+    MemoSearchResult,
+    MemosError,
+    MemosService,
+)
 
 from .access import AccessPolicy
 from .markdown import NO_MENTIONS, escape_text
@@ -24,12 +35,16 @@ class DiscordMemosCapture:
         channel_id: int,
         confirmation_delete_after: float = 5.0,
         search_result_delete_after: float = 1800.0,
+        operations: GovernorOperations | None = None,
+        memo_mutations: MemoMutationService | None = None,
     ) -> None:
         self.service = service
         self.policy = policy
         self.channel_id = channel_id
         self.confirmation_delete_after = confirmation_delete_after
         self.search_result_delete_after = search_result_delete_after
+        self.operations = operations or GovernorOperations()
+        self.memo_mutations = memo_mutations or MemoMutationService(service)
         self._temporary_search_messages: set[int] = set()
         self.accepted_count = 0
         self.rejected_count = 0
@@ -65,9 +80,20 @@ class DiscordMemosCapture:
         await self._handle_create(message, memo_content)
         return True
 
-    async def create_memo(self, content: str):
+    async def create_memo(
+        self,
+        content: str,
+        *,
+        actor_id: str = "",
+        idempotency_key: str = "",
+    ) -> Memo:
         try:
-            memo = await asyncio.to_thread(self.service.create, content)
+            execution = await self._execute_memo_mutation(
+                MemoMutationCommand("create", content=content),
+                actor_id=actor_id,
+                idempotency_key=idempotency_key,
+            )
+            memo = await self._memo_from_execution(execution)
         except (ValueError, MemosError) as exc:
             self.rejected_count += 1
             self.last_error = exc.code if isinstance(exc, MemosError) else str(exc)
@@ -81,9 +107,21 @@ class DiscordMemosCapture:
         self.last_error = ""
         return memo
 
-    async def update_memo(self, name: str, content: str) -> Memo:
+    async def update_memo(
+        self,
+        name: str,
+        content: str,
+        *,
+        actor_id: str = "",
+        idempotency_key: str = "",
+    ) -> Memo:
         try:
-            memo = await asyncio.to_thread(self.service.update, name, content)
+            execution = await self._execute_memo_mutation(
+                MemoMutationCommand("edit", name=name, content=content),
+                actor_id=actor_id,
+                idempotency_key=idempotency_key,
+            )
+            memo = await self._memo_from_execution(execution)
         except (ValueError, MemosError) as exc:
             self.rejected_count += 1
             self.last_error = exc.code if isinstance(exc, MemosError) else str(exc)
@@ -96,9 +134,19 @@ class DiscordMemosCapture:
         self.last_error = ""
         return memo
 
-    async def delete_memo(self, name: str) -> None:
+    async def delete_memo(
+        self,
+        name: str,
+        *,
+        actor_id: str = "",
+        idempotency_key: str = "",
+    ) -> None:
         try:
-            await asyncio.to_thread(self.service.delete, name)
+            await self._execute_memo_mutation(
+                MemoMutationCommand("delete", name=name),
+                actor_id=actor_id,
+                idempotency_key=idempotency_key,
+            )
         except (ValueError, MemosError) as exc:
             self.rejected_count += 1
             self.last_error = exc.code if isinstance(exc, MemosError) else str(exc)
@@ -110,9 +158,43 @@ class DiscordMemosCapture:
             raise
         self.last_error = ""
 
+    async def _execute_memo_mutation(
+        self,
+        command: MemoMutationCommand,
+        *,
+        actor_id: str,
+        idempotency_key: str,
+    ) -> MemoMutationExecution:
+        clean_actor_id = str(actor_id or "").strip()
+        actor = (
+            Actor("user", clean_actor_id, "personal")
+            if clean_actor_id
+            else Actor("system", "discord-memos", "personal")
+        )
+        clean_idempotency_key = idempotency_key.strip() or (
+            f"discord-surface:memos:{command.operation_type}:{secrets.token_hex(12)}"
+        )
+        return await asyncio.to_thread(
+            self.memo_mutations.execute_governed,
+            self.operations,
+            command,
+            actor=actor,
+            idempotency_key=clean_idempotency_key,
+        )
+
+    async def _memo_from_execution(self, execution: MemoMutationExecution) -> Memo:
+        record = execution.mutation.record
+        if isinstance(record, Memo):
+            return record
+        return await asyncio.to_thread(self.service.get, execution.mutation.name)
+
     async def _handle_create(self, message: discord.Message, content: str) -> None:
         try:
-            memo = await self.create_memo(content)
+            memo = await self.create_memo(
+                content,
+                actor_id=str(message.author.id),
+                idempotency_key=f"discord-message:{message.id}",
+            )
         except (ValueError, MemosError):
             await message.reply(
                 f"Memos rejected: {self.last_error}",
@@ -249,7 +331,11 @@ class MemosCreateModal(discord.ui.Modal):
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         try:
-            memo = await self.capture.create_memo(str(self.memo.value or ""))
+            memo = await self.capture.create_memo(
+                str(self.memo.value or ""),
+                actor_id=_interaction_actor_id(interaction),
+                idempotency_key=_interaction_idempotency_key(interaction),
+            )
         except Exception:
             await interaction.response.send_message(
                 f"Memos rejected: {self.capture.last_error or 'internal_error'}",
@@ -454,7 +540,11 @@ class MemosDeleteConfirmView(discord.ui.View):
     async def _confirm(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
         try:
-            await self.capture.delete_memo(self.memo.name)
+            await self.capture.delete_memo(
+                self.memo.name,
+                actor_id=_interaction_actor_id(interaction),
+                idempotency_key=_interaction_idempotency_key(interaction),
+            )
         except Exception:
             await interaction.followup.send(
                 f"Memos delete rejected: {self.capture.last_error or 'internal_error'}",
@@ -496,7 +586,11 @@ class MemosDeletedView(discord.ui.View):
     async def _undo(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
         try:
-            memo = await self.capture.create_memo(self.memo.content)
+            memo = await self.capture.create_memo(
+                self.memo.content,
+                actor_id=_interaction_actor_id(interaction),
+                idempotency_key=_interaction_idempotency_key(interaction),
+            )
         except Exception:
             await interaction.followup.send(
                 f"Memos restore rejected: {self.capture.last_error or 'internal_error'}",
@@ -536,7 +630,12 @@ class MemosEditModal(discord.ui.Modal):
     async def on_submit(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
         try:
-            memo = await self.capture.update_memo(self.memo.name, str(self.content.value or ""))
+            memo = await self.capture.update_memo(
+                self.memo.name,
+                str(self.content.value or ""),
+                actor_id=_interaction_actor_id(interaction),
+                idempotency_key=_interaction_idempotency_key(interaction),
+            )
         except Exception:
             await interaction.followup.send(
                 f"Memos edit rejected: {self.capture.last_error or 'internal_error'}",
@@ -561,6 +660,15 @@ def parse_create_memo_message(content: str) -> str | None:
     if not lines or lines[0].strip() != "+++":
         return None
     return "\n".join(lines[1:]).strip()
+
+
+def _interaction_actor_id(interaction: discord.Interaction) -> str:
+    return str(getattr(getattr(interaction, "user", None), "id", "") or "")
+
+
+def _interaction_idempotency_key(interaction: discord.Interaction) -> str:
+    interaction_id = str(getattr(interaction, "id", "") or "")
+    return f"discord-interaction:{interaction_id}" if interaction_id else ""
 
 
 def render_memos_search_summary(page: MemoSearchPage) -> str:

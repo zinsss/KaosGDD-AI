@@ -372,6 +372,8 @@ class GovernorBot(discord.Client):
                 self.memos,
                 self.policy,
                 channel_id=settings.memos_channel_id,
+                operations=self.governor_operations,
+                memo_mutations=self.memo_mutations,
             )
             if settings.memos_enabled and settings.memos_channel_id is not None
             else None

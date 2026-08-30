@@ -22,8 +22,8 @@ H4, office-service, and stateful-service cutovers.
   through Governor and completed its H3 production observation on 2026-08-30
   after correcting and replay-verifying a false terminal UI failure. Memos
   handler slice 1 completed production observation for the confirmed Brain/iOS
-  route on 2026-08-30. Direct Discord Memos capture remains the next Phase 3
-  slice.
+  route on 2026-08-30. Direct Discord Memos capture slice 2 is locally
+  validated and awaits review and controlled H3 deployment.
 - H4 Brain correction: Korean task-create requests using `만들어` or `생성`
   were corrected and deployed in commit `99011fb` on 2026-08-30. This was an
   intent parser deployment only and did not promote the Phase 3 Governor
@@ -41,7 +41,7 @@ H4, office-service, and stateful-service cutovers.
 | 0 | Audit current architecture and flows | Complete | No change | Complete |
 | 1 | Establish the Governor operation boundary | Complete and tested | Deployed and observed 2026-08-30 | Complete |
 | 2 | Persist operations, confirmations, and pending payloads | Complete and tested | Deployed and observed 2026-08-30 | Complete |
-| 3 | Route every meaningful mutation through Governor | Task slices and Memos handler slice 1 complete | Task slices and Memos slice 1 observed 2026-08-30 | In progress |
+| 3 | Route every meaningful mutation through Governor | Task slices and Memos slice 1 complete; Memos slice 2 validated | Task slices and Memos slice 1 observed 2026-08-30 | Validated locally |
 | 4 | Make Brain transport-neutral | Not started | Not deployed | Planned |
 | 5 | Isolate KaosDiscoord and notification delivery | Not started | Not deployed | Planned |
 | 6 | Add stable iOS APIs and lightweight clients | Pilot read endpoint only | Pilot active | Planned |
@@ -631,6 +631,67 @@ writer until this slice has production evidence.
 Rollback: recreate the preceding H3 Governor/Discord image. The handler adds
 no schema and does not change authoritative Memos data or credentials.
 
+Memos slice 2 scope (started 2026-08-30):
+
+- Route direct Discord Memos create, edit, delete, and undo-create actions
+  through `MemoMutationService.execute_governed` and the bot's shared durable
+  `GovernorOperations` store.
+- Derive the personal user actor and idempotency key from the Discord message
+  or interaction. Retried delivery of the same explicit action must not repeat
+  an authoritative Memos write.
+- Preserve the existing `+++` capture marker, modal and confirmation UX,
+  message cleanup, and response copy. Search, browse, and open remain direct
+  read-only Memos domain operations.
+- Keep memo content out of durable operation parameters; retain only the
+  existing content fingerprint and byte length.
+
+Memos slice 2 expected files:
+
+- `integrations/discord/src/kaos_governor_discord/memos.py`
+- `integrations/discord/src/kaos_governor_discord/bot.py`
+- `integrations/discord/tests/test_memos.py`
+- narrow Governor memo result changes and tests only if required to return the
+  authoritative adapter record without a second upstream read
+
+Risk: medium around Discord interaction retries, undo behavior, and avoiding a
+false UI failure after a successful authoritative write.
+
+Rollback: restore `DiscordMemosCapture` construction and its three mutation
+methods to direct `MemosService` calls. No schema or Memos data migration is in
+scope.
+
+Memos slice 2 implementation and validation:
+
+- `DiscordMemosCapture` now owns no direct create, update, or delete adapter
+  dispatch. All four explicit mutation entry points (`+++`, add modal,
+  edit/delete controls, and undo delete) execute through the shared
+  `MemoMutationService` and PostgreSQL-backed `GovernorOperations` instance.
+- Discord message and interaction IDs provide stable idempotency keys and the
+  authenticated Discord user becomes the personal Governor actor. A system
+  actor and random key are retained only for internal/test callers without a
+  Discord context.
+- Create and edit return the authoritative adapter record from the successful
+  handler execution. This avoids a second upstream read and therefore avoids a
+  false UI failure after a committed Memos write. A replay may read the named
+  memo to reconstruct the UI, but never repeats the write.
+- Durable parameters continue to contain only memo name, content SHA-256, and
+  byte length. Search/read paths and existing Discord copy and controls are
+  unchanged.
+- 24 focused Discord Memos tests, all 231 Governor tests (11 PostgreSQL tests
+  gated in that run), all 11 isolated PostgreSQL 16 integration tests, all 355
+  Discord tests, and all 321 Brain tests passed. Package compilation,
+  container builds, and `git diff --check` passed.
+
+Memos slice 2 production gate:
+
+- [x] Direct create/edit/delete and replay tests
+- [x] Actor, idempotency, content-redaction, and authoritative-result tests
+- [x] Governor, PostgreSQL, Discord, and Brain regression suites
+- [ ] Review and commit
+- [ ] Controlled H3 deployment
+- [ ] Reconcile one direct Discord memo capture with Memos and Governor audit
+- [ ] Slice observation gate
+
 H4 task-create routing correction:
 
 - A normal observation attempt, `전염병신고 할일 만들어줘`, incorrectly
@@ -841,6 +902,8 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | 3 | Added the Governor Memos handler and routed confirmed Brain/iOS memo mutations through it | 9 focused memo + 78 tool tests; 231 Governor with all 11 PostgreSQL tests passed separately; 352 Discord + 321 Brain tests passed | None; Memos slice 1 validated locally, direct Discord capture writer unchanged |
 | 2026-08-30 | 3 | Promoted Memos handler slice 1 to H3 | Commit `1e6a3aa`; installed route delegates to the shared handler with no direct confirmation write; container healthy with zero restarts; 4 completed operations retained and 0 pending payloads; H4 dependencies ready | Production observation started; direct memo-capture writer unchanged; rollback image `kaosgdd-ai-governor-discord:rollback-7521ac0` retained |
 | 2026-08-30 | 3 | Completed Memos handler slice 1 production observation | Normal Brain confirmation created authoritative memo `memos/LZ44eThP6c4NjmWCK8s2AK`; exact content count 1; operation completed with four ordered audit records and zero pending payloads; container healthy with zero restarts | Slice 1 complete; direct Discord Memos capture remains the next slice |
+| 2026-08-30 | 3 | Started Memos slice 2 for direct Discord mutation routing | Scope records shared durable operations, Discord actor/idempotency derivation, unchanged read paths and UX, and no raw memo content in the ledger | None; implementation started |
+| 2026-08-30 | 3 | Routed direct Discord Memos mutations through the shared Governor lifecycle | 24 focused Memos + 231 Governor + 11 isolated PostgreSQL + 355 Discord + 321 Brain tests passed; authoritative result prevents a post-write read failure; retries do not repeat writes | None; locally validated and awaiting review/commit |
 | 2026-08-30 | 6 | Recorded deferred Shortcut deep-link support for opening a selected Memos item | Existing Memos route and ID mapping verified as `/m/{memo-id}`; iOS external-link/PWA limitation documented | None; planning only |
 
 ## How to Update This Tracker

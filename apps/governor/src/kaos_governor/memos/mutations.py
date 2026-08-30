@@ -74,6 +74,7 @@ class MemoMutationResult:
 
     name: str
     content: str
+    record: MemoMutationRecord | None = None
 
 
 @dataclass(frozen=True)
@@ -156,14 +157,14 @@ class MemoMutationService:
         name = str(memo.name or "").strip()
         if not MEMO_NAME.fullmatch(name):
             raise MemoMutationError("memo_adapter_missing_name")
-        return MemoMutationResult(name=name, content=str(memo.content or ""))
+        return MemoMutationResult(name=name, content=str(memo.content or ""), record=memo)
 
     def _edit(self, command: MemoMutationCommand) -> MemoMutationResult:
         memo = self._adapter.update(command.name, command.content)
         name = str(memo.name or "").strip()
         if name != command.name:
             raise MemoMutationError("memo_adapter_name_mismatch")
-        return MemoMutationResult(name=name, content=str(memo.content or ""))
+        return MemoMutationResult(name=name, content=str(memo.content or ""), record=memo)
 
     def _delete(self, command: MemoMutationCommand) -> MemoMutationResult:
         self._adapter.delete(command.name)

@@ -55,6 +55,7 @@ class MemoMutationServiceTests(unittest.TestCase):
 
         self.assertEqual(result.name, "memos/1")
         self.assertEqual(result.content, "# New memo")
+        self.assertIsNotNone(result.record)
         self.assertEqual(self.adapter.calls, [("create", "# New memo", "PRIVATE")])
 
     def test_edit_routes_to_the_update_handler(self) -> None:
@@ -64,12 +65,14 @@ class MemoMutationServiceTests(unittest.TestCase):
 
         self.assertEqual(result.name, "memos/1")
         self.assertEqual(result.content, "# Updated memo")
+        self.assertIsNotNone(result.record)
         self.assertEqual(self.adapter.calls, [("edit", "memos/1", "# Updated memo")])
 
     def test_delete_routes_to_the_delete_handler(self) -> None:
         result = self.service.execute(MemoMutationCommand("delete", name="memos/1"))
 
         self.assertEqual(result.name, "memos/1")
+        self.assertIsNone(result.record)
         self.assertEqual(self.adapter.calls, [("delete", "memos/1")])
 
     def test_invalid_commands_are_rejected_before_adapter_call(self) -> None:
@@ -147,6 +150,7 @@ class MemoMutationServiceTests(unittest.TestCase):
         self.assertFalse(replay.created)
         self.assertEqual(replay.mutation.name, "memos/1")
         self.assertEqual(replay.mutation.content, "private body")
+        self.assertIsNone(replay.mutation.record)
         self.assertEqual(self.adapter.calls, [("delete", "memos/1")])
 
     def test_governed_adapter_failure_marks_operation_failed(self) -> None:

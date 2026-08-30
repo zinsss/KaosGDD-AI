@@ -4,7 +4,8 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock
 
-from kaos_governor.memos import Memo, MemoSearchPage, MemoSearchResult
+from kaos_governor import GovernorOperations, MemoryDurableGovernorStore
+from kaos_governor.memos import Memo, MemoMutationService, MemoSearchPage, MemoSearchResult
 from kaos_governor_discord.access import AccessPolicy
 from kaos_governor_discord.memos import (
     DiscordMemosCapture,
@@ -29,20 +30,31 @@ class FakeMemos:
         self.created = []
         self.updated = []
         self.deleted = []
+        self.gets = []
         self.searches = []
         self.config = SimpleNamespace(max_results=20)
+        self.memos = {}
 
     def create(self, content):
         self.created.append(content)
-        return Memo("memos/42", content, ("태그",), "created", "updated", "PRIVATE", False)
+        memo = Memo("memos/42", content, ("태그",), "created", "updated", "PRIVATE", False)
+        self.memos[memo.name] = memo
+        return memo
 
     def update(self, name, content):
         self.updated.append((name, content))
-        return Memo(name, content, ("태그",), "created", "updated2", "PRIVATE", False)
+        memo = Memo(name, content, ("태그",), "created", "updated2", "PRIVATE", False)
+        self.memos[memo.name] = memo
+        return memo
 
     def delete(self, name):
         self.deleted.append(name)
+        self.memos.pop(name, None)
         return None
+
+    def get(self, name):
+        self.gets.append(name)
+        return self.memos[name]
 
     def search(self, query, tags, limit):
         self.searches.append((query, tags, limit))
@@ -141,6 +153,106 @@ class DiscordMemosCaptureTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(message.channel.sent[0][0], ("Saved to Memos: memos/42",))
         self.assertEqual(message.channel.sent[0][1]["delete_after"], 1)
         self.assertEqual(capture.status()["acceptedCount"], 1)
+
+    async def test_direct_create_uses_governed_actor_and_durable_fingerprint(self) -> None:
+        service = FakeMemos()
+        store = MemoryDurableGovernorStore()
+        capture = DiscordMemosCapture(
+            service,  # type: ignore[arg-type]
+            AccessPolicy(100, frozenset({200}), frozenset({300})),
+            channel_id=300,
+            operations=GovernorOperations(store),
+            memo_mutations=MemoMutationService(service),  # type: ignore[arg-type]
+        )
+
+        memo = await capture.create_memo(
+            "private body",
+            actor_id="200",
+            idempotency_key="discord-message:500",
+        )
+
+        self.assertEqual(memo.name, "memos/42")
+        self.assertEqual(service.created, ["private body"])
+        audit = store.audit_records()
+        operation = store.get_operation(audit[0].operation_id)
+        assert operation is not None
+        self.assertEqual(operation.actor.actor_id, "200")
+        self.assertEqual(operation.actor.scope, "personal")
+        self.assertEqual(operation.tool_name, "memos")
+        self.assertEqual(operation.operation_type, "create")
+        self.assertEqual(operation.status, "completed")
+        self.assertNotIn("content", operation.parameters)
+        self.assertEqual(operation.parameters["contentFingerprint"]["bytes"], 12)
+        self.assertEqual([record.outcome for record in audit], ["accepted", "completed"])
+
+    async def test_direct_create_replay_does_not_repeat_memos_write(self) -> None:
+        service = FakeMemos()
+        store = MemoryDurableGovernorStore()
+        capture = DiscordMemosCapture(
+            service,  # type: ignore[arg-type]
+            AccessPolicy(100, frozenset({200}), frozenset({300})),
+            channel_id=300,
+            operations=GovernorOperations(store),
+            memo_mutations=MemoMutationService(service),  # type: ignore[arg-type]
+        )
+
+        first = await capture.create_memo(
+            "private body",
+            actor_id="200",
+            idempotency_key="discord-message:500",
+        )
+        replay = await capture.create_memo(
+            "private body",
+            actor_id="200",
+            idempotency_key="discord-message:500",
+        )
+
+        self.assertEqual(first.name, replay.name)
+        self.assertEqual(service.created, ["private body"])
+        self.assertEqual(service.gets, ["memos/42"])
+        self.assertEqual(len(store.audit_records()), 2)
+
+    async def test_direct_edit_and_delete_use_governed_operations(self) -> None:
+        service = FakeMemos()
+        original = service.create("# Original")
+        service.created.clear()
+        store = MemoryDurableGovernorStore()
+        capture = DiscordMemosCapture(
+            service,  # type: ignore[arg-type]
+            AccessPolicy(100, frozenset({200}), frozenset({300})),
+            channel_id=300,
+            operations=GovernorOperations(store),
+            memo_mutations=MemoMutationService(service),  # type: ignore[arg-type]
+        )
+
+        updated = await capture.update_memo(
+            original.name,
+            "# Updated",
+            actor_id="200",
+            idempotency_key="discord-interaction:501",
+        )
+        await capture.delete_memo(
+            original.name,
+            actor_id="200",
+            idempotency_key="discord-interaction:502",
+        )
+
+        self.assertEqual(updated.content, "# Updated")
+        self.assertEqual(service.updated, [("memos/42", "# Updated")])
+        self.assertEqual(service.deleted, ["memos/42"])
+        operation_ids = list(dict.fromkeys(record.operation_id for record in store.audit_records()))
+        operations = [store.get_operation(operation_id) for operation_id in operation_ids]
+        self.assertEqual(
+            [operation.operation_type for operation in operations if operation],
+            ["edit", "delete"],
+        )
+        self.assertTrue(
+            all("content" not in operation.parameters for operation in operations if operation)
+        )
+        self.assertEqual(
+            [record.outcome for record in store.audit_records()],
+            ["accepted", "completed", "accepted", "completed"],
+        )
 
     async def test_triple_plus_only_posts_modal_button_prompt(self) -> None:
         service = FakeMemos()
