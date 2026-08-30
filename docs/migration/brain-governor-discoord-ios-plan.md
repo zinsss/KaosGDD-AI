@@ -738,6 +738,23 @@ Planned API capabilities:
 - confirmation approval
 - `Ask Kaos` through Brain
 
+Deferred mobile interaction:
+
+- Add a read-only `Open Memo` action to the Memos Shortcut after the initial
+  list/search workflow is stable.
+- Build the target from the authoritative Memos resource name by removing the
+  `memos/` prefix and opening
+  `https://memos.kaosgdd.net/m/{memo-id}`. Do not introduce a second memo ID or
+  a Kaos redirect endpoint solely for this action.
+- Treat this as an exact-memo web deep link, not a guaranteed launch into the
+  installed Home Screen PWA. iOS currently opens externally invoked HTTPS
+  links from Shortcuts in the browser because installed web apps cannot
+  reliably capture in-scope links. Re-test this behavior on the target iOS
+  version before implementation.
+- Keep the first version read-only. Memo editing and deletion remain separate
+  Governor-controlled actions with the normal validation and confirmation
+  policy.
+
 Rules:
 
 - use scoped mobile credentials, never the broad Governor token
@@ -817,6 +834,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | 3 | Promoted the approval-replay correction and closed task slice 2 observation | Exact completed confirmation replay returned the original UID with no second write; 4 completed operations and 0 payloads retained; container healthy with zero restarts; Discord and H4 dependencies ready | Task slices 1 and 2 complete; rollback image `kaosgdd-ai-governor-discord:rollback-f6b8257` retained; Memos is next |
 | 2026-08-30 | 3 | Added the Governor Memos handler and routed confirmed Brain/iOS memo mutations through it | 9 focused memo + 78 tool tests; 231 Governor with all 11 PostgreSQL tests passed separately; 352 Discord + 321 Brain tests passed | None; Memos slice 1 validated locally, direct Discord capture writer unchanged |
 | 2026-08-30 | 3 | Promoted Memos handler slice 1 to H3 | Commit `1e6a3aa`; installed route delegates to the shared handler with no direct confirmation write; container healthy with zero restarts; 4 completed operations retained and 0 pending payloads; H4 dependencies ready | Production observation started; direct memo-capture writer unchanged; rollback image `kaosgdd-ai-governor-discord:rollback-7521ac0` retained |
+| 2026-08-30 | 6 | Recorded deferred Shortcut deep-link support for opening a selected Memos item | Existing Memos route and ID mapping verified as `/m/{memo-id}`; iOS external-link/PWA limitation documented | None; planning only |
 
 ## How to Update This Tracker
 
