@@ -35,10 +35,11 @@ H4, office-service, and stateful-service cutovers.
   topic. Direct operational channels are now compatibility surfaces scheduled
   for gated retirement; see
   [Discord Brain-Only Target](../architecture/discord-brain-only.md).
-- Phase 5 started with the Governor-side Discord adapter package extraction:
-  the canonical package/path becomes `kaosdiscoord` under
-  `integrations/discoord`, while legacy imports and the current H3 deployment
-  identity remain compatibility shims during observation.
+- Phase 5 started with the Governor-side Discord adapter package extraction.
+  Commit `20732fa` is deployed on H3: the canonical package/path is
+  `kaosdiscoord` under `integrations/discoord`, while legacy imports and the
+  current H3 deployment identity remain compatibility shims during
+  observation.
 - Database schema in production: additive migration `005`.
 - Working rule: finish and verify one boundary before moving another domain.
 
@@ -51,7 +52,7 @@ H4, office-service, and stateful-service cutovers.
 | 2 | Persist operations, confirmations, and pending payloads | Complete and tested | Deployed and observed 2026-08-30 | Complete |
 | 3 | Route every meaningful mutation through Governor | Task slices and Memos slices 1-2 implemented | Task slices and Memos slice 1 observed; Memos slice 2 deployed 2026-08-30 | Production observation |
 | 4 | Make Brain transport-neutral | Not started | Not deployed | Planned |
-| 5 | Retain brain-only KaosDiscoord; detach workers and notifications | Governor-side package extraction started | Existing gateways unchanged | In progress |
+| 5 | Retain brain-only KaosDiscoord; detach workers and notifications | Package extraction slice complete | Deployed 2026-08-30; compatibility observation started | In progress |
 | 6 | Add stable iOS APIs and lightweight clients | Pilot read endpoint only; replacement matrix accepted | Pilot active | Planned |
 | 7 | Remove compatibility debt and finish documentation/CI | Not started | Not deployed | Planned |
 
@@ -865,8 +866,21 @@ Slice 1 local validation (2026-08-30):
 - 231 Governor + 358 KaosDiscoord + 321 Brain tests passed
 - H3 preflight and Compose rendering passed
 
-Local implementation is complete. Production deployment and observation are
-still pending; the wider Phase 5 worker detachment remains in progress.
+Slice 1 production deployment (2026-08-30):
+
+- commit `20732fa` was pushed to `main` and synced to H4
+- H3 runs canonical entry point `kaosdiscoord` inside the unchanged
+  `kaos-governor-discord` service/container identity
+- installed canonical and legacy imports resolve to the same implementation
+- container is healthy and Discord-ready with zero restarts
+- the durable ledger remained at 5 completed operations and 0 pending payloads
+- H4 doctor passes at the same commit with Governor and Discord dependencies
+  ready
+- rollback image `kaosgdd-ai-governor-discord:rollback-pre-kaosdiscoord`
+  retains image `sha256:e64429338e2aafa30005efaf1adea0dff2a093cab1e47e7ec69f5f309c001524`
+
+Compatibility observation has started. The wider Phase 5 worker detachment
+remains in progress.
 
 Risk: high around worker lifecycles currently started by the H3 Discord bot,
 persistent views/state, duplicate notification delivery, and historical
@@ -1003,6 +1017,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | 3 | Promoted direct Discord Memos governed execution to H3 | Installed runtime confirms governed create/edit/delete and shared durable objects; container healthy with zero restarts; 5 completed operations retained with 0 payloads; H4 doctor healthy and checkout synced | Slice 2 production observation started; rollback image `kaosgdd-ai-governor-discord:rollback-1e6a3aa` retained |
 | 2026-08-30 | Decision | Narrowed Discord's target role to the single H4 `#brain` topic | Added the accepted brain-only architecture decision, replacement matrix, worker-detachment requirement, channel history gates, and revised Phases 5-6 | No channel disabled; direct surfaces remain compatibility paths until replacements are observed |
 | 2026-08-30 | 5 | Completed the local Governor-side KaosDiscoord package extraction | Canonical package/executable plus thin legacy shims; dependency boundary enforced; 231 Governor + 358 KaosDiscoord + 321 Brain tests; H3 preflight and Compose render passed | None; deployment pending, current service/image/container identity retained |
+| 2026-08-30 | 5 | Promoted the KaosDiscoord package boundary to H3 | Commit `20732fa`; canonical runtime entry point and package installed; legacy imports resolve to canonical classes; container healthy/ready with zero restarts; ledger retained 5 completed operations and 0 payloads; H4 synced and doctor healthy | Compatibility observation started; rollback image `kaosgdd-ai-governor-discord:rollback-pre-kaosdiscoord` retained |
 | 2026-08-30 | 6 | Recorded deferred Shortcut deep-link support for opening a selected Memos item | Existing Memos route and ID mapping verified as `/m/{memo-id}`; iOS external-link/PWA limitation documented | None; planning only |
 
 ## How to Update This Tracker
