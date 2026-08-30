@@ -499,9 +499,42 @@ html.isAgendaSuppliesEmbed body {
   border: 0;
 }
 
+.app[data-profile="main"] .appIdentity .kicker {
+  color: var(--nord8);
+  font-size: 1.55rem;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+@media (max-width: 1179px) {
+  .app[data-profile="main"] .appTop {
+    grid-template-columns: minmax(148px, 1fr) auto;
+  }
+
+  .app[data-profile="main"] .topNav {
+    grid-column: 1;
+    grid-row: 1;
+    justify-content: start;
+  }
+
+  .app[data-profile="main"] .appIdentity {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+    min-width: 0;
+    text-align: right;
+  }
+
+  .app[data-profile="main"] .mainMenuPicker {
+    justify-self: start;
+  }
+}
+
 @media (max-width: 560px) {
   .app[data-profile="main"] .appIdentity {
-    min-width: 82px;
+    min-width: 0;
   }
 
   .app[data-profile="main"] .topNav {
