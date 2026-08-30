@@ -14,12 +14,14 @@ Build the next Kaos platform around two new permanent roles:
 - **H3+, 32 GB**: KaosGovernor, authoritative personal/family backends,
   Family KaosGDD, and the public/private application edge.
 
-Discord becomes the primary personal orchestration surface. Personal events use
-iOS Calendar; personal/family tasks and supplies use iOS Reminders through
-Radicale. The family continues to use `family.kaosgdd.net`, including an
-embedded family-scoped AI chat. No main personal KaosGDD web application is
-deployed in the target architecture, but `kaosgdd.net` retains a narrow
-settings/admin page for KaosGDD configuration.
+Discord retains only the private `#brain` conversational surface. Personal
+events use iOS Calendar; personal/family tasks and supplies use iOS Reminders
+through Radicale; scoped Shortcuts/Scriptable and service PWAs provide other
+on-demand actions. Pushover provides minimal immediate text alerts. The family
+continues to use `family.kaosgdd.net`, including an embedded family-scoped AI
+chat. No main personal KaosGDD web application is deployed in the target
+architecture, but `kaosgdd.net` retains a narrow settings/admin page for
+KaosGDD configuration.
 
 Office Kaos remains a separate clinic-critical system. PACS, DICOM, fax
 hardware, Paperless, RustDesk, and other hardware- or clinic-bound services are
@@ -32,8 +34,10 @@ requires every service to cut over at once.
 
 ```mermaid
 flowchart TD
-    Discord["Discord: primary personal UI"] --> BrainBot["KaosBrain Discord integration"]
+    Discord["Discord: private #brain only"] --> BrainBot["KaosBrain Discord integration"]
     IOS["iOS Calendar + Reminders"] -->|"CalDAV: events, tasks, supplies"| Radicale
+    IOSActions["Shortcuts + Scriptable"] --> Governor
+    Governor --> Push["Pushover: minimal text alerts"]
     FamilyWeb["family.kaosgdd.net"] --> FamilyGateway["Family chat gateway"]
 
     subgraph H4["H4 Ultra 32 GB: AI plane"]
@@ -95,7 +99,7 @@ are optional future workers and are not required for normal operation.
 
 H4 runs only AI-facing components:
 
-- KaosBrain as the Discord adapter and deterministic guard.
+- KaosBrain as the private `#brain` Discord adapter and deterministic guard.
 - Optional KaosAI/OpenClaw planner runtime behind KaosBrain Guard.
 - One local model server, initially serving a 7-9B quantized instruct model.
 - A separately scoped family AI session/gateway.
@@ -149,7 +153,8 @@ H3+ runs durable, non-AI platform services:
 - Caddy and cloudflared.
 - Vaultwarden.
 - SFTPGo, after its data ownership and migration are verified.
-- deterministic mail polling and Discord organizer.
+- deterministic mail polling and Governor organizer state/notification
+  adapters.
 - Web Push delivery for Family KaosGDD.
 
 H3+ may call Office Kaos through narrow Tailscale services. It does not mount
@@ -228,9 +233,9 @@ interrupt PACS, DICOM receipt, fax transport, Paperless, or RustDesk.
 | current KaosGDD Brain / transitional `kaosgovernor-legacy-api` | H3+ KaosGovernor | Rename during migration to reflect deterministic-governor duties, then port modules into KaosGovernor one domain at a time |
 | Brain PostgreSQL | H3+ Governor PostgreSQL | Explicit schema/data migration only |
 | calendar adapter | H3+ KaosCalendar | Absorb and retire after parity tests |
-| Governor Discord bot | H3+ | Move state and credentials after live comparison |
+| Governor Discord bot | H3+ transitional runtime | Detach schedulers, polling, health/tools, and Pushover from its Discord gateway, then retire the H3 operational bot after replacement observation |
 | upstream Memos web | H3+ | Retain as direct service UI; Memos remains authoritative |
-| custom personal Memos web | Retire after parity | Discord plus upstream Memos replace it |
+| custom personal Memos web | Retire after parity | Upstream Memos PWA plus iOS/Brain access replace it |
 | `kaosgdd-portal` personal/main route | Deprecated | Do not carry forward as a personal portal; keep only what is required to serve Family KaosGDD during transition |
 | Family KaosGDD at `family.kaosgdd.net` | H3+ | Retain as the only custom KaosGDD portal and primary family interface |
 | Caddy/cloudflared | H3+ | Move hostname routes one at a time |
@@ -247,26 +252,26 @@ deployed. Retirement follows observation and rollback periods.
 
 | Current feature | Target implementation | Authority |
 | --- | --- | --- |
-| Personal Today/agenda | Discord summaries on request or schedule | Source services, never a copied agenda table |
+| Personal Today/agenda | Native iOS and on-demand `#brain`/mobile summaries | Source services, never a copied agenda table |
 | Family Today/agenda | Family KaosGDD backed by Governor aggregate reads | Source services, never a copied agenda table |
-| Personal calendar | iOS Calendar plus Discord/Governor operations | Radicale VEVENT |
-| Personal/family tasks | iOS Reminders plus Discord/Governor operations | Radicale VTODO |
+| Personal calendar | iOS Calendar plus scoped Governor/mobile operations | Radicale VEVENT |
+| Personal/family tasks | iOS Reminders plus scoped Governor/mobile operations | Radicale VTODO |
 | Event presets | KaosCalendar typed templates | Governor PostgreSQL |
 | Repeating/custom tasks | KaosCalendar rules triggered by Scheduler | Governor rules plus Radicale instances |
 | Market day, claim day, holidays | KaosCalendar deterministic generators | Governor rules/exceptions plus Radicale output |
 | Weather and weather history | KaosCalendar weather adapter and journal writer | Provider forecast; saved history in approved Radicale journals |
-| Personal Memos | Discord KaosMemos tools; upstream Memos UI when needed | Memos |
+| Personal Memos | Upstream Memos PWA; Shortcuts/Scriptable; `Ask Kaos` in `#brain` | Memos |
 | Family Memos | Family KaosGDD simplified UI; upstream Memos remains available | Memos |
-| Supplies | iOS Reminders list plus Discord/Governor presets and recent items | Dedicated Radicale VTODO collection |
+| Supplies | iOS Reminders list plus scoped Shortcuts/Governor actions | Dedicated Radicale VTODO collection |
 | Rouny timetable | KaosCalendar family extension | Governor durable domain state |
 | Caregiver hours/summary | Family Governor domain with deterministic calculations | Migrated family records; final authority documented before cutover |
 | Family ledger/dues | Family Governor domain with XLSX export/backup | Governor PostgreSQL |
-| Mail organizer | KaosMail plus Governor Discord bot | Naver IMAP |
+| Mail organizer | KaosMail/Governor workers, Pushover alert, and on-demand `#brain` query | Naver IMAP |
 | Fax intake/send/status | KaosFax plus Office Fax Connector | HylaFAX transport and Governor operation records |
-| Document inbox/search | KaosInbox and Paperless adapter | Paperless |
+| Document inbox/search | Paperless PWA, iOS Share Sheet/KaosInbox API, and `Ask Kaos` | Paperless |
 | PDF processing | Optional Governor job calling office Stirling-PDF | Paperless/original file according to completed workflow |
 | HWP handoff | Manual Polaris flow by default | Original user file |
-| Service administration | Direct service-native UIs and Discord status tools | Governor health and service-native health APIs |
+| Service administration | Narrow settings/admin UI, service-native UIs, and authenticated `#brain` operations | Governor health and service-native health APIs |
 
 The caregiver authority is intentionally unresolved until current records are
 inventoried. Migration must choose one durable representation and test totals;
@@ -274,35 +279,29 @@ it must not silently write the same hours into both Governor and Radicale.
 
 ## 5. Interaction Architecture
 
-### 5.1 Discord: primary personal interaction
+### 5.1 Discord: brain-only conversation
 
-Use two Discord identities:
+The accepted target keeps one Discord identity and topic in normal use:
 
-1. **KaosBrain bot on H4**
-   - natural-language conversation
-   - interpretation and tool selection
-   - summaries and generated explanations
-   - no deterministic polling or authoritative state
+- **KaosBrain bot on H4 in private `#brain`**
+  - natural-language conversation
+  - interpretation and tool selection
+  - structured proposals and confirmations
+  - summaries, requested files, and operation receipts in that conversation
+  - no deterministic polling or authoritative state
 
-2. **KaosGovernor bot on H3+**
-   - mail organizer and deterministic notifications
-   - upload/document intake
-   - fax status and confirmations
-   - operation receipts and failures
-   - available even when H4/model inference is offline
+The H3 KaosGovernor Discord identity and its direct inbox, mail/fax,
+notification, alert, task, calendar, supplies, and Memos surfaces are
+transitional. They retire only after their iOS, PWA, Pushover, settings/admin,
+or `#brain` replacement passes production observation. Before disconnecting
+the H3 Discord gateway, move all schedulers, polling, Pushover delivery,
+health/tool routes, and other non-Discord lifecycles into a Governor-owned
+runtime entry point.
 
-Recommended private channels:
-
-| Channel | Purpose |
-| --- | --- |
-| `#brain` | Personal conversation with KaosBrain |
-| `#inbox` | Documents, Paperless intake, and temporary files |
-| `#mail-fax` | Target mail archive and outbound fax intake; no automatic received-fax PDF uploads |
-| `#notifications` | Calendar/task summaries and text-only received-fax notices |
-| `#alerts` | Infrastructure, backup, connector, and failed-job alerts |
-
-Do not give the Brain bot access to unrelated channels. Governor checks guild,
-channel, and user allowlists even when Discord permissions already deny access.
+Do not delete Discord channels or history until mail/fax/document retention is
+explicitly resolved. See
+[Discord Brain-Only Target](discord-brain-only.md) for the replacement matrix
+and retirement gates.
 
 ### 5.2 Family KaosGDD: primary family interaction
 
@@ -345,14 +344,15 @@ The normal personal interaction model is:
 - iOS Calendar for personal and shared family VEVENT collections
 - iOS Reminders for personal tasks, shared family tasks, and the dedicated
   supplies VTODO collection
-- Discord for KaosBrain conversation, Governor commands, summaries, mail, fax,
-  documents, Memos operations, presets, rules, and administration
+- Discord `#brain` only for KaosBrain conversation, proposals, confirmations,
+  requested results/files, and operation receipts
+- Shortcuts and Scriptable for deterministic on-demand lists and actions
+- Pushover for immediate minimal text notifications and Apple Watch delivery
 - upstream Memos, Paperless, Vaultwarden, SFTPGo, and Stirling-PDF web UIs only
   when direct service interaction is useful
 
 Native app notifications remain authoritative for calendar and task reminders.
-Governor must not duplicate them through Discord unless the user explicitly
-enables a summary or exceptional notification.
+Governor must not duplicate them through direct Discord notification channels.
 
 The existing main KaosGDD repository may be retained as design and migration
 reference, but it is not deployed as a fallback. A future personal UI starts as
@@ -377,11 +377,11 @@ only.
 | Events, tasks, journals | Radicale | Calendar views and search indexes |
 | Calendar/weather settings | Governor PostgreSQL | Rendered agenda/month views |
 | Personal/family memos | Memos | Embeddings and snippets |
-| Clinic documents | Paperless | OCR summaries and temporary Discord copies |
+| Clinic documents | Paperless | OCR summaries and temporary explicitly requested copies |
 | Fax transport/queues | HylaFAX | Governor operation/status records |
-| Mail and folders | Naver IMAP | UID checkpoints and Discord message IDs |
+| Mail and folders | Naver IMAP | UID checkpoints and Governor organizer references |
 | Rules, preferences, exceptions | Governor PostgreSQL | AI explanations |
-| Jobs, confirmations, audit | Governor PostgreSQL | Discord presentation |
+| Jobs, confirmations, audit | Governor PostgreSQL | Transport-specific presentation |
 | Rouny and family domain state | Governor or documented service authority | Rendered timetable |
 | Family ledger and caregiver records | Governor after explicit migration decision | XLSX exports and summaries |
 | Conversation transcript | Governor chat store where durability is required | H4 context window |
@@ -439,14 +439,15 @@ or classify. Governor validates and a named backend stores the result.
 
 ### KaosInbox
 
-- Discord/family upload intake
+- iOS Share Sheet/family upload intake; requested `#brain` files only
 - temporary retention and cleanup
 - Paperless import and metadata
 - optional Stirling-PDF conversion
 
 ### KaosNotifications
 
-- Discord delivery
+- Pushover delivery for immediate minimal personal text alerts
+- requested detail/receipts in the retained `#brain` topic
 - Family Web Push
 - no duplicate personal calendar/task push by default; native iOS clients own
   those reminders
@@ -736,24 +737,32 @@ Exit gate:
 - family scope cannot retrieve personal or clinic data
 - family web remains usable when H4 is stopped
 
-### Phase 8: Discord becomes primary personal UI
+### Phase 8: Discord narrows to `#brain`
 
 Actions:
 
-1. Verify `#brain`, `#inbox`, `#mail-fax`, `#notifications`, and `#alerts`.
-2. Move document, mail, and fax workflows one by one.
+1. Verify H4 `#brain` can answer, propose, confirm, and return explicitly
+   requested results/files through Governor.
+2. Verify Paperless/Memos PWAs, iOS Share Sheet capture, Pushover, and scoped
+   Shortcuts/Scriptable replace the direct operational Discord surfaces.
 3. Verify iOS Calendar handles personal/shared events and iOS Reminders handles
    personal tasks, family tasks, and supplies without the main web UI.
-4. Verify upstream backend UIs remain directly reachable when needed.
-5. Confirm no main KaosGDD UI is deployed; keep its repository only as
+4. Move every non-Discord worker out of the H3 Discord gateway lifecycle and
+   verify it with the gateway stopped in a controlled exercise.
+5. Resolve required retention/export for inbox, mail/fax, notification, and
+   alert history; then disable direct channel intake one domain at a time.
+6. Verify upstream backend UIs remain directly reachable when needed.
+7. Confirm no main KaosGDD UI is deployed; keep its repository only as
    reference. Keep Family KaosGDD deployed.
-6. Stop KaosTelegram after retained workflows are verified; archive its
+8. Stop KaosTelegram after retained workflows are verified; archive its
    Compose/config/state for rollback reference only.
 
 Exit gate:
 
-- every Discord action is actor/channel allowlisted and audited
+- `#brain` is the only active Kaos Discord topic
+- required direct-channel history has an explicit retain/export/delete outcome
 - deterministic notifications still work with H4 offline
+- Governor workers continue when the H3 Discord gateway is disconnected
 
 ### Phase 9: optional service moves and cleanup
 
@@ -798,7 +807,9 @@ The architecture is complete only when:
 
 - H4 contains no authoritative application data or broad production authority.
 - H3+ owns deterministic workflows and durable personal/family backends.
-- Discord is the verified primary personal interface.
+- Discord `#brain` is the only active Kaos Discord topic.
+- Pushover, iOS native apps, scoped mobile clients, and service PWAs replace
+  the retired direct Discord surfaces.
 - Family KaosGDD remains a complete, separately scoped family application.
 - native iOS Calendar/Reminders are the verified personal calendar, task, and
   supplies interfaces.

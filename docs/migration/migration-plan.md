@@ -15,8 +15,10 @@ implemented in production:
   the service edge are active.
 - H4 KaosBrain is active with narrow Governor tools and guarded KaosAI/OpenClaw
   chat.
-- Discord is the primary personal orchestration surface; native iOS apps remain
-  the calendar, task, and supplies clients.
+- Discord direct operational surfaces are active during transition, but the
+  accepted target retains only the H4 `#brain` topic. Native iOS apps, scoped
+  mobile clients, service PWAs, and Pushover replace the other channels under
+  the [brain-only decision](../architecture/discord-brain-only.md).
 - Naver mail, Memos, Paperless inbox/search, calendar, task confirmations,
   system status, and imaging second-look are active Governor workflows.
 - Fax uses the authenticated Office Fax Connector plus the repository-owned

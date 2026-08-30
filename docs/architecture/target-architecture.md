@@ -10,7 +10,7 @@ Implementation phases and current progress are tracked in the
 ## Overview
 
 ```text
-Discord       Shortcuts / Scriptable       Family KaosGDD PWA
+Discord #brain only   Shortcuts / Scriptable       Family KaosGDD PWA
    |                    |                           |
    v                    |                           |
 KaosDiscoord            |                           |
@@ -34,10 +34,10 @@ iOS Calendar and Reminders
 (personal, family, supplies)
 ```
 
-KaosBrain communicates with backends only through KaosGovernor. KaosDiscoord,
-Shortcuts, Scriptable, and the family UI may call Governor directly for
-deterministic operations. Family AI receives a separate family-scoped Governor
-credential.
+KaosBrain communicates with backends only through KaosGovernor. KaosDiscoord
+is retained only for the private Discord `#brain` conversation. Shortcuts,
+Scriptable, and the family UI may call Governor directly for deterministic
+operations. Family AI receives a separate family-scoped Governor credential.
 
 Native clients may still use service-native interfaces:
 
@@ -133,7 +133,7 @@ Memos remains the source of truth. Embeddings and AI summaries are disposable de
 - folder selection and mail rules
 - deduplication
 - attachment intake
-- Discord delivery and inbox actions
+- notification delivery and transport-specific inbox actions
 - retry and read/delete/import operations
 
 AI may summarize collected mail but does not own polling or mailbox state.
@@ -144,13 +144,13 @@ AI may summarize collected mail but does not own polling or mailbox state.
 - number and attachment validation
 - confirmations
 - status transitions and retries
-- Discord presentation
+- transport-neutral result presentation, including requested `#brain` output
 
 Physical modem access remains in a narrow office Fax Connector beside HylaFAX.
 
 ### KaosInbox
 
-- Discord file intake
+- iOS Share Sheet and family file intake; requested `#brain` files only
 - temporary upload lifecycle
 - MIME, size, and duplicate validation
 - Paperless import and metadata application
@@ -161,7 +161,8 @@ Mail attachments and faxes may create Inbox references without transferring owne
 
 ### KaosNotifications
 
-- Discord delivery
+- Pushover delivery for immediate personal text alerts
+- requested `#brain` detail/receipts
 - Family PWA chat delivery and Web Push
 - quiet hours and category preferences
 - retry/outbox handling

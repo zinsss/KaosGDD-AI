@@ -84,9 +84,11 @@ migration, rename it to transitional `kaosgovernor-legacy-api` and continue abso
 modules into KaosGovernor.
 
 The target architecture does not require a custom personal Memos frontend.
-Personal Memos workflows use Discord and the upstream Memos web UI. The family
-frontend may retain its simplified Memos experience because Family KaosGDD
-remains a supported product.
+Personal Memos workflows use the upstream Memos PWA, scoped iOS clients, and
+the retained Discord `#brain` conversation when AI is useful. Direct Discord
+Memos channels retire under the brain-only decision. The family frontend may
+retain its simplified Memos experience because Family KaosGDD remains a
+supported product.
 
 ### Upstream projects continue to own
 
