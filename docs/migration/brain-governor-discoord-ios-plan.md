@@ -19,7 +19,8 @@ H4, office-service, and stateful-service cutovers.
   result.
 - Active implementation: Phase 3 task-handler slice 1 is complete after H3
   production observation. Slice 2 routes direct Discord task/supplies writers
-  through Governor and is validated locally but not deployed.
+  through Governor and was deployed to H3 on 2026-08-30; its production
+  observation gate remains open for one normal approved Brain task.
 - H4 Brain correction: Korean task-create requests using `만들어` or `생성`
   were corrected and deployed in commit `99011fb` on 2026-08-30. This was an
   intent parser deployment only and did not promote the Phase 3 Governor
@@ -37,7 +38,7 @@ H4, office-service, and stateful-service cutovers.
 | 0 | Audit current architecture and flows | Complete | No change | Complete |
 | 1 | Establish the Governor operation boundary | Complete and tested | Deployed and observed 2026-08-30 | Complete |
 | 2 | Persist operations, confirmations, and pending payloads | Complete and tested | Deployed and observed 2026-08-30 | Complete |
-| 3 | Route every meaningful mutation through Governor | Task slice 1 complete; direct-surface slice 2 validated locally | Slice 1 deployed and observed 2026-08-30 | Validated locally |
+| 3 | Route every meaningful mutation through Governor | Task slices 1 and 2 complete and tested | Slice 1 observed; slice 2 deployed 2026-08-30 | Production observation |
 | 4 | Make Brain transport-neutral | Not started | Not deployed | Planned |
 | 5 | Isolate KaosDiscoord and notification delivery | Not started | Not deployed | Planned |
 | 6 | Add stable iOS APIs and lightweight clients | Pilot read endpoint only | Pilot active | Planned |
@@ -122,8 +123,7 @@ Exit evidence:
 
 ## Phase 1 — Governor Operation Boundary
 
-Status: deployed with Phase 2 on 2026-08-30; production observation in
-progress.
+Status: complete. Deployed with Phase 2 and production-observed on 2026-08-30.
 
 Objective:
 
@@ -328,8 +328,9 @@ Production promotion evidence (2026-08-30):
 ## Phase 3 — Route Mutations Through Governor
 
 Status: in progress. Task tool handler slice 1 completed H3 production
-observation on 2026-08-30. Direct Discord task/supplies slice 2 is validated
-locally but not deployed; later writers and domains remain.
+observation on 2026-08-30. Direct Discord task/supplies slice 2 was deployed
+to H3 on 2026-08-30 and is under production observation; later writers and
+domains remain.
 
 Objective:
 
@@ -354,7 +355,7 @@ Mutation inventory and current routing:
 | Surface | Current writer path | Governor lifecycle | Domain handler | Migration state |
 | --- | --- | --- | --- | --- |
 | Brain/iOS task proposals | `BrainToolServer` confirmation routes | Yes | `TaskMutationService` | Slice 1 complete |
-| Discord task/supply buttons and channel commands | `DiscordTasksSurface` to governed task execution locally | Yes locally | `TaskMutationService` locally | Slice 2 validated locally |
+| Discord task/supply buttons and channel commands | `DiscordTasksSurface` to governed task execution | Yes | `TaskMutationService` | Slice 2 deployed; surfaces configured inactive |
 | Portal task/event writes | Calendar adapter proxy | No | No | Later task/event slice |
 | Recurring task synchronization | Governor API recurring service to calendar adapter | Partial domain ownership, no durable operation | Recurring service only | Later task slice |
 | Memos proposals | `BrainToolServer` confirmation routes | Yes | No | Domain 2 |
@@ -426,7 +427,7 @@ Slice 1 production promotion evidence (2026-08-30):
   matching the Governor operation result. The H3 container remained healthy
   with zero restarts, closing slice 1's observation gate.
 
-Slice 2 implemented locally:
+Slice 2 implemented and deployed:
 
 - Added `TaskMutationService.execute_governed` so deterministic direct actions
   share Governor submission, validation/dispatch, completion/failure audit,
@@ -447,7 +448,7 @@ Slice 2 implemented locally:
   The dedicated Delete button remains the explicit user action in this slice;
   the target expiring second confirmation for destructive operations remains
   later confirmation-policy work.
-- H3 currently reports the direct tasks and supplies surfaces disabled. This
+- H3 reports the direct tasks and supplies surfaces disabled. This
   migration does not re-enable retired channels merely to obtain observation
   traffic; the enabled due-notification surface has no task mutation buttons.
 
@@ -478,10 +479,36 @@ Slice 2 production gate:
 - [x] Governor, Discord, and Brain regression suites
 - [x] Existing task/supplies UI and reminder behavior tests
 - [x] Review and commit
-- [ ] Controlled H3 deployment
-- [ ] Verify configured inactive surfaces remain inactive
+- [x] Controlled H3 deployment
+- [x] Verify configured inactive surfaces remain inactive
 - [ ] Verify enabled Brain task path remains compatible
 - [ ] Slice observation gate
+
+Slice 2 production promotion evidence (2026-08-30):
+
+- Commit `1b9405a` was deployed through the guarded H3 backend restart. The
+  previous slice 1 image is retained as
+  `kaosgdd-ai-governor-discord:rollback-1cc96e1`.
+- Only `governor-discord` was rebuilt and recreated. The running image is
+  `sha256:8ea38f0687593f46b7e3c3d00854897343fb0125edfbd6fdf6921d50d24f5baf`;
+  the retained rollback image is
+  `sha256:a1a8a2b9ddfcbb8acde07b6b8313d9285481c4aa18a465275b7d1eb6266ddc46`.
+- Runtime inspection confirms `TaskMutationService.execute_governed` is
+  installed, `DiscordTasksSurface` delegates to governed execution, no direct
+  task adapter create/update/delete call remains there, and the bot shares one
+  Governor operation store across Brain tools and task surfaces.
+- Docker reports healthy with zero restarts. Discord reconnected, restored its
+  persistent views, and initialized startup surfaces without an application
+  error. The optional PyNaCl/davey voice-support warnings are unchanged and do
+  not affect text operations.
+- Health reports Discord ready and Brain tools enabled. Direct task and
+  supplies surfaces remain disabled, and due-notification messages remain
+  disabled as configured; no retired channel was re-enabled for testing.
+- PostgreSQL retained all three earlier operations as completed and contains
+  zero pending durable payloads after deployment.
+- H4 doctor reports Governor reachability, Discord readiness, and Brain tools
+  enabled. A normal post-deployment approved task remains required to close
+  the end-to-end compatibility and slice observation checks.
 
 H4 task-create routing correction:
 
@@ -670,6 +697,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | 3 | Promoted the task-handler slice to H3 through the guarded Discord/Governor restart | New handler present and wired; container healthy with zero restarts; Discord ready; H4 dependency checks pass; durable operations retained with zero pending payloads | Production observation started; rollback image `kaosgdd-ai-governor-discord:rollback-11b18be` retained |
 | 2026-08-30 | 3 | Completed task-handler slice 1 production observation | Post-deployment task completed through the handler; confirmation approved once; four audit events present; payload removed; authoritative calendar UID matched the operation result; zero restarts | Slice 1 complete; direct Discord task/supplies writers remain the next task slice |
 | 2026-08-30 | 3 | Routed direct Discord task/supplies writes through shared governed task execution | 11 focused Governor + 59 task-surface tests; 221 Governor discovered with all 10 PostgreSQL tests passed separately; 351 Discord + 321 Brain tests passed | None; slice 2 validated locally, production direct surfaces remain disabled |
+| 2026-08-30 | 3 | Promoted direct Discord task/supplies governed execution to H3 | Commit `1b9405a`; installed-path inspection confirms governed delegation and shared durable store; container healthy with zero restarts; Discord and H4 dependencies ready; 3 completed operations retained and 0 pending payloads | Slice 2 production observation started; direct task/supplies surfaces remain disabled; rollback image `kaosgdd-ai-governor-discord:rollback-1cc96e1` retained |
 
 ## How to Update This Tracker
 
