@@ -20,6 +20,7 @@ from kaos_governor import (
     DurableGovernorError,
     DurableOperationStore,
     GovernorOperations,
+    OperationRecord,
     OperationRequest,
     PendingOperationPayload,
 )
@@ -1750,6 +1751,16 @@ class BrainToolServer:
         operation = self._operations.get_operation(confirmation.operation_id)
         if operation is None:
             return web.json_response({"error": "operation_not_found"}, status=404)
+        try:
+            actor = Actor("user", actor_id, operation.actor.scope)
+        except DurableGovernorError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+        if confirmation.actor != actor:
+            return web.json_response({"error": "confirmation_actor_mismatch"}, status=400)
+        if confirmation.status == "approved" and operation.status == "completed":
+            replay = _completed_operation_replay_payload(operation, confirmation_id)
+            if replay is not None:
+                return web.json_response(replay)
         pending_record = self._operations.get_pending_payload(operation.operation_id)
         if pending_record is None:
             return web.json_response({"error": "operation_payload_not_found"}, status=410)
@@ -1775,7 +1786,6 @@ class BrainToolServer:
             None,
         )
         try:
-            actor = Actor("user", actor_id, operation.actor.scope)
             self._operations.approve(confirmation_id, actor=actor)
             if pending_task is not None:
                 command = _task_mutation_command(pending_task, operation.operation_type)
@@ -2510,6 +2520,119 @@ def _completed_operation_source(*, memo: bool, document: bool) -> str:
     if document:
         return "paperless-live"
     return "calendar-adapter-live"
+
+
+def _completed_operation_replay_payload(
+    operation: OperationRecord,
+    confirmation_id: str,
+) -> dict[str, object] | None:
+    """Rebuild a sanitized receipt after terminal payload cleanup.
+
+    Durable pending payloads intentionally disappear after completion. A
+    repeated delivery from a UI must still be able to observe the completed
+    result without executing the domain mutation again or retaining raw memo
+    content indefinitely.
+    """
+
+    parameters = dict(operation.parameters)
+    uid = str(operation.result.get("uid") or "")
+    response: dict[str, object] = {
+        "operationId": operation.operation_id,
+        "confirmationId": confirmation_id,
+        "status": "completed",
+        "replayed": True,
+    }
+    if operation.tool_name == "calendar.tasks":
+        profile = str(parameters.get("profile") or "main")
+        collection_id = str(parameters.get("collectionId") or "")
+        task: dict[str, object] = {
+            "profile": profile,
+            "uid": uid or str(parameters.get("uid") or ""),
+            "collectionId": collection_id,
+        }
+        if operation.operation_type == "create":
+            task.update(
+                {
+                    "title": str(parameters.get("title") or ""),
+                    "due": str(parameters.get("dueDate") or ""),
+                    "dueTime": str(parameters.get("dueTime") or ""),
+                }
+            )
+        elif operation.operation_type == "update_due":
+            task.update(
+                {
+                    "title": str(parameters.get("title") or ""),
+                    "oldDue": str(parameters.get("oldDue") or ""),
+                    "oldDueTime": str(parameters.get("oldDueTime") or ""),
+                    "newDue": str(parameters.get("newDue") or ""),
+                    "newDueTime": str(parameters.get("newDueTime") or ""),
+                }
+            )
+        elif operation.operation_type == "edit":
+            task.update(
+                {
+                    "oldTitle": str(parameters.get("oldTitle") or ""),
+                    "title": str(parameters.get("newTitle") or ""),
+                    "oldDue": str(parameters.get("oldDue") or ""),
+                    "oldDueTime": str(parameters.get("oldDueTime") or ""),
+                    "due": str(parameters.get("newDue") or ""),
+                    "dueTime": str(parameters.get("newDueTime") or ""),
+                    "action": "edit",
+                }
+            )
+        elif operation.operation_type in {"complete", "reopen", "delete"}:
+            task.update(
+                {
+                    "title": str(parameters.get("title") or ""),
+                    "action": operation.operation_type,
+                }
+            )
+        else:
+            return None
+        response.update({"task": task, "source": "calendar-adapter-live"})
+        return response
+    if operation.tool_name == "calendar.events" and operation.operation_type == "create":
+        response.update(
+            {
+                "event": {
+                    "profile": str(parameters.get("profile") or "main"),
+                    "uid": uid,
+                    "collectionId": str(parameters.get("collectionId") or ""),
+                    "title": str(parameters.get("title") or ""),
+                    "startDate": str(parameters.get("startDate") or ""),
+                    "endDate": str(parameters.get("endDate") or ""),
+                    "allDay": bool(parameters.get("allDay", True)),
+                },
+                "source": "calendar-adapter-live",
+            }
+        )
+        return response
+    if operation.tool_name == "memos" and operation.operation_type in {"create", "edit", "delete"}:
+        response.update(
+            {
+                "memo": {
+                    "name": str(parameters.get("name") or uid),
+                    "action": operation.operation_type,
+                },
+                "source": "memos-live",
+            }
+        )
+        return response
+    if operation.tool_name == "documents" and operation.operation_type in {"update_metadata", "update_tags"}:
+        response.update(
+            {
+                "document": {
+                    "id": parameters.get("documentId"),
+                    "oldTitle": str(parameters.get("oldTitle") or ""),
+                    "title": str(parameters.get("title") or ""),
+                    "tags": list(parameters.get("tags") or []),
+                    "action": "update_metadata",
+                },
+                "source": "paperless-live",
+            }
+        )
+        return response
+    return None
 
 
 def _profile(request: web.Request) -> str:

@@ -1079,6 +1079,15 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.memos.create_calls, ["# Rustdesk\nUse Tailscale."])
         self.assertEqual(self.calendar_refresh_count, 0)
 
+        replay = await self.client.post(
+            f"/tools/confirmations/{confirmation_id}/approve",
+            headers=self.headers(),
+            json={"actorId": "994579996960104529"},
+        )
+        self.assertEqual(replay.status, 200)
+        self.assertTrue((await replay.json())["replayed"])
+        self.assertEqual(self.memos.create_calls, ["# Rustdesk\nUse Tailscale."])
+
     async def test_memo_create_proposal_can_be_approved_after_tool_server_restart(self) -> None:
         durable = MemoryDurableGovernorStore()
         first_server = BrainToolServer(
@@ -1469,6 +1478,15 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.paperless.update_calls, [(42, "Rustdesk Settings", ("server", "rustdesk"))])
         self.assertEqual(self.calendar_refresh_count, 0)
 
+        replay = await self.client.post(
+            f"/tools/confirmations/{confirmation_id}/approve",
+            headers=self.headers(),
+            json={"actorId": "994579996960104529"},
+        )
+        self.assertEqual(replay.status, 200)
+        self.assertTrue((await replay.json())["replayed"])
+        self.assertEqual(self.paperless.update_calls, [(42, "Rustdesk Settings", ("server", "rustdesk"))])
+
     async def test_document_metadata_approval_rejects_wrong_actor(self) -> None:
         proposal = await self.client.post(
             "/tools/documents/42/metadata/proposals",
@@ -1810,6 +1828,47 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.calendar.created[0][1]["dueDate"], "2026-08-17")
         self.assertEqual(self.calendar_refresh_count, 1)
 
+    async def test_completed_task_approval_replays_receipt_without_second_write(self) -> None:
+        proposal = await self.client.post(
+            "/tools/tasks/create/proposals",
+            headers=self.headers(),
+            json={
+                "actorId": "994579996960104529",
+                "idempotencyKey": "discord-message-create-replay-1",
+                "profile": "main",
+                "title": "Observe deployment",
+            },
+        )
+        confirmation_id = (await proposal.json())["confirmationId"]
+        route = f"/tools/confirmations/{confirmation_id}/approve"
+
+        first = await self.client.post(
+            route,
+            headers=self.headers(),
+            json={"actorId": "994579996960104529"},
+        )
+        replay = await self.client.post(
+            route,
+            headers=self.headers(),
+            json={"actorId": "994579996960104529"},
+        )
+        wrong_actor = await self.client.post(
+            route,
+            headers=self.headers(),
+            json={"actorId": "100000000000000001"},
+        )
+
+        self.assertEqual(first.status, 200)
+        self.assertEqual(replay.status, 200)
+        replay_payload = await replay.json()
+        self.assertTrue(replay_payload["replayed"])
+        self.assertEqual(replay_payload["status"], "completed")
+        self.assertEqual(replay_payload["task"]["title"], "Observe deployment")
+        self.assertEqual(replay_payload["task"]["uid"], "TASK-CREATED-1")
+        self.assertEqual(len(self.calendar.created), 1)
+        self.assertEqual(wrong_actor.status, 400)
+        self.assertEqual((await wrong_actor.json())["error"], "confirmation_actor_mismatch")
+
     async def test_task_create_allows_personal_task_without_due_date(self) -> None:
         proposal = await self.client.post(
             "/tools/tasks/create/proposals",
@@ -2012,6 +2071,15 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
             },
         )
         self.assertEqual(self.calendar_refresh_count, 1)
+
+        replay = await self.client.post(
+            f"/tools/confirmations/{confirmation_id}/approve",
+            headers=self.headers(),
+            json={"actorId": "994579996960104529"},
+        )
+        self.assertEqual(replay.status, 200)
+        self.assertTrue((await replay.json())["replayed"])
+        self.assertEqual(len(self.calendar.created_events), 1)
 
     async def test_task_complete_proposal_requires_confirmation_before_write(self) -> None:
         response = await self.client.post(

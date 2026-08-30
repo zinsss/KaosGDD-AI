@@ -510,6 +510,28 @@ Slice 2 production promotion evidence (2026-08-30):
   enabled. A normal post-deployment approved task remains required to close
   the end-to-end compatibility and slice observation checks.
 
+Slice 2 observation incident and correction (2026-08-30):
+
+- The normal observation task `테스트 관찰` was created successfully and
+  exists exactly once in the authoritative calendar with UID
+  `30791be8-aff0-4546-abcf-092269590145`. PostgreSQL records the operation as
+  completed, its confirmation as approved once, all four lifecycle audit
+  events, and zero pending payloads.
+- H4 nevertheless rendered a failure 1.6 seconds after completion because a
+  repeated approval delivery reached the endpoint after correct terminal
+  payload cleanup. The endpoint looked for the deleted pending payload before
+  recognizing the already-completed operation and returned
+  `operation_payload_not_found`.
+- The approval endpoint now returns a sanitized completed receipt for a
+  repeated delivery by the same actor without executing the domain mutation
+  again or retaining raw memo content. A different actor remains rejected.
+  The replay behavior covers task, event, memo, and Paperless confirmation
+  receipts.
+- Local correction validation passed 78 focused approval/tool tests, all 221
+  Governor tests with 10 PostgreSQL-only tests skipped in this unit run, and
+  the full 352-test Discord suite. Production promotion and replay of the
+  observed completed confirmation remain required before closing the gate.
+
 H4 task-create routing correction:
 
 - A normal observation attempt, `전염병신고 할일 만들어줘`, incorrectly
@@ -698,6 +720,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | 3 | Completed task-handler slice 1 production observation | Post-deployment task completed through the handler; confirmation approved once; four audit events present; payload removed; authoritative calendar UID matched the operation result; zero restarts | Slice 1 complete; direct Discord task/supplies writers remain the next task slice |
 | 2026-08-30 | 3 | Routed direct Discord task/supplies writes through shared governed task execution | 11 focused Governor + 59 task-surface tests; 221 Governor discovered with all 10 PostgreSQL tests passed separately; 351 Discord + 321 Brain tests passed | None; slice 2 validated locally, production direct surfaces remain disabled |
 | 2026-08-30 | 3 | Promoted direct Discord task/supplies governed execution to H3 | Commit `1b9405a`; installed-path inspection confirms governed delegation and shared durable store; container healthy with zero restarts; Discord and H4 dependencies ready; 3 completed operations retained and 0 pending payloads | Slice 2 production observation started; direct task/supplies surfaces remain disabled; rollback image `kaosgdd-ai-governor-discord:rollback-1cc96e1` retained |
+| 2026-08-30 | 3 | Diagnosed a false Discord failure after the slice 2 observation task had completed | Operation completed once and authoritative UID matched; a repeated approval hit correct payload cleanup and received `operation_payload_not_found`; idempotent terminal receipt tests pass for the same actor while another actor is rejected | Task data is correct; approval-replay correction validated locally and awaiting H3 promotion |
 
 ## How to Update This Tracker
 
