@@ -22,6 +22,20 @@ class FakeServiceStatus:
 
 
 class GovernorBotTests(unittest.IsolatedAsyncioTestCase):
+    async def test_worker_mode_never_starts_inline_pushover_delivery(self) -> None:
+        notifications = SimpleNamespace(
+            config=SimpleNamespace(delivery_mode="worker", poll_seconds=5),
+            deliver_pending=Mock(),
+        )
+        bot = SimpleNamespace(
+            text_notifications=notifications,
+            is_closed=Mock(return_value=False),
+        )
+
+        await GovernorBot._text_notification_loop(bot)  # type: ignore[arg-type]
+
+        notifications.deliver_pending.assert_not_called()
+
     async def test_daily_digest_posts_simple_morning_and_event_watch_alerts(self) -> None:
         channel = SimpleNamespace(send=AsyncMock(return_value=SimpleNamespace(id=701)))
         daily_digest = SimpleNamespace(

@@ -53,6 +53,13 @@ iPhone and Watch, create a Pushover application, place its application token
 and the account user key in `secrets/pushover_app_token` and
 `secrets/pushover_user_key`, then set `PUSHOVER_ENABLED=true`.
 
+Pushover delivery runs in the independent `kaos-governor-worker` container.
+KaosDiscoord only queues records into the shared durable outbox, and the worker
+delivers them within `PUSHOVER_POLL_SECONDS` (five seconds by default). The
+outbox is protected by a cross-process lock. `PUSHOVER_DELIVERY_MODE=inline`
+is retained only as the rollback mode and must not run together with the
+worker.
+
 The durable outbox sends minimal one-line alerts: `Good Morning.`, one
 `Today. <event>.` line per daily event, final fax receipt/sent/failure states,
 `Mail received.`, unread-mail counts, service down/recovery transitions, auth
@@ -88,9 +95,9 @@ Run:
 ./deploy/h3-backend/kaos-h3 up
 ```
 
-`up` runs preflight, builds locally, starts Governor, and waits for its health
-endpoint. It does not start Memos or Radicale and cannot touch PACS, DICOM,
-Paperless, HylaFAX, or RustDesk.
+`up` runs preflight, builds locally, starts KaosDiscoord and the Governor
+worker, and waits for both health checks. It does not start Memos or Radicale
+and cannot touch PACS, DICOM, Paperless, HylaFAX, or RustDesk.
 
 Governor mutation proposals use PostgreSQL when
 `GOVERNOR_OPERATION_STORE=postgres`. This persists the operation,

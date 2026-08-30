@@ -17,6 +17,7 @@ dependencies = [
 
 [project.scripts]
 kaos-governor-api = "kaos_governor.api:main"
+kaos-governor-worker = "kaos_governor.worker:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

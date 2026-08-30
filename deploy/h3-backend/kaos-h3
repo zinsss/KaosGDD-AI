@@ -230,6 +230,10 @@ preflight() {
     require_secret pushover_app_token
     require_secret pushover_user_key
   fi
+  case "${PUSHOVER_DELIVERY_MODE:-worker}" in
+    inline|worker) ;;
+    *) die "PUSHOVER_DELIVERY_MODE must be inline or worker" ;;
+  esac
   if [[ "${DAILY_DIGEST_ENABLED:-false}" == "true" ]]; then
     [[ -n "${DISCORD_SYSTEM_CHANNEL_ID:-}" ]] \
       || die "DISCORD_SYSTEM_CHANNEL_ID is required when the daily digest is enabled"
@@ -245,6 +249,17 @@ test_image() {
     --file "${REPO_ROOT}/integrations/discoord/Dockerfile" \
     "${REPO_ROOT}"
   docker run --rm kaosgdd-ai-governor-discord:test
+}
+
+wait_worker_healthy() {
+  local attempt worker_status=""
+  for attempt in $(seq 1 30); do
+    worker_status=$(docker inspect --format '{{.State.Health.Status}}' kaos-governor-worker 2>/dev/null || true)
+    [[ "${worker_status}" == "healthy" ]] && return
+    sleep 1
+  done
+  "${COMPOSE[@]}" logs --tail=80 governor-worker >&2 || true
+  die "Governor worker did not become healthy"
 }
 
 smoke() {
@@ -268,12 +283,33 @@ smoke() {
     if curl --fail --silent --show-error "${ready_url}" >/dev/null 2>&1; then
       curl --fail --silent --show-error "${ready_url}"
       printf '\n'
+      if [[ "${PUSHOVER_DELIVERY_MODE:-worker}" == "worker" ]]; then
+        wait_worker_healthy
+      fi
       return
     fi
     sleep 1
   done
   "${COMPOSE[@]}" logs --tail=80 governor-discord >&2 || true
   die "Governor ready endpoint did not become ready: ${ready_url}"
+}
+
+up_runtime() {
+  local recreate=$1
+  local recreate_options=()
+  if [[ "${recreate}" == "true" ]]; then
+    recreate_options+=(--force-recreate)
+  fi
+  if [[ "${PUSHOVER_DELIVERY_MODE:-worker}" == "worker" ]]; then
+    "${COMPOSE[@]}" build governor-discord governor-worker
+    "${COMPOSE[@]}" stop governor-discord >/dev/null 2>&1 || true
+    "${COMPOSE[@]}" up --detach "${recreate_options[@]}" governor-worker
+    wait_worker_healthy
+    "${COMPOSE[@]}" up --detach "${recreate_options[@]}" governor-discord
+  else
+    "${COMPOSE[@]}" stop governor-worker >/dev/null 2>&1 || true
+    "${COMPOSE[@]}" up --detach --build "${recreate_options[@]}" governor-discord
+  fi
 }
 
 maintenance_report() {
@@ -582,8 +618,8 @@ Commands:
   setup              Create local env, secrets, and Governor state directories
   preflight          Validate configuration without starting containers
   test               Build and run the complete container test suite
-  build              Build the production Governor image
-  up                 Validate, build, start Governor, and check health
+  build              Build the production Governor and worker images
+  up                 Validate, build, start Governor/worker, and check health
   down               Stop Governor without deleting persistent data
   restart            Recreate Governor from current configuration
   status             Show Compose and health status
@@ -615,10 +651,10 @@ case "${command}" in
   setup) setup ;;
   preflight) preflight ;;
   test) test_image ;;
-  build) load_env; "${COMPOSE[@]}" build governor-discord ;;
-  up) preflight; "${COMPOSE[@]}" up --detach --build governor-discord; smoke ;;
+  build) load_env; "${COMPOSE[@]}" build governor-discord governor-worker ;;
+  up) preflight; up_runtime false; smoke ;;
   down) load_env; "${COMPOSE[@]}" down ;;
-  restart) preflight; "${COMPOSE[@]}" up --detach --build --force-recreate governor-discord; smoke ;;
+  restart) preflight; up_runtime true; smoke ;;
   status) load_env; "${COMPOSE[@]}" ps; smoke ;;
   logs) load_env; "${COMPOSE[@]}" logs --follow --tail=100 governor-discord ;;
   smoke) smoke ;;

@@ -12,6 +12,12 @@ being extracted. The canonical Python package and executable are now
 compatibility shims. This preserves the deployed state, volumes, credentials,
 and rollback path during migration.
 
+Pushover delivery is no longer a KaosDiscoord-owned lifecycle when
+`PUSHOVER_DELIVERY_MODE=worker`. Discord producers append minimal alerts to the
+shared outbox; the independent `kaos-governor-worker` process is the sole
+delivery owner. Other schedulers remain attached until their Discord callbacks
+have transport-neutral replacements.
+
 The preparation build exposes `/status`, `/confirmation-test`, `/fax-send`,
 `/mail-organizer-now`, `/mail-organizer-schedule`, `/health`, and `/ready`.
 Every interaction must match configured server, channel, and user

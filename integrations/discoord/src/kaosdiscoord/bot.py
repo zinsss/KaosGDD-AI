@@ -659,7 +659,11 @@ class GovernorBot(discord.Client):
     async def on_ready(self) -> None:
         LOGGER.info("Discord ready as %s (%s)", self.user, self.user.id if self.user else None)
         self._startup_complete = False
-        if self.text_notifications.config.enabled and self._text_notification_task is None:
+        if (
+            self.text_notifications.config.enabled
+            and self.text_notifications.config.delivery_mode == "inline"
+            and self._text_notification_task is None
+        ):
             self._text_notification_task = asyncio.create_task(
                 self._text_notification_loop(),
                 name="governor-text-notifications",
@@ -909,6 +913,8 @@ class GovernorBot(discord.Client):
             return False
 
     async def _text_notification_loop(self) -> None:
+        if self.text_notifications.config.delivery_mode != "inline":
+            return
         while not self.is_closed():
             try:
                 await asyncio.to_thread(self.text_notifications.deliver_pending)

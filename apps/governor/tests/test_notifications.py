@@ -1,4 +1,6 @@
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
+import json
 import tempfile
 import unittest
 import urllib.parse
@@ -14,7 +16,13 @@ from kaos_governor.notifications import (
 
 
 class NotificationTests(unittest.TestCase):
-    def config(self, root: Path, *, enabled: bool = True) -> PushoverConfig:
+    def config(
+        self,
+        root: Path,
+        *,
+        enabled: bool = True,
+        delivery_mode: str = "inline",
+    ) -> PushoverConfig:
         return PushoverConfig(
             enabled=enabled,
             state_path=root / "pushover.json",
@@ -23,6 +31,7 @@ class NotificationTests(unittest.TestCase):
             priority=1,
             timeout_seconds=10,
             poll_seconds=5,
+            delivery_mode=delivery_mode,  # type: ignore[arg-type]
         )
 
     def notification(self, **values) -> TextNotification:
@@ -63,6 +72,14 @@ class NotificationTests(unittest.TestCase):
                     "PUSHOVER_APP_TOKEN": "app-secret",
                     "PUSHOVER_USER_KEY": "user-secret",
                     "PUSHOVER_PRIORITY": "2",
+                }
+            )
+
+        with self.assertRaisesRegex(NotificationError, "inline or worker"):
+            PushoverConfig.from_env(
+                {
+                    "PUSHOVER_ENABLED": "false",
+                    "PUSHOVER_DELIVERY_MODE": "both",
                 }
             )
 
@@ -155,6 +172,41 @@ class NotificationTests(unittest.TestCase):
         self.assertEqual(final["pendingCount"], 0)
         self.assertEqual(final["deliveredCount"], 1)
         self.assertEqual(final["lastError"], "")
+
+    def test_worker_mode_queues_without_inline_delivery(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            config = self.config(Path(temporary), delivery_mode="worker")
+            client = mock.Mock()
+            service = TextNotificationService(config, client=client)
+
+            created = service.notify(self.notification())
+            queued = service.status()
+
+        self.assertTrue(created)
+        client.send.assert_not_called()
+        self.assertEqual(queued["pendingCount"], 1)
+        self.assertEqual(queued["deliveryMode"], "worker")
+        self.assertEqual(queued["deliveryOwner"], "governor-worker")
+
+    def test_shared_outbox_lock_preserves_concurrent_producers(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = self.config(root, delivery_mode="worker")
+            first = TextNotificationService(config, client=mock.Mock())
+            second = TextNotificationService(config, client=mock.Mock())
+
+            def enqueue(index: int) -> None:
+                service = first if index % 2 else second
+                service.enqueue(self.notification(key=f"mail:event-{index}", category="mail"))
+
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                list(executor.map(enqueue, range(40)))
+
+            state = json.loads(config.state_path.read_text(encoding="utf-8"))
+            lock_exists = config.state_path.with_name("pushover.json.lock").exists()
+
+        self.assertEqual(len(state["pending"]), 40)
+        self.assertTrue(lock_exists)
 
     def test_tasks_are_not_an_allowed_mirror_category(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

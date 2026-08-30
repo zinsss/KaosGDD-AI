@@ -19,6 +19,7 @@ services:
       GOVERNOR_OPERATION_STORE: "${GOVERNOR_OPERATION_STORE:-postgres}"
       GOVERNOR_DB_HOST: "governor-postgres"
       GOVERNOR_DB_PORT: "5432"
+      PUSHOVER_DELIVERY_MODE: "${PUSHOVER_DELIVERY_MODE:-worker}"
     secrets:
       - discord_bot_token
       - governor_api_token
@@ -56,6 +57,44 @@ services:
       driver: json-file
       options:
         max-size: 5m
+        max-file: "2"
+    networks:
+      - backend
+
+  governor-worker:
+    build:
+      context: ../..
+      dockerfile: apps/governor/Dockerfile
+      target: runtime
+    image: kaosgdd-ai-governor-worker:0.1.0
+    pull_policy: never
+    container_name: kaos-governor-worker
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env
+    environment:
+      PUSHOVER_DELIVERY_MODE: "${PUSHOVER_DELIVERY_MODE:-worker}"
+    secrets:
+      - pushover_app_token
+      - pushover_user_key
+    volumes:
+      - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/notifications:/data/notifications
+    group_add:
+      - "${KAOS_HOST_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
+    pids_limit: 50
+    logging:
+      driver: json-file
+      options:
+        max-size: 2m
         max-file: "2"
     networks:
       - backend

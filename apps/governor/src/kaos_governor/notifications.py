@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import fcntl
 import json
 import os
 from pathlib import Path
 import re
 import threading
-from typing import Mapping
+from typing import Iterator, Literal, Mapping
 import urllib.parse
 import urllib.request
 
@@ -100,6 +102,7 @@ class PushoverConfig:
     priority: int = 1
     timeout_seconds: int = 10
     poll_seconds: int = 10
+    delivery_mode: Literal["inline", "worker"] = "inline"
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "PushoverConfig":
@@ -111,6 +114,9 @@ class PushoverConfig:
             raise NotificationError(
                 "PUSHOVER_APP_TOKEN and PUSHOVER_USER_KEY are required when PUSHOVER_ENABLED=true"
             )
+        delivery_mode = source.get("PUSHOVER_DELIVERY_MODE", "inline").strip().lower() or "inline"
+        if delivery_mode not in {"inline", "worker"}:
+            raise NotificationError("PUSHOVER_DELIVERY_MODE must be inline or worker")
         return cls(
             enabled=enabled,
             state_path=Path(
@@ -121,6 +127,7 @@ class PushoverConfig:
             priority=_bounded_int(source, "PUSHOVER_PRIORITY", 1, 0, 1),
             timeout_seconds=_int(source, "PUSHOVER_TIMEOUT_SECONDS", 10, 1),
             poll_seconds=_int(source, "PUSHOVER_POLL_SECONDS", 10, 5),
+            delivery_mode=delivery_mode,  # type: ignore[arg-type]
         )
 
 
@@ -181,6 +188,17 @@ class TextNotificationService:
         self._lock = threading.RLock()
         self._delivery_lock = threading.Lock()
 
+    @contextmanager
+    def _state_lock(self) -> Iterator[None]:
+        self.config.state_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = self.config.state_path.with_name(f"{self.config.state_path.name}.lock")
+        with self._lock, lock_path.open("a+", encoding="utf-8") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
     def _load(self) -> dict[str, object]:
         try:
             value = json.loads(self.config.state_path.read_text(encoding="utf-8"))
@@ -211,7 +229,7 @@ class TextNotificationService:
             raise NotificationError("notification_category_not_mirrored")
         if not message:
             raise NotificationError("notification_text_required")
-        with self._lock:
+        with self._state_lock():
             state = self._load()
             pending = state["pending"]
             delivered = state["delivered"]
@@ -228,7 +246,7 @@ class TextNotificationService:
 
     def notify(self, notification: TextNotification) -> bool:
         created = self.enqueue(notification)
-        if self.config.enabled:
+        if self.config.enabled and self.config.delivery_mode == "inline":
             self.deliver_pending()
         return created
 
@@ -241,7 +259,7 @@ class TextNotificationService:
     def _deliver_pending(self, *, limit: int) -> int:
         delivered_count = 0
         for _index in range(max(0, limit)):
-            with self._lock:
+            with self._state_lock():
                 state = self._load()
                 pending = state["pending"]
                 if not pending:
@@ -249,7 +267,7 @@ class TextNotificationService:
                 key = next(iter(pending))
                 record = pending[key]
             if not isinstance(record, dict):
-                with self._lock:
+                with self._state_lock():
                     state = self._load()
                     state["pending"].pop(key, None)
                     self._save(state)
@@ -263,13 +281,13 @@ class TextNotificationService:
             try:
                 self.client.send(notification)
             except Exception as exc:
-                with self._lock:
+                with self._state_lock():
                     state = self._load()
                     state["lastError"] = f"{type(exc).__name__}: {exc}"
                     self._save(state)
                 raise NotificationError("pushover_pending_delivery_failed") from exc
             delivered_at = _timestamp()
-            with self._lock:
+            with self._state_lock():
                 state = self._load()
                 record = state["pending"].pop(key, None)
                 if record is not None:
@@ -287,7 +305,7 @@ class TextNotificationService:
         return delivered_count
 
     def status(self) -> dict[str, object]:
-        with self._lock:
+        with self._state_lock():
             state = self._load()
         return {
             "enabled": self.config.enabled,
@@ -300,6 +318,12 @@ class TextNotificationService:
             "deliveredCount": len(state["delivered"]),
             "lastDeliveryAt": str(state.get("lastDeliveryAt") or ""),
             "lastError": str(state.get("lastError") or ""),
+            "deliveryMode": self.config.delivery_mode,
+            "deliveryOwner": (
+                "governor-worker"
+                if self.config.delivery_mode == "worker"
+                else "inline-producer"
+            ),
             "mirroredCategories": sorted(MIRRORED_CATEGORIES),
             "tasksMirrored": False,
         }
