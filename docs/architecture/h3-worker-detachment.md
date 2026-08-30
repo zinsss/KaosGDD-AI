@@ -12,7 +12,7 @@ writer, the current durable state, and a direct rollback.
 | Lifecycle | Current owner | Discord coupling | Target owner | Migration order |
 | --- | --- | --- | --- | --- |
 | Pushover pending delivery | `GovernorBot` task | None; reads the shared notification outbox | `kaos-governor-worker` | 1 |
-| Daily digest scheduling | `GovernorBot` task | Publishes a Discord message and controls before queuing Pushover | Governor worker with mobile/Brain detail | 2 |
+| Daily digest scheduling | `kaos-governor-worker`; KaosDiscoord transports a pending rendered publication | Transitional Discord controls only; timing and Watch alerts are independent | Governor worker with mobile/Brain detail | 2 (schedule complete; transport pending) |
 | Naver mail polling | `GovernorBot` task | Poller callbacks render/send Discord mail and attachments | Governor worker with archive plus minimal Pushover | 3 |
 | Fax lifecycle polling | `GovernorBot` task | `DiscordFaxTransport` consumes domain actions | Governor worker with durable archive plus minimal Pushover | 3 |
 | Maintenance reminders | `GovernorBot` task | Sends Discord detail before Pushover | Governor worker with Pushover; detail queried on demand | 4 |
@@ -52,8 +52,8 @@ Both containers remained healthy with zero restarts. Every later row in the
 inventory remains attached to KaosDiscoord until its own replacement gate
 passes.
 
-The next incremental cutover moves only daily-digest scheduling and alert
-production. The worker builds the digest, persists one pending publication,
+The next incremental cutover moved daily-digest scheduling and alert
+production on 2026-08-30. The worker builds the digest, persists one pending publication,
 and queues normal-priority `Good Morning.` and `Today.` records. KaosDiscoord
 temporarily remains the transport for the rendered Discord message and its
 Weather/Bible/Quote controls; it no longer owns timing or Watch alerts. This
@@ -64,6 +64,12 @@ Notification urgency is now record-level rather than global. Routine daily,
 mail, fax-success/receipt, recovery, and startup records use priority `0`.
 Service-down, fax-send-failure, maintenance-required, and authentication
 renewal records use priority `1`.
+
+Production runs `DAILY_DIGEST_OWNER=worker` at commit `58e5237`. The existing
+2026-08-30 sent-date was retained during cutover, so no same-day digest or
+Pushover record was repeated. Worker and KaosDiscoord are healthy with zero
+restarts; the outbox remains at 0 pending and 8 delivered records. The next
+organic 07:00 digest is the production observation gate.
 
 ## Pushover Rollback
 
