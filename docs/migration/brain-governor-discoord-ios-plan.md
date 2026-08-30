@@ -13,10 +13,10 @@ H4, office-service, and stateful-service cutovers.
 
 ## Current Position
 
-- Production phase: Phase 2 observation. Durable PostgreSQL operations and
-  confirmation payloads were promoted on 2026-08-30; the observation gate
-  remains open because only the controlled deployment smoke operation has used
-  the new store so far.
+- Production phase: Phases 1 and 2 are complete. Durable PostgreSQL operations
+  and confirmation payloads were promoted on 2026-08-30, then reconciled
+  against a normal user-approved task creation and its authoritative calendar
+  result.
 - Active implementation: Phase 3 task-handler slice 1 is validated locally but
   is not deployed.
 - H4 Brain correction: Korean task-create requests using `만들어` or `생성`
@@ -34,8 +34,8 @@ H4, office-service, and stateful-service cutovers.
 | Phase | Objective | Implementation | Production | Status |
 | --- | --- | --- | --- | --- |
 | 0 | Audit current architecture and flows | Complete | No change | Complete |
-| 1 | Establish the Governor operation boundary | Complete and tested | Deployed 2026-08-30 | Production observation |
-| 2 | Persist operations, confirmations, and pending payloads | Complete and tested | Deployed 2026-08-30 | Production observation |
+| 1 | Establish the Governor operation boundary | Complete and tested | Deployed and observed 2026-08-30 | Complete |
+| 2 | Persist operations, confirmations, and pending payloads | Complete and tested | Deployed and observed 2026-08-30 | Complete |
 | 3 | Route every meaningful mutation through Governor | Task tool handler slice 1 complete and tested | Not deployed | Validated locally |
 | 4 | Make Brain transport-neutral | Not started | Not deployed | Planned |
 | 5 | Isolate KaosDiscoord and notification delivery | Not started | Not deployed | Planned |
@@ -188,11 +188,11 @@ Release checklist:
 - [x] Review and commit
 - [x] Deploy through the existing H3 procedure
 - [x] Verify health and representative proposal/approval in production
-- [ ] Complete observation gate
+- [x] Complete observation gate
 
 ## Phase 2 — PostgreSQL Operation Persistence
 
-Status: deployed on 2026-08-30; production observation in progress.
+Status: complete. Deployed and production-observed on 2026-08-30.
 
 Objective:
 
@@ -293,7 +293,7 @@ Exit criteria:
 - [x] All relevant regressions pass
 - [x] Backup/restore includes new operation state
 - [x] Production promotion approved
-- [ ] Observation gate completed
+- [x] Observation gate completed
 
 Production promotion evidence (2026-08-30):
 
@@ -316,6 +316,13 @@ Production promotion evidence (2026-08-30):
   An isolated PostgreSQL 16 restore recovered migration `005`, 18 public
   tables, the completed smoke operation, its four audit rows, and zero pending
   payload rows.
+- A normal Discord/Brain request created task `전염병신고` after explicit user
+  approval. PostgreSQL recorded a completed `calendar.tasks/create` operation,
+  an approved single-use confirmation, and the expected four lifecycle audit
+  events. The terminal payload table remained empty.
+- The live calendar adapter returned exactly one active task with that title;
+  its authoritative UID matched the UID recorded in the Governor operation
+  result. The Discord container remained healthy with zero restarts.
 
 ## Phase 3 — Route Mutations Through Governor
 
@@ -387,7 +394,7 @@ Slice 1 production gate:
 
 - [x] Domain handler contract and transport parity tests
 - [x] Full Governor, PostgreSQL, Discord, and Brain regressions
-- [ ] Phase 2 observation has normal task/memo/event usage evidence
+- [x] Phase 2 observation has normal task/memo/event usage evidence
 - [x] Review and commit
 - [ ] Controlled H3 deployment
 - [ ] Reconcile operation audit row with the authoritative task result
@@ -576,6 +583,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | 1-2 | Promoted commit `11b18be`, migration 005, and the PostgreSQL-backed Discord operation store after pre/post recovery exercises | Both custom-format backups restored into isolated PostgreSQL 16; live proposal/approval/completion/audit/payload cleanup passed; API, Discord, and PostgreSQL healthy with zero restarts | Production observation started; compatibility and memory-store rollback path retained |
 | 2026-08-30 | 3 | Extracted the first task/supplies execution slice from the Discord HTTP adapter into registered Governor task handlers | 8 focused task tests; 208 Governor unit/contract + 9 PostgreSQL integration + 349 Discord + 317 Brain tests passed | None; code is locally validated and Phase 2 observation remains open |
 | 2026-08-30 | 3 | Corrected Korean `만들어`/`생성` task-create routing discovered during normal H4 observation | Exact parser/tool/bot regressions and all 321 Brain tests passed; deployed runtime parses the reported phrase as task `전염병신고` without a read-only lookup | H4 Brain deployed at `99011fb`, healthy with zero restarts; prior image tagged for rollback; H3 unchanged |
+| 2026-08-30 | 1-2 | Completed the production observation gate with a normal user-approved task creation | Durable operation completed; confirmation approved once; four lifecycle audit events present; pending payload removed; live calendar task UID matched the operation result | Phases 1 and 2 complete; Phase 3 slice 1 is eligible for controlled H3 deployment |
 
 ## How to Update This Tracker
 
