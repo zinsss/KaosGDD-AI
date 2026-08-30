@@ -1,18 +1,36 @@
-# KaosGDD Family Portal
+# Personal and Family KaosGDD Portal
 
-Mobile-first KaosGDD Family portal.
+Shared mobile-first KaosGDD portal. Hostname selects the personal or Family
+profile; authoritative scope remains server-controlled.
 
 The frontend remains static and keeps mock fallback data, while production
 calendar/task operations go through the server-side calendar adapter.
 
 ## Routes
 
-- `#/today`
-- `#/calendar`
-- `#/calendar?date=YYYY-MM-DD` (selects a calendar day for PWA/Shortcut links)
-- `#/calendar?weather=YYYY-MM-DD` (opens the existing detailed-weather popup)
-- `#/tasks`
-- `#/services`
+The personal profile uses one native main-menu selector so its growing route
+list remains usable on iPhone and desktop:
+
+- Agenda — `#/today`
+- Calendar — `#/calendar`
+- Tasks — `#/tasks`
+- Memos — `#/memos`
+- Documents — `#/documents`
+- Fax — `#/fax`
+- Mail — `#/mail`
+- Utils — `#/services`
+- Settings — `#/settings`
+
+Fax and Mail currently show an explicit transition notice until their scoped
+PWA read APIs are connected. Documents exposes its existing page and reports
+the current API availability.
+
+Stable calendar links:
+
+- `#/calendar?date=YYYY-MM-DD` selects a calendar day for PWA/Shortcut links.
+- `#/calendar?weather=YYYY-MM-DD` opens the existing detailed-weather popup.
+
+Family retains its existing direct navigation and family-only routes.
 
 ## Boundaries
 

@@ -1,11 +1,13 @@
 const routes = {
-  today: "Today",
+  today: "Agenda",
   calendar: "Calendar",
   caregiver: "Caregiver",
   tasks: "Tasks",
   add: "Add",
   supplies: "Supplies",
-  documents: "Document Inbox",
+  documents: "Documents",
+  fax: "Fax",
+  mail: "Mail",
   "add-event": "Add Event",
   "edit-event": "Edit Event",
   "add-task": "Add Task",
@@ -110,14 +112,7 @@ const profileConfigs = {
   main: {
     label: "KaosGDD",
     defaultRoute: "today",
-    nav: [
-      { route: "today", label: "Today" },
-      { route: "calendar", label: "Calendar" },
-      { route: "tasks", label: "Tasks" },
-      { route: "memos", label: "Memos" },
-      { route: "services", label: "Utils" },
-      { route: "settings", label: "Settings" },
-    ],
+    nav: window.KAOS_PORTAL_NAVIGATION?.personalMenu || [],
   },
   family: {
     label: uiText("profile.family", "Family"),
@@ -2493,7 +2488,7 @@ function getRoute() {
   const route = raw.split("?", 1)[0];
   if (!routes[route]) return profileConfig().defaultRoute;
   if (portalProfile() === "family" && route === "services") return profileConfig().defaultRoute;
-  if (portalProfile() === "family" && (route === "supplies" || route === "documents")) return profileConfig().defaultRoute;
+  if (portalProfile() === "family" && ["supplies", "documents", "fax", "mail"].includes(route)) return profileConfig().defaultRoute;
   if (portalProfile() === "main" && (route === "rouny" || route === "caregiver" || route === "ledger")) return profileConfig().defaultRoute;
   return route;
 }
@@ -2689,7 +2684,7 @@ function profileConfig() {
 function activeNavRoute(route) {
   if (route === "add" || route === "add-event" || route === "edit-event" || route === "caregiver") return "calendar";
   if (route === "add-task" || route === "edit-task") return "tasks";
-  if (route === "supplies" || route === "documents" || route === "service") return "services";
+  if (route === "supplies" || route === "service") return "services";
   return route;
 }
 
@@ -2697,43 +2692,18 @@ function renderTopNav(route) {
   const nav = document.getElementById("topNav");
   if (!nav) return;
   const activeRoute = activeNavRoute(route);
-  if (isDesktopLayout() && portalProfile() === "main") {
-    const utilsActive = activeRoute === "services";
-    nav.innerHTML = profileConfig()
-      .nav.map((item) => {
-        if (item.route !== "services") {
-          return `
-            <a href="#/${item.route}" data-nav="${item.route}" class="${item.route === activeRoute ? "isActive" : ""}" aria-label="${escapeHtml(item.label)}">
-              ${escapeHtml(item.label)}
-            </a>
-          `;
-        }
-        return `
-          <div class="desktopNavGroup ${utilsActive ? "isActive" : ""}">
-            <a
-              href="#/services"
-              class="desktopNavToggle desktopNavUtilsHeader ${utilsActive ? "isActive" : ""}"
-              aria-controls="desktopUtilsMenu"
-            >
-              <span>${escapeHtml(item.label)}</span>
-            </a>
-            <div class="desktopNavSubmenu" id="desktopUtilsMenu">
-              ${mockAdapter
-                .getServices()
-                .map((service) => {
-                  const isCurrent = (route === "supplies" && service.id === "supplies")
-                    || (route === "documents" && service.id === "documents")
-                    || (route === "service" && hashParam("service") === service.id);
-                  return service.href
-                    ? `<a href="${escapeHtml(serviceHref(service))}" class="${isCurrent ? "isActive" : ""}">${escapeHtml(service.name)}</a>`
-                    : `<span class="desktopNavUtility isDisabled" aria-disabled="true">${escapeHtml(service.name)}</span>`;
-                })
-                .join("")}
-            </div>
-          </div>
-        `;
-      })
-      .join("");
+  if (portalProfile() === "main") {
+    const selectedRoute = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(activeRoute) || "today";
+    nav.innerHTML = `
+      <label class="mainMenuPicker">
+        <span>Main menu</span>
+        <select data-main-menu aria-label="Main menu">
+          ${profileConfig().nav.map((item) => `
+            <option value="${escapeHtml(item.route)}" ${item.route === selectedRoute ? "selected" : ""}>${escapeHtml(item.label)}</option>
+          `).join("")}
+        </select>
+      </label>
+    `;
     return;
   }
   nav.innerHTML = profileConfig()
@@ -4218,6 +4188,36 @@ function renderServices() {
       </div>
     </section>
   `;
+}
+
+function renderTransitioningDomain(label, detail) {
+  return `
+    <section class="panel domainTransitionPanel">
+      <div class="panelHeader">
+        <div>
+          <p class="label">${escapeHtml(label)}</p>
+          <h2>${escapeHtml(label)}</h2>
+        </div>
+      </div>
+      <div class="panelBody">
+        <p class="taskMeta">${escapeHtml(detail)}</p>
+      </div>
+    </section>
+  `;
+}
+
+function renderFax() {
+  return renderTransitioningDomain(
+    "Fax",
+    "HylaFAX processing and notifications continue through KaosGovernor. Fax history and send controls are not connected to this PWA yet.",
+  );
+}
+
+function renderMail() {
+  return renderTransitioningDomain(
+    "Mail",
+    "Naver Mail polling and notifications continue through KaosGovernor. The personal mail view is not connected to this PWA yet.",
+  );
 }
 
 function renderDesktopService() {
@@ -6762,6 +6762,8 @@ function render() {
   else if (route === "service") view.innerHTML = renderDesktopService();
   else if (route === "supplies") view.innerHTML = renderSupplies();
   else if (route === "documents") view.innerHTML = renderDocuments();
+  else if (route === "fax") view.innerHTML = renderFax();
+  else if (route === "mail") view.innerHTML = renderMail();
   else if (route === "rouny") view.innerHTML = renderRouny();
   else if (route === "memos") view.innerHTML = renderMemos();
   else if (route === "ledger") view.innerHTML = renderLedger();
@@ -8048,6 +8050,13 @@ document.addEventListener("keydown", (event) => {
 });
 
 document.addEventListener("change", async (event) => {
+  const mainMenu = event.target.closest("[data-main-menu]");
+  if (mainMenu) {
+    const route = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(mainMenu.value) || "today";
+    window.location.hash = `#/${route}`;
+    return;
+  }
+
   const organizerFrequency = event.target.closest('[data-mail-organizer-form] [name="runsPerDay"]');
   if (organizerFrequency) {
     const form = organizerFrequency.closest("[data-mail-organizer-form]");

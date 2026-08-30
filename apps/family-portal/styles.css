@@ -432,20 +432,51 @@ html.isAgendaSuppliesEmbed body {
   color: var(--nord8);
 }
 
+.mainMenuPicker {
+  display: grid;
+  justify-self: end;
+  gap: 3px;
+  width: min(100%, 210px);
+  min-width: 148px;
+}
+
+.mainMenuPicker > span {
+  color: var(--dim);
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.mainMenuPicker select {
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 34px 6px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.mainMenuPicker select:focus-visible {
+  outline: 2px solid var(--nord8);
+  outline-offset: 2px;
+}
+
 @media (max-width: 560px) {
   .app[data-profile="main"] .appIdentity {
     min-width: 82px;
   }
 
   .app[data-profile="main"] .topNav {
-    grid-template-columns: repeat(6, auto);
-    gap: 5px;
+    display: block;
   }
 
-  .app[data-profile="main"] .topNav a {
-    padding-inline: 0;
-    font-family: "Pretendard", ui-sans-serif, system-ui, sans-serif;
-    font-size: 0.74rem;
+  .app[data-profile="main"] .mainMenuPicker {
+    width: min(100%, 190px);
   }
 }
 
@@ -4790,6 +4821,15 @@ h3 {
     justify-content: flex-start;
     gap: 6px;
     margin-top: 28px;
+  }
+
+  .app[data-profile="main"] .mainMenuPicker {
+    justify-self: stretch;
+    width: 100%;
+  }
+
+  .app[data-profile="main"] .mainMenuPicker select {
+    min-height: 44px;
   }
 
   .topNav a,

@@ -34,6 +34,7 @@ jobs:
       - name: Validate KaosGDD PWA JavaScript
         run: |
           node --check apps/family-portal/deep-links.js
+          node --check apps/family-portal/navigation.js
           node --check apps/family-portal/app.js
           node --test tests/family-portal/*.cjs
       - name: Render H3 deployment

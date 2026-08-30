@@ -548,6 +548,7 @@ family_portal_source_preflight() {
   require_file "${app_source}/index.html"
   require_file "${app_source}/app.js"
   require_file "${app_source}/deep-links.js"
+  require_file "${app_source}/navigation.js"
   require_file "${app_source}/translations.js"
   if [ -d "${app_source}/app" ]; then
     fail "Family portal source must not contain a nested app/ duplicate"
