@@ -687,7 +687,7 @@ Memos slice 2 production gate:
 - [x] Direct create/edit/delete and replay tests
 - [x] Actor, idempotency, content-redaction, and authoritative-result tests
 - [x] Governor, PostgreSQL, Discord, and Brain regression suites
-- [ ] Review and commit
+- [x] Review and commit (`7c9f577`)
 - [ ] Controlled H3 deployment
 - [ ] Reconcile one direct Discord memo capture with Memos and Governor audit
 - [ ] Slice observation gate
@@ -903,7 +903,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | 3 | Promoted Memos handler slice 1 to H3 | Commit `1e6a3aa`; installed route delegates to the shared handler with no direct confirmation write; container healthy with zero restarts; 4 completed operations retained and 0 pending payloads; H4 dependencies ready | Production observation started; direct memo-capture writer unchanged; rollback image `kaosgdd-ai-governor-discord:rollback-7521ac0` retained |
 | 2026-08-30 | 3 | Completed Memos handler slice 1 production observation | Normal Brain confirmation created authoritative memo `memos/LZ44eThP6c4NjmWCK8s2AK`; exact content count 1; operation completed with four ordered audit records and zero pending payloads; container healthy with zero restarts | Slice 1 complete; direct Discord Memos capture remains the next slice |
 | 2026-08-30 | 3 | Started Memos slice 2 for direct Discord mutation routing | Scope records shared durable operations, Discord actor/idempotency derivation, unchanged read paths and UX, and no raw memo content in the ledger | None; implementation started |
-| 2026-08-30 | 3 | Routed direct Discord Memos mutations through the shared Governor lifecycle | 24 focused Memos + 231 Governor + 11 isolated PostgreSQL + 355 Discord + 321 Brain tests passed; authoritative result prevents a post-write read failure; retries do not repeat writes | None; locally validated and awaiting review/commit |
+| 2026-08-30 | 3 | Routed direct Discord Memos mutations through the shared Governor lifecycle | Commit `7c9f577`; 24 focused Memos + 231 Governor + 11 isolated PostgreSQL + 355 Discord + 321 Brain tests passed; authoritative result prevents a post-write read failure; retries do not repeat writes | None; locally validated and awaiting controlled H3 deployment |
 | 2026-08-30 | 6 | Recorded deferred Shortcut deep-link support for opening a selected Memos item | Existing Memos route and ID mapping verified as `/m/{memo-id}`; iOS external-link/PWA limitation documented | None; planning only |
 
 ## How to Update This Tracker
