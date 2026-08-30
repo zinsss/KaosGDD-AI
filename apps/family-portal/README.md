@@ -9,7 +9,8 @@ calendar/task operations go through the server-side calendar adapter.
 ## Routes
 
 The personal profile uses one native main-menu selector so its growing route
-list remains usable on iPhone and desktop:
+list remains usable on iPhone and desktop. The selected menu value is also the
+visible page title; the separate duplicate route heading is visually hidden.
 
 - Agenda — `#/today`
 - Calendar — `#/calendar`

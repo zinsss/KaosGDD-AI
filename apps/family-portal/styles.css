@@ -435,35 +435,48 @@ html.isAgendaSuppliesEmbed body {
 .mainMenuPicker {
   display: grid;
   justify-self: end;
-  gap: 3px;
   width: min(100%, 210px);
   min-width: 148px;
 }
 
 .mainMenuPicker > span {
-  color: var(--dim);
-  font-size: 0.62rem;
-  font-weight: 700;
-  line-height: 1;
-  text-transform: uppercase;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .mainMenuPicker select {
   width: 100%;
-  min-height: 36px;
+  min-height: 44px;
   padding: 6px 34px 6px 10px;
   border: 1px solid var(--line-strong);
   border-radius: 7px;
   background: var(--surface);
-  color: var(--text);
+  color: var(--nord13);
   font: inherit;
-  font-size: 16px;
-  font-weight: 650;
+  font-size: 1.18rem;
+  font-weight: 700;
 }
 
 .mainMenuPicker select:focus-visible {
   outline: 2px solid var(--nord8);
   outline-offset: 2px;
+}
+
+.app[data-profile="main"] .appIdentity h1 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 @media (max-width: 560px) {
