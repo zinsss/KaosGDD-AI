@@ -39,6 +39,15 @@ outbox. `kaos-governor-worker` is the sole process allowed to deliver pending
 records. A cross-process file lock protects the JSON outbox while the producer
 and worker share it.
 
+## Current Cutover Status
+
+Pushover delivery moved to `kaos-governor-worker` on 2026-08-30 in commit
+`356e1b4`. Production KaosDiscoord reports `deliveryMode=worker` with a
+five-second poll, both containers are healthy with zero restarts, and the
+existing outbox was preserved at 0 pending and 7 delivered records. Production
+observation is active. Every later row in the inventory remains attached to
+KaosDiscoord until its own replacement gate passes.
+
 ## Pushover Rollback
 
 Stop `governor-worker`, set `PUSHOVER_DELIVERY_MODE=inline`, and recreate the

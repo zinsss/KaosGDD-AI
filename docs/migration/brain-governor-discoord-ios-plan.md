@@ -40,6 +40,8 @@ H4, office-service, and stateful-service cutovers.
   `kaosdiscoord` under `integrations/discoord`, while legacy imports and the
   current H3 deployment identity remain compatibility shims during
   observation.
+- Phase 5 worker slice 2 is deployed in commit `356e1b4`: Pushover delivery is
+  owned by the independent `kaos-governor-worker`; KaosDiscoord is queue-only.
 - Database schema in production: additive migration `005`.
 - Working rule: finish and verify one boundary before moving another domain.
 
@@ -52,7 +54,7 @@ H4, office-service, and stateful-service cutovers.
 | 2 | Persist operations, confirmations, and pending payloads | Complete and tested | Deployed and observed 2026-08-30 | Complete |
 | 3 | Route every meaningful mutation through Governor | Task slices and Memos slices 1-2 implemented | Task slices and Memos slice 1 observed; Memos slice 2 deployed 2026-08-30 | Production observation |
 | 4 | Make Brain transport-neutral | Not started | Not deployed | Planned |
-| 5 | Retain brain-only KaosDiscoord; detach workers and notifications | Package extraction deployed; Pushover worker locally validated | Package compatibility observation active; worker deployment pending | In progress |
+| 5 | Retain brain-only KaosDiscoord; detach workers and notifications | Package extraction and Pushover worker deployed | Both compatibility observations active | In progress |
 | 6 | Add stable iOS APIs and lightweight clients | Pilot read endpoint only; replacement matrix accepted | Pilot active | Planned |
 | 7 | Remove compatibility debt and finish documentation/CI | Not started | Not deployed | Planned |
 
@@ -916,8 +918,24 @@ Slice 2 local validation (2026-08-30):
   `kaos-governor-worker` entry point and became healthy
 - H3 preflight, Bash validation, and Compose rendering passed
 
-Local implementation is complete. Production one-writer cutover and
-observation remain pending.
+Slice 2 production deployment (2026-08-30):
+
+- commit `356e1b4` was pushed to `main` and synced to H4
+- the guarded cutover built both images, stopped the old inline owner, started
+  and health-checked `kaos-governor-worker`, then started KaosDiscoord in
+  queue-only mode
+- worker and KaosDiscoord are healthy with zero restarts; H4 doctor passes
+- KaosDiscoord reports `deliveryMode=worker`, `deliveryOwner=governor-worker`,
+  and a five-second poll
+- the existing Pushover outbox remained at 0 pending and 7 delivered records
+  with no error; the worker heartbeat is ready and current
+- the durable Governor ledger remained at 5 completed operations and 0 pending
+  payloads
+- rollback image `kaosgdd-ai-governor-discord:rollback-pre-pushover-worker`
+  retains image `sha256:9175013d0926db3b969ed2adcd3cbcffbb8c15d50197d69175a7f6773d21a74c`
+
+Production observation is active. No synthetic watch alert was sent during the
+cutover; the next organic Pushover event is the delivery-path observation gate.
 
 Risk: high around worker lifecycles currently started by the H3 Discord bot,
 persistent views/state, duplicate notification delivery, and historical
@@ -1056,6 +1074,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | 5 | Completed the local Governor-side KaosDiscoord package extraction | Canonical package/executable plus thin legacy shims; dependency boundary enforced; 231 Governor + 358 KaosDiscoord + 321 Brain tests; H3 preflight and Compose render passed | None; deployment pending, current service/image/container identity retained |
 | 2026-08-30 | 5 | Promoted the KaosDiscoord package boundary to H3 | Commit `20732fa`; canonical runtime entry point and package installed; legacy imports resolve to canonical classes; container healthy/ready with zero restarts; ledger retained 5 completed operations and 0 payloads; H4 synced and doctor healthy | Compatibility observation started; rollback image `kaosgdd-ai-governor-discord:rollback-pre-kaosdiscoord` retained |
 | 2026-08-30 | 5 | Implemented the independent Pushover delivery worker | Lifecycle inventory plus dedicated image/entry point, queue-only producer mode, cross-process state lock, worker heartbeat, and guarded Compose ownership; 237 Governor + 359 KaosDiscoord + 321 Brain tests passed | None; locally validated, production cutover pending |
+| 2026-08-30 | 5 | Promoted independent Pushover delivery to H3 | Commit `356e1b4`; sequenced one-writer cutover; worker and KaosDiscoord healthy with zero restarts; queue state preserved at 0 pending/7 delivered; ledger retained 5 completed/0 payloads; H4 synced and healthy | Production observation started; rollback image `kaosgdd-ai-governor-discord:rollback-pre-pushover-worker` retained |
 | 2026-08-30 | 6 | Recorded deferred Shortcut deep-link support for opening a selected Memos item | Existing Memos route and ID mapping verified as `/m/{memo-id}`; iOS external-link/PWA limitation documented | None; planning only |
 
 ## How to Update This Tracker
