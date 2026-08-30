@@ -21,6 +21,25 @@ KOREAN_WEEKDAYS = {
     "일요일": 6,
     "일": 6,
 }
+CREATE_MARKERS = (
+    "만들어 주세요",
+    "만들어주세요",
+    "만들어 줘",
+    "만들어줘",
+    "생성해 주세요",
+    "생성해주세요",
+    "생성해 줘",
+    "생성해줘",
+    "추가해줘",
+    "저장해줘",
+    "등록해줘",
+    "만들어",
+    "생성해",
+    "추가",
+    "저장",
+    "등록",
+    "생성",
+)
 
 
 @dataclass(frozen=True)
@@ -306,7 +325,7 @@ def _scope(text: str) -> tuple[str, str]:
 
 
 def _parse_supplies_create(text: str) -> TaskCreateRequest | None:
-    marker = _first_marker(text, ("추가해줘", "추가", "저장해줘", "저장", "등록해줘", "등록"))
+    marker = _first_marker(text, CREATE_MARKERS)
     if marker is None:
         return None
     title = _strip_scope_words(text.replace(marker, " ", 1))
@@ -350,7 +369,7 @@ def _parse_prefixed_create(text: str, *, today: date) -> TaskCreateRequest | Non
 def _parse_explicit_task_create(text: str) -> TaskCreateRequest | None:
     if not any(marker in text for marker in ("할 일", "할일", "task", "태스크")):
         return None
-    marker = _first_marker(text, ("추가해줘", "추가", "저장해줘", "저장", "등록해줘", "등록"))
+    marker = _first_marker(text, CREATE_MARKERS)
     if marker is None:
         return None
     profile, collection_id = _scope(text)

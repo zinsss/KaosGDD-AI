@@ -344,6 +344,21 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(tools.task_create_calls, [])
         self.assertEqual(tools.task_due_calls, [])
 
+    async def test_reported_korean_make_task_uses_create_not_active_list(self) -> None:
+        tools = FakeGovernorTools()
+        brain = self.brain(None, governor_tools=tools)
+        message = fake_discord_message("전염병신고 할일 만들어줘")
+
+        await BrainBot.on_message(brain, message)  # type: ignore[arg-type]
+
+        request, actor_id, idempotency_key = tools.task_create_calls[0]
+        self.assertEqual(request.title, "전염병신고")
+        self.assertEqual(request.due_date, "")
+        self.assertEqual(actor_id, 200)
+        self.assertEqual(idempotency_key, "discord:777")
+        self.assertEqual(tools.fetch_calls, [])
+        self.assertIn("Confirm New Task", message.reply.await_args.args[0])
+
     async def test_kaosai_diagnostic_reports_planner_and_guard_failures(self) -> None:
         planner_failed = self.brain(None, error=KaosAIError("nope"))
         reply = await BrainBot._render_kaosai_diagnostic(  # type: ignore[arg-type]

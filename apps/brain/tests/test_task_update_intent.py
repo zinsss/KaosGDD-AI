@@ -86,6 +86,24 @@ class TaskUpdateIntentTests(unittest.TestCase):
         self.assertEqual(request.due_date, "")
         self.assertEqual(request.due_time, "")
 
+    def test_explicit_task_make_from_reported_discord_phrase(self) -> None:
+        request = parse_task_create("전염병신고 할일 만들어줘", today=date(2026, 8, 30))
+        assert request is not None
+        self.assertEqual(request.title, "전염병신고")
+        self.assertEqual(request.due_date, "")
+        self.assertEqual(request.due_time, "")
+
+    def test_explicit_task_generate_without_due(self) -> None:
+        request = parse_task_create("보험 서류 할 일 생성해줘", today=date(2026, 8, 30))
+        assert request is not None
+        self.assertEqual(request.title, "보험 서류")
+
+    def test_supplies_make_uses_supplies_profile(self) -> None:
+        request = parse_task_create("비품 비누 만들어 줘", today=date(2026, 8, 30))
+        assert request is not None
+        self.assertEqual(request.title, "비누")
+        self.assertEqual(request.profile, "supplies")
+
     def test_comma_task_create_without_due(self) -> None:
         request = parse_task_create("할일, 엄마 전화", today=date(2026, 8, 14))
         assert request is not None

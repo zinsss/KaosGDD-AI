@@ -304,6 +304,8 @@ def _looks_like_mutation(lowered: str) -> bool:
             "추가",
             "등록",
             "저장",
+            "만들어",
+            "생성",
             "삭제",
             "지워",
             "없애",

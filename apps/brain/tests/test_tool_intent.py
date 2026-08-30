@@ -221,6 +221,8 @@ class ToolIntentTests(unittest.TestCase):
 
     def test_mutation_words_do_not_trigger_readonly_tool_lookup(self) -> None:
         self.assertIsNone(parse_tool_request("엄마 전화 할 일 추가해줘"))
+        self.assertIsNone(parse_tool_request("전염병신고 할일 만들어줘"))
+        self.assertIsNone(parse_tool_request("보험 서류 할 일 생성해줘"))
         self.assertIsNone(parse_tool_request("영이 큐시미아 다음주 월요일까지로 수정"))
 
     def test_plain_chat_does_not_trigger_tool(self) -> None:
