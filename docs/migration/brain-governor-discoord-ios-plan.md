@@ -1279,6 +1279,9 @@ Phase 6 slice 2 production deployment (2026-08-30):
   healthy/running with zero restarts
 - no API, credential, task, event, memo, document, fax, mail, notification, or
   authoritative backend was changed
+- follow-up commit `ba15c8e` made the selector itself the visible page title,
+  removing the duplicate route heading and visible menu caption; versioned CSS
+  was synced byte-for-byte with zero service restarts
 
 Rollback: restore the static portal from commit `c9f1bc0` and run
 `family-portal-sync`. No data reconciliation is required.
@@ -1396,6 +1399,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | Decision | Reconciled the host migration plan, production plan, and repository overview with the retained personal-PWA decision | Cross-document search removed the stale no-personal-portal and native-UI-primary assumptions | Documentation only; deployed services and data unchanged |
 | 2026-08-30 | 6 | Implemented and locally validated the compact personal main-menu selector | Exact nine-item order, subroute ownership, fallback, and asset load order covered by focused tests; existing deep-link tests and syntax checks pass | Awaiting controlled static-portal promotion; Family navigation and all backends unchanged |
 | 2026-08-30 | 6 | Promoted the compact personal main-menu selector | Commit `216d1ba`; both host profiles serve byte-matching versioned assets; exact menu order verified; migrated-service preflight passed; related containers retained zero restarts | Slice 2 deployed; rollback is static commit `c9f1bc0`; no backend or data change |
+| 2026-08-30 | 6 | Made the personal selector the sole visible page title | Commit `ba15c8e`; duplicate route heading and visible menu caption removed; deployed HTML/CSS match Git; portal and Governor workers retained zero restarts | Presentation-only follow-up; backend and Family behavior unchanged |
 
 ## How to Update This Tracker
 
