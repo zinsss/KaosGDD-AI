@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import AsyncMock
 
+from kaos_governor import GovernorOperations, MemoryDurableGovernorStore
 from kaos_governor_discord.access import AccessPolicy
 from kaos_governor_discord.tasks import (
     AddTaskCommand,
@@ -401,6 +402,37 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("- none", channel.sent[0]["content"])
             self.assertIsNone(channel.sent[0]["view"])
             self.assertEqual(channel.sent[1]["content"], "## Call mom")
+
+    async def test_plus_message_uses_governor_actor_idempotency_and_replay(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            adapter = FakeAdapter(tasks=[])
+            store = MemoryDurableGovernorStore()
+            surface = self.make_surface(
+                Path(temporary) / "tasks.json",
+                channel,
+                adapter,
+                operations=GovernorOperations(store),
+            )
+            message = SimpleNamespace(
+                id=77,
+                content="+ Call mom",
+                channel=SimpleNamespace(id=300),
+                author=SimpleNamespace(id=200, bot=False),
+                delete=AsyncMock(),
+            )
+
+            self.assertTrue(await surface.handle_message(message))  # type: ignore[arg-type]
+            self.assertTrue(await surface.handle_message(message))  # type: ignore[arg-type]
+
+            self.assertEqual(len(adapter.created), 1)
+            audit = store.audit_records()
+            self.assertEqual([record.outcome for record in audit], ["accepted", "completed"])
+            operation = store.get_operation(audit[0].operation_id)
+            assert operation is not None
+            self.assertEqual(operation.actor.actor_id, "200")
+            self.assertEqual(operation.idempotency_key, "discord-message:77")
+            self.assertEqual(operation.status, "completed")
 
     async def test_plus_message_creates_task_with_strict_due_date_time(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -804,6 +836,41 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(await surface.delete_task("zin:tasks|TASK-1"))
             self.assertEqual(adapter.deleted[0], ("main", "TASK-1", "zin:tasks"))
             self.assertEqual(surface.state.message_ids, {})
+
+    async def test_complete_button_uses_interaction_actor_and_idempotency(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            channel = FakeChannel()
+            adapter = FakeAdapter()
+            store = MemoryDurableGovernorStore()
+            surface = self.make_surface(
+                Path(temporary) / "tasks.json",
+                channel,
+                adapter,
+                operations=GovernorOperations(store),
+            )
+            await surface.ensure_message()
+            task_message = channel.messages[surface.state.message_ids["zin:tasks|TASK-1"]]
+            done = task_message.view.children[0]
+            interaction = SimpleNamespace(
+                id=880,
+                guild_id=100,
+                channel_id=300,
+                user=SimpleNamespace(id=200),
+                message=task_message,
+                response=SimpleNamespace(defer=AsyncMock(), is_done=lambda: True),
+                followup=SimpleNamespace(send=AsyncMock()),
+            )
+
+            await done.callback(interaction)  # type: ignore[arg-type]
+
+            self.assertEqual(len(adapter.updated), 1)
+            audit = store.audit_records()
+            operation = store.get_operation(audit[0].operation_id)
+            assert operation is not None
+            self.assertEqual(operation.actor.actor_id, "200")
+            self.assertEqual(operation.idempotency_key, "discord-interaction:880")
+            self.assertEqual(operation.operation_type, "complete")
+            self.assertEqual(operation.status, "completed")
 
     async def test_external_ios_completion_marks_discord_message_completed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

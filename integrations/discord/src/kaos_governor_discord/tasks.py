@@ -7,10 +7,13 @@ import json
 import logging
 from pathlib import Path
 import re
+import secrets
 from typing import Any, Mapping
 
 import discord
+from kaos_governor import Actor, GovernorOperations
 from kaos_governor.calendar import CalendarAdapterClient
+from kaos_governor.tasks import TaskMutationCommand, TaskMutationExecution, TaskMutationService
 
 from .access import AccessPolicy
 from .markdown import NO_MENTIONS, escape_text
@@ -67,6 +70,8 @@ class DiscordTasksSurface:
         messages_enabled: bool = True,
         repeat_due_notifications: bool = False,
         repeat_interval_minutes: int = 30,
+        operations: GovernorOperations | None = None,
+        task_mutations: TaskMutationService | None = None,
     ) -> None:
         self.bot = bot
         self.policy = policy
@@ -81,6 +86,8 @@ class DiscordTasksSurface:
         self.messages_enabled = messages_enabled
         self.repeat_due_notifications = repeat_due_notifications
         self.repeat_interval_minutes = repeat_interval_minutes
+        self.operations = operations or GovernorOperations()
+        self.task_mutations = task_mutations or TaskMutationService(adapter)
         self.message_refresh_delay_seconds = MESSAGE_REFRESH_DELAY_SECONDS
         self.state = self._load_state()
         self._tasks_by_key: dict[str, dict[str, Any]] = {}
@@ -222,7 +229,11 @@ class DiscordTasksSurface:
             return self._is_own_message(message)
         command = parse_add_task_message(str(message.content or ""))
         if command is not None:
-            await self.create_task(command)
+            await self.create_task(
+                command,
+                actor_id=str(message.author.id),
+                idempotency_key=f"discord-message:{message.id}",
+            )
         elif self._uses_supplies_rules():
             remembered_title = self._remembered_supply_title(str(message.content or ""))
             if remembered_title:
@@ -235,7 +246,13 @@ class DiscordTasksSurface:
         await self._delete_message(message)
         return True
 
-    async def create_task(self, command: AddTaskCommand | str) -> bool:
+    async def create_task(
+        self,
+        command: AddTaskCommand | str,
+        *,
+        actor_id: str = "",
+        idempotency_key: str = "",
+    ) -> bool:
         if isinstance(command, AddTaskCommand):
             clean_title = command.title.strip()
             due_date = command.due_date
@@ -256,8 +273,17 @@ class DiscordTasksSurface:
         if self.collection_id:
             payload["collectionId"] = self.collection_id
         payload = normalize_supplies_due(payload, collection_id=self.collection_id)
-        result = await asyncio.to_thread(self.adapter.create_task, self.profile, payload)
-        uid = str(result.get("uid") or "")
+        execution = await self._execute_task_mutation(
+            TaskMutationCommand(
+                operation_type="create",
+                profile=self.profile,
+                payload=payload,
+                collection_id=self.collection_id,
+            ),
+            actor_id=actor_id,
+            idempotency_key=idempotency_key,
+        )
+        uid = execution.mutation.uid
         if not uid:
             return False
         if self._uses_supplies_rules():
@@ -265,13 +291,30 @@ class DiscordTasksSurface:
         await self.ensure_message()
         return True
 
-    async def complete_task(self, key: str, *, notification_message_id: int = 0) -> bool:
+    async def complete_task(
+        self,
+        key: str,
+        *,
+        notification_message_id: int = 0,
+        actor_id: str = "",
+        idempotency_key: str = "",
+    ) -> bool:
         task = self._tasks_by_key.get(key)
         if task is None:
             return False
         payload = task_payload(task, status="COMPLETED")
         payload = normalize_supplies_due(payload, collection_id=self.collection_id or str(task.get("collection") or ""))
-        await asyncio.to_thread(self.adapter.update_task, self.profile, payload)
+        await self._execute_task_mutation(
+            TaskMutationCommand(
+                operation_type="complete",
+                profile=self.profile,
+                payload=payload,
+                uid=str(task.get("uid") or ""),
+                collection_id=str(task.get("collection") or ""),
+            ),
+            actor_id=actor_id,
+            idempotency_key=idempotency_key,
+        )
         message_id = self.state.message_ids.pop(key, 0)
         self._tasks_by_key.pop(key, None)
         self._save_state()
@@ -284,13 +327,29 @@ class DiscordTasksSurface:
         await self.ensure_message()
         return True
 
-    async def reopen_completed_task(self, key: str) -> bool:
+    async def reopen_completed_task(
+        self,
+        key: str,
+        *,
+        actor_id: str = "",
+        idempotency_key: str = "",
+    ) -> bool:
         task = await self._task_by_key(key)
         if task is None or str(task.get("status") or "").upper() != "COMPLETED":
             return False
         payload = task_payload(task, status="NEEDS-ACTION")
         payload = normalize_supplies_due(payload, collection_id=self.collection_id or str(task.get("collection") or ""))
-        await asyncio.to_thread(self.adapter.update_task, self.profile, payload)
+        await self._execute_task_mutation(
+            TaskMutationCommand(
+                operation_type="reopen",
+                profile=self.profile,
+                payload=payload,
+                uid=str(task.get("uid") or ""),
+                collection_id=str(task.get("collection") or ""),
+            ),
+            actor_id=actor_id,
+            idempotency_key=idempotency_key,
+        )
         await self.ensure_message()
         return True
 
@@ -303,6 +362,8 @@ class DiscordTasksSurface:
         due_date: str = "",
         due_time: str = "",
         priority: str = "",
+        actor_id: str = "",
+        idempotency_key: str = "",
     ) -> tuple[bool, str]:
         task = await self._task_by_key(key)
         if task is None:
@@ -336,7 +397,17 @@ class DiscordTasksSurface:
             "status": str(task.get("status") or "NEEDS-ACTION"),
         }
         payload = normalize_supplies_due(payload, collection_id=self.collection_id or str(task.get("collection") or ""))
-        await asyncio.to_thread(self.adapter.update_task, self.profile, payload)
+        await self._execute_task_mutation(
+            TaskMutationCommand(
+                operation_type="edit",
+                profile=self.profile,
+                payload=payload,
+                uid=str(task.get("uid") or ""),
+                collection_id=str(task.get("collection") or ""),
+            ),
+            actor_id=actor_id,
+            idempotency_key=idempotency_key,
+        )
         if str(task.get("status") or "").upper() == "COMPLETED":
             updated_task = {
                 **task,
@@ -350,20 +421,58 @@ class DiscordTasksSurface:
         await self.ensure_message()
         return True, ""
 
-    async def delete_task(self, key: str) -> bool:
+    async def delete_task(
+        self,
+        key: str,
+        *,
+        actor_id: str = "",
+        idempotency_key: str = "",
+    ) -> bool:
         task = await self._task_by_key(key)
         if task is None:
             return False
-        await asyncio.to_thread(
-            self.adapter.delete_task,
-            self.profile,
-            str(task.get("uid") or ""),
-            str(task.get("collection") or ""),
+        payload = task_payload(task, status=str(task.get("status") or ""))
+        payload = normalize_supplies_due(payload, collection_id=self.collection_id or str(task.get("collection") or ""))
+        await self._execute_task_mutation(
+            TaskMutationCommand(
+                operation_type="delete",
+                profile=self.profile,
+                payload=payload,
+                uid=str(task.get("uid") or ""),
+                collection_id=str(task.get("collection") or ""),
+            ),
+            actor_id=actor_id,
+            idempotency_key=idempotency_key,
         )
         channel = await self.channel()
         await self._delete_completed_messages(key, channel)
         await self.ensure_message()
         return True
+
+    async def _execute_task_mutation(
+        self,
+        command: TaskMutationCommand,
+        *,
+        actor_id: str,
+        idempotency_key: str,
+    ) -> TaskMutationExecution:
+        clean_actor_id = str(actor_id or "").strip()
+        scope = "family" if self.profile == "family" else "personal"
+        actor = (
+            Actor("user", clean_actor_id, scope)
+            if clean_actor_id
+            else Actor("system", f"discord-{self.button_prefix}", scope)
+        )
+        clean_idempotency_key = idempotency_key.strip() or (
+            f"discord-surface:{self.button_prefix}:{command.operation_type}:{secrets.token_hex(12)}"
+        )
+        return await asyncio.to_thread(
+            self.task_mutations.execute_governed,
+            self.operations,
+            command,
+            actor=actor,
+            idempotency_key=clean_idempotency_key,
+        )
 
     async def _task_by_key(self, key: str) -> dict[str, Any] | None:
         task = self._tasks_by_key.get(key)
@@ -793,7 +902,12 @@ class TaskView(discord.ui.View):
         async def callback(interaction: discord.Interaction) -> None:
             await interaction.response.defer(ephemeral=True)
             notification_message_id = int(getattr(getattr(interaction, "message", None), "id", 0) or 0)
-            if not await self.surface.complete_task(key, notification_message_id=notification_message_id):
+            if not await self.surface.complete_task(
+                key,
+                notification_message_id=notification_message_id,
+                actor_id=_interaction_actor_id(interaction),
+                idempotency_key=_interaction_idempotency_key(interaction),
+            ):
                 await interaction.followup.send(
                     f"{self.surface.surface_name.capitalize()} is no longer active.",
                     ephemeral=True,
@@ -819,7 +933,11 @@ class TaskView(discord.ui.View):
     def _delete_callback(self, key: str):
         async def callback(interaction: discord.Interaction) -> None:
             await interaction.response.defer(ephemeral=True)
-            if not await self.surface.delete_task(key):
+            if not await self.surface.delete_task(
+                key,
+                actor_id=_interaction_actor_id(interaction),
+                idempotency_key=_interaction_idempotency_key(interaction),
+            ):
                 await interaction.followup.send(
                     f"{self.surface.surface_name.capitalize()} is no longer active.",
                     ephemeral=True,
@@ -917,7 +1035,11 @@ class CompletedTaskMessageView(discord.ui.View):
     def _undone_callback(self, key: str):
         async def callback(interaction: discord.Interaction) -> None:
             await interaction.response.defer(ephemeral=True)
-            if not await self.surface.reopen_completed_task(key):
+            if not await self.surface.reopen_completed_task(
+                key,
+                actor_id=_interaction_actor_id(interaction),
+                idempotency_key=_interaction_idempotency_key(interaction),
+            ):
                 await interaction.followup.send(
                     f"{self.surface.surface_name.capitalize()} is no longer completed.",
                     ephemeral=True,
@@ -943,7 +1065,11 @@ class CompletedTaskMessageView(discord.ui.View):
     def _delete_callback(self, key: str):
         async def callback(interaction: discord.Interaction) -> None:
             await interaction.response.defer(ephemeral=True)
-            if not await self.surface.delete_task(key):
+            if not await self.surface.delete_task(
+                key,
+                actor_id=_interaction_actor_id(interaction),
+                idempotency_key=_interaction_idempotency_key(interaction),
+            ):
                 await interaction.followup.send(
                     f"{self.surface.surface_name.capitalize()} is no longer available.",
                     ephemeral=True,
@@ -1020,6 +1146,8 @@ class TaskEditModal(discord.ui.Modal):
             due_date=due_date,
             due_time=due_time,
             priority=priority,
+            actor_id=_interaction_actor_id(interaction),
+            idempotency_key=_interaction_idempotency_key(interaction),
         )
         if not ok:
             await interaction.followup.send(error, ephemeral=True, allowed_mentions=NO_MENTIONS)
@@ -1027,6 +1155,15 @@ class TaskEditModal(discord.ui.Modal):
 
 class SimpleTextInput:
     value = ""
+
+
+def _interaction_actor_id(interaction: discord.Interaction) -> str:
+    return str(getattr(getattr(interaction, "user", None), "id", "") or "")
+
+
+def _interaction_idempotency_key(interaction: discord.Interaction) -> str:
+    interaction_id = str(getattr(interaction, "id", "") or "")
+    return f"discord-interaction:{interaction_id}" if interaction_id else ""
 
 
 class RecentSuppliesView(discord.ui.View):
@@ -1060,7 +1197,11 @@ class RecentSuppliesView(discord.ui.View):
                 title = self.items[index]
             except IndexError:
                 return
-            await self.surface.create_task(title)
+            await self.surface.create_task(
+                title,
+                actor_id=_interaction_actor_id(interaction),
+                idempotency_key=_interaction_idempotency_key(interaction),
+            )
 
         return callback
 
@@ -1089,7 +1230,11 @@ class RememberedSupplyConfirmationView(discord.ui.View):
     def _add_callback(self):
         async def callback(interaction: discord.Interaction) -> None:
             await interaction.response.defer(ephemeral=True)
-            ok = await self.surface.create_task(self.title)
+            ok = await self.surface.create_task(
+                self.title,
+                actor_id=_interaction_actor_id(interaction),
+                idempotency_key=_interaction_idempotency_key(interaction),
+            )
             if not ok:
                 await interaction.followup.send("비품을 추가하지 못했어요.", ephemeral=True, allowed_mentions=NO_MENTIONS)
                 return
@@ -1176,7 +1321,11 @@ class CompletedHistoryActionView(discord.ui.View):
         async def callback(interaction: discord.Interaction) -> None:
             await interaction.response.defer(ephemeral=True)
             key = task_key(self.task)
-            if not await self.surface.reopen_completed_task(key):
+            if not await self.surface.reopen_completed_task(
+                key,
+                actor_id=_interaction_actor_id(interaction),
+                idempotency_key=_interaction_idempotency_key(interaction),
+            ):
                 await interaction.followup.send(
                     f"{self.surface.surface_name.capitalize()} is no longer completed.",
                     ephemeral=True,
@@ -1193,7 +1342,9 @@ class CompletedHistoryActionView(discord.ui.View):
                     title=str(self.task.get("summary") or "Untitled task"),
                     due_date=str(self.task.get("due") or ""),
                     due_time=str(self.task.get("dueTime") or ""),
-                )
+                ),
+                actor_id=_interaction_actor_id(interaction),
+                idempotency_key=_interaction_idempotency_key(interaction),
             )
 
         return callback

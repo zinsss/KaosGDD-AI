@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 
+from kaos_governor import Actor, GovernorOperations, MemoryDurableGovernorStore
 from kaos_governor.tasks import (
     TASK_OPERATION_TYPES,
     TaskMutationCommand,
@@ -14,16 +15,23 @@ class FakeTaskAdapter:
     def __init__(self) -> None:
         self.calls: list[tuple[object, ...]] = []
         self.result_uid = "TASK-1"
+        self.error: Exception | None = None
 
     def create_task(self, profile, payload):
+        if self.error is not None:
+            raise self.error
         self.calls.append(("create", profile, dict(payload)))
         return {"uid": self.result_uid}
 
     def update_task(self, profile, payload):
+        if self.error is not None:
+            raise self.error
         self.calls.append(("update", profile, dict(payload)))
         return {"uid": self.result_uid}
 
     def delete_task(self, profile, uid, collection_id):
+        if self.error is not None:
+            raise self.error
         self.calls.append(("delete", profile, uid, collection_id))
         return {"uid": self.result_uid}
 
@@ -120,6 +128,98 @@ class TaskMutationServiceTests(unittest.TestCase):
                     payload={"uid": "TASK-1", "title": "Edited"},
                 )
             )
+
+    def test_governed_execution_records_sanitized_operation_and_audit(self) -> None:
+        store = MemoryDurableGovernorStore()
+        operations = GovernorOperations(store)
+        command = TaskMutationCommand(
+            operation_type="create",
+            profile="main",
+            payload={"title": "Call school", "memo": "private body"},
+        )
+
+        execution = self.service.execute_governed(
+            operations,
+            command,
+            actor=Actor("user", "200", "personal"),
+            idempotency_key="discord-message:700",
+        )
+
+        self.assertTrue(execution.created)
+        self.assertEqual(execution.operation.status, "completed")
+        self.assertEqual(execution.operation.result, {"uid": "TASK-1"})
+        self.assertEqual(execution.operation.actor, Actor("user", "200", "personal"))
+        self.assertEqual(execution.operation.idempotency_key, "discord-message:700")
+        self.assertNotIn("memo", execution.operation.parameters)
+        self.assertEqual(execution.operation.parameters["memoFingerprint"]["bytes"], 12)
+        self.assertEqual(
+            [record.outcome for record in store.audit_records(execution.operation.operation_id)],
+            ["accepted", "completed"],
+        )
+
+    def test_governed_execution_replay_does_not_repeat_adapter_write(self) -> None:
+        store = MemoryDurableGovernorStore()
+        operations = GovernorOperations(store)
+        command = TaskMutationCommand(
+            operation_type="complete",
+            profile="main",
+            uid="TASK-1",
+            collection_id="zin:tasks",
+            payload={
+                "uid": "TASK-1",
+                "collectionId": "zin:tasks",
+                "title": "Call school",
+                "status": "COMPLETED",
+            },
+        )
+        actor = Actor("user", "200", "personal")
+
+        first = self.service.execute_governed(
+            operations,
+            command,
+            actor=actor,
+            idempotency_key="discord-interaction:900",
+        )
+        replay = self.service.execute_governed(
+            operations,
+            command,
+            actor=actor,
+            idempotency_key="discord-interaction:900",
+        )
+
+        self.assertTrue(first.created)
+        self.assertFalse(replay.created)
+        self.assertEqual(replay.mutation.uid, "TASK-1")
+        self.assertEqual(len(self.adapter.calls), 1)
+        self.assertEqual(
+            [record.outcome for record in store.audit_records(first.operation.operation_id)],
+            ["accepted", "completed"],
+        )
+
+    def test_governed_adapter_failure_marks_operation_failed(self) -> None:
+        store = MemoryDurableGovernorStore()
+        operations = GovernorOperations(store)
+        self.adapter.error = RuntimeError("offline")
+        command = TaskMutationCommand(
+            operation_type="create",
+            profile="main",
+            payload={"title": "Call school"},
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "offline"):
+            self.service.execute_governed(
+                operations,
+                command,
+                actor=Actor("user", "200", "personal"),
+                idempotency_key="discord-message:701",
+            )
+
+        audit = store.audit_records()
+        operation = store.get_operation(audit[0].operation_id)
+        assert operation is not None
+        self.assertEqual(operation.status, "failed")
+        self.assertEqual(operation.error_code, "task_adapter_error")
+        self.assertEqual([record.outcome for record in audit], ["accepted", "failed"])
 
 
 if __name__ == "__main__":

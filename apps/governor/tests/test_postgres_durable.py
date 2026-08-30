@@ -14,9 +14,27 @@ from kaos_governor.database import apply_migrations, connect, database_status
 from kaos_governor.durable import Actor, DurableGovernorError, OperationRequest
 from kaos_governor.operations import GovernorOperations
 from kaos_governor.postgres_durable import PostgresDurableGovernorStore
+from kaos_governor.tasks import TaskMutationCommand, TaskMutationService
 
 
 NOW = datetime(2026, 8, 30, 2, 0, tzinfo=UTC)
+
+
+class FakeTaskAdapter:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, dict[str, object]]] = []
+
+    def create_task(self, profile, payload):
+        self.calls.append(("create", profile, dict(payload)))
+        return {"uid": "TASK-POSTGRES-1"}
+
+    def update_task(self, profile, payload):
+        self.calls.append(("update", profile, dict(payload)))
+        return {"uid": str(payload.get("uid") or "")}
+
+    def delete_task(self, profile, uid, collection_id):
+        self.calls.append(("delete", profile, {"uid": uid, "collectionId": collection_id}))
+        return {"uid": uid}
 
 
 def _migration_directory() -> Path:
@@ -265,6 +283,43 @@ class PostgresDurableGovernorTests(unittest.TestCase):
         self.assertEqual(results, ["approved", "confirmation_not_pending"])
         audits = PostgresDurableGovernorStore().audit_records(proposal.operation.operation_id)
         self.assertEqual(sum(record.outcome == "approved" for record in audits), 1)
+
+    def test_governed_task_execution_is_durable_and_idempotent(self) -> None:
+        adapter = FakeTaskAdapter()
+        service = TaskMutationService(adapter)
+        command = TaskMutationCommand(
+            operation_type="create",
+            profile="main",
+            payload={"title": "PostgreSQL task", "memo": "private body"},
+        )
+
+        first = service.execute_governed(
+            GovernorOperations(PostgresDurableGovernorStore()),
+            command,
+            actor=self.actor,
+            idempotency_key="discord-message:postgres-task",
+        )
+        replay = service.execute_governed(
+            GovernorOperations(PostgresDurableGovernorStore()),
+            command,
+            actor=self.actor,
+            idempotency_key="discord-message:postgres-task",
+        )
+
+        self.assertTrue(first.created)
+        self.assertFalse(replay.created)
+        self.assertEqual(replay.mutation.uid, "TASK-POSTGRES-1")
+        self.assertEqual(len(adapter.calls), 1)
+        persisted = PostgresDurableGovernorStore().get_operation(first.operation.operation_id)
+        assert persisted is not None
+        self.assertEqual(persisted.status, "completed")
+        self.assertEqual(persisted.result, {"uid": "TASK-POSTGRES-1"})
+        self.assertNotIn("memo", persisted.parameters)
+        self.assertIsNone(PostgresDurableGovernorStore().get_pending_payload(first.operation.operation_id))
+        self.assertEqual(
+            [record.outcome for record in PostgresDurableGovernorStore().audit_records(first.operation.operation_id)],
+            ["accepted", "completed"],
+        )
 
 
 if __name__ == "__main__":

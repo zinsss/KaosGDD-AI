@@ -12,6 +12,7 @@ import time
 
 import discord
 from discord import app_commands
+from kaos_governor import GovernorOperations
 from kaos_governor.calendar import CalendarAdapterClient, CalendarAdapterConfig
 from kaos_governor.daily_digest import (
     DailyDigestConfig,
@@ -34,6 +35,7 @@ from kaos_governor.fax import FaxConfig, FaxError, FaxService
 from kaos_governor.memos import MemosConfig, MemosService
 from kaos_governor.notifications import PushoverConfig, TextNotification, TextNotificationService
 from kaos_governor.postgres_durable import PostgresDurableGovernorStore
+from kaos_governor.tasks import TaskMutationService
 
 from . import __version__
 from .access import AccessPolicy
@@ -240,6 +242,10 @@ class GovernorBot(discord.Client):
         self._daily_digest_view_message_id = 0
         self.text_notifications = TextNotificationService(PushoverConfig.from_env())
         self.calendar_adapter = CalendarAdapterClient(CalendarAdapterConfig(settings.calendar_adapter_url))
+        self.governor_operations = GovernorOperations(
+            PostgresDurableGovernorStore() if settings.operation_store == "postgres" else None
+        )
+        self.task_mutations = TaskMutationService(self.calendar_adapter)
         daily_digest_config = DailyDigestConfig.from_env()
         if daily_digest_config.enabled and settings.system_channel_id is None:
             raise DailyDigestError(
@@ -271,6 +277,8 @@ class GovernorBot(discord.Client):
                 profile=settings.tasks_profile,
                 state_path=settings.tasks_state_path,
                 adapter=self.calendar_adapter,
+                operations=self.governor_operations,
+                task_mutations=self.task_mutations,
             )
             if settings.tasks_enabled and settings.tasks_channel_id is not None
             else None
@@ -286,6 +294,8 @@ class GovernorBot(discord.Client):
                 messages_enabled=False,
                 repeat_due_notifications=settings.task_due_repeat_notifications_enabled,
                 repeat_interval_minutes=settings.task_due_repeat_interval_minutes,
+                operations=self.governor_operations,
+                task_mutations=self.task_mutations,
             )
             if settings.task_due_notifications_enabled and settings.task_due_notification_channel_id is not None
             else None
@@ -302,6 +312,8 @@ class GovernorBot(discord.Client):
                 button_prefix="supplies",
                 collection_id=settings.supplies_collection_id,
                 show_due=False,
+                operations=self.governor_operations,
+                task_mutations=self.task_mutations,
             )
             if settings.supplies_enabled and settings.supplies_channel_id is not None
             else None
@@ -404,11 +416,8 @@ class GovernorBot(discord.Client):
                 calendar_adapter=self.calendar_adapter,
                 memos=self.memos,
                 paperless=self.paperless,
-                durable_store=(
-                    PostgresDurableGovernorStore()
-                    if settings.operation_store == "postgres"
-                    else None
-                ),
+                durable_store=self.governor_operations.store,
+                task_mutations=self.task_mutations,
                 calendar_refresh_callback=self._refresh_calendar_surfaces,
                 import_status_provider=self._import_status,
                 import_items_provider=self._recent_import_items,

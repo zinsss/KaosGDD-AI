@@ -9,7 +9,11 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+import hashlib
 from typing import Any, Protocol
+
+from ..durable import Actor, OperationRecord, OperationRequest
+from ..operations import GovernorOperations
 
 
 TASK_PROFILES = frozenset({"main", "family", "supplies"})
@@ -84,6 +88,15 @@ class TaskMutationResult:
     adapter_result: Mapping[str, Any]
 
 
+@dataclass(frozen=True)
+class TaskMutationExecution:
+    """One governed task execution, including durable lifecycle state."""
+
+    operation: OperationRecord
+    mutation: TaskMutationResult
+    created: bool
+
+
 class TaskMutationService:
     """Registered deterministic handlers for task and supply mutations."""
 
@@ -108,6 +121,56 @@ class TaskMutationService:
         except KeyError as exc:
             raise TaskMutationError("task_operation_not_registered") from exc
         return handler(command)
+
+    def execute_governed(
+        self,
+        operations: GovernorOperations,
+        command: TaskMutationCommand,
+        *,
+        actor: Actor,
+        idempotency_key: str,
+    ) -> TaskMutationExecution:
+        """Run a deterministic task command through the Governor lifecycle.
+
+        This path is for callers whose UI action is already explicit and does
+        not require a separate confirmation proposal. Replaying the same actor
+        and idempotency key returns the completed result without dispatching a
+        second authoritative adapter write.
+        """
+
+        submission = operations.submit(
+            OperationRequest(
+                actor=actor,
+                idempotency_key=idempotency_key,
+                tool_name="calendar.tasks",
+                operation_type=command.operation_type,
+                parameters=_operation_parameters(command),
+            )
+        )
+        operation = submission.operation
+        if not submission.created:
+            if operation.status != "completed":
+                raise TaskMutationError(f"task_operation_{operation.status}")
+            uid = str(operation.result.get("uid") or command.uid).strip()
+            if not uid:
+                raise TaskMutationError("task_operation_result_missing_uid")
+            return TaskMutationExecution(
+                operation=operation,
+                mutation=TaskMutationResult(uid=uid, adapter_result=dict(operation.result)),
+                created=False,
+            )
+
+        try:
+            mutation = self.execute(command)
+        except TaskMutationError as exc:
+            operations.fail(operation.operation_id, error_code=exc.code)
+            raise
+        except Exception:
+            operations.fail(operation.operation_id, error_code="task_adapter_error")
+            raise
+
+        completed = operations.complete(operation.operation_id, result={"uid": mutation.uid})
+        return TaskMutationExecution(operation=completed, mutation=mutation, created=True)
 
     def _create(self, command: TaskMutationCommand) -> TaskMutationResult:
         result = dict(self._adapter.create_task(command.profile, dict(command.payload)))
@@ -135,3 +198,27 @@ class TaskMutationService:
         if result_uid != command.uid:
             raise TaskMutationError("task_adapter_uid_mismatch")
         return TaskMutationResult(uid=result_uid, adapter_result=result)
+
+
+def _operation_parameters(command: TaskMutationCommand) -> dict[str, Any]:
+    """Return durable task parameters without persisting memo content."""
+
+    payload = command.payload
+    memo = str(payload.get("memo") or "")
+    encoded_memo = memo.encode("utf-8")
+    collection_id = command.collection_id or str(payload.get("collectionId") or "")
+    uid = command.uid or str(payload.get("uid") or "")
+    return {
+        "profile": command.profile,
+        "uid": uid,
+        "collectionId": collection_id,
+        "title": str(payload.get("title") or ""),
+        "memoFingerprint": {
+            "sha256": hashlib.sha256(encoded_memo).hexdigest(),
+            "bytes": len(encoded_memo),
+        },
+        "dueDate": str(payload.get("dueDate") or ""),
+        "dueTime": str(payload.get("dueTime") or ""),
+        "priority": str(payload.get("priority") or ""),
+        "status": str(payload.get("status") or ""),
+    }

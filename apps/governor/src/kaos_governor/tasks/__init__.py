@@ -6,6 +6,7 @@ from .mutations import (
     TaskMutationAdapter,
     TaskMutationCommand,
     TaskMutationError,
+    TaskMutationExecution,
     TaskMutationResult,
     TaskMutationService,
 )
@@ -44,6 +45,7 @@ __all__ = (
     "TaskMutationAdapter",
     "TaskMutationCommand",
     "TaskMutationError",
+    "TaskMutationExecution",
     "TaskMutationResult",
     "TaskMutationService",
     "add_months",
