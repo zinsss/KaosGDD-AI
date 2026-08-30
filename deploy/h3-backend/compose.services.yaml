@@ -127,7 +127,7 @@ services:
   governor-api:
     build:
       context: ../..
-      dockerfile: integrations/discord/Dockerfile
+      dockerfile: integrations/discoord/Dockerfile
       target: runtime
     image: kaosgdd-ai-governor-api:0.1.0
     pull_policy: never

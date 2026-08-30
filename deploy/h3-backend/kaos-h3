@@ -242,7 +242,7 @@ test_image() {
   require_command docker
   docker build --target test \
     --tag kaosgdd-ai-governor-discord:test \
-    --file "${REPO_ROOT}/integrations/discord/Dockerfile" \
+    --file "${REPO_ROOT}/integrations/discoord/Dockerfile" \
     "${REPO_ROOT}"
   docker run --rm kaosgdd-ai-governor-discord:test
 }

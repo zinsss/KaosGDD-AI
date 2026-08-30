@@ -35,6 +35,10 @@ H4, office-service, and stateful-service cutovers.
   topic. Direct operational channels are now compatibility surfaces scheduled
   for gated retirement; see
   [Discord Brain-Only Target](../architecture/discord-brain-only.md).
+- Phase 5 started with the Governor-side Discord adapter package extraction:
+  the canonical package/path becomes `kaosdiscoord` under
+  `integrations/discoord`, while legacy imports and the current H3 deployment
+  identity remain compatibility shims during observation.
 - Database schema in production: additive migration `005`.
 - Working rule: finish and verify one boundary before moving another domain.
 
@@ -47,7 +51,7 @@ H4, office-service, and stateful-service cutovers.
 | 2 | Persist operations, confirmations, and pending payloads | Complete and tested | Deployed and observed 2026-08-30 | Complete |
 | 3 | Route every meaningful mutation through Governor | Task slices and Memos slices 1-2 implemented | Task slices and Memos slice 1 observed; Memos slice 2 deployed 2026-08-30 | Production observation |
 | 4 | Make Brain transport-neutral | Not started | Not deployed | Planned |
-| 5 | Retain brain-only KaosDiscoord; detach workers and notifications | Target revised; inventory not started | Existing gateways unchanged | Planned |
+| 5 | Retain brain-only KaosDiscoord; detach workers and notifications | Governor-side package extraction started | Existing gateways unchanged | In progress |
 | 6 | Add stable iOS APIs and lightweight clients | Pilot read endpoint only; replacement matrix accepted | Pilot active | Planned |
 | 7 | Remove compatibility debt and finish documentation/CI | Not started | Not deployed | Planned |
 
@@ -160,7 +164,7 @@ Files:
 - `apps/governor/src/kaos_governor/operations.py`
 - `apps/governor/src/kaos_governor/__init__.py`
 - `apps/governor/tests/test_operations.py`
-- `integrations/discord/src/kaos_governor_discord/tools.py`
+- `integrations/discoord/src/kaosdiscoord/tools.py`
 - `apps/brain/src/kaos_brain/discord_active_control_views.py`
 - `apps/brain/tests/test_bot_views.py`
 - `docs/architecture/target-architecture.md`
@@ -248,10 +252,10 @@ Likely files:
 - `apps/governor/tests/test_durable.py`
 - `apps/governor/tests/test_operations.py`
 - `apps/governor/tests/test_postgres_durable.py`
-- `integrations/discord/src/kaos_governor_discord/config.py`
-- `integrations/discord/src/kaos_governor_discord/main.py`
-- `integrations/discord/src/kaos_governor_discord/tools.py`
-- `integrations/discord/tests/test_tools.py`
+- `integrations/discoord/src/kaosdiscoord/config.py`
+- `integrations/discoord/src/kaosdiscoord/main.py`
+- `integrations/discoord/src/kaosdiscoord/tools.py`
+- `integrations/discoord/tests/test_tools.py`
 - `deploy/h3-backend/compose.yaml`
 - `.github/workflows/test.yaml`
 
@@ -392,7 +396,7 @@ Slice 1 files:
 - `apps/governor/src/kaos_governor/tasks/mutations.py`
 - `apps/governor/src/kaos_governor/tasks/__init__.py`
 - `apps/governor/tests/test_task_mutations.py`
-- `integrations/discord/src/kaos_governor_discord/tools.py`
+- `integrations/discoord/src/kaosdiscoord/tools.py`
 
 Slice 1 validation:
 
@@ -467,9 +471,9 @@ Slice 2 files:
 - `apps/governor/src/kaos_governor/tasks/__init__.py`
 - `apps/governor/tests/test_task_mutations.py`
 - `apps/governor/tests/test_postgres_durable.py`
-- `integrations/discord/src/kaos_governor_discord/bot.py`
-- `integrations/discord/src/kaos_governor_discord/tasks.py`
-- `integrations/discord/tests/test_tasks.py`
+- `integrations/discoord/src/kaosdiscoord/bot.py`
+- `integrations/discoord/src/kaosdiscoord/tasks.py`
+- `integrations/discoord/tests/test_tasks.py`
 
 Slice 2 validation:
 
@@ -580,8 +584,8 @@ Memos slice 1 files:
 - `apps/governor/src/kaos_governor/memos/__init__.py`
 - `apps/governor/tests/test_memo_mutations.py`
 - `apps/governor/tests/test_postgres_durable.py`
-- `integrations/discord/src/kaos_governor_discord/bot.py`
-- `integrations/discord/src/kaos_governor_discord/tools.py`
+- `integrations/discoord/src/kaosdiscoord/bot.py`
+- `integrations/discoord/src/kaosdiscoord/tools.py`
 
 Memos slice 1 validation:
 
@@ -653,9 +657,9 @@ Memos slice 2 scope (started 2026-08-30):
 
 Memos slice 2 expected files:
 
-- `integrations/discord/src/kaos_governor_discord/memos.py`
-- `integrations/discord/src/kaos_governor_discord/bot.py`
-- `integrations/discord/tests/test_memos.py`
+- `integrations/discoord/src/kaosdiscoord/memos.py`
+- `integrations/discoord/src/kaosdiscoord/bot.py`
+- `integrations/discoord/tests/test_memos.py`
 - narrow Governor memo result changes and tests only if required to return the
   authoritative adapter record without a second upstream read
 
@@ -741,7 +745,8 @@ H4 task-create routing correction:
 
 Affected areas:
 
-- `integrations/discord/tasks.py`, Memos, inbox, fax, mail, and organizer paths
+- `integrations/discoord/src/kaosdiscoord/tasks.py`, Memos, inbox, fax, mail,
+  and organizer paths
 - `apps/governor/src/kaos_governor/api.py`
 - family portal calendar write proxy
 - Governor domain modules and boundary tests
@@ -814,6 +819,54 @@ Planned implementation:
 - Export or deliberately retain required Discord history before channel
   deletion. Discord must not remain the sole mail/fax/document archive.
 - Preserve simple Apple Watch copy and native iOS task/calendar notifications.
+
+Phase 5 slice 1 — Governor-side KaosDiscoord package boundary:
+
+- Move `integrations/discord` to `integrations/discoord` and make
+  `kaosdiscoord` the canonical Python package, distribution, imports, tests,
+  and console entry point.
+- Move all H3 Discord-specific actions, views, formatters, channel/user IDs,
+  attachments, interactions, and presentation code with that package. Do not
+  move Governor domain services or deterministic policies into it.
+- Retain a thin `kaos_governor_discord` import/console compatibility layer for
+  one observation period. It may re-export KaosDiscoord symbols but must not
+  contain a second implementation.
+- Keep the current Compose service, container, image name, data mounts,
+  credentials, ports, and production behavior unchanged in this slice. Runtime
+  identity changes occur only after imports and operations are observed.
+- Add compatibility tests proving old and new imports resolve to the same
+  implementation, plus dependency tests preventing `kaosdiscoord` imports in
+  Governor.
+
+Phase 5 slice 1 expected files:
+
+- `integrations/discoord/pyproject.toml`
+- `integrations/discoord/Dockerfile`
+- `integrations/discoord/src/kaosdiscoord/`
+- `integrations/discoord/src/kaos_governor_discord/` compatibility shims
+- `integrations/discoord/tests/`
+- H3 Compose/build path references and architecture/operations documentation
+
+Risk: medium around Python module identity, console entry points, Docker build
+paths, and hidden operational imports. No Discord behavior or channel should
+change.
+
+Rollback: restore the previous directory/package path and the retained
+`kaos-governor-discord` console entry point. No database, state, channel, or
+credential migration is involved.
+
+Slice 1 local validation (2026-08-30):
+
+- canonical `kaosdiscoord` and compatibility `kaos-governor-discord` console
+  entry points are both installed and resolve to version `0.6.0`
+- legacy module imports resolve to canonical implementation classes
+- the dependency boundary test confirms Governor contains no Discord,
+  `kaosdiscoord`, or `kaos_governor_discord` imports
+- 231 Governor + 358 KaosDiscoord + 321 Brain tests passed
+- H3 preflight and Compose rendering passed
+
+Local implementation is complete. Production deployment and observation are
+still pending; the wider Phase 5 worker detachment remains in progress.
 
 Risk: high around worker lifecycles currently started by the H3 Discord bot,
 persistent views/state, duplicate notification delivery, and historical
@@ -949,6 +1002,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | 3 | Routed direct Discord Memos mutations through the shared Governor lifecycle | Commit `7c9f577`; 24 focused Memos + 231 Governor + 11 isolated PostgreSQL + 355 Discord + 321 Brain tests passed; authoritative result prevents a post-write read failure; retries do not repeat writes | None; locally validated and awaiting controlled H3 deployment |
 | 2026-08-30 | 3 | Promoted direct Discord Memos governed execution to H3 | Installed runtime confirms governed create/edit/delete and shared durable objects; container healthy with zero restarts; 5 completed operations retained with 0 payloads; H4 doctor healthy and checkout synced | Slice 2 production observation started; rollback image `kaosgdd-ai-governor-discord:rollback-1e6a3aa` retained |
 | 2026-08-30 | Decision | Narrowed Discord's target role to the single H4 `#brain` topic | Added the accepted brain-only architecture decision, replacement matrix, worker-detachment requirement, channel history gates, and revised Phases 5-6 | No channel disabled; direct surfaces remain compatibility paths until replacements are observed |
+| 2026-08-30 | 5 | Completed the local Governor-side KaosDiscoord package extraction | Canonical package/executable plus thin legacy shims; dependency boundary enforced; 231 Governor + 358 KaosDiscoord + 321 Brain tests; H3 preflight and Compose render passed | None; deployment pending, current service/image/container identity retained |
 | 2026-08-30 | 6 | Recorded deferred Shortcut deep-link support for opening a selected Memos item | Existing Memos route and ID mapping verified as `/m/{memo-id}`; iOS external-link/PWA limitation documented | None; planning only |
 
 ## How to Update This Tracker

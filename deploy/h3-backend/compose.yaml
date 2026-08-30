@@ -4,7 +4,7 @@ services:
   governor-discord:
     build:
       context: ../..
-      dockerfile: integrations/discord/Dockerfile
+      dockerfile: integrations/discoord/Dockerfile
       target: runtime
     image: kaosgdd-ai-governor-discord:0.6.0
     pull_policy: never

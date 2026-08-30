@@ -50,12 +50,14 @@ remain authoritative for events and tasks.
 
 ## Runtime Consequence
 
-The current H3 `kaos-governor-discord` process also starts schedulers, polling,
-Pushover delivery, health/tool routes, and domain adapters. The Discord gateway
-cannot simply be stopped. First move those non-Discord lifecycles behind a
-Governor-owned runtime entry point. Keep the same modular-monolith deployment
-unless a separate process is operationally justified; this decision does not
-require microservices.
+The current H3 service/container retains the transitional
+`kaos-governor-discord` name, but its canonical source package and executable
+are `integrations/discoord` and `kaosdiscoord`. That process also starts
+schedulers, polling, Pushover delivery, health/tool routes, and domain adapters.
+The Discord gateway cannot simply be stopped. First move those non-Discord
+lifecycles behind a Governor-owned runtime entry point. Keep the same
+modular-monolith deployment unless a separate process is operationally
+justified; this decision does not require microservices.
 
 H4 retains the KaosBrain Discord identity and the `#brain` topic. H3's
 operational Discord identity and direct channel surfaces retire after the

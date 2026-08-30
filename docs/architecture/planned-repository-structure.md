@@ -21,15 +21,14 @@ KaosGDD-AI/
 │   │       ├── memos/
 │   │       ├── paperless/
 │   │       ├── stirling/
-│   │       ├── imap/
-│   │       └── discord/
+│   │       └── imap/
 │   └── family-ai-gateway/
 ├── integrations/
 │   ├── openclaw/
 │   │   ├── skills/
 │   │   ├── mcp/
 │   │   └── config-templates/
-│   └── discord/
+│   └── discoord/
 ├── connectors/
 │   └── fax/
 ├── contracts/

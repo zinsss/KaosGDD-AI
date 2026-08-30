@@ -12,7 +12,7 @@ Architecture, deterministic orchestration, AI integrations, and deployment plans
 - **KaosAI**: optional model/planner implementation used by KaosBrain, currently an OpenClaw/hosted-or-local model slot when explicitly enabled.
 - **KaosBrain**: interpretation and reasoning layer on H4. It handles natural language and proposes guarded structured actions, but does not directly mutate authoritative services.
 - **KaosGovernor**: deterministic authority on the H3+ backend. It validates operations, owns domain workflows, records audit history, and calls backend services.
-- **KaosDiscoord**: replaceable Discord transport for messages, attachments, IDs, controls, and response formatting. Current Discord code is being moved to this boundary incrementally.
+- **KaosDiscoord**: replaceable Discord transport for messages, attachments, IDs, controls, and response formatting. Its canonical package is `integrations/discoord`; the historical H3 service name remains temporarily for rollback compatibility.
 - **Family AI**: a separately scoped assistant served by H4 or a future optional worker.
 - **Authoritative backends**: Radicale, Memos, Paperless, HylaFAX, and other service-owned data stores.
 - **Family KaosGDD**: the retained family web interface and embedded family AI chat. The frontend remains in the `zinsss/KaosGDD` repository.

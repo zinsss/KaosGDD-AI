@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kaosdiscoord"
+version = "0.6.0"
+description = "Discord transport adapter for Kaos"
+requires-python = ">=3.12"
+dependencies = ["discord.py==2.7.1", "Pillow>=10,<13", "pypdf>=5,<7"]
+
+[project.scripts]
+kaosdiscoord = "kaosdiscoord.main:main"
+kaos-governor-discord = "kaosdiscoord.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

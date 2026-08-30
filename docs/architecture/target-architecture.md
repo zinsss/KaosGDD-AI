@@ -190,7 +190,7 @@ governor-api
 governor-worker
 kaos-scheduler
 kaos-mail-worker
-governor-discord  # current compatibility process; target adapter is KaosDiscoord
+kaosdiscoord      # canonical adapter; H3 service name remains transitional
 governor-postgres
 ```
 
