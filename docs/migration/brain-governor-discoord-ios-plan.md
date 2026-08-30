@@ -934,8 +934,13 @@ Slice 2 production deployment (2026-08-30):
 - rollback image `kaosgdd-ai-governor-discord:rollback-pre-pushover-worker`
   retains image `sha256:9175013d0926db3b969ed2adcd3cbcffbb8c15d50197d69175a7f6773d21a74c`
 
-Production observation is active. No synthetic watch alert was sent during the
-cutover; the next organic Pushover event is the delivery-path observation gate.
+Slice 2 production observation completed on 2026-08-30 with an organic
+incoming fax. HylaFAX finished the one-page receipt at 16:49:18 KST; H3
+archived it at 16:50:26 KST, KaosDiscoord queued the keyed `Fax received.`
+record, and `kaos-governor-worker` delivered it at 16:50:27 KST. The shared
+outbox advanced from 7 to 8 delivered records with 0 pending, retained one
+fax key, and both containers remained healthy with zero restarts. No synthetic
+watch alert was needed.
 
 Risk: high around worker lifecycles currently started by the H3 Discord bot,
 persistent views/state, duplicate notification delivery, and historical
@@ -1075,6 +1080,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | 5 | Promoted the KaosDiscoord package boundary to H3 | Commit `20732fa`; canonical runtime entry point and package installed; legacy imports resolve to canonical classes; container healthy/ready with zero restarts; ledger retained 5 completed operations and 0 payloads; H4 synced and doctor healthy | Compatibility observation started; rollback image `kaosgdd-ai-governor-discord:rollback-pre-kaosdiscoord` retained |
 | 2026-08-30 | 5 | Implemented the independent Pushover delivery worker | Lifecycle inventory plus dedicated image/entry point, queue-only producer mode, cross-process state lock, worker heartbeat, and guarded Compose ownership; 237 Governor + 359 KaosDiscoord + 321 Brain tests passed | None; locally validated, production cutover pending |
 | 2026-08-30 | 5 | Promoted independent Pushover delivery to H3 | Commit `356e1b4`; sequenced one-writer cutover; worker and KaosDiscoord healthy with zero restarts; queue state preserved at 0 pending/7 delivered; ledger retained 5 completed/0 payloads; H4 synced and healthy | Production observation started; rollback image `kaosgdd-ai-governor-discord:rollback-pre-pushover-worker` retained |
+| 2026-08-30 | 5 | Completed independent Pushover delivery production observation | An organic one-page incoming fax was archived on H3; KaosDiscoord queued one keyed `Fax received.` record and `kaos-governor-worker` delivered it one second later; outbox moved from 7 to 8 delivered with 0 pending; both containers remained healthy with zero restarts | Slice 2 complete; rollback image remains retained while the next worker lifecycle is selected |
 | 2026-08-30 | 6 | Recorded deferred Shortcut deep-link support for opening a selected Memos item | Existing Memos route and ID mapping verified as `/m/{memo-id}`; iOS external-link/PWA limitation documented | None; planning only |
 
 ## How to Update This Tracker

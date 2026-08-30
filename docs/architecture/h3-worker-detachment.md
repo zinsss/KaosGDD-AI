@@ -45,8 +45,12 @@ Pushover delivery moved to `kaos-governor-worker` on 2026-08-30 in commit
 `356e1b4`. Production KaosDiscoord reports `deliveryMode=worker` with a
 five-second poll, both containers are healthy with zero restarts, and the
 existing outbox was preserved at 0 pending and 7 delivered records. Production
-observation is active. Every later row in the inventory remains attached to
-KaosDiscoord until its own replacement gate passes.
+observation completed with an organic incoming fax on 2026-08-30: KaosDiscoord
+queued one keyed `Fax received.` record after archival, the worker delivered it
+one second later, and the outbox settled at 0 pending and 8 delivered records.
+Both containers remained healthy with zero restarts. Every later row in the
+inventory remains attached to KaosDiscoord until its own replacement gate
+passes.
 
 ## Pushover Rollback
 
