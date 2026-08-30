@@ -52,6 +52,9 @@ H4, office-service, and stateful-service cutovers.
   observation.
 - Phase 5 worker slice 2 is deployed in commit `356e1b4`: Pushover delivery is
   owned by the independent `kaos-governor-worker`; KaosDiscoord is queue-only.
+- Phase 5 worker slice 3 completed production observation on 2026-08-31: the
+  organic 07:00 `Good Morning.` notification was scheduled by the worker,
+  delivered through the Pushover outbox, and confirmed received by the user.
 - Phase 5 worker slice 4 is deployed in commit `3d98e40`: Naver mail and fax
   polling are owned by `kaos-governor-worker` without uploading messages or
   attachments to Discord. Organic mail/fax observation is active.
@@ -75,7 +78,7 @@ H4, office-service, and stateful-service cutovers.
 | 2 | Persist operations, confirmations, and pending payloads | Complete and tested | Deployed and observed 2026-08-30 | Complete |
 | 3 | Route every meaningful mutation through Governor | Task slices and Memos slices 1-2 implemented | Task slices and Memos slice 1 observed; Memos slice 2 deployed 2026-08-30 | Production observation |
 | 4 | Make Brain transport-neutral | Not started | Not deployed | Planned |
-| 5 | Retain brain-only KaosDiscoord; detach workers and notifications | Package, Pushover, digest, and fax/mail worker slices implemented | Digest and fax/mail observations active | In progress |
+| 5 | Retain brain-only KaosDiscoord; detach workers and notifications | Package, Pushover, digest, and fax/mail worker slices implemented | Pushover and digest observed; fax/mail observation active | In progress |
 | 6 | Retain the personal PWA and add stable iOS integrations | Selected-date deep link plus compact personal-menu selector implemented | Both slices deployed 2026-08-30 | In progress |
 | 7 | Remove compatibility debt and finish documentation/CI | Not started | Not deployed | Planned |
 | 8 | Add governed Brain system operations | Architecture accepted; current Guard remains deny-by-default | Not deployed | Planned |
@@ -1023,9 +1026,13 @@ Slice 3 production deployment (2026-08-30):
   and `kaosgdd-ai-governor-worker:rollback-pre-digest-worker` at
   `sha256:b2d4f81e794f4c416ad7581106ed20e48651795e553d53526c9ac0c5d0144446`
 
-Production observation is active. The organic 07:00 worker-owned
-`Good Morning.` record and its corresponding KaosDiscoord publication are the
-remaining gate; no synthetic alert is required.
+Slice 3 production observation completed on 2026-08-31. The worker scheduled
+the organic `Good Morning.` digest at `07:00:12 KST`, persisted status `sent`
+with no error or pending publication, and recorded the corresponding
+KaosDiscoord publication. The Pushover worker delivered the ninth outbox record
+at `07:00:13 KST` with 0 pending and no error. The user confirmed receipt;
+worker and KaosDiscoord remained healthy with zero restarts. No synthetic alert
+was required.
 
 Phase 5 slice 4 — worker-owned Naver mail and fax polling:
 
@@ -1406,6 +1413,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | 6 | Made the personal selector the sole visible page title | Commit `ba15c8e`; duplicate route heading and visible menu caption removed; deployed HTML/CSS match Git; portal and Governor workers retained zero restarts | Presentation-only follow-up; backend and Family behavior unchanged |
 | 2026-08-30 | 6 | Flattened the personal title selector | Commit `d7b7c2d`; transparent borderless selector with `•` indicator; versioned CSS matches production; portal retained zero restarts | Presentation-only follow-up; no backend or data change |
 | 2026-08-30 | 6 | Kept the selector borderless while focused or active | Commit `a7a8643`; focus/active outline, shadow, background, border, and tap highlight removed; versioned CSS matches production | Presentation-only follow-up; no backend or data change |
+| 2026-08-31 | 5 | Completed worker-owned daily-digest production observation | Organic `Good Morning.` scheduled at 07:00:12 KST and delivered by Pushover at 07:00:13 KST; outbox reached 9 delivered/0 pending; no errors; user confirmed receipt; worker and KaosDiscoord healthy with zero restarts | Slice 3 complete; no synthetic notification needed |
 
 ## How to Update This Tracker
 
