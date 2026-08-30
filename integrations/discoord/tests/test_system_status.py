@@ -295,6 +295,7 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
 
             alerts = [call.args[0] for call in notifier.notify.call_args_list]
             self.assertEqual([alert.message for alert in alerts], ["KaosBrain is down.", "KaosBrain is back."])
+            self.assertEqual([alert.priority for alert in alerts], [1, 0])
             self.assertTrue(all(alert.title == "" for alert in alerts))
             state = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(state["serviceStates"]["kaosbrain"], "healthy")

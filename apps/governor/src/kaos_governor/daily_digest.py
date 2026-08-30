@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, time
+import fcntl
 import json
 import os
 from pathlib import Path
 import re
 import threading
-from typing import Any
+from typing import Any, Iterator, Literal
 import urllib.parse
 from zoneinfo import ZoneInfo
 
@@ -101,6 +103,7 @@ def _portal_url(value: str) -> str:
 @dataclass(frozen=True)
 class DailyDigestConfig:
     enabled: bool = False
+    owner: Literal["discord", "worker"] = "discord"
     send_time: time = time(7, 0)
     profile: str = "main"
     weather_city: str = "pohang"
@@ -118,12 +121,16 @@ class DailyDigestConfig:
         profile = source.get("DAILY_DIGEST_PROFILE", "main").strip().lower() or "main"
         if profile not in {"main", "family"}:
             raise DailyDigestError("DAILY_DIGEST_PROFILE must be main or family")
+        owner = source.get("DAILY_DIGEST_OWNER", "discord").strip().lower() or "discord"
+        if owner not in {"discord", "worker"}:
+            raise DailyDigestError("DAILY_DIGEST_OWNER must be discord or worker")
         weather_city = source.get("DAILY_DIGEST_WEATHER_CITY", "pohang").strip().lower()
         if not re.fullmatch(r"[a-z0-9_-]{2,40}", weather_city):
             raise DailyDigestError("DAILY_DIGEST_WEATHER_CITY invalid")
         default_portal_url = "https://family.kaosgdd.net" if profile == "family" else "https://kaosgdd.net"
         return cls(
             enabled=_bool(source, "DAILY_DIGEST_ENABLED"),
+            owner=owner,  # type: ignore[arg-type]
             send_time=_send_time(source.get("DAILY_DIGEST_TIME", "07:00")),
             profile=profile,
             weather_city=weather_city,
@@ -316,12 +323,30 @@ class DailyDigestService:
         self._lock = threading.RLock()
         self.last_error = ""
 
+    @contextmanager
+    def _state_lock(self) -> Iterator[None]:
+        self.config.state_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = self.config.state_path.with_name(f"{self.config.state_path.name}.lock")
+        with self._lock, lock_path.open("a+", encoding="utf-8") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
     def _load(self) -> dict[str, object]:
         try:
             value = json.loads(self.config.state_path.read_text(encoding="utf-8"))
         except (FileNotFoundError, OSError, json.JSONDecodeError):
             value = {}
-        return value if isinstance(value, dict) else {}
+        if not isinstance(value, dict):
+            value = {}
+        value["publications"] = (
+            value.get("publications")
+            if isinstance(value.get("publications"), dict)
+            else {}
+        )
+        return value
 
     def _save(self, state: dict[str, object]) -> None:
         state["version"] = 1
@@ -331,7 +356,7 @@ class DailyDigestService:
         if not self.config.enabled:
             return
         current = now or datetime.now(KST)
-        with self._lock:
+        with self._state_lock():
             state = self._load()
             if state.get("initialized"):
                 return
@@ -348,7 +373,7 @@ class DailyDigestService:
         current = now or datetime.now(KST)
         if current.timetz().replace(tzinfo=None) < self.config.send_time:
             return False
-        with self._lock:
+        with self._state_lock():
             state = self._load()
         return bool(state.get("initialized")) and state.get("lastSentDate") != current.date().isoformat()
 
@@ -411,7 +436,7 @@ class DailyDigestService:
         return f"{self.config.portal_url}/#/calendar?weather={day.isoformat()}"
 
     def last_message_id(self) -> int:
-        with self._lock:
+        with self._state_lock():
             value = self._load().get("lastMessageId")
         try:
             return int(value or 0)
@@ -419,15 +444,64 @@ class DailyDigestService:
             return 0
 
     def last_sent_day(self) -> date | None:
-        with self._lock:
+        with self._state_lock():
             value = str(self._load().get("lastSentDate") or "")
         try:
             return date.fromisoformat(value) if value else None
         except ValueError:
             return None
 
+    def record_scheduled(self, day: date, content: str) -> None:
+        if not content.strip():
+            raise DailyDigestError("daily_digest_content_missing")
+        with self._state_lock():
+            state = self._load()
+            state["initialized"] = True
+            state["lastSentDate"] = day.isoformat()
+            state["lastSentAt"] = datetime.now(KST).isoformat()
+            publications = state["publications"]
+            publications[day.isoformat()] = {
+                "date": day.isoformat(),
+                "content": content,
+                "status": "pending",
+                "queuedAt": datetime.now(KST).isoformat(),
+            }
+            if len(publications) > 14:
+                retained = sorted(publications.items())[-14:]
+                state["publications"] = dict(retained)
+            state["lastStatus"] = "scheduled"
+            state["lastError"] = ""
+            self._save(state)
+            self.last_error = ""
+
+    def pending_publication(self) -> dict[str, object] | None:
+        with self._state_lock():
+            publications = self._load()["publications"]
+            for _day, publication in sorted(publications.items()):
+                if isinstance(publication, Mapping) and publication.get("status") == "pending":
+                    return dict(publication)
+        return None
+
+    def record_published(self, day: date, *, message_id: int) -> None:
+        with self._state_lock():
+            state = self._load()
+            publications = state["publications"]
+            publication = publications.get(day.isoformat())
+            if not isinstance(publication, dict):
+                publication = {"date": day.isoformat(), "content": ""}
+                publications[day.isoformat()] = publication
+            publication["status"] = "sent"
+            publication["content"] = ""
+            publication["messageId"] = str(message_id or "")
+            publication["publishedAt"] = datetime.now(KST).isoformat()
+            state["lastMessageId"] = str(message_id or "")
+            state["lastStatus"] = "sent"
+            state["lastError"] = ""
+            self._save(state)
+            self.last_error = ""
+
     def record_sent(self, day: date, *, message_id: int = 0) -> None:
-        with self._lock:
+        with self._state_lock():
             state = self._load()
             state["initialized"] = True
             state["lastSentDate"] = day.isoformat()
@@ -440,7 +514,7 @@ class DailyDigestService:
 
     def record_error(self, exc: Exception) -> None:
         error = f"{type(exc).__name__}: {exc}"
-        with self._lock:
+        with self._state_lock():
             state = self._load()
             state["lastError"] = error
             state["lastStatus"] = "failed"
@@ -448,10 +522,17 @@ class DailyDigestService:
             self.last_error = error
 
     def status(self) -> dict[str, object]:
-        with self._lock:
+        with self._state_lock():
             state = self._load()
+        publications = state["publications"]
+        pending_publications = sum(
+            1
+            for publication in publications.values()
+            if isinstance(publication, Mapping) and publication.get("status") == "pending"
+        )
         return {
             "enabled": self.config.enabled,
+            "owner": self.config.owner,
             "time": self.config.send_time.strftime("%H:%M"),
             "timezone": "Asia/Seoul",
             "profile": self.config.profile,
@@ -464,6 +545,7 @@ class DailyDigestService:
             "lastMessageId": str(state.get("lastMessageId") or ""),
             "lastStatus": str(state.get("lastStatus") or ""),
             "lastError": str(state.get("lastError") or self.last_error),
+            "pendingPublicationCount": pending_publications,
             "content": self.content.status(),
         }
 

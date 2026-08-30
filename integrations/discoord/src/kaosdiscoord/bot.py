@@ -669,10 +669,11 @@ class GovernorBot(discord.Client):
                 name="governor-text-notifications",
             )
         if self.daily_digest.config.enabled and self._daily_digest_task is None:
-            await asyncio.to_thread(self.daily_digest.initialize)
-            content_status = await asyncio.to_thread(self.daily_digest.refresh_content)
-            if content_status.get("lastError"):
-                LOGGER.warning("Daily digest content refresh: %s", content_status["lastError"])
+            if self.daily_digest.config.owner == "discord":
+                await asyncio.to_thread(self.daily_digest.initialize)
+                content_status = await asyncio.to_thread(self.daily_digest.refresh_content)
+                if content_status.get("lastError"):
+                    LOGGER.warning("Daily digest content refresh: %s", content_status["lastError"])
             last_message_id = self.daily_digest.last_message_id()
             if last_message_id and last_message_id != self._daily_digest_view_message_id:
                 await self._restore_daily_digest_view(last_message_id)
@@ -779,6 +780,7 @@ class GovernorBot(discord.Client):
                         category="system",
                         title="",
                         message="System online.",
+                        priority=0,
                     )
                 )
             except (discord.HTTPException, TypeError):
@@ -944,6 +946,7 @@ class GovernorBot(discord.Client):
                 category="daily",
                 title="",
                 message="Good Morning.",
+                priority=0,
             )
         )
         for event in digest_events(content):
@@ -956,6 +959,7 @@ class GovernorBot(discord.Client):
                     category="daily",
                     title="",
                     message=f"Today. {event_text}{punctuation}",
+                    priority=0,
                 )
             )
         await asyncio.to_thread(
@@ -981,6 +985,37 @@ class GovernorBot(discord.Client):
             await message.edit(view=view, allowed_mentions=NO_MENTIONS)
         except Exception:
             LOGGER.exception("Failed to refresh controls on existing daily digest message %s", message_id)
+
+    async def _publish_pending_daily_digest(self) -> bool:
+        publication = await asyncio.to_thread(self.daily_digest.pending_publication)
+        if publication is None:
+            return False
+        content = str(publication.get("content") or "")
+        try:
+            publication_day = date.fromisoformat(str(publication.get("date") or ""))
+        except ValueError as exc:
+            raise DailyDigestError("daily_digest_publication_date_invalid") from exc
+        if not content:
+            raise DailyDigestError("daily_digest_publication_content_missing")
+        channel_id = self.settings.system_channel_id
+        if channel_id is None:
+            raise DailyDigestError("daily_digest_channel_not_configured")
+        channel = self.get_channel(channel_id) or await self.fetch_channel(channel_id)
+        if not isinstance(channel, discord.abc.Messageable) and not hasattr(channel, "send"):
+            raise DailyDigestError("daily_digest_channel_not_messageable")
+        message = await channel.send(
+            content,
+            view=DailyDigestView(self, publication_day),
+            allowed_mentions=NO_MENTIONS,
+        )
+        message_id = int(getattr(message, "id", 0) or 0)
+        await asyncio.to_thread(
+            self.daily_digest.record_published,
+            publication_day,
+            message_id=message_id,
+        )
+        self._daily_digest_view_message_id = message_id
+        return True
 
     async def _cycle_daily_content(self, interaction: discord.Interaction, kind: str) -> None:
         if interaction.message is None:
@@ -1014,12 +1049,15 @@ class GovernorBot(discord.Client):
         next_content_check = time.monotonic() + 3600
         while not self.is_closed():
             try:
-                if time.monotonic() >= next_content_check:
-                    content_status = await asyncio.to_thread(self.daily_digest.refresh_content)
-                    if content_status.get("lastError"):
-                        LOGGER.warning("Daily digest content refresh: %s", content_status["lastError"])
-                    next_content_check = time.monotonic() + 3600
-                await self._publish_daily_digest()
+                if self.daily_digest.config.owner == "worker":
+                    await self._publish_pending_daily_digest()
+                else:
+                    if time.monotonic() >= next_content_check:
+                        content_status = await asyncio.to_thread(self.daily_digest.refresh_content)
+                        if content_status.get("lastError"):
+                            LOGGER.warning("Daily digest content refresh: %s", content_status["lastError"])
+                        next_content_check = time.monotonic() + 3600
+                    await self._publish_daily_digest()
             except Exception as exc:
                 await asyncio.to_thread(self.daily_digest.record_error, exc)
                 LOGGER.exception("Failed to publish daily digest")
@@ -1189,6 +1227,7 @@ class GovernorBot(discord.Client):
                     category="maintenance",
                     title="",
                     message="System maintenance required.",
+                    priority=1,
                 ),
             )
             sent_keys.add(issue_key)
@@ -1203,6 +1242,7 @@ class GovernorBot(discord.Client):
                     category="maintenance",
                     title="",
                     message="KaosBrain auth renewal.",
+                    priority=1,
                 ),
             )
             sent_keys.add(reminder.key)
@@ -1235,6 +1275,7 @@ class GovernorBot(discord.Client):
                 category="mail",
                 title="",
                 message="Mail received.",
+                priority=0,
             )
         )
         return sent

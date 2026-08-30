@@ -7,6 +7,7 @@ import unittest
 from unittest import mock
 
 from kaos_governor.notifications import PushoverConfig
+from kaos_governor.daily_digest import KST
 from kaos_governor.worker import (
     GovernorWorker,
     WorkerConfig,
@@ -21,6 +22,7 @@ class GovernorWorkerTests(unittest.TestCase):
         notifications = SimpleNamespace(
             config=SimpleNamespace(poll_seconds=5),
             deliver_pending=mock.Mock(return_value=delivered),
+            enqueue=mock.Mock(return_value=True),
             status=mock.Mock(return_value={"pendingCount": 0, "deliveryMode": "worker"}),
         )
         config = WorkerConfig(status_path=root / "worker.json", health_stale_seconds=60)
@@ -41,6 +43,7 @@ class GovernorWorkerTests(unittest.TestCase):
         notifications.deliver_pending.assert_called_once_with()
         self.assertEqual(status["status"], "ready")
         self.assertEqual(status["lastDeliveredCount"], 2)
+        self.assertEqual(status["lastScheduledNotificationCount"], 0)
         self.assertEqual(status["pushover"]["deliveryMode"], "worker")
 
     def test_failed_cycle_records_degraded_health(self) -> None:
@@ -58,6 +61,44 @@ class GovernorWorkerTests(unittest.TestCase):
         self.assertEqual(status["status"], "degraded")
         self.assertIn("offline", status["lastError"])
         self.assertFalse(healthy)
+
+    def test_worker_schedules_normal_priority_digest_then_delivers_it(self) -> None:
+        now = datetime(2026, 8, 29, 7, 0, tzinfo=KST)
+        daily_digest = SimpleNamespace(
+            config=SimpleNamespace(enabled=True, owner="worker", poll_seconds=30),
+            initialize=mock.Mock(),
+            refresh_content=mock.Mock(return_value={"lastError": ""}),
+            is_due=mock.Mock(return_value=True),
+            build=mock.Mock(
+                return_value="# 2026.08.29(Sat)\n### Events\n- Christmas\n\n### Tasks\n-"
+            ),
+            record_scheduled=mock.Mock(),
+            record_error=mock.Mock(),
+            status=mock.Mock(return_value={"enabled": True, "owner": "worker"}),
+        )
+        notifications = SimpleNamespace(
+            config=SimpleNamespace(poll_seconds=5),
+            deliver_pending=mock.Mock(side_effect=[0, 2]),
+            enqueue=mock.Mock(return_value=True),
+            status=mock.Mock(return_value={"pendingCount": 0, "deliveryMode": "worker"}),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            worker = GovernorWorker(
+                WorkerConfig(status_path=Path(temporary) / "worker.json"),
+                notifications,
+                daily_digest,
+            )
+
+            delivered = worker.run_once(now)
+            status = json.loads(worker.config.status_path.read_text(encoding="utf-8"))
+
+        queued = [call.args[0] for call in notifications.enqueue.call_args_list]
+        self.assertEqual(delivered, 2)
+        self.assertEqual([item.message for item in queued], ["Good Morning.", "Today. Christmas."])
+        self.assertEqual([item.priority for item in queued], [0, 0])
+        daily_digest.record_scheduled.assert_called_once_with(now.date(), daily_digest.build.return_value)
+        self.assertEqual(status["lastScheduledNotificationCount"], 2)
+        self.assertEqual(status["dailyDigest"]["owner"], "worker")
 
     def test_missing_heartbeat_is_unhealthy(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

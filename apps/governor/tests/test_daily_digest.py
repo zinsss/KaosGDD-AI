@@ -47,9 +47,10 @@ class Adapter:
 
 
 class DailyDigestTests(unittest.TestCase):
-    def config(self, root: Path) -> DailyDigestConfig:
+    def config(self, root: Path, *, owner: str = "discord") -> DailyDigestConfig:
         return DailyDigestConfig(
             enabled=True,
+            owner=owner,  # type: ignore[arg-type]
             send_time=time(7, 0),
             profile="main",
             weather_city="pohang",
@@ -63,18 +64,22 @@ class DailyDigestTests(unittest.TestCase):
         config = DailyDigestConfig.from_env(
             {
                 "DAILY_DIGEST_ENABLED": "true",
+                "DAILY_DIGEST_OWNER": "worker",
                 "DAILY_DIGEST_TIME": "07:00",
                 "DAILY_DIGEST_PROFILE": "main",
                 "DAILY_DIGEST_WEATHER_CITY": "pohang",
             }
         )
         self.assertTrue(config.enabled)
+        self.assertEqual(config.owner, "worker")
         self.assertEqual(config.send_time, time(7, 0))
 
         with self.assertRaisesRegex(DailyDigestError, "HH:MM"):
             DailyDigestConfig.from_env({"DAILY_DIGEST_TIME": "7am"})
         with self.assertRaisesRegex(DailyDigestError, "main or family"):
             DailyDigestConfig.from_env({"DAILY_DIGEST_PROFILE": "admin"})
+        with self.assertRaisesRegex(DailyDigestError, "discord or worker"):
+            DailyDigestConfig.from_env({"DAILY_DIGEST_OWNER": "both"})
         with self.assertRaisesRegex(DailyDigestError, "WEATHER_CITY"):
             DailyDigestConfig.from_env({"DAILY_DIGEST_WEATHER_CITY": "../../etc"})
         with self.assertRaisesRegex(DailyDigestError, "HTTPS URL"):
@@ -174,6 +179,29 @@ class DailyDigestTests(unittest.TestCase):
 
         self.assertFalse(before)
         self.assertTrue(at_time)
+
+    def test_worker_schedule_survives_cross_process_transport_publication(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            config = self.config(Path(temporary), owner="worker")
+            worker_service = DailyDigestService(config, Adapter())  # type: ignore[arg-type]
+            transport_service = DailyDigestService(config, Adapter())  # type: ignore[arg-type]
+            day = date(2026, 8, 29)
+            content = worker_service.build(day)
+
+            worker_service.record_scheduled(day, content)
+            pending = transport_service.pending_publication()
+            transport_service.record_published(day, message_id=701)
+            final = worker_service.status()
+            no_pending = worker_service.pending_publication() is None
+            lock_exists = config.state_path.with_name("daily-digest.json.lock").exists()
+
+        self.assertEqual(pending["date"], "2026-08-29")  # type: ignore[index]
+        self.assertEqual(pending["content"], content)  # type: ignore[index]
+        self.assertTrue(no_pending)
+        self.assertEqual(final["owner"], "worker")
+        self.assertEqual(final["lastMessageId"], "701")
+        self.assertEqual(final["pendingPublicationCount"], 0)
+        self.assertTrue(lock_exists)
 
     def test_bible_and_quote_cycle_through_available_content(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

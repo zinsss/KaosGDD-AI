@@ -52,6 +52,19 @@ Both containers remained healthy with zero restarts. Every later row in the
 inventory remains attached to KaosDiscoord until its own replacement gate
 passes.
 
+The next incremental cutover moves only daily-digest scheduling and alert
+production. The worker builds the digest, persists one pending publication,
+and queues normal-priority `Good Morning.` and `Today.` records. KaosDiscoord
+temporarily remains the transport for the rendered Discord message and its
+Weather/Bible/Quote controls; it no longer owns timing or Watch alerts. This
+preserves the current detail UI until the Brain/mobile replacement passes its
+own gate.
+
+Notification urgency is now record-level rather than global. Routine daily,
+mail, fax-success/receipt, recovery, and startup records use priority `0`.
+Service-down, fax-send-failure, maintenance-required, and authentication
+renewal records use priority `1`.
+
 ## Pushover Rollback
 
 Stop `governor-worker`, set `PUSHOVER_DELIVERY_MODE=inline`, and recreate the

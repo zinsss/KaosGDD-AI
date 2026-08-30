@@ -75,9 +75,38 @@ class GovernorBotTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(mirrored[0].key, "daily:2026-08-29")
         self.assertEqual(mirrored[0].title, "")
         self.assertEqual(mirrored[0].message, "Good Morning.")
+        self.assertEqual(mirrored[0].priority, 0)
         self.assertEqual(len(mirrored), 2)
         self.assertEqual(mirrored[1].message, "Today. Christmas.")
+        self.assertEqual(mirrored[1].priority, 0)
         daily_digest.record_sent.assert_called_once_with(date(2026, 8, 29), message_id=701)
+
+    async def test_worker_owned_digest_only_transports_pending_publication(self) -> None:
+        channel = SimpleNamespace(send=AsyncMock(return_value=SimpleNamespace(id=702)))
+        daily_digest = SimpleNamespace(
+            pending_publication=Mock(
+                return_value={
+                    "date": "2026-08-29",
+                    "content": "# 2026.08.29(Sat)\n### Events\n-",
+                }
+            ),
+            record_published=Mock(),
+            weather_url=Mock(return_value="https://kaosgdd.net/#/calendar?weather=2026-08-29"),
+        )
+        bot = SimpleNamespace(
+            daily_digest=daily_digest,
+            settings=SimpleNamespace(system_channel_id=301),
+            get_channel=lambda _channel_id: channel,
+            fetch_channel=AsyncMock(return_value=channel),
+            _daily_digest_view_message_id=0,
+        )
+
+        published = await GovernorBot._publish_pending_daily_digest(bot)  # type: ignore[arg-type]
+
+        self.assertTrue(published)
+        channel.send.assert_awaited_once()
+        daily_digest.record_published.assert_called_once_with(date(2026, 8, 29), message_id=702)
+        self.assertEqual(bot._daily_digest_view_message_id, 702)
 
     async def test_daily_digest_cycle_edits_message_with_persistent_controls(self) -> None:
         response = SimpleNamespace(edit_message=AsyncMock(), send_message=AsyncMock())
@@ -194,6 +223,7 @@ class GovernorBotTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(mirrored.category, "maintenance")
         self.assertEqual(mirrored.title, "")
         self.assertEqual(mirrored.message, "KaosBrain auth renewal.")
+        self.assertEqual(mirrored.priority, 1)
 
     async def test_actionable_fresh_maintenance_report_sends_simple_watch_alert_once(self) -> None:
         class FakeChannel:
@@ -248,6 +278,7 @@ class GovernorBotTests(unittest.IsolatedAsyncioTestCase):
         mirrored = bot.text_notifications.notify.call_args.args[0]
         self.assertEqual(mirrored.title, "")
         self.assertEqual(mirrored.message, "System maintenance required.")
+        self.assertEqual(mirrored.priority, 1)
 
     async def test_new_mail_watch_alert_omits_preview_and_attachments(self) -> None:
         channel = SimpleNamespace(send=AsyncMock(return_value=SimpleNamespace(id=501)))
@@ -280,6 +311,7 @@ class GovernorBotTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(mirrored), 1)
         self.assertEqual(mirrored[0].category, "mail")
         self.assertEqual(mirrored[0].message, "Mail received.")
+        self.assertEqual(mirrored[0].priority, 0)
         self.assertNotIn("Tax document arrived", mirrored[0].message)
         self.assertNotIn("Sensitive body", mirrored[0].message)
 

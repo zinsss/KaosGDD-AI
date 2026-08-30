@@ -284,6 +284,7 @@ class DiscordServiceStatusSurface:
                         category="system",
                         title="",
                         message=f"{labels.get(key, key)} is down.",
+                        priority=1,
                     )
                 )
             elif old_state == "down" and result.state == "healthy":
@@ -294,6 +295,7 @@ class DiscordServiceStatusSurface:
                         category="system",
                         title="",
                         message=f"{labels.get(key, key)} is back.",
+                        priority=0,
                     )
                 )
         self.state.service_states = {key: result.state for key, result in results.items()}

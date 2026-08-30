@@ -942,6 +942,41 @@ outbox advanced from 7 to 8 delivered records with 0 pending, retained one
 fax key, and both containers remained healthy with zero restarts. No synthetic
 watch alert was needed.
 
+Phase 5 slice 3 — worker-owned daily-digest schedule and alert priority:
+
+- Add durable per-notification priority to the shared Pushover outbox. Routine
+  information is priority `0`; actionable failures and required intervention
+  are priority `1`.
+- Add `DAILY_DIGEST_OWNER=discord|worker` with `discord` as the compatibility
+  default and `worker` as the H3 target.
+- Move initialization, due-time checking, live aggregate construction,
+  content refresh, and morning/event Pushover enqueueing into
+  `kaos-governor-worker`.
+- Persist the rendered digest as a locked pending publication. KaosDiscoord
+  temporarily transports that publication with the existing controls, but no
+  longer makes scheduling decisions or queues duplicate Watch alerts.
+- Keep the same daily-digest state and content cache. A same-day owner cutover
+  must honor `lastSentDate` and never duplicate a digest.
+
+Slice 3 local validation (2026-08-30):
+
+- 240 Governor + 361 KaosDiscoord tests passed
+- normal/high priority survives queue persistence and worker delivery
+- priority policy tests cover daily, mail, fax success/receipt/failure,
+  service down/recovery, maintenance, and authentication renewal
+- two `DailyDigestService` instances share the locked schedule/publication
+  state, proving worker-to-transport restart continuity
+- worker tests prove one normal-priority morning record plus one record per
+  event, followed by delivery through the existing sole Pushover owner
+- KaosDiscoord tests prove worker-owned mode only transports a pending rendered
+  publication and retains Weather/Bible/Quote/Close controls
+- H3 Bash validation, preflight, and Compose rendering passed
+
+Risk: medium around the 07:00 owner boundary and cross-process publication
+state. Rollback sets `DAILY_DIGEST_OWNER=discord`, recreates the worker and
+KaosDiscoord with the retained images, and preserves the same digest/cache and
+Pushover state files.
+
 Risk: high around worker lifecycles currently started by the H3 Discord bot,
 persistent views/state, duplicate notification delivery, and historical
 mail/fax/document messages.
@@ -1081,6 +1116,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | 5 | Implemented the independent Pushover delivery worker | Lifecycle inventory plus dedicated image/entry point, queue-only producer mode, cross-process state lock, worker heartbeat, and guarded Compose ownership; 237 Governor + 359 KaosDiscoord + 321 Brain tests passed | None; locally validated, production cutover pending |
 | 2026-08-30 | 5 | Promoted independent Pushover delivery to H3 | Commit `356e1b4`; sequenced one-writer cutover; worker and KaosDiscoord healthy with zero restarts; queue state preserved at 0 pending/7 delivered; ledger retained 5 completed/0 payloads; H4 synced and healthy | Production observation started; rollback image `kaosgdd-ai-governor-discord:rollback-pre-pushover-worker` retained |
 | 2026-08-30 | 5 | Completed independent Pushover delivery production observation | An organic one-page incoming fax was archived on H3; KaosDiscoord queued one keyed `Fax received.` record and `kaos-governor-worker` delivered it one second later; outbox moved from 7 to 8 delivered with 0 pending; both containers remained healthy with zero restarts | Slice 2 complete; rollback image remains retained while the next worker lifecycle is selected |
+| 2026-08-30 | 5 | Implemented worker-owned daily-digest scheduling and per-alert Pushover priority | Worker owns due/build/enqueue and persists a locked Discord publication; KaosDiscoord is transport-only for the transitional controls; routine alerts are priority 0 and actionable failures priority 1; 240 Governor + 361 KaosDiscoord tests passed; H3 preflight passed | Locally validated; controlled H3 cutover and next organic 07:00 observation pending |
 | 2026-08-30 | 6 | Recorded deferred Shortcut deep-link support for opening a selected Memos item | Existing Memos route and ID mapping verified as `/m/{memo-id}`; iOS external-link/PWA limitation documented | None; planning only |
 
 ## How to Update This Tracker

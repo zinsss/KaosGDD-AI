@@ -234,9 +234,15 @@ preflight() {
     inline|worker) ;;
     *) die "PUSHOVER_DELIVERY_MODE must be inline or worker" ;;
   esac
+  case "${DAILY_DIGEST_OWNER:-discord}" in
+    discord|worker) ;;
+    *) die "DAILY_DIGEST_OWNER must be discord or worker" ;;
+  esac
   if [[ "${DAILY_DIGEST_ENABLED:-false}" == "true" ]]; then
     [[ -n "${DISCORD_SYSTEM_CHANNEL_ID:-}" ]] \
       || die "DISCORD_SYSTEM_CHANNEL_ID is required when the daily digest is enabled"
+    [[ -n "${CALENDAR_ADAPTER_INTERNAL_URL:-}" ]] \
+      || die "CALENDAR_ADAPTER_INTERNAL_URL is required when the daily digest is enabled"
   fi
   "${COMPOSE[@]}" config --quiet
   info "Preflight passed."

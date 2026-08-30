@@ -66,7 +66,7 @@ services:
       context: ../..
       dockerfile: apps/governor/Dockerfile
       target: runtime
-    image: kaosgdd-ai-governor-worker:0.1.0
+    image: kaosgdd-ai-governor-worker:0.2.0
     pull_policy: never
     container_name: kaos-governor-worker
     restart: unless-stopped

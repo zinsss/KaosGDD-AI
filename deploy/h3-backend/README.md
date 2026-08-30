@@ -70,6 +70,13 @@ native iOS calendar/reminder notification path. Control messages, Brain selector
 refreshes, archives, message details, document bodies, attachments, and fax PDFs
 are never sent to Pushover.
 
+Priority is stored per outbox record. Routine information uses normal Pushover
+priority `0`: morning/event notices, fax receipt/success, mail, recovery, and
+startup. Actionable failures use high priority `1`: service down, fax-send
+failure, required maintenance, and KaosBrain authentication renewal.
+`PUSHOVER_PRIORITY` is only the compatibility fallback for an old queued
+record that predates per-record priority.
+
 The optional daily digest is sent once at `DAILY_DIGEST_TIME` in KST. It uses
 the selected live calendar profile, today's Radicale events and active due
 tasks, and the existing calendar adapter weather location. The Bible and quote
@@ -78,6 +85,14 @@ libraries refresh weekly into a durable local cache: public-domain Korean Bible
 quotes come from the MIT-licensed Quotable data repository. The original local
 14-item rotations remain as the offline fallback, so delivery never depends on
 a successful web request at send time.
+
+With `DAILY_DIGEST_OWNER=worker`, the Governor worker owns initialization,
+due-time checking, aggregate reads, and the Pushover records. It writes the
+rendered digest to shared durable state. During the Discord retirement
+transition, KaosDiscoord only transports that pending rendered message and
+attaches the existing controls; it does not decide when the digest is due or
+queue a second Watch alert. Set the owner back to `discord` for the narrow
+daily-digest rollback.
 
 Discord digests have `Weather`, `Bible`, `Quote`, and `Close` controls. Weather
 deep-links to the existing KaosGDD calendar detailed-weather popup for that

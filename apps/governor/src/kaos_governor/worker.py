@@ -3,7 +3,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+import hashlib
 import json
 import logging
 import os
@@ -11,13 +12,19 @@ from pathlib import Path
 import signal
 from typing import Mapping
 
-from .notifications import PushoverConfig, TextNotificationService
+from .calendar import CalendarAdapterClient, CalendarAdapterConfig
+from .daily_digest import DailyDigestConfig, DailyDigestService, KST, digest_events
+from .notifications import PushoverConfig, TextNotification, TextNotificationService
 
 
 LOGGER = logging.getLogger(__name__)
 
 
 class WorkerConfigurationError(ValueError):
+    pass
+
+
+class WorkerCycleError(RuntimeError):
     pass
 
 
@@ -83,34 +90,106 @@ class GovernorWorker:
         self,
         config: WorkerConfig,
         notifications: TextNotificationService,
+        daily_digest: DailyDigestService | None = None,
     ) -> None:
         self.config = config
         self.notifications = notifications
+        self.daily_digest = daily_digest
+        self._next_digest_check_at: datetime | None = None
+        self._next_content_refresh_at: datetime | None = None
+
+    @staticmethod
+    def _current_kst(now: datetime | None) -> datetime:
+        current = now or datetime.now(KST)
+        if current.tzinfo is None:
+            current = current.replace(tzinfo=KST)
+        return current.astimezone(KST)
+
+    def _schedule_daily_digest(self, now: datetime | None) -> int:
+        service = self.daily_digest
+        if service is None or not service.config.enabled or service.config.owner != "worker":
+            return 0
+        current = self._current_kst(now)
+        service.initialize(current)
+        created = 0
+        if self._next_digest_check_at is None or current >= self._next_digest_check_at:
+            self._next_digest_check_at = current + timedelta(seconds=service.config.poll_seconds)
+            if service.is_due(current):
+                content = service.build(current.date())
+                notifications = [
+                    TextNotification(
+                        key=f"daily:{current.date().isoformat()}",
+                        category="daily",
+                        title="",
+                        message="Good Morning.",
+                        priority=0,
+                    )
+                ]
+                for event in digest_events(content):
+                    event_text = event.strip()
+                    punctuation = "" if event_text.endswith((".", "!", "?", "。", "！", "？")) else "."
+                    event_key = hashlib.sha256(event.encode("utf-8")).hexdigest()[:16]
+                    notifications.append(
+                        TextNotification(
+                            key=f"daily:event:{current.date().isoformat()}:{event_key}",
+                            category="daily",
+                            title="",
+                            message=f"Today. {event_text}{punctuation}",
+                            priority=0,
+                        )
+                    )
+                created = sum(
+                    1
+                    for notification in notifications
+                    if self.notifications.enqueue(notification)
+                )
+                service.record_scheduled(current.date(), content)
+        # Refresh after scheduling so a slow or unavailable web source can never
+        # delay the time-sensitive morning alert; cached/local content is enough.
+        if self._next_content_refresh_at is None or current >= self._next_content_refresh_at:
+            content_status = service.refresh_content()
+            if content_status.get("lastError"):
+                LOGGER.warning("Daily digest content refresh: %s", content_status["lastError"])
+            self._next_content_refresh_at = current + timedelta(hours=1)
+        return created
 
     def run_once(self, now: datetime | None = None) -> int:
+        delivered = 0
+        scheduled = 0
+        errors = []
         try:
-            delivered = self.notifications.deliver_pending()
-            self._write_status(
-                status="ready",
-                delivered=delivered,
-                error="",
-                now=now,
-            )
-            return delivered
+            delivered += self.notifications.deliver_pending()
         except Exception as exc:
-            self._write_status(
-                status="degraded",
-                delivered=0,
-                error=f"{type(exc).__name__}: {exc}",
-                now=now,
-            )
-            raise
+            errors.append(f"{type(exc).__name__}: {exc}")
+        try:
+            scheduled = self._schedule_daily_digest(now)
+        except Exception as exc:
+            errors.append(f"{type(exc).__name__}: {exc}")
+            if self.daily_digest is not None:
+                self.daily_digest.record_error(exc)
+        if scheduled:
+            try:
+                delivered += self.notifications.deliver_pending()
+            except Exception as exc:
+                errors.append(f"{type(exc).__name__}: {exc}")
+        error = "; ".join(errors)
+        self._write_status(
+            status="degraded" if errors else "ready",
+            delivered=delivered,
+            scheduled=scheduled,
+            error=error,
+            now=now,
+        )
+        if errors:
+            raise WorkerCycleError(error)
+        return delivered
 
     def _write_status(
         self,
         *,
         status: str,
         delivered: int,
+        scheduled: int,
         error: str,
         now: datetime | None,
     ) -> None:
@@ -121,8 +200,10 @@ class GovernorWorker:
                 "status": status,
                 "lastCycleAt": _timestamp(now),
                 "lastDeliveredCount": delivered,
+                "lastScheduledNotificationCount": scheduled,
                 "lastError": error,
                 "pushover": self.notifications.status(),
+                "dailyDigest": self.daily_digest.status() if self.daily_digest is not None else {"enabled": False},
             },
         )
 
@@ -192,7 +273,26 @@ def main() -> None:
         level=getattr(logging, config.log_level, logging.INFO),
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
-    asyncio.run(_run(GovernorWorker(config, TextNotificationService(pushover))))
+    digest_config = DailyDigestConfig.from_env()
+    daily_digest = None
+    if digest_config.enabled and digest_config.owner == "worker":
+        calendar_url = os.environ.get(
+            "CALENDAR_ADAPTER_INTERNAL_URL",
+            "http://calendar-adapter:8091",
+        ).strip()
+        daily_digest = DailyDigestService(
+            digest_config,
+            CalendarAdapterClient(CalendarAdapterConfig(calendar_url)),
+        )
+    asyncio.run(
+        _run(
+            GovernorWorker(
+                config,
+                TextNotificationService(pushover),
+                daily_digest,
+            )
+        )
+    )
 
 
 if __name__ == "__main__":

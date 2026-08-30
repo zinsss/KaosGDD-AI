@@ -120,6 +120,7 @@ class DiscordFaxTransport:
                         category="fax",
                         title="",
                         message=watch_message,
+                        priority=1 if action.key.endswith(":failed") else 0,
                     ),
                 )
             except Exception:

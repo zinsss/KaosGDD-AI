@@ -99,7 +99,7 @@ class PushoverConfig:
     state_path: Path = Path("/data/notifications/pushover.json")
     app_token: str = ""
     user_key: str = ""
-    priority: int = 1
+    priority: int = 0
     timeout_seconds: int = 10
     poll_seconds: int = 10
     delivery_mode: Literal["inline", "worker"] = "inline"
@@ -124,7 +124,7 @@ class PushoverConfig:
             ),
             app_token=app_token,
             user_key=user_key,
-            priority=_bounded_int(source, "PUSHOVER_PRIORITY", 1, 0, 1),
+            priority=_bounded_int(source, "PUSHOVER_PRIORITY", 0, 0, 1),
             timeout_seconds=_int(source, "PUSHOVER_TIMEOUT_SECONDS", 10, 1),
             poll_seconds=_int(source, "PUSHOVER_POLL_SECONDS", 10, 5),
             delivery_mode=delivery_mode,  # type: ignore[arg-type]
@@ -137,6 +137,19 @@ class TextNotification:
     category: str
     title: str
     message: str
+    priority: int | None = None
+
+
+def _notification_priority(value: object, *, fallback: int) -> int:
+    if value is None:
+        return fallback
+    try:
+        priority = int(value)
+    except (TypeError, ValueError) as exc:
+        raise NotificationError("notification_priority_invalid") from exc
+    if priority not in {0, 1}:
+        raise NotificationError("notification_priority_invalid")
+    return priority
 
 
 class PushoverClient:
@@ -153,7 +166,12 @@ class PushoverClient:
             "token": self.config.app_token,
             "user": self.config.user_key,
             "message": notification.message[:1024],
-            "priority": str(self.config.priority),
+            "priority": str(
+                _notification_priority(
+                    notification.priority,
+                    fallback=self.config.priority,
+                )
+            ),
         }
         if notification.title:
             values["title"] = notification.title[:250]
@@ -223,6 +241,10 @@ class TextNotificationService:
         category = str(notification.category).strip().lower()
         title = _plain_text(str(notification.title))[:250]
         message = _plain_text(str(notification.message))[:1024]
+        priority = _notification_priority(
+            notification.priority,
+            fallback=self.config.priority,
+        )
         if not key or len(key) > 512 or "\n" in key:
             raise NotificationError("notification_key_invalid")
         if category not in MIRRORED_CATEGORIES:
@@ -239,6 +261,7 @@ class TextNotificationService:
                 "category": category,
                 "title": title,
                 "message": message,
+                "priority": priority,
                 "queuedAt": _timestamp(),
             }
             self._save(state)
@@ -277,6 +300,10 @@ class TextNotificationService:
                 category=str(record.get("category") or ""),
                 title=str(record.get("title") or ""),
                 message=str(record.get("message") or ""),
+                priority=_notification_priority(
+                    record.get("priority"),
+                    fallback=self.config.priority,
+                ),
             )
             try:
                 self.client.send(notification)
@@ -293,6 +320,7 @@ class TextNotificationService:
                 if record is not None:
                     state["delivered"][key] = {
                         "category": notification.category,
+                        "priority": notification.priority,
                         "at": delivered_at,
                     }
                     if len(state["delivered"]) > 2000:
@@ -313,6 +341,7 @@ class TextNotificationService:
                 self.config.enabled and self.config.app_token and self.config.user_key
             ),
             "priority": self.config.priority,
+            "defaultPriority": self.config.priority,
             "statePath": str(self.config.state_path),
             "pendingCount": len(state["pending"]),
             "deliveredCount": len(state["delivered"]),

@@ -22,13 +22,14 @@ class NotificationTests(unittest.TestCase):
         *,
         enabled: bool = True,
         delivery_mode: str = "inline",
+        priority: int = 0,
     ) -> PushoverConfig:
         return PushoverConfig(
             enabled=enabled,
             state_path=root / "pushover.json",
             app_token="app-secret" if enabled else "",
             user_key="user-secret" if enabled else "",
-            priority=1,
+            priority=priority,
             timeout_seconds=10,
             poll_seconds=5,
             delivery_mode=delivery_mode,  # type: ignore[arg-type]
@@ -40,6 +41,7 @@ class NotificationTests(unittest.TestCase):
             category=values.get("category", "fax"),
             title=values.get("title", "KaosGDD Fax"),
             message=values.get("message", "Fax received.\n: from 07079664986"),
+            priority=values.get("priority"),
         )
 
     def test_enabled_configuration_requires_file_backed_credentials(self) -> None:
@@ -99,7 +101,7 @@ class NotificationTests(unittest.TestCase):
             urlopen = mock.Mock(return_value=Response())
             client = PushoverClient(config, urlopen=urlopen)
 
-            client.send(self.notification())
+            client.send(self.notification(priority=1))
 
         request = urlopen.call_args.args[0]
         payload = urllib.parse.parse_qs(request.data.decode("utf-8"))
@@ -131,6 +133,7 @@ class NotificationTests(unittest.TestCase):
         payload = urllib.parse.parse_qs(urlopen.call_args.args[0].data.decode("utf-8"))
         self.assertNotIn("title", payload)
         self.assertEqual(payload["message"], ["Good Morning."])
+        self.assertEqual(payload["priority"], ["0"])
 
     def test_notify_delivers_immediately_and_deduplicates_durably(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -149,6 +152,7 @@ class NotificationTests(unittest.TestCase):
         client.send.assert_called_once()
         delivered = client.send.call_args.args[0]
         self.assertEqual(delivered.message, "Fax received.\nFrom 07079664986")
+        self.assertEqual(delivered.priority, 0)
         self.assertEqual(status["pendingCount"], 0)
         self.assertEqual(status["deliveredCount"], 1)
         self.assertFalse(status["tasksMirrored"])
@@ -187,6 +191,22 @@ class NotificationTests(unittest.TestCase):
         self.assertEqual(queued["pendingCount"], 1)
         self.assertEqual(queued["deliveryMode"], "worker")
         self.assertEqual(queued["deliveryOwner"], "governor-worker")
+
+    def test_outbox_persists_per_message_priority_and_rejects_invalid_value(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            service = TextNotificationService(
+                self.config(root, delivery_mode="worker"),
+                client=mock.Mock(),
+            )
+
+            service.enqueue(self.notification(key="fax:failed", priority=1))
+            state = json.loads((root / "pushover.json").read_text(encoding="utf-8"))
+
+            with self.assertRaisesRegex(NotificationError, "priority_invalid"):
+                service.enqueue(self.notification(key="fax:invalid", priority=2))
+
+        self.assertEqual(state["pending"]["fax:failed"]["priority"], 1)
 
     def test_shared_outbox_lock_preserves_concurrent_producers(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

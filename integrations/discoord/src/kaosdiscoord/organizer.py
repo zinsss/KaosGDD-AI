@@ -158,6 +158,7 @@ class DiscordMailOrganizer:
                             category="mail",
                             title="",
                             message=f"{int(digest.get('totalUnread') or 0)} unread mail.",
+                            priority=0,
                         ),
                     )
                 except Exception:
