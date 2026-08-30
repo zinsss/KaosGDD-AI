@@ -74,6 +74,12 @@ class NaverMailConfigTests(unittest.TestCase):
             )
         self.assertEqual(config.password, "mail-file-secret")
 
+    def test_worker_owner_is_explicit_and_validated(self) -> None:
+        config = NaverMailConfig.from_env({"MAIL_NAVER_OWNER": "worker"})
+        self.assertEqual(config.owner, "worker")
+        with self.assertRaisesRegex(ValueError, "MAIL_NAVER_OWNER"):
+            NaverMailConfig.from_env({"MAIL_NAVER_OWNER": "both"})
+
 
 class FakeIMAP:
     def __init__(self, server: FakeMailboxServer) -> None:
@@ -183,6 +189,21 @@ class NaverMailTests(unittest.TestCase):
         self.assertEqual([item.filename for item in attachments], ["notice.pdf"])
         self.assertTrue(all(server.last_client.readonly_values))
         self.assertEqual(server.fetch_specs, ["(BODY.PEEK[])"])
+
+    def test_runtime_status_is_visible_to_a_separate_reader(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            state_path = Path(tmp) / "state.json"
+            server = FakeMailboxServer()
+            poller = NaverMailPoller(config(state_path), server.factory)
+            poller.scan(lambda mail: {"messageId": 1}, lambda item: None)
+
+            reader = NaverMailPoller(config(state_path), server.factory)
+            status = reader.status()
+
+        self.assertTrue(status["started"])
+        self.assertTrue(status["lastScanAt"])
+        self.assertEqual(status["mailboxCount"], 3)
+        self.assertEqual(status["owner"], "discord")
 
     def test_list_messages_reads_configured_mailboxes_by_date(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

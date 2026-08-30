@@ -46,6 +46,24 @@ class FaxTests(unittest.TestCase):
             max_bytes=1024,
         )
 
+    def test_worker_owner_is_explicit_and_validated(self) -> None:
+        config = FaxConfig.from_env({"FAX_LIFECYCLE_OWNER": "worker"})
+        self.assertEqual(config.owner, "worker")
+        with self.assertRaisesRegex(FaxError, "FAX_LIFECYCLE_OWNER"):
+            FaxConfig.from_env({"FAX_LIFECYCLE_OWNER": "both"})
+
+    def test_runtime_status_is_visible_to_a_separate_reader(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            service = FaxService(self.config(root))
+            service.scan_actions()
+
+            status = FaxService(self.config(root)).status()
+
+        self.assertTrue(status["lastScanAt"])
+        self.assertEqual(status["lastError"], "")
+        self.assertEqual(status["owner"], "discord")
+
     def test_normalizes_domestic_and_country_code_numbers(self) -> None:
         self.assertEqual(normalize_destination("02-284-8302"), "022848302")
         self.assertEqual(normalize_destination("+82 2 284 8302"), "022848302")
@@ -156,6 +174,46 @@ class FaxTests(unittest.TestCase):
         )
         self.assertEqual(actions[2].content, "Fax successfully sent.")
         self.assertEqual(actions[-1].message_ids, (20, 21))
+
+    def test_worker_owner_separates_discord_source_cleanup(self) -> None:
+        class Connector:
+            def submit(self, job_id, request, source_metadata):
+                return {"status": "queued"}
+
+            def job_status(self, job_id):
+                return {
+                    "status": "sent",
+                    "hylafaxJobId": "42",
+                    "completedAt": "2026-08-13T06:00:00Z",
+                }
+
+            def incoming_events(self):
+                return []
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = FaxConfig(
+                **{
+                    **self.config(root).__dict__,
+                    "message_intake": True,
+                    "transport": "connector",
+                    "connector_base_url": "http://office-fax:8098",
+                    "connector_token": "not-a-real-token",
+                    "owner": "worker",
+                }
+            )
+            service = FaxService(config, connector=Connector())  # type: ignore[arg-type]
+            service.submit(
+                self.request(),
+                {"channelId": 10, "messageId": 20, "commandMessageId": 21},
+            )
+
+            worker_actions = service.scan_actions()
+            cleanup_actions = service.cleanup_actions()
+
+        self.assertNotIn("cleanup", [action.kind for action in worker_actions])
+        self.assertEqual([action.kind for action in cleanup_actions], ["cleanup"])
+        self.assertEqual(cleanup_actions[0].message_ids, (20, 21))
 
     def test_recent_items_returns_outgoing_jobs_without_pdf_content(self) -> None:
         class Connector:

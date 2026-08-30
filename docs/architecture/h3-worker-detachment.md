@@ -71,6 +71,17 @@ Pushover record was repeated. Worker and KaosDiscoord are healthy with zero
 restarts; the outbox remains at 0 pending and 8 delivered records. The next
 organic 07:00 digest is the production observation gate.
 
+The next cutover is implemented but not yet promoted. With
+`MAIL_NAVER_OWNER=worker`, the Governor worker advances the existing IMAP
+checkpoint, retains messages and attachments in authoritative Naver IMAP, and
+queues only `Mail received.`. With `FAX_LIFECYCLE_OWNER=worker`, it reconciles
+the existing Office Fax Connector state, stores incoming PDFs in the current
+H3 fax archive, and queues only final fax alerts. Shared fax JSON writes use a
+cross-process lock because transitional KaosDiscoord fax intake can still
+submit. KaosDiscoord retains only deletion of a successfully sent fax's source
+message; it does not poll IMAP/the connector or publish mail/fax topics under
+worker ownership.
+
 ## Pushover Rollback
 
 Stop `governor-worker`, set `PUSHOVER_DELIVERY_MODE=inline`, and recreate the

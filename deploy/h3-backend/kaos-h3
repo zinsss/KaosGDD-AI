@@ -198,7 +198,9 @@ preflight() {
   if [[ "${MAIL_NAVER_ENABLED:-false}" == "true" || "${MAIL_ORGANIZER_ENABLED:-false}" == "true" ]]; then
     require_secret naver_mail_password
     [[ -n "${MAIL_NAVER_USERNAME:-}" ]] || die "MAIL_NAVER_USERNAME is required"
-    [[ -n "${MAIL_ARCHIVE_DISCORD_CHANNEL_ID:-}" ]] || die "MAIL_ARCHIVE_DISCORD_CHANNEL_ID is required"
+    if [[ "${MAIL_NAVER_OWNER:-discord}" == "discord" || "${MAIL_ORGANIZER_ENABLED:-false}" == "true" ]]; then
+      [[ -n "${MAIL_ARCHIVE_DISCORD_CHANNEL_ID:-}" ]] || die "MAIL_ARCHIVE_DISCORD_CHANNEL_ID is required"
+    fi
   fi
   if [[ "${MAIL_ORGANIZER_ENABLED:-false}" == "true" ]]; then
     [[ -n "${MAIL_ORGANIZER_DISCORD_CHANNEL_ID:-}" ]] || die "MAIL_ORGANIZER_DISCORD_CHANNEL_ID is required"
@@ -234,10 +236,22 @@ preflight() {
     inline|worker) ;;
     *) die "PUSHOVER_DELIVERY_MODE must be inline or worker" ;;
   esac
+  case "${MAIL_NAVER_OWNER:-discord}" in
+    discord|worker) ;;
+    *) die "MAIL_NAVER_OWNER must be discord or worker" ;;
+  esac
+  case "${FAX_LIFECYCLE_OWNER:-discord}" in
+    discord|worker) ;;
+    *) die "FAX_LIFECYCLE_OWNER must be discord or worker" ;;
+  esac
   case "${DAILY_DIGEST_OWNER:-discord}" in
     discord|worker) ;;
     *) die "DAILY_DIGEST_OWNER must be discord or worker" ;;
   esac
+  if [[ "${MAIL_NAVER_OWNER:-discord}" == "worker" || "${FAX_LIFECYCLE_OWNER:-discord}" == "worker" ]]; then
+    [[ "${PUSHOVER_DELIVERY_MODE:-worker}" == "worker" ]] \
+      || die "PUSHOVER_DELIVERY_MODE must be worker for worker-owned mail or fax polling"
+  fi
   if [[ "${DAILY_DIGEST_ENABLED:-false}" == "true" ]]; then
     [[ -n "${DISCORD_SYSTEM_CHANNEL_ID:-}" ]] \
       || die "DISCORD_SYSTEM_CHANNEL_ID is required when the daily digest is enabled"

@@ -42,6 +42,9 @@ H4, office-service, and stateful-service cutovers.
   observation.
 - Phase 5 worker slice 2 is deployed in commit `356e1b4`: Pushover delivery is
   owned by the independent `kaos-governor-worker`; KaosDiscoord is queue-only.
+- Phase 5 worker slice 4 is locally validated: Naver mail and fax polling can
+  move to `kaos-governor-worker` without uploading messages or attachments to
+  Discord. Production ownership remains unchanged until the guarded cutover.
 - Database schema in production: additive migration `005`.
 - Working rule: finish and verify one boundary before moving another domain.
 
@@ -54,7 +57,7 @@ H4, office-service, and stateful-service cutovers.
 | 2 | Persist operations, confirmations, and pending payloads | Complete and tested | Deployed and observed 2026-08-30 | Complete |
 | 3 | Route every meaningful mutation through Governor | Task slices and Memos slices 1-2 implemented | Task slices and Memos slice 1 observed; Memos slice 2 deployed 2026-08-30 | Production observation |
 | 4 | Make Brain transport-neutral | Not started | Not deployed | Planned |
-| 5 | Retain brain-only KaosDiscoord; detach workers and notifications | Package extraction and Pushover worker deployed | Both compatibility observations active | In progress |
+| 5 | Retain brain-only KaosDiscoord; detach workers and notifications | Package, Pushover, digest, and fax/mail worker slices implemented | Digest observation active; fax/mail awaiting cutover | In progress |
 | 6 | Add stable iOS APIs and lightweight clients | Pilot read endpoint only; replacement matrix accepted | Pilot active | Planned |
 | 7 | Remove compatibility debt and finish documentation/CI | Not started | Not deployed | Planned |
 
@@ -1002,6 +1005,50 @@ Production observation is active. The organic 07:00 worker-owned
 `Good Morning.` record and its corresponding KaosDiscoord publication are the
 remaining gate; no synthetic alert is required.
 
+Phase 5 slice 4 — worker-owned Naver mail and fax polling:
+
+- Add `MAIL_NAVER_OWNER=discord|worker` and
+  `FAX_LIFECYCLE_OWNER=discord|worker`, preserving `discord` as the code
+  rollback default and selecting `worker` only during the guarded H3 cutover.
+- Move IMAP checkpoint advancement, fax connector reconciliation, incoming fax
+  PDF retention, and final fax/mail Pushover production into
+  `kaos-governor-worker`.
+- Keep Naver IMAP authoritative for message bodies and attachments. The worker
+  queues one normal-priority `Mail received.` record per new message and does
+  not create a Discord or second local attachment archive.
+- Keep incoming fax PDFs in the existing H3 fax archive used by the H4
+  `Fax Mail` selector. Queue only `Fax received.` and `Fax sent.` at normal
+  priority and `Fax send failed.` at high priority; queued/sending states stay
+  silent.
+- Add a cross-process fax state lock because transitional Discord fax intake
+  can still submit a job while the worker reconciles it.
+- Retain only adapter-specific cleanup in KaosDiscoord so a successful fax can
+  delete its transitional Discord source message. KaosDiscoord performs no
+  connector polling, fax archival, status notification, or mail upload when
+  worker ownership is selected.
+- Persist mail/fax runtime status in their existing state files so the H3
+  readiness and Brain import views can observe the worker-owned lifecycle
+  across process boundaries.
+
+Slice 4 local validation (2026-08-30):
+
+- focused tests prove one owner, final-state-only fax alerts, normal/high
+  priority policy, Naver IMAP retention, no Discord attachment callback, and
+  adapter-only fax source cleanup
+- 250 Governor tests passed with 11 PostgreSQL tests skipped in the unit image
+- 368 KaosDiscoord and 321 KaosBrain tests passed
+- H3 Bash validation, preflight, and Compose rendering passed
+- the worker runtime image contains `tiff2pdf` for local-transport rollback and
+  imports both neutral lifecycle workers successfully
+
+Risk: medium around one-writer ownership, existing mail/fax checkpoints,
+connector availability, and direct fax submissions during reconciliation.
+
+Rollback: stop the worker-owned pollers, restore both owner settings to
+`discord`, recreate the retained KaosDiscoord and worker images, and preserve
+the same mail, fax, and Pushover state. No HylaFAX, Naver mailbox, Paperless,
+database, or archive migration is involved.
+
 Risk: high around worker lifecycles currently started by the H3 Discord bot,
 persistent views/state, duplicate notification delivery, and historical
 mail/fax/document messages.
@@ -1143,6 +1190,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | 5 | Completed independent Pushover delivery production observation | An organic one-page incoming fax was archived on H3; KaosDiscoord queued one keyed `Fax received.` record and `kaos-governor-worker` delivered it one second later; outbox moved from 7 to 8 delivered with 0 pending; both containers remained healthy with zero restarts | Slice 2 complete; rollback image remains retained while the next worker lifecycle is selected |
 | 2026-08-30 | 5 | Implemented worker-owned daily-digest scheduling and per-alert Pushover priority | Worker owns due/build/enqueue and persists a locked Discord publication; KaosDiscoord is transport-only for the transitional controls; routine alerts are priority 0 and actionable failures priority 1; 240 Governor + 361 KaosDiscoord tests passed; H3 preflight passed | Locally validated; controlled H3 cutover and next organic 07:00 observation pending |
 | 2026-08-30 | 5 | Promoted worker-owned daily-digest scheduling and per-alert priority to H3 | Commit `58e5237`; owner switched after preserving today's sent-date; no duplicate digest/alert; worker and KaosDiscoord healthy with zero restarts; outbox 0 pending/8 delivered; H4 doctor passes | Production observation started; retained rollback images cover both processes; next organic 07:00 is the gate |
+| 2026-08-30 | 5 | Implemented worker-owned Naver mail and fax polling | Neutral lifecycle workers retain IMAP/fax sources, queue only minimal final alerts, persist cross-process status, lock shared fax state, and leave only source-message deletion in KaosDiscoord; 250 Governor + 368 KaosDiscoord + 321 Brain tests passed; runtime/preflight checks pass | Locally validated; production remains Discord-owned pending the guarded cutover |
 | 2026-08-30 | 6 | Recorded deferred Shortcut deep-link support for opening a selected Memos item | Existing Memos route and ID mapping verified as `/m/{memo-id}`; iOS external-link/PWA limitation documented | None; planning only |
 
 ## How to Update This Tracker

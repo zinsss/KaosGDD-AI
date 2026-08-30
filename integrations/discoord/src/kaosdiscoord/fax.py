@@ -12,7 +12,8 @@ import unicodedata
 
 import discord
 from kaos_governor.fax import FaxAction, FaxError, FaxService, request_from_pdf
-from kaos_governor.notifications import TextNotification, TextNotificationService
+from kaos_governor.import_workers import fax_text_notification
+from kaos_governor.notifications import TextNotificationService
 from PIL import Image, UnidentifiedImageError
 
 from .access import AccessPolicy
@@ -25,13 +26,8 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff", ".bmp"}
 
 
 def watch_fax_message(action: FaxAction) -> str:
-    if action.key.startswith("incoming:"):
-        return "Fax received."
-    if action.key.endswith(":failed"):
-        return "Fax send failed."
-    if action.key.endswith(":sent"):
-        return "Fax sent."
-    return ""
+    notification = fax_text_notification(action)
+    return notification.message if notification is not None else ""
 
 
 def safe_filename(value: str) -> str:
@@ -110,18 +106,12 @@ class DiscordFaxTransport:
     async def _notification(self, action: FaxAction) -> None:
         channel = await self._channel(self.notification_channel_id)
         await channel.send(action.content, allowed_mentions=NO_MENTIONS)
-        watch_message = watch_fax_message(action)
-        if self.text_notifications is not None and watch_message:
+        text_notification = fax_text_notification(action)
+        if self.text_notifications is not None and text_notification is not None:
             try:
                 await asyncio.to_thread(
                     self.text_notifications.notify,
-                    TextNotification(
-                        key=f"fax:{action.key}",
-                        category="fax",
-                        title="",
-                        message=watch_message,
-                        priority=1 if action.key.endswith(":failed") else 0,
-                    ),
+                    text_notification,
                 )
             except Exception:
                 LOGGER.exception("Failed to queue Apple Watch fax alert: %s", action.key)
@@ -216,6 +206,22 @@ class DiscordFaxTransport:
                 except (FaxError, OSError, RuntimeError, discord.HTTPException) as exc:
                     self.service.record_error(exc)
                     LOGGER.exception("Fax action failed: %s", action.key)
+                    break
+            return completed
+
+    async def cleanup_cycle(self) -> int:
+        """Delete only transitional Discord intake messages after fax success."""
+        async with self._cycle_lock:
+            actions = await asyncio.to_thread(self.service.cleanup_actions)
+            completed = 0
+            for action in actions:
+                try:
+                    await self._cleanup(action)
+                    await asyncio.to_thread(self.service.acknowledge, action)
+                    completed += 1
+                except (OSError, RuntimeError, discord.HTTPException) as exc:
+                    self.service.record_error(exc)
+                    LOGGER.exception("Fax source cleanup failed: %s", action.key)
                     break
             return completed
 

@@ -40,6 +40,7 @@ class NaverMailConfig:
     max_attachment_bytes: int
     preview_characters: int
     mark_existing_on_first_run: bool
+    owner: str = "discord"
 
     @property
     def configured(self) -> bool:
@@ -48,6 +49,9 @@ class NaverMailConfig:
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "NaverMailConfig":
         source = os.environ if env is None else env
+        owner = source.get("MAIL_NAVER_OWNER", "discord").strip().lower() or "discord"
+        if owner not in {"discord", "worker"}:
+            raise ValueError("MAIL_NAVER_OWNER must be discord or worker")
         roots = tuple(
             value.strip()
             for value in source.get("MAIL_NAVER_FOLDERS", "세무사,영덕군보건소").split(",")
@@ -66,6 +70,7 @@ class NaverMailConfig:
             max_attachment_bytes=max(1, int(source.get("MAIL_NAVER_MAX_ATTACHMENT_MB", "20"))) * 1024 * 1024,
             preview_characters=max(200, min(3000, int(source.get("MAIL_NAVER_PREVIEW_CHARS", "2200")))),
             mark_existing_on_first_run=_env_bool(source, "MAIL_NAVER_MARK_EXISTING_ON_FIRST_RUN", True),
+            owner=owner,
         )
 
 
@@ -341,9 +346,13 @@ class NaverMailPoller:
         try:
             payload = json.loads(self.config.state_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
-            return {"mailboxes": {}}
+            return {"mailboxes": {}, "runtime": {}}
         mailboxes = payload.get("mailboxes") if isinstance(payload, dict) else None
-        return {"mailboxes": mailboxes if isinstance(mailboxes, dict) else {}}
+        runtime = payload.get("runtime") if isinstance(payload, dict) else None
+        return {
+            "mailboxes": mailboxes if isinstance(mailboxes, dict) else {},
+            "runtime": runtime if isinstance(runtime, dict) else {},
+        }
 
     def save_state(self, state: dict[str, object]) -> None:
         path = self.config.state_path
@@ -355,28 +364,55 @@ class NaverMailPoller:
 
     def status(self) -> dict[str, object]:
         runtime = self.runtime
+        persisted = self.load_state().get("runtime")
+        persisted = persisted if isinstance(persisted, dict) else {}
+        started = runtime.started or bool(persisted.get("started"))
+        last_scan_at = runtime.last_scan_at or str(persisted.get("lastScanAt") or "")
+        last_archive_at = runtime.last_archive_at or str(persisted.get("lastArchiveAt") or "")
+        last_error = runtime.last_error or str(persisted.get("lastError") or "")
+        archived_count = max(runtime.archived_count, int(persisted.get("archivedCount") or 0))
+        mailbox_count = runtime.mailbox_count or int(persisted.get("mailboxCount") or 0)
         return {
-            "ok": (not self.config.enabled) or (self.config.configured and not runtime.last_error),
+            "ok": (not self.config.enabled) or (self.config.configured and not last_error),
             "enabled": self.config.enabled,
+            "owner": self.config.owner,
             "configured": self.config.configured,
-            "started": runtime.started,
+            "started": started,
             "folders": list(self.config.folder_roots),
             "statePath": str(self.config.state_path),
             "pollSeconds": self.config.poll_seconds,
+            "lastScanAt": last_scan_at,
+            "lastArchiveAt": last_archive_at,
+            "lastError": last_error,
+            "archivedCount": archived_count,
+            "mailboxCount": mailbox_count,
+        }
+
+    def _save_runtime(self, state: dict[str, object]) -> None:
+        runtime = self.runtime
+        state["runtime"] = {
+            "started": runtime.started,
             "lastScanAt": runtime.last_scan_at,
             "lastArchiveAt": runtime.last_archive_at,
             "lastError": runtime.last_error,
             "archivedCount": runtime.archived_count,
             "mailboxCount": runtime.mailbox_count,
         }
+        self.save_state(state)
 
     def scan(
         self,
         summary_sender: Callable[[MailMessage], object],
         attachment_sender: Callable[[Attachment], object],
     ) -> int:
-        self.runtime.started = True
         state = self.load_state()
+        persisted = state.get("runtime")
+        persisted = persisted if isinstance(persisted, dict) else {}
+        if not self.runtime.started:
+            self.runtime.archived_count = int(persisted.get("archivedCount") or 0)
+            self.runtime.last_archive_at = str(persisted.get("lastArchiveAt") or "")
+            self.runtime.mailbox_count = int(persisted.get("mailboxCount") or 0)
+        self.runtime.started = True
 
         def persist() -> None:
             self.save_state(state)
@@ -388,17 +424,18 @@ class NaverMailPoller:
                 attachment_sender=attachment_sender,
                 persist=persist,
             )
-            self.save_state(state)
             self.runtime.last_scan_at = _utc_timestamp()
             self.runtime.last_error = ""
             self.runtime.mailbox_count = mailbox_count
             self.runtime.archived_count += archived
             if archived:
                 self.runtime.last_archive_at = self.runtime.last_scan_at
+            self._save_runtime(state)
             return archived
         except (imaplib.IMAP4.error, OSError, NaverMailError, UnicodeError, ValueError) as exc:
             self.runtime.last_scan_at = _utc_timestamp()
             self.runtime.last_error = type(exc).__name__
+            self._save_runtime(state)
             return 0
 
     def list_messages(self, *, limit: int = 50) -> dict[str, object]:

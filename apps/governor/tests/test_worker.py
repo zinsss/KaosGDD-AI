@@ -8,6 +8,7 @@ from unittest import mock
 
 from kaos_governor.notifications import PushoverConfig
 from kaos_governor.daily_digest import KST
+from kaos_governor.import_workers import ImportCycleResult
 from kaos_governor.worker import (
     GovernorWorker,
     WorkerConfig,
@@ -44,6 +45,8 @@ class GovernorWorkerTests(unittest.TestCase):
         self.assertEqual(status["status"], "ready")
         self.assertEqual(status["lastDeliveredCount"], 2)
         self.assertEqual(status["lastScheduledNotificationCount"], 0)
+        self.assertEqual(status["lastMailProcessedCount"], 0)
+        self.assertEqual(status["lastFaxActionCount"], 0)
         self.assertEqual(status["pushover"]["deliveryMode"], "worker")
 
     def test_failed_cycle_records_degraded_health(self) -> None:
@@ -99,6 +102,48 @@ class GovernorWorkerTests(unittest.TestCase):
         daily_digest.record_scheduled.assert_called_once_with(now.date(), daily_digest.build.return_value)
         self.assertEqual(status["lastScheduledNotificationCount"], 2)
         self.assertEqual(status["dailyDigest"]["owner"], "worker")
+
+    def test_worker_polls_mail_and_fax_at_their_own_intervals(self) -> None:
+        now = datetime(2026, 8, 30, 8, 0, tzinfo=timezone.utc)
+        notifications = SimpleNamespace(
+            config=SimpleNamespace(poll_seconds=5),
+            deliver_pending=mock.Mock(side_effect=[0, 2, 0]),
+            enqueue=mock.Mock(return_value=True),
+            status=mock.Mock(return_value={"pendingCount": 0, "deliveryMode": "worker"}),
+        )
+        mail = SimpleNamespace(
+            poller=SimpleNamespace(
+                config=SimpleNamespace(poll_seconds=60),
+                status=mock.Mock(return_value={"enabled": True, "owner": "worker", "lastError": ""}),
+            ),
+            run_once=mock.Mock(return_value=ImportCycleResult(1, 1)),
+        )
+        fax = SimpleNamespace(
+            service=SimpleNamespace(
+                config=SimpleNamespace(poll_seconds=20),
+                status=mock.Mock(return_value={"enabled": True, "owner": "worker", "lastError": ""}),
+            ),
+            run_once=mock.Mock(return_value=ImportCycleResult(3, 1)),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            worker = GovernorWorker(
+                WorkerConfig(status_path=Path(temporary) / "worker.json"),
+                notifications,
+                mail_lifecycle=mail,
+                fax_lifecycle=fax,
+            )
+
+            delivered = worker.run_once(now)
+            worker.run_once(now + timedelta(seconds=5))
+            status = json.loads(worker.config.status_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(delivered, 2)
+        mail.run_once.assert_called_once_with()
+        fax.run_once.assert_called_once_with()
+        self.assertEqual(status["lastMailProcessedCount"], 0)
+        self.assertEqual(status["lastFaxActionCount"], 0)
+        self.assertEqual(status["naverMail"]["owner"], "worker")
+        self.assertEqual(status["fax"]["owner"], "worker")
 
     def test_missing_heartbeat_is_unhealthy(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -66,7 +66,7 @@ services:
       context: ../..
       dockerfile: apps/governor/Dockerfile
       target: runtime
-    image: kaosgdd-ai-governor-worker:0.2.0
+    image: kaosgdd-ai-governor-worker:0.3.0
     pull_policy: never
     container_name: kaos-governor-worker
     restart: unless-stopped
@@ -76,20 +76,24 @@ services:
     environment:
       PUSHOVER_DELIVERY_MODE: "${PUSHOVER_DELIVERY_MODE:-worker}"
     secrets:
+      - naver_mail_password
+      - fax_connector_token
       - pushover_app_token
       - pushover_user_key
     volumes:
+      - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/mail:/data/mail
+      - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/fax:/data/fax
       - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/notifications:/data/notifications
     group_add:
       - "${KAOS_HOST_GID:-1000}"
     read_only: true
     tmpfs:
-      - /tmp:size=32m,mode=1777
+      - /tmp:size=96m,mode=1777
     cap_drop:
       - ALL
     security_opt:
       - no-new-privileges:true
-    mem_limit: 128m
+    mem_limit: 256m
     pids_limit: 50
     logging:
       driver: json-file

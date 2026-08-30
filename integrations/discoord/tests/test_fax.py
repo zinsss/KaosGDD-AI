@@ -45,6 +45,40 @@ class DiscordFaxTests(unittest.TestCase):
 
 
 class DiscordFaxTransportTests(unittest.IsolatedAsyncioTestCase):
+    async def test_worker_owned_cleanup_cycle_only_deletes_source_messages(self) -> None:
+        action = FaxAction(
+            "outgoing:discord:event-1:cleanup",
+            "cleanup",
+            channel_id=300,
+            message_ids=(10, 11),
+        )
+        service = SimpleNamespace(
+            cleanup_actions=mock.Mock(return_value=[action]),
+            acknowledge=mock.Mock(),
+            record_error=mock.Mock(),
+        )
+        transport = DiscordFaxTransport(
+            SimpleNamespace(),  # type: ignore[arg-type]
+            service,  # type: ignore[arg-type]
+            SimpleNamespace(),  # type: ignore[arg-type]
+            archive_channel_id=300,
+            notification_channel_id=301,
+        )
+        messages = {
+            10: SimpleNamespace(delete=mock.AsyncMock()),
+            11: SimpleNamespace(delete=mock.AsyncMock()),
+        }
+        channel = SimpleNamespace(fetch_message=mock.AsyncMock(side_effect=lambda message_id: messages[message_id]))
+        transport._channel = mock.AsyncMock(return_value=channel)  # type: ignore[method-assign]
+
+        completed = await transport.cleanup_cycle()
+
+        self.assertEqual(completed, 1)
+        service.acknowledge.assert_called_once_with(action)
+        messages[10].delete.assert_awaited_once()
+        messages[11].delete.assert_awaited_once()
+        service.record_error.assert_not_called()
+
     async def test_text_notification_is_mirrored_after_discord(self) -> None:
         service = SimpleNamespace(
             scan_actions=mock.Mock(),

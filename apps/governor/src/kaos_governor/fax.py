@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import base64
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
+import fcntl
 import hashlib
 import json
 import os
@@ -11,7 +13,7 @@ import re
 import threading
 import time
 import unicodedata
-from typing import Mapping
+from typing import Iterator, Mapping
 import urllib.error
 import urllib.request
 from zoneinfo import ZoneInfo
@@ -80,6 +82,7 @@ class FaxConfig:
     connector_base_url: str = ""
     connector_token: str = ""
     connector_timeout_seconds: int = 20
+    owner: str = "discord"
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "FaxConfig":
@@ -87,6 +90,9 @@ class FaxConfig:
         transport = source.get("FAX_TRANSPORT", "local").strip().lower() or "local"
         if transport not in {"local", "connector"}:
             raise FaxError("FAX_TRANSPORT must be local or connector")
+        owner = source.get("FAX_LIFECYCLE_OWNER", "discord").strip().lower() or "discord"
+        if owner not in {"discord", "worker"}:
+            raise FaxError("FAX_LIFECYCLE_OWNER must be discord or worker")
         enabled = _bool(source, "FAX_DISCORD_ENABLED")
         return cls(
             enabled=enabled,
@@ -110,6 +116,7 @@ class FaxConfig:
             connector_base_url=source.get("FAX_CONNECTOR_BASE_URL", "").strip().rstrip("/"),
             connector_token=_secret(source, "FAX_CONNECTOR_TOKEN"),
             connector_timeout_seconds=_int(source, "FAX_CONNECTOR_TIMEOUT_SECONDS", 20, 1),
+            owner=owner,
         )
 
 
@@ -353,12 +360,28 @@ class FaxService:
         self.last_scan_at = ""
         self.last_error = ""
 
+    @contextmanager
+    def _state_lock(self) -> Iterator[None]:
+        lock_path = self.config.state_path.with_name(f".{self.config.state_path.name}.lock")
+        _ensure_directory(lock_path.parent)
+        with self._lock, lock_path.open("a+b") as lock_file:
+            try:
+                os.chmod(lock_path, 0o660)
+            except PermissionError:
+                pass
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
     def _load(self) -> dict:
         value = _read_json(self.config.state_path)
         value["jobs"] = value.get("jobs") if isinstance(value.get("jobs"), dict) else {}
         value["incoming"] = value.get("incoming") if isinstance(value.get("incoming"), dict) else {}
         value["delivered"] = value.get("delivered") if isinstance(value.get("delivered"), dict) else {}
         value["prompts"] = value.get("prompts") if isinstance(value.get("prompts"), dict) else {}
+        value["runtime"] = value.get("runtime") if isinstance(value.get("runtime"), dict) else {}
         return value
 
     def _save(self, state: dict) -> None:
@@ -366,13 +389,13 @@ class FaxService:
         _atomic_json(self.config.state_path, state)
 
     def remember_prompt(self, source_message_id: int, prompt_message_id: int) -> None:
-        with self._lock:
+        with self._state_lock():
             state = self._load()
             state["prompts"][str(source_message_id)] = prompt_message_id
             self._save(state)
 
     def submit(self, request: FaxRequest, source_metadata: dict[str, object]) -> tuple[dict, bool]:
-        with self._lock:
+        with self._state_lock():
             state = self._load()
             job_id = request_job_id(request)
             if job_id in state["jobs"]:
@@ -605,7 +628,7 @@ class FaxService:
     def scan_actions(self) -> list[FaxAction]:
         if not self.config.enabled:
             return []
-        with self._lock:
+        with self._state_lock():
             state = self._load()
             self._reconcile_jobs(state)
             candidates = self._incoming_actions()
@@ -620,18 +643,42 @@ class FaxService:
                 for action in candidates:
                     state["delivered"][action.key] = {"at": _timestamp(), "status": "baselined"}
                 state["initialized"] = True
+                state["runtime"] = {"lastScanAt": _timestamp(), "lastError": ""}
                 self._save(state)
-                self.last_scan_at = _timestamp()
+                self.last_scan_at = str(state["runtime"]["lastScanAt"])
                 self.last_error = ""
                 return []
             state["initialized"] = True
+            state["runtime"] = {"lastScanAt": _timestamp(), "lastError": ""}
             self._save(state)
-            self.last_scan_at = _timestamp()
+            self.last_scan_at = str(state["runtime"]["lastScanAt"])
             self.last_error = ""
-            return [action for action in candidates if action.key not in state["delivered"]]
+            return [
+                action
+                for action in candidates
+                if action.key not in state["delivered"]
+                and not (self.config.owner == "worker" and action.kind == "cleanup")
+            ]
+
+    def cleanup_actions(self) -> list[FaxAction]:
+        """Return only Discord source cleanup work after worker reconciliation."""
+        if not self.config.enabled or not self.config.message_intake:
+            return []
+        with self._state_lock():
+            state = self._load()
+            actions: list[FaxAction] = []
+            for job_id, job in state["jobs"].items():
+                if not isinstance(job, dict):
+                    continue
+                actions.extend(
+                    action
+                    for action in self._job_actions("discord", str(job_id), job)
+                    if action.kind == "cleanup" and action.key not in state["delivered"]
+                )
+            return actions
 
     def acknowledge(self, action: FaxAction) -> None:
-        with self._lock:
+        with self._state_lock():
             state = self._load()
             if action.kind == "archive" and action.key.startswith("incoming:archive:"):
                 self._record_incoming_archive(state, action)
@@ -646,7 +693,7 @@ class FaxService:
         incoming_id = hashlib.sha256(action.key.encode("utf-8")).hexdigest()[:32]
         relative_path = Path("archive") / f"{incoming_id}.pdf"
         document_path = self.config.state_path.parent / relative_path
-        with self._lock:
+        with self._state_lock():
             if not document_path.is_file() or document_path.read_bytes() != pdf:
                 _atomic_bytes(document_path, pdf)
             state = self._load()
@@ -658,7 +705,7 @@ class FaxService:
         normalized_id = str(fax_id or "").strip().lower()
         if not FAX_ID.fullmatch(normalized_id):
             raise FaxError("fax_document_not_found")
-        with self._lock:
+        with self._state_lock():
             state = self._load()
             incoming = state["incoming"].get(normalized_id)
             if not isinstance(incoming, dict):
@@ -700,7 +747,13 @@ class FaxService:
             state["incoming"][incoming_id]["documentPath"] = document_path
 
     def record_error(self, exc: Exception) -> None:
-        self.last_error = f"{type(exc).__name__}: {exc}"
+        with self._state_lock():
+            self.last_error = f"{type(exc).__name__}: {exc}"
+            state = self._load()
+            runtime = state["runtime"]
+            runtime["lastError"] = self.last_error
+            state["runtime"] = runtime
+            self._save(state)
 
     def recent_items(self, *, limit: int = 50) -> list[dict[str, object]]:
         state = self._load()
@@ -769,8 +822,10 @@ class FaxService:
 
     def status(self) -> dict[str, object]:
         state = self._load()
+        runtime = state["runtime"]
         return {
             "enabled": self.config.enabled,
+            "owner": self.config.owner,
             "messageIntake": self.config.message_intake,
             "transport": self.config.transport,
             "configured": bool(
@@ -787,8 +842,8 @@ class FaxService:
             "statePath": str(self.config.state_path),
             "queueRoot": str(self.config.queue_root),
             "connectorUrlConfigured": bool(self.config.connector_base_url),
-            "lastScanAt": self.last_scan_at,
-            "lastError": self.last_error,
+            "lastScanAt": self.last_scan_at or str(runtime.get("lastScanAt") or ""),
+            "lastError": self.last_error or str(runtime.get("lastError") or ""),
             "incomingCount": len(state["incoming"]),
             "trackedJobs": len(state["jobs"]),
             "deliveredActions": len(state["delivered"]),

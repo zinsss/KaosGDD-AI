@@ -14,6 +14,13 @@ from typing import Mapping
 
 from .calendar import CalendarAdapterClient, CalendarAdapterConfig
 from .daily_digest import DailyDigestConfig, DailyDigestService, KST, digest_events
+from .fax import FaxConfig, FaxService
+from .import_workers import (
+    FaxLifecycleWorker,
+    ImportCycleResult,
+    NaverMailLifecycleWorker,
+)
+from .mail import NaverMailConfig, NaverMailPoller
 from .notifications import PushoverConfig, TextNotification, TextNotificationService
 
 
@@ -91,12 +98,18 @@ class GovernorWorker:
         config: WorkerConfig,
         notifications: TextNotificationService,
         daily_digest: DailyDigestService | None = None,
+        mail_lifecycle: NaverMailLifecycleWorker | None = None,
+        fax_lifecycle: FaxLifecycleWorker | None = None,
     ) -> None:
         self.config = config
         self.notifications = notifications
         self.daily_digest = daily_digest
+        self.mail_lifecycle = mail_lifecycle
+        self.fax_lifecycle = fax_lifecycle
         self._next_digest_check_at: datetime | None = None
         self._next_content_refresh_at: datetime | None = None
+        self._next_mail_check_at: datetime | None = None
+        self._next_fax_check_at: datetime | None = None
 
     @staticmethod
     def _current_kst(now: datetime | None) -> datetime:
@@ -153,9 +166,42 @@ class GovernorWorker:
             self._next_content_refresh_at = current + timedelta(hours=1)
         return created
 
+    @staticmethod
+    def _current_utc(now: datetime | None) -> datetime:
+        current = now or datetime.now(timezone.utc)
+        if current.tzinfo is None:
+            current = current.replace(tzinfo=timezone.utc)
+        return current.astimezone(timezone.utc)
+
+    def _poll_mail(self, now: datetime | None) -> ImportCycleResult:
+        lifecycle = self.mail_lifecycle
+        if lifecycle is None:
+            return ImportCycleResult()
+        current = self._current_utc(now)
+        if self._next_mail_check_at is not None and current < self._next_mail_check_at:
+            return ImportCycleResult()
+        self._next_mail_check_at = current + timedelta(seconds=lifecycle.poller.config.poll_seconds)
+        result = lifecycle.run_once()
+        status = lifecycle.poller.status()
+        if status.get("lastError"):
+            LOGGER.warning("Naver mail scan failed: %s", status["lastError"])
+        return result
+
+    def _poll_fax(self, now: datetime | None) -> ImportCycleResult:
+        lifecycle = self.fax_lifecycle
+        if lifecycle is None:
+            return ImportCycleResult()
+        current = self._current_utc(now)
+        if self._next_fax_check_at is not None and current < self._next_fax_check_at:
+            return ImportCycleResult()
+        self._next_fax_check_at = current + timedelta(seconds=lifecycle.service.config.poll_seconds)
+        return lifecycle.run_once()
+
     def run_once(self, now: datetime | None = None) -> int:
         delivered = 0
         scheduled = 0
+        mail_result = ImportCycleResult()
+        fax_result = ImportCycleResult()
         errors = []
         try:
             delivered += self.notifications.deliver_pending()
@@ -167,7 +213,15 @@ class GovernorWorker:
             errors.append(f"{type(exc).__name__}: {exc}")
             if self.daily_digest is not None:
                 self.daily_digest.record_error(exc)
-        if scheduled:
+        try:
+            mail_result = self._poll_mail(now)
+        except Exception as exc:
+            errors.append(f"{type(exc).__name__}: {exc}")
+        try:
+            fax_result = self._poll_fax(now)
+        except Exception as exc:
+            errors.append(f"{type(exc).__name__}: {exc}")
+        if scheduled or mail_result.notification_count or fax_result.notification_count:
             try:
                 delivered += self.notifications.deliver_pending()
             except Exception as exc:
@@ -177,6 +231,8 @@ class GovernorWorker:
             status="degraded" if errors else "ready",
             delivered=delivered,
             scheduled=scheduled,
+            mail_result=mail_result,
+            fax_result=fax_result,
             error=error,
             now=now,
         )
@@ -190,20 +246,34 @@ class GovernorWorker:
         status: str,
         delivered: int,
         scheduled: int,
+        mail_result: ImportCycleResult,
+        fax_result: ImportCycleResult,
         error: str,
         now: datetime | None,
     ) -> None:
         _atomic_json(
             self.config.status_path,
             {
-                "version": 1,
+                "version": 2,
                 "status": status,
                 "lastCycleAt": _timestamp(now),
                 "lastDeliveredCount": delivered,
                 "lastScheduledNotificationCount": scheduled,
+                "lastMailProcessedCount": mail_result.processed,
+                "lastFaxActionCount": fax_result.processed,
                 "lastError": error,
                 "pushover": self.notifications.status(),
                 "dailyDigest": self.daily_digest.status() if self.daily_digest is not None else {"enabled": False},
+                "naverMail": (
+                    self.mail_lifecycle.poller.status()
+                    if self.mail_lifecycle is not None
+                    else {"enabled": False}
+                ),
+                "fax": (
+                    self.fax_lifecycle.service.status()
+                    if self.fax_lifecycle is not None
+                    else {"enabled": False}
+                ),
             },
         )
 
@@ -284,12 +354,29 @@ def main() -> None:
             digest_config,
             CalendarAdapterClient(CalendarAdapterConfig(calendar_url)),
         )
+    notifications = TextNotificationService(pushover)
+    mail_config = NaverMailConfig.from_env()
+    mail_lifecycle = None
+    if mail_config.enabled and mail_config.owner == "worker":
+        mail_lifecycle = NaverMailLifecycleWorker(
+            NaverMailPoller(mail_config),
+            notifications,
+        )
+    fax_config = FaxConfig.from_env()
+    fax_lifecycle = None
+    if fax_config.enabled and fax_config.owner == "worker":
+        fax_lifecycle = FaxLifecycleWorker(
+            FaxService(fax_config),
+            notifications,
+        )
     asyncio.run(
         _run(
             GovernorWorker(
                 config,
-                TextNotificationService(pushover),
+                notifications,
                 daily_digest,
+                mail_lifecycle,
+                fax_lifecycle,
             )
         )
     )

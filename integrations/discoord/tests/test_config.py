@@ -61,6 +61,16 @@ class SettingsTests(unittest.TestCase):
         )
         self.assertEqual(settings.mail_archive_channel_id, 300)
 
+    def test_worker_owned_mail_does_not_require_a_discord_archive_channel(self) -> None:
+        settings = Settings.from_env(
+            {**BASE_ENV, "MAIL_NAVER_ENABLED": "true", "MAIL_NAVER_OWNER": "worker"}
+        )
+        self.assertIsNone(settings.mail_archive_channel_id)
+
+    def test_rejects_unknown_mail_owner(self) -> None:
+        with self.assertRaisesRegex(ConfigurationError, "MAIL_NAVER_OWNER"):
+            Settings.from_env({**BASE_ENV, "MAIL_NAVER_OWNER": "both"})
+
     def test_organizer_also_requires_an_allowed_mail_channel(self) -> None:
         with self.assertRaises(ConfigurationError):
             Settings.from_env({**BASE_ENV, "MAIL_ORGANIZER_ENABLED": "true"})
@@ -112,6 +122,17 @@ class SettingsTests(unittest.TestCase):
         )
         self.assertEqual(settings.fax_archive_channel_id, 300)
         self.assertEqual(settings.fax_notification_channel_id, 301)
+
+    def test_worker_owned_fax_without_message_intake_needs_no_discord_channels(self) -> None:
+        settings = Settings.from_env(
+            {**BASE_ENV, "FAX_DISCORD_ENABLED": "true", "FAX_LIFECYCLE_OWNER": "worker"}
+        )
+        self.assertIsNone(settings.fax_archive_channel_id)
+        self.assertIsNone(settings.fax_notification_channel_id)
+
+    def test_rejects_unknown_fax_owner(self) -> None:
+        with self.assertRaisesRegex(ConfigurationError, "FAX_LIFECYCLE_OWNER"):
+            Settings.from_env({**BASE_ENV, "FAX_LIFECYCLE_OWNER": "both"})
 
     def test_fax_message_intake_is_disabled_by_default(self) -> None:
         self.assertFalse(Settings.from_env(BASE_ENV).fax_message_intake)

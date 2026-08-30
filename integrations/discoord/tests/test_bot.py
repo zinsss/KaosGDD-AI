@@ -36,6 +36,28 @@ class GovernorBotTests(unittest.IsolatedAsyncioTestCase):
 
         notifications.deliver_pending.assert_not_called()
 
+    async def test_worker_owned_mail_loop_performs_no_discord_polling(self) -> None:
+        poller = SimpleNamespace(
+            config=SimpleNamespace(owner="worker"),
+            scan=Mock(),
+        )
+        bot = SimpleNamespace(mail_poller=poller)
+
+        await GovernorBot._mail_loop(bot)  # type: ignore[arg-type]
+
+        poller.scan.assert_not_called()
+
+    async def test_worker_owned_fax_loop_performs_no_discord_polling(self) -> None:
+        transport = SimpleNamespace(cycle=AsyncMock())
+        bot = SimpleNamespace(
+            discord_fax=transport,
+            fax_service=SimpleNamespace(config=SimpleNamespace(owner="worker")),
+        )
+
+        await GovernorBot._fax_loop(bot)  # type: ignore[arg-type]
+
+        transport.cycle.assert_not_awaited()
+
     async def test_daily_digest_posts_simple_morning_and_event_watch_alerts(self) -> None:
         channel = SimpleNamespace(send=AsyncMock(return_value=SimpleNamespace(id=701)))
         daily_digest = SimpleNamespace(

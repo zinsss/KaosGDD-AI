@@ -32,6 +32,7 @@ from kaos_governor.mail import (
     NaverMailPoller,
 )
 from kaos_governor.fax import FaxConfig, FaxError, FaxService
+from kaos_governor.import_workers import mail_text_notification
 from kaos_governor.memos import MemoMutationService, MemosConfig, MemosService
 from kaos_governor.notifications import PushoverConfig, TextNotification, TextNotificationService
 from kaos_governor.postgres_durable import PostgresDurableGovernorStore
@@ -681,7 +682,11 @@ class GovernorBot(discord.Client):
                 self._daily_digest_loop(),
                 name="governor-daily-digest",
             )
-        if self.mail_poller.config.enabled and self._mail_task is None:
+        if (
+            self.mail_poller.config.enabled
+            and self.mail_poller.config.owner == "discord"
+            and self._mail_task is None
+        ):
             self._mail_task = asyncio.create_task(self._mail_loop(), name="governor-naver-mail")
         if self.mail_organizer.config.enabled and self._organizer_task is None:
             if self.discord_mail_organizer is None:
@@ -694,9 +699,24 @@ class GovernorBot(discord.Client):
                     self._mail_organizer_loop(),
                     name="governor-naver-mail-organizer",
                 )
-        if self.discord_fax is not None and self._fax_task is None:
+        if (
+            self.discord_fax is not None
+            and self.fax_service.config.owner == "discord"
+            and self._fax_task is None
+        ):
             await self.discord_fax.cycle()
             self._fax_task = asyncio.create_task(self._fax_loop(), name="governor-fax")
+        elif (
+            self.discord_fax is not None
+            and self.fax_service.config.owner == "worker"
+            and self.fax_service.config.message_intake
+            and self._fax_task is None
+        ):
+            await self.discord_fax.cleanup_cycle()
+            self._fax_task = asyncio.create_task(
+                self._fax_cleanup_loop(),
+                name="governor-fax-source-cleanup",
+            )
         if self.discord_calendar is not None:
             try:
                 await self.discord_calendar.ensure_messages()
@@ -1064,6 +1084,8 @@ class GovernorBot(discord.Client):
             await asyncio.sleep(self.daily_digest.config.poll_seconds)
 
     async def _mail_loop(self) -> None:
+        if self.mail_poller.config.owner != "discord":
+            return
         loop = asyncio.get_running_loop()
 
         def await_discord(coroutine):
@@ -1104,7 +1126,7 @@ class GovernorBot(discord.Client):
             await asyncio.sleep(self.mail_organizer.config.scheduler_poll_seconds)
 
     async def _fax_loop(self) -> None:
-        if self.discord_fax is None:
+        if self.discord_fax is None or self.fax_service.config.owner != "discord":
             return
         while not self.is_closed():
             try:
@@ -1112,6 +1134,21 @@ class GovernorBot(discord.Client):
             except Exception as exc:
                 self.fax_service.record_error(exc)
                 LOGGER.exception("Fax cycle failed")
+            await asyncio.sleep(self.fax_service.config.poll_seconds)
+
+    async def _fax_cleanup_loop(self) -> None:
+        if (
+            self.discord_fax is None
+            or self.fax_service.config.owner != "worker"
+            or not self.fax_service.config.message_intake
+        ):
+            return
+        while not self.is_closed():
+            try:
+                await self.discord_fax.cleanup_cycle()
+            except Exception as exc:
+                self.fax_service.record_error(exc)
+                LOGGER.exception("Fax source cleanup cycle failed")
             await asyncio.sleep(self.fax_service.config.poll_seconds)
 
     async def _refresh_calendar_surfaces(self) -> None:
@@ -1265,18 +1302,8 @@ class GovernorBot(discord.Client):
             render_mail_summary(mail, self.mail_poller.config.max_attachment_bytes),
             allowed_mentions=NO_MENTIONS,
         )
-        identity = "\0".join(
-            (mail.mailbox, str(mail.uid), mail.received_at, mail.sender, mail.subject)
-        )
-        key = hashlib.sha256(identity.encode("utf-8")).hexdigest()
         await self._queue_text_notification(
-            TextNotification(
-                key=f"mail:message:{key}",
-                category="mail",
-                title="",
-                message="Mail received.",
-                priority=0,
-            )
+            mail_text_notification(mail)
         )
         return sent
 

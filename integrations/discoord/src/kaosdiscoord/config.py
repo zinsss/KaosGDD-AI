@@ -160,10 +160,13 @@ class Settings:
             _positive_int(raw_organizer, "MAIL_ORGANIZER_DISCORD_CHANNEL_ID") if raw_organizer else None
         )
         mail_enabled = _boolean(source, "MAIL_NAVER_ENABLED")
+        mail_owner = source.get("MAIL_NAVER_OWNER", "discord").strip().lower() or "discord"
+        if mail_owner not in {"discord", "worker"}:
+            raise ConfigurationError("MAIL_NAVER_OWNER must be discord or worker")
         organizer_enabled = _boolean(source, "MAIL_ORGANIZER_ENABLED")
-        if (mail_enabled or organizer_enabled) and mail_archive_channel_id is None:
+        if ((mail_enabled and mail_owner == "discord") or organizer_enabled) and mail_archive_channel_id is None:
             raise ConfigurationError(
-                "MAIL_ARCHIVE_DISCORD_CHANNEL_ID is required when Naver mail or its organizer is enabled"
+                "MAIL_ARCHIVE_DISCORD_CHANNEL_ID is required for Discord-owned Naver mail or its organizer"
             )
         if organizer_enabled and mail_organizer_channel_id is None:
             raise ConfigurationError(
@@ -176,6 +179,9 @@ class Settings:
             if channel_id is not None and channel_id not in allowed_channels:
                 raise ConfigurationError(f"{name} must be in DISCORD_ALLOWED_CHANNEL_IDS")
         fax_enabled = _boolean(source, "FAX_DISCORD_ENABLED")
+        fax_owner = source.get("FAX_LIFECYCLE_OWNER", "discord").strip().lower() or "discord"
+        if fax_owner not in {"discord", "worker"}:
+            raise ConfigurationError("FAX_LIFECYCLE_OWNER must be discord or worker")
         fax_message_intake = _boolean(source, "FAX_DISCORD_MESSAGE_INTAKE")
         if fax_message_intake and not fax_enabled:
             raise ConfigurationError("FAX_DISCORD_ENABLED must be true when fax message intake is enabled")
@@ -189,10 +195,14 @@ class Settings:
             if raw_fax_notification
             else None
         )
-        if fax_enabled and (fax_archive_channel_id is None or fax_notification_channel_id is None):
+        if (
+            fax_enabled
+            and (fax_owner == "discord" or fax_message_intake)
+            and (fax_archive_channel_id is None or fax_notification_channel_id is None)
+        ):
             raise ConfigurationError(
                 "FAX_ARCHIVE_DISCORD_CHANNEL_ID and FAX_NOTIFICATION_DISCORD_CHANNEL_ID are required "
-                "when FAX_DISCORD_ENABLED=true"
+                "for Discord-owned fax polling or Discord message intake"
             )
         for name, channel_id in (
             ("FAX_ARCHIVE_DISCORD_CHANNEL_ID", fax_archive_channel_id),
