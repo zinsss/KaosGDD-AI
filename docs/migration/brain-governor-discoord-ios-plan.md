@@ -19,8 +19,9 @@ H4, office-service, and stateful-service cutovers.
   result.
 - Active implementation: Phase 3 task-handler slice 1 is complete after H3
   production observation. Slice 2 routes direct Discord task/supplies writers
-  through Governor and was deployed to H3 on 2026-08-30; its production
-  observation gate remains open for one normal approved Brain task.
+  through Governor and completed its H3 production observation on 2026-08-30
+  after correcting and replay-verifying a false terminal UI failure. Memos are
+  the next Phase 3 mutation domain.
 - H4 Brain correction: Korean task-create requests using `만들어` or `생성`
   were corrected and deployed in commit `99011fb` on 2026-08-30. This was an
   intent parser deployment only and did not promote the Phase 3 Governor
@@ -38,7 +39,7 @@ H4, office-service, and stateful-service cutovers.
 | 0 | Audit current architecture and flows | Complete | No change | Complete |
 | 1 | Establish the Governor operation boundary | Complete and tested | Deployed and observed 2026-08-30 | Complete |
 | 2 | Persist operations, confirmations, and pending payloads | Complete and tested | Deployed and observed 2026-08-30 | Complete |
-| 3 | Route every meaningful mutation through Governor | Task slices 1 and 2 complete and tested | Slice 1 observed; slice 2 deployed 2026-08-30 | Production observation |
+| 3 | Route every meaningful mutation through Governor | Task slices 1 and 2 complete and tested; later domains remain | Task slices 1 and 2 observed 2026-08-30 | In progress |
 | 4 | Make Brain transport-neutral | Not started | Not deployed | Planned |
 | 5 | Isolate KaosDiscoord and notification delivery | Not started | Not deployed | Planned |
 | 6 | Add stable iOS APIs and lightweight clients | Pilot read endpoint only | Pilot active | Planned |
@@ -327,9 +328,8 @@ Production promotion evidence (2026-08-30):
 
 ## Phase 3 — Route Mutations Through Governor
 
-Status: in progress. Task tool handler slice 1 completed H3 production
-observation on 2026-08-30. Direct Discord task/supplies slice 2 was deployed
-to H3 on 2026-08-30 and is under production observation; later writers and
+Status: in progress. Task tool handler slice 1 and direct Discord task/supplies
+slice 2 completed H3 production observation on 2026-08-30; later writers and
 domains remain.
 
 Objective:
@@ -355,7 +355,7 @@ Mutation inventory and current routing:
 | Surface | Current writer path | Governor lifecycle | Domain handler | Migration state |
 | --- | --- | --- | --- | --- |
 | Brain/iOS task proposals | `BrainToolServer` confirmation routes | Yes | `TaskMutationService` | Slice 1 complete |
-| Discord task/supply buttons and channel commands | `DiscordTasksSurface` to governed task execution | Yes | `TaskMutationService` | Slice 2 deployed; surfaces configured inactive |
+| Discord task/supply buttons and channel commands | `DiscordTasksSurface` to governed task execution | Yes | `TaskMutationService` | Slice 2 complete; surfaces configured inactive |
 | Portal task/event writes | Calendar adapter proxy | No | No | Later task/event slice |
 | Recurring task synchronization | Governor API recurring service to calendar adapter | Partial domain ownership, no durable operation | Recurring service only | Later task slice |
 | Memos proposals | `BrainToolServer` confirmation routes | Yes | No | Domain 2 |
@@ -481,8 +481,8 @@ Slice 2 production gate:
 - [x] Review and commit
 - [x] Controlled H3 deployment
 - [x] Verify configured inactive surfaces remain inactive
-- [ ] Verify enabled Brain task path remains compatible
-- [ ] Slice observation gate
+- [x] Verify enabled Brain task path remains compatible
+- [x] Slice observation gate
 
 Slice 2 production promotion evidence (2026-08-30):
 
@@ -507,8 +507,8 @@ Slice 2 production promotion evidence (2026-08-30):
 - PostgreSQL retained all three earlier operations as completed and contains
   zero pending durable payloads after deployment.
 - H4 doctor reports Governor reachability, Discord readiness, and Brain tools
-  enabled. A normal post-deployment approved task remains required to close
-  the end-to-end compatibility and slice observation checks.
+  enabled. The normal post-deployment approved-task evidence and its terminal
+  response replay are recorded below.
 
 Slice 2 observation incident and correction (2026-08-30):
 
@@ -529,8 +529,22 @@ Slice 2 observation incident and correction (2026-08-30):
   receipts.
 - Local correction validation passed 78 focused approval/tool tests, all 221
   Governor tests with 10 PostgreSQL-only tests skipped in this unit run, and
-  the full 352-test Discord suite. Production promotion and replay of the
-  observed completed confirmation remain required before closing the gate.
+  the full 352-test Discord suite.
+- Commit `53d8996` was deployed through the guarded H3 restart. The preceding
+  healthy image is retained as
+  `kaosgdd-ai-governor-discord:rollback-f6b8257` with image ID
+  `sha256:8ea38f0687593f46b7e3c3d00854897343fb0125edfbd6fdf6921d50d24f5baf`.
+  The corrected running image is
+  `sha256:d3d421dc9f46e69515b9fb0a6d354ce4de89085a2b147365e4be05c4b844dc40`.
+- Replaying the exact completed production confirmation returned HTTP success,
+  `status=completed`, `replayed=true`, and the original authoritative task UID.
+  The operation count remained four completed, the observed operation retained
+  exactly four audit records, and the pending-payload count remained zero, so
+  the replay performed no second domain write or lifecycle transition.
+- The corrected H3 container is healthy with zero restarts; Discord startup is
+  complete, direct task/supplies surfaces remain inactive, and H4 doctor
+  reports Governor, Discord, and Brain tools reachable. This closes slice 2's
+  production observation gate.
 
 H4 task-create routing correction:
 
@@ -721,6 +735,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | 3 | Routed direct Discord task/supplies writes through shared governed task execution | 11 focused Governor + 59 task-surface tests; 221 Governor discovered with all 10 PostgreSQL tests passed separately; 351 Discord + 321 Brain tests passed | None; slice 2 validated locally, production direct surfaces remain disabled |
 | 2026-08-30 | 3 | Promoted direct Discord task/supplies governed execution to H3 | Commit `1b9405a`; installed-path inspection confirms governed delegation and shared durable store; container healthy with zero restarts; Discord and H4 dependencies ready; 3 completed operations retained and 0 pending payloads | Slice 2 production observation started; direct task/supplies surfaces remain disabled; rollback image `kaosgdd-ai-governor-discord:rollback-1cc96e1` retained |
 | 2026-08-30 | 3 | Diagnosed a false Discord failure after the slice 2 observation task had completed | Operation completed once and authoritative UID matched; a repeated approval hit correct payload cleanup and received `operation_payload_not_found`; idempotent terminal receipt tests pass for the same actor while another actor is rejected | Task data is correct; approval-replay correction validated locally and awaiting H3 promotion |
+| 2026-08-30 | 3 | Promoted the approval-replay correction and closed task slice 2 observation | Exact completed confirmation replay returned the original UID with no second write; 4 completed operations and 0 payloads retained; container healthy with zero restarts; Discord and H4 dependencies ready | Task slices 1 and 2 complete; rollback image `kaosgdd-ai-governor-discord:rollback-f6b8257` retained; Memos is next |
 
 ## How to Update This Tracker
 
