@@ -55,9 +55,10 @@ H4, office-service, and stateful-service cutovers.
 - Phase 5 worker slice 4 is deployed in commit `3d98e40`: Naver mail and fax
   polling are owned by `kaos-governor-worker` without uploading messages or
   attachments to Discord. Organic mail/fax observation is active.
-- Phase 6 slice 1 is locally validated: the shared personal/family PWA accepts
-  a real `#/calendar?date=YYYY-MM-DD` deep link for Shortcuts, ignores invalid
-  dates, and performs no backend operation. Production is unchanged.
+- Phase 6 slice 1 is deployed in commit `0d9448a`: the shared personal/family
+  PWA accepts a real `#/calendar?date=YYYY-MM-DD` deep link for Shortcuts,
+  ignores invalid dates, and performs no backend operation. Both host profiles
+  serve the committed helper and the portal retained zero restarts.
 - Database schema in production: additive migration `005`.
 - Working rule: finish and verify one boundary before moving another domain.
 
@@ -71,7 +72,7 @@ H4, office-service, and stateful-service cutovers.
 | 3 | Route every meaningful mutation through Governor | Task slices and Memos slices 1-2 implemented | Task slices and Memos slice 1 observed; Memos slice 2 deployed 2026-08-30 | Production observation |
 | 4 | Make Brain transport-neutral | Not started | Not deployed | Planned |
 | 5 | Retain brain-only KaosDiscoord; detach workers and notifications | Package, Pushover, digest, and fax/mail worker slices implemented | Digest and fax/mail observations active | In progress |
-| 6 | Retain the personal PWA and add stable iOS integrations | Selected-date deep-link slice started; pilot read endpoint exists | Pilot active | In progress |
+| 6 | Retain the personal PWA and add stable iOS integrations | Selected-date deep-link slice and pilot read endpoint implemented | Deep-link slice deployed 2026-08-30; pilot active | In progress |
 | 7 | Remove compatibility debt and finish documentation/CI | Not started | Not deployed | Planned |
 | 8 | Add governed Brain system operations | Architecture accepted; current Guard remains deny-by-default | Not deployed | Planned |
 
@@ -1212,6 +1213,26 @@ Phase 6 slice 1 local validation (2026-08-30):
 - no production asset, API, database, Radicale object, credential, or runtime
   process changed
 
+Phase 6 slice 1 production deployment (2026-08-30):
+
+- commit `0d9448a` was pushed to `main` and the clean H4 checkout was
+  fast-forwarded to the same commit without restarting Brain
+- `family-portal-sync` copied only the committed static source/config set,
+  validated nginx, reloaded it, and passed migrated-service preflight
+- internal edge requests for both `kaosgdd.net` and `family.kaosgdd.net`
+  returned HTTP 200 for the index and `deep-links.js`
+- the deployed helper matches the repository source byte-for-byte; the portal
+  container is running with zero restarts
+- the post-sync service preflight passes and the H4 doctor reports repository,
+  Brain, KaosAI, Ollama, Governor, imaging, and system-controller dependencies
+  ready
+- no Governor, worker, Radicale, mail, fax, Paperless, PACS, or Brain runtime
+  was restarted or migrated
+
+Rollback: restore the prior portal static assets from commit `d70dabf`, run
+`family-portal-sync`, and retain every backend and source-of-truth service
+unchanged.
+
 ## Phase 7 — Cleanup, CI, and Deprecation
 
 Status: planned.
@@ -1321,6 +1342,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | Decision | Retained the personal KaosGDD PWA as the primary visual console with Shortcuts as the iOS integration layer | Architecture, authority, personal/family scope, native CalDAV relationship, Scriptable optionality, and incremental delivery recorded | Supersedes the earlier no-personal-PWA assumption; no production route changed |
 | 2026-08-30 | Decision | Defined Brain's future as both a KaosGDD language gateway and a governed system-operations console | Typed operation, host-executor, confirmation, upgrade, PACS-isolation, and availability boundaries recorded | Current system/restart Guard rejection remains active; no privileged capability added |
 | 2026-08-30 | 6 | Implemented and locally validated the first personal-PWA/Shortcut deep link | Four focused tests, both portal syntax checks, deploy-helper Bash validation, `git diff --check`, H3 `services-preflight`, 250 Governor tests, and 368 KaosDiscoord tests passed; CI covers the route helper | `#/calendar?date=YYYY-MM-DD` is ready for controlled sync; no backend or production change |
+| 2026-08-30 | 6 | Promoted the selected-date PWA/Shortcut deep link | Commit `0d9448a`; nginx validation/reload and service preflight passed; both personal and Family host profiles returned HTTP 200 and served a byte-matching helper; portal zero restarts; H4 synced and doctor healthy | Slice 1 deployed; rollback is the prior static source at `d70dabf`; no backend/runtime restart or data migration |
 
 ## How to Update This Tracker
 

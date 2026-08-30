@@ -2,7 +2,7 @@
 
 Decision date: 2026-08-30
 
-Status: accepted; incremental implementation started.
+Status: accepted; the selected-date deep-link slice was deployed on 2026-08-30.
 
 ## Decision
 
