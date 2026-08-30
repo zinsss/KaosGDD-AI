@@ -6,7 +6,7 @@ application-boundary work has a separate canonical
 The two plans use independent phase numbers; always name the plan as well as
 the phase when recording progress.
 
-## Implementation status on 2026-08-28
+## Implementation status on 2026-08-30
 
 This remains the rollback-aware migration contract, but several phases are now
 implemented in production:
@@ -16,9 +16,10 @@ implemented in production:
 - H4 KaosBrain is active with narrow Governor tools and guarded KaosAI/OpenClaw
   chat.
 - Discord direct operational surfaces are active during transition, but the
-  accepted target retains only the H4 `#brain` topic. Native iOS apps, scoped
-  mobile clients, service PWAs, and Pushover replace the other channels under
-  the [brain-only decision](../architecture/discord-brain-only.md).
+  accepted target retains only the H4 `#brain` topic. The personal KaosGDD PWA,
+  scoped Shortcuts, native iOS synchronization/notifications, service PWAs,
+  and Pushover replace the other channels under the
+  [brain-only decision](../architecture/discord-brain-only.md).
 - Naver mail, Memos, Paperless inbox/search, calendar, task confirmations,
   system status, and imaging second-look are active Governor workflows.
 - Fax uses the authenticated Office Fax Connector plus the repository-owned
@@ -166,10 +167,10 @@ Rollback:
 
 ### Phase 5: Web Edge to H3+
 
-- Deploy Family KaosGDD as the supported custom web application.
-- Do not deploy the main KaosGDD UI. Retain its repository as reference only.
-  The old `kaosgdd-portal` personal/main route is deprecated; keep only the
-  family portal surface needed for `family.kaosgdd.net`.
+- Deploy the canonical shared KaosGDD PWA with separate personal
+  (`kaosgdd.net`) and Family (`family.kaosgdd.net`) profiles.
+- Preserve the personal colors and variations while enforcing personal/family
+  scope on the server. Do not maintain a second divergent live frontend copy.
 - Keep ready-made backend services under their native operational names. They
   remain part of the KaosGDD project deployment, but do not rename Radicale,
   Memos, Vaultwarden, SFTPGo, Caddy, or cloudflared into `kaosgdd-*` services.
@@ -215,16 +216,19 @@ Failure must affect only AI chat, not Family KaosGDD or native services.
 - Archive its Compose/config/state for rollback reference only; do not restart
   it automatically during rollback without an explicit decision.
 
-### Phase 8.1: Personal UI simplification
+### Phase 8.1: Personal PWA and iOS integration
 
-- Verify personal events in iOS Calendar.
-- Verify personal and family tasks plus the supplies list in iOS Reminders.
-- Verify Discord covers personal Memos, document, mail, fax, rule, and
-  orchestration workflows.
-- Use upstream service web UIs only when direct backend access is useful.
-- Confirm the main KaosGDD web UI is not part of the target deployment. Start a
-  future personal UI only if this parity check exposes a concrete unmet need.
-- Family KaosGDD is explicitly retained.
+- Verify calendar, tasks, supplies, fax, Memos, and document workflows in the
+  retained personal KaosGDD PWA.
+- Verify iOS Calendar and Reminders continue Radicale synchronization and
+  native scheduled notifications without being the preferred daily UI.
+- Add scoped Shortcuts for Action Button, Siri, Share Sheet, quick actions, and
+  exact PWA deep links. Keep Scriptable optional.
+- Use Pushover for minimal immediate alerts and retain Discord only for
+  conversational `#brain` workflows.
+- Keep upstream Memos and Paperless UIs available for advanced operations while
+  preserving their authority.
+- Family KaosGDD remains separately scoped and explicitly retained.
 
 ### Phase 9: Reduce the Office H3+
 
@@ -239,10 +243,11 @@ Target services that remain:
 - internal reverse proxy only if still required
 
 Rename old `kaosgdd-brain` to transitional `kaosgovernor-legacy-api` during the H3 move if
-it still has unported deterministic API duties. Remove `kaosgovernor-legacy-api`, any
-remaining main personal web, adapter, edge, or notification containers only
-after their KaosGovernor replacements have passed the observation period.
-Family KaosGDD is retained.
+it still has unported deterministic API duties. Remove
+`kaosgovernor-legacy-api`, obsolete duplicate frontend deployments, adapters,
+edge processes, or notification containers only after their KaosGovernor
+replacements have passed the observation period. The canonical personal and
+Family KaosGDD portal remains deployed.
 
 ## Production Cutover Rules
 

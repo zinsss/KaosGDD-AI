@@ -522,7 +522,7 @@ version, and expiry. A conversational `yes` alone is insufficient.
 | Route | Policy |
 | --- | --- |
 | `family.kaosgdd.net` | Cloudflare Access with approved Google accounts |
-| `kaosgdd.net` | Settings/admin only; no full personal portal unless a future UI is approved |
+| `kaosgdd.net` | Personal KaosGDD PWA behind personal authentication and scoped Governor APIs |
 | service-native web UIs | Separate least-privilege Access policy or Tailscale-only access |
 | CalDAV endpoint | Native TLS + Radicale credentials; no interactive Access challenge |
 | Vaultwarden endpoint | Native client-compatible HTTPS and Vaultwarden authentication |
@@ -741,17 +741,19 @@ Actions:
 
 1. Verify H4 `#brain` can answer, propose, confirm, and return explicitly
    requested results/files through Governor.
-2. Verify Paperless/Memos PWAs, iOS Share Sheet capture, Pushover, and scoped
-   Shortcuts/Scriptable replace the direct operational Discord surfaces.
-3. Verify iOS Calendar handles personal/shared events and iOS Reminders handles
-   personal tasks, family tasks, and supplies without the main web UI.
+2. Verify the personal KaosGDD PWA, Paperless/Memos PWAs, iOS Share Sheet
+   capture, Pushover, and scoped Shortcuts replace the direct operational
+   Discord surfaces. Scriptable remains optional for focused UI or widgets.
+3. Verify the personal PWA handles daily calendar, task, and supplies workflows
+   while iOS Calendar/Reminders continue Radicale synchronization and native
+   scheduled notifications.
 4. Move every non-Discord worker out of the H3 Discord gateway lifecycle and
    verify it with the gateway stopped in a controlled exercise.
 5. Resolve required retention/export for inbox, mail/fax, notification, and
    alert history; then disable direct channel intake one domain at a time.
 6. Verify upstream backend UIs remain directly reachable when needed.
-7. Confirm no main KaosGDD UI is deployed; keep its repository only as
-   reference. Keep Family KaosGDD deployed.
+7. Confirm the personal and Family KaosGDD profiles remain deployed from the
+   canonical shared portal source with separate server-enforced scopes.
 8. Stop KaosTelegram after retained workflows are verified; archive its
    Compose/config/state for rollback reference only.
 
@@ -769,10 +771,10 @@ Actions:
 1. Migrate Vaultwarden with export, backup, and client tests.
 2. Migrate SFTPGo after classifying clinic versus personal storage.
 3. Retire RHWP only after confirming Polaris/manual workflows cover all needs.
-4. Stop transitional `kaosgovernor-legacy-api`, calendar adapter, any remaining main
-   personal portal, and bridge containers after their KaosGovernor
-   replacements pass observation. KaosTelegram is retired rather than migrated.
-   Do not stop Family KaosGDD.
+4. Stop transitional `kaosgovernor-legacy-api`, obsolete calendar adapters,
+   duplicate portal deployments, and bridge containers after their
+   KaosGovernor replacements pass observation. KaosTelegram is retired rather
+   than migrated. Do not stop the canonical personal/Family KaosGDD portal.
 5. Keep archived Compose/config/data through their observation periods.
 
 No PACS, DICOM, Paperless archive, fax spool, or RustDesk migration is included.
@@ -806,12 +808,14 @@ The architecture is complete only when:
 - H4 contains no authoritative application data or broad production authority.
 - H3+ owns deterministic workflows and durable personal/family backends.
 - Discord `#brain` is the only active Kaos Discord topic.
-- Pushover, iOS native apps, scoped mobile clients, and service PWAs replace
-  the retired direct Discord surfaces.
+- the personal KaosGDD PWA, Pushover, scoped Shortcuts, native iOS clients, and
+  service PWAs replace the retired direct Discord surfaces.
 - Family KaosGDD remains a complete, separately scoped family application.
-- native iOS Calendar/Reminders are the verified personal calendar, task, and
-  supplies interfaces.
-- service-native web interfaces remain available without a custom main portal.
+- the personal PWA is the verified primary visual interface for calendar,
+  tasks, supplies, fax, Memos, and documents.
+- native iOS Calendar/Reminders remain verified synchronization and scheduled
+  notification clients against Radicale.
+- service-native web interfaces remain available alongside the personal PWA.
 - Office Kaos continues PACS, DICOM, Paperless, fax, and RustDesk during H3/H4
   outages.
 - every stateful service has tested backup and restore procedures.

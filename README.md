@@ -15,8 +15,8 @@ Architecture, deterministic orchestration, AI integrations, and deployment plans
 - **KaosDiscoord**: replaceable Discord transport for messages, attachments, IDs, controls, and response formatting. Its canonical package is `integrations/discoord`; the historical H3 service name remains temporarily for rollback compatibility.
 - **Family AI**: a separately scoped assistant served by H4 or a future optional worker.
 - **Authoritative backends**: Radicale, Memos, Paperless, HylaFAX, and other service-owned data stores.
-- **Family KaosGDD**: the retained family web interface and embedded family AI chat. The frontend remains in the `zinsss/KaosGDD` repository.
-- **Personal clients**: Discord for orchestration and native iOS Calendar/Reminders for calendar, tasks, and supplies. No main KaosGDD web UI is planned; it may be designed later only if a concrete need appears.
+- **Family KaosGDD**: the retained family-scoped web interface and embedded family AI chat. Its canonical shared personal/family PWA source is `apps/family-portal`.
+- **Personal clients**: the retained `kaosgdd.net` PWA is the primary visual console; iOS Shortcuts provides system integration and quick actions, native Calendar/Reminders continue synchronization and scheduled notifications, Pushover provides immediate alerts, and Discord retains only the conversational `#brain` surface.
 
 KaosBrain and Family AI never become sources of truth. They call narrow KaosGovernor tools. KaosGovernor applies deterministic validation before changing an authoritative backend. Deterministic clients may call Governor without invoking Brain.
 

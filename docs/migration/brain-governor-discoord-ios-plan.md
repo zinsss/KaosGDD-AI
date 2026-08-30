@@ -1343,6 +1343,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | Decision | Defined Brain's future as both a KaosGDD language gateway and a governed system-operations console | Typed operation, host-executor, confirmation, upgrade, PACS-isolation, and availability boundaries recorded | Current system/restart Guard rejection remains active; no privileged capability added |
 | 2026-08-30 | 6 | Implemented and locally validated the first personal-PWA/Shortcut deep link | Four focused tests, both portal syntax checks, deploy-helper Bash validation, `git diff --check`, H3 `services-preflight`, 250 Governor tests, and 368 KaosDiscoord tests passed; CI covers the route helper | `#/calendar?date=YYYY-MM-DD` is ready for controlled sync; no backend or production change |
 | 2026-08-30 | 6 | Promoted the selected-date PWA/Shortcut deep link | Commit `0d9448a`; nginx validation/reload and service preflight passed; both personal and Family host profiles returned HTTP 200 and served a byte-matching helper; portal zero restarts; H4 synced and doctor healthy | Slice 1 deployed; rollback is the prior static source at `d70dabf`; no backend/runtime restart or data migration |
+| 2026-08-30 | Decision | Reconciled the host migration plan, production plan, and repository overview with the retained personal-PWA decision | Cross-document search removed the stale no-personal-portal and native-UI-primary assumptions | Documentation only; deployed services and data unchanged |
 
 ## How to Update This Tracker
 
