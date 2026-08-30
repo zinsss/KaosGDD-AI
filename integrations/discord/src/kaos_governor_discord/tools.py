@@ -26,7 +26,13 @@ from kaos_governor import (
 )
 from kaos_governor.calendar import CalendarAdapterClient, CalendarAdapterError, profile_host, render_month_png
 from kaos_governor.documents import DocumentIntakeError, PaperlessDocumentService
-from kaos_governor.memos import MemosError, MemosService
+from kaos_governor.memos import (
+    MemoMutationCommand,
+    MemoMutationError,
+    MemoMutationService,
+    MemosError,
+    MemosService,
+)
 from kaos_governor.tasks import TaskMutationCommand, TaskMutationError, TaskMutationService
 
 from .calendar import month_markers, visible_month_grid_range, weather_agenda_summary, weather_items_by_date
@@ -156,6 +162,7 @@ PendingMutation = (
     | PendingMemoEdit
     | PendingDocumentMetadata
 )
+MemoPendingMutation = PendingMemoCreate | PendingMemoDelete | PendingMemoEdit
 
 PENDING_MUTATION_KINDS: tuple[tuple[type, str], ...] = (
     (PendingTaskDueUpdate, "task.update_due"),
@@ -306,6 +313,7 @@ class BrainToolServer:
         today_provider: Callable[[], date] | None = None,
         durable_store: DurableOperationStore | None = None,
         task_mutations: TaskMutationService | None = None,
+        memo_mutations: MemoMutationService | None = None,
         imaging_second_look: ImagingSecondLookClient | None = None,
         second_look_status_path: Path | None = None,
         second_look_status_callback: Callable[[], Awaitable[None]] | None = None,
@@ -326,6 +334,7 @@ class BrainToolServer:
         self._today_provider = today_provider or kst_today
         self._operations = GovernorOperations(durable_store)
         self._task_mutations = task_mutations or TaskMutationService(calendar_adapter)
+        self._memo_mutations = memo_mutations or MemoMutationService(memos)
         self._imaging_second_look_client = imaging_second_look or ImagingSecondLookClient(ImagingSecondLookConfig())
         self._second_look_rate: dict[str, list[datetime]] = {}
         self._second_look_response_cache: dict[str, tuple[datetime, dict[str, Any]]] = {}
@@ -1810,19 +1819,28 @@ class BrainToolServer:
                 result_uid = str(document.document_id)
                 document_payload = _completed_document_metadata_payload(pending_document_metadata, document.as_dict())
             else:
+                pending_memo = next(
+                    (
+                        candidate
+                        for candidate in (pending_memo_create, pending_memo_delete, pending_memo_edit)
+                        if candidate is not None
+                    ),
+                    None,
+                )
+                assert pending_memo is not None
+                command = _memo_mutation_command(pending_memo, operation.operation_type)
+                memo_result = await asyncio.to_thread(self._memo_mutations.execute, command)
+                result_uid = memo_result.name
                 if pending_memo_create is not None:
-                    memo = await asyncio.to_thread(self._memos.create, pending_memo_create.content)
-                    result_uid = memo.name
-                    memo_payload = {"name": memo.name, "content": memo.content, "action": "create"}
+                    memo_payload = {
+                        "name": memo_result.name,
+                        "content": memo_result.content,
+                        "action": "create",
+                    }
                 elif pending_memo_edit is not None:
-                    memo = await asyncio.to_thread(self._memos.update, pending_memo_edit.name, pending_memo_edit.new_content)
-                    result_uid = memo.name
-                    memo_payload = _completed_memo_edit_payload(pending_memo_edit, memo.content)
+                    memo_payload = _completed_memo_edit_payload(pending_memo_edit, memo_result.content)
                 else:
-                    assert pending_memo_delete is not None
-                    await asyncio.to_thread(self._memos.delete, pending_memo_delete.name)
-                    result_uid = pending_memo_delete.name
-                    memo_payload = _pending_memo_delete_payload(pending_memo_delete)
+                    memo_payload = _pending_memo_delete_payload(pending_memo)
             self._operations.complete(operation.operation_id, result={"uid": result_uid})
             if (
                 pending_memo_create is None
@@ -1834,6 +1852,9 @@ class BrainToolServer:
         except DurableGovernorError as exc:
             return web.json_response({"error": str(exc)}, status=400)
         except TaskMutationError as exc:
+            self._operations.fail(operation.operation_id, error_code=exc.code)
+            return web.json_response({"error": exc.code}, status=400)
+        except MemoMutationError as exc:
             self._operations.fail(operation.operation_id, error_code=exc.code)
             return web.json_response({"error": exc.code}, status=400)
         except CalendarAdapterError as exc:
@@ -2207,6 +2228,31 @@ def _task_mutation_command(
         payload=pending.payload,
         uid=uid,
         collection_id=collection_id,
+    )
+
+
+def _memo_mutation_command(
+    pending: MemoPendingMutation,
+    operation_type: str,
+) -> MemoMutationCommand:
+    if isinstance(pending, PendingMemoCreate):
+        expected_operation = "create"
+        name = ""
+        content = pending.content
+    elif isinstance(pending, PendingMemoEdit):
+        expected_operation = "edit"
+        name = pending.name
+        content = pending.new_content
+    else:
+        expected_operation = "delete"
+        name = pending.name
+        content = pending.content
+    if operation_type != expected_operation:
+        raise MemoMutationError("memo_operation_payload_mismatch")
+    return MemoMutationCommand(
+        operation_type=operation_type,
+        name=name,
+        content=content,
     )
 
 

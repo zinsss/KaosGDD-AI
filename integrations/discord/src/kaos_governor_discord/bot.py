@@ -32,7 +32,7 @@ from kaos_governor.mail import (
     NaverMailPoller,
 )
 from kaos_governor.fax import FaxConfig, FaxError, FaxService
-from kaos_governor.memos import MemosConfig, MemosService
+from kaos_governor.memos import MemoMutationService, MemosConfig, MemosService
 from kaos_governor.notifications import PushoverConfig, TextNotification, TextNotificationService
 from kaos_governor.postgres_durable import PostgresDurableGovernorStore
 from kaos_governor.tasks import TaskMutationService
@@ -366,6 +366,7 @@ class GovernorBot(discord.Client):
         fax_config = FaxConfig.from_env()
         self.fax_service = FaxService(fax_config)
         self.memos = MemosService(MemosConfig.from_env())
+        self.memo_mutations = MemoMutationService(self.memos)
         self.discord_memos = (
             DiscordMemosCapture(
                 self.memos,
@@ -418,6 +419,7 @@ class GovernorBot(discord.Client):
                 paperless=self.paperless,
                 durable_store=self.governor_operations.store,
                 task_mutations=self.task_mutations,
+                memo_mutations=self.memo_mutations,
                 calendar_refresh_callback=self._refresh_calendar_surfaces,
                 import_status_provider=self._import_status,
                 import_items_provider=self._recent_import_items,

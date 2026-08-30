@@ -12,6 +12,7 @@ from psycopg import sql
 
 from kaos_governor.database import apply_migrations, connect, database_status
 from kaos_governor.durable import Actor, DurableGovernorError, OperationRequest
+from kaos_governor.memos import MemoMutationCommand, MemoMutationService
 from kaos_governor.operations import GovernorOperations
 from kaos_governor.postgres_durable import PostgresDurableGovernorStore
 from kaos_governor.tasks import TaskMutationCommand, TaskMutationService
@@ -35,6 +36,28 @@ class FakeTaskAdapter:
     def delete_task(self, profile, uid, collection_id):
         self.calls.append(("delete", profile, {"uid": uid, "collectionId": collection_id}))
         return {"uid": uid}
+
+
+class FakeMemoRecord:
+    def __init__(self, name: str, content: str) -> None:
+        self.name = name
+        self.content = content
+
+
+class FakeMemoAdapter:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, ...]] = []
+
+    def create(self, content, *, visibility="PRIVATE"):
+        self.calls.append(("create", str(content), visibility))
+        return FakeMemoRecord("memos/postgres-1", str(content))
+
+    def update(self, name, content):
+        self.calls.append(("edit", str(name), str(content)))
+        return FakeMemoRecord(str(name), str(content))
+
+    def delete(self, name):
+        self.calls.append(("delete", str(name)))
 
 
 def _migration_directory() -> Path:
@@ -315,6 +338,40 @@ class PostgresDurableGovernorTests(unittest.TestCase):
         self.assertEqual(persisted.status, "completed")
         self.assertEqual(persisted.result, {"uid": "TASK-POSTGRES-1"})
         self.assertNotIn("memo", persisted.parameters)
+        self.assertIsNone(PostgresDurableGovernorStore().get_pending_payload(first.operation.operation_id))
+        self.assertEqual(
+            [record.outcome for record in PostgresDurableGovernorStore().audit_records(first.operation.operation_id)],
+            ["accepted", "completed"],
+        )
+
+    def test_governed_memo_execution_is_durable_and_idempotent(self) -> None:
+        adapter = FakeMemoAdapter()
+        service = MemoMutationService(adapter)
+        command = MemoMutationCommand("create", content="private memo body")
+
+        first = service.execute_governed(
+            GovernorOperations(PostgresDurableGovernorStore()),
+            command,
+            actor=self.actor,
+            idempotency_key="discord-message:postgres-memo",
+        )
+        replay = service.execute_governed(
+            GovernorOperations(PostgresDurableGovernorStore()),
+            command,
+            actor=self.actor,
+            idempotency_key="discord-message:postgres-memo",
+        )
+
+        self.assertTrue(first.created)
+        self.assertFalse(replay.created)
+        self.assertEqual(replay.mutation.name, "memos/postgres-1")
+        self.assertEqual(adapter.calls, [("create", "private memo body", "PRIVATE")])
+        persisted = PostgresDurableGovernorStore().get_operation(first.operation.operation_id)
+        assert persisted is not None
+        self.assertEqual(persisted.status, "completed")
+        self.assertEqual(persisted.result, {"name": "memos/postgres-1"})
+        self.assertNotIn("content", persisted.parameters)
+        self.assertEqual(persisted.parameters["contentFingerprint"]["bytes"], 17)
         self.assertIsNone(PostgresDurableGovernorStore().get_pending_payload(first.operation.operation_id))
         self.assertEqual(
             [record.outcome for record in PostgresDurableGovernorStore().audit_records(first.operation.operation_id)],
