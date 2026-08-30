@@ -465,6 +465,7 @@ html.isAgendaSuppliesEmbed body {
 
 .mainMenuPicker select {
   -webkit-appearance: none;
+  -webkit-tap-highlight-color: transparent;
   appearance: none;
   width: 100%;
   min-height: 44px;
@@ -478,9 +479,13 @@ html.isAgendaSuppliesEmbed body {
   font-weight: 700;
 }
 
-.mainMenuPicker select:focus-visible {
-  outline: 2px solid var(--nord8);
-  outline-offset: 2px;
+.mainMenuPicker select:focus,
+.mainMenuPicker select:focus-visible,
+.mainMenuPicker select:active {
+  border: 0;
+  outline: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .app[data-profile="main"] .appIdentity h1 {
