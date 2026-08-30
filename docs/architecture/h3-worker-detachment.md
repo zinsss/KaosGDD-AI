@@ -13,8 +13,8 @@ writer, the current durable state, and a direct rollback.
 | --- | --- | --- | --- | --- |
 | Pushover pending delivery | `GovernorBot` task | None; reads the shared notification outbox | `kaos-governor-worker` | 1 |
 | Daily digest scheduling | `kaos-governor-worker`; KaosDiscoord transports a pending rendered publication | Transitional Discord controls only; timing and Watch alerts are independent | Governor worker with mobile/Brain detail | 2 (schedule complete; transport pending) |
-| Naver mail polling | `GovernorBot` task | Poller callbacks render/send Discord mail and attachments | Governor worker with archive plus minimal Pushover | 3 |
-| Fax lifecycle polling | `GovernorBot` task | `DiscordFaxTransport` consumes domain actions | Governor worker with durable archive plus minimal Pushover | 3 |
+| Naver mail polling | `kaos-governor-worker` | None; Naver IMAP retains messages and attachments | Governor worker with minimal Pushover | 3 (complete; observation active) |
+| Fax lifecycle polling | `kaos-governor-worker`; KaosDiscoord deletes transitional source messages only | Source cleanup only; no connector polling/archive/alerts | Governor worker with durable archive plus minimal Pushover | 3 (complete; observation active) |
 | Maintenance reminders | `GovernorBot` task | Sends Discord detail before Pushover | Governor worker with Pushover; detail queried on demand | 4 |
 | Health and Brain tool HTTP routes | Discord process setup hook | Server is neutral, but status/refresh callbacks reference Discord surfaces | Governor API/worker runtime | 4 |
 | Mail organizer schedule | `GovernorBot` task | Persistent Discord views and action messages | Governor service plus scoped mobile/Brain operations | 5 |
@@ -71,7 +71,7 @@ Pushover record was repeated. Worker and KaosDiscoord are healthy with zero
 restarts; the outbox remains at 0 pending and 8 delivered records. The next
 organic 07:00 digest is the production observation gate.
 
-The next cutover is implemented but not yet promoted. With
+The third cutover was promoted on 2026-08-30 in commit `3d98e40`. With
 `MAIL_NAVER_OWNER=worker`, the Governor worker advances the existing IMAP
 checkpoint, retains messages and attachments in authoritative Naver IMAP, and
 queues only `Mail received.`. With `FAX_LIFECYCLE_OWNER=worker`, it reconciles
@@ -81,6 +81,14 @@ cross-process lock because transitional KaosDiscoord fax intake can still
 submit. KaosDiscoord retains only deletion of a successfully sent fax's source
 message; it does not poll IMAP/the connector or publish mail/fax topics under
 worker ownership.
+
+The guarded deployment retained 2 mailboxes, 3 incoming fax records, 4 fax
+jobs, 53 acknowledged fax actions, and the 0-pending/8-delivered Pushover
+ledger. Both worker-owned scan timestamps advanced after cutover without an
+error or notification. Worker `0.3.0` and KaosDiscoord are healthy with zero
+restarts, Brain's live import/mail routes remain available, and H4 dependency
+checks pass. Organic new-mail/final-fax observation remains open; rollback
+images and explicit pre-cutover copies of all three state files are retained.
 
 ## Pushover Rollback
 

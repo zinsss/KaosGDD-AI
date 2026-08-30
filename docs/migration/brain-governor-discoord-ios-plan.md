@@ -42,9 +42,9 @@ H4, office-service, and stateful-service cutovers.
   observation.
 - Phase 5 worker slice 2 is deployed in commit `356e1b4`: Pushover delivery is
   owned by the independent `kaos-governor-worker`; KaosDiscoord is queue-only.
-- Phase 5 worker slice 4 is locally validated: Naver mail and fax polling can
-  move to `kaos-governor-worker` without uploading messages or attachments to
-  Discord. Production ownership remains unchanged until the guarded cutover.
+- Phase 5 worker slice 4 is deployed in commit `3d98e40`: Naver mail and fax
+  polling are owned by `kaos-governor-worker` without uploading messages or
+  attachments to Discord. Organic mail/fax observation is active.
 - Database schema in production: additive migration `005`.
 - Working rule: finish and verify one boundary before moving another domain.
 
@@ -57,7 +57,7 @@ H4, office-service, and stateful-service cutovers.
 | 2 | Persist operations, confirmations, and pending payloads | Complete and tested | Deployed and observed 2026-08-30 | Complete |
 | 3 | Route every meaningful mutation through Governor | Task slices and Memos slices 1-2 implemented | Task slices and Memos slice 1 observed; Memos slice 2 deployed 2026-08-30 | Production observation |
 | 4 | Make Brain transport-neutral | Not started | Not deployed | Planned |
-| 5 | Retain brain-only KaosDiscoord; detach workers and notifications | Package, Pushover, digest, and fax/mail worker slices implemented | Digest observation active; fax/mail awaiting cutover | In progress |
+| 5 | Retain brain-only KaosDiscoord; detach workers and notifications | Package, Pushover, digest, and fax/mail worker slices implemented | Digest and fax/mail observations active | In progress |
 | 6 | Add stable iOS APIs and lightweight clients | Pilot read endpoint only; replacement matrix accepted | Pilot active | Planned |
 | 7 | Remove compatibility debt and finish documentation/CI | Not started | Not deployed | Planned |
 
@@ -1041,6 +1041,39 @@ Slice 4 local validation (2026-08-30):
 - the worker runtime image contains `tiff2pdf` for local-transport rollback and
   imports both neutral lifecycle workers successfully
 
+Slice 4 production deployment (2026-08-30):
+
+- commit `3d98e40` was pushed to `main` and synchronized to H4
+- H3 now runs `MAIL_NAVER_OWNER=worker` and
+  `FAX_LIFECYCLE_OWNER=worker` in both installed processes
+- the guarded sequence retained both old images and copied mail, fax, and
+  Pushover state before stopping KaosDiscoord, recreating the worker owner,
+  health-checking it, and restoring KaosDiscoord as intake/cleanup transport
+- the Naver checkpoint retained 2 mailboxes and advanced from
+  `2026-08-30T11:04:46Z` to `2026-08-30T11:05:47Z` under the worker with no
+  error or new mail
+- fax state retained 3 incoming records, 4 jobs, and 53 delivered actions; its
+  scan timestamp advanced under the worker with no connector error
+- Pushover remained at 0 pending and 8 delivered records, proving the owner
+  change emitted no duplicate or synthetic Watch alert
+- authenticated Brain routes still return HTTP 200 for recent imports and live
+  Naver mail; H4 doctor passes all Brain, Governor, Discord, and tool checks
+- worker image `0.3.0` and KaosDiscoord are healthy with zero restarts; their
+  deployed image IDs are
+  `sha256:7c46f857222ba1804b8764747b4c53a35a71a7c45318f6f56fb2f06494716133`
+  and
+  `sha256:bb56cafe98b790350deb238a05c6246cc0cbf6f408a6bba96dd6faf67ffa60fc`
+- rollback images are
+  `kaosgdd-ai-governor-worker:rollback-pre-fax-mail-worker` at
+  `sha256:b282140616b730b1d3f96b2c2efcf0ea560de3f2dc21ae950b098f0d1ba2218d`
+  and `kaosgdd-ai-governor-discord:rollback-pre-fax-mail-worker` at
+  `sha256:6f5ef03f0717b623bf3c0f133a554244535e9b33ebbe4960c0bee560a62590eb`
+
+Production observation is active. One organic new mail or final fax state must
+advance the existing checkpoint/action ledger and produce exactly one simple
+worker-delivered Pushover record without a Discord archive upload. No synthetic
+alert is required.
+
 Risk: medium around one-writer ownership, existing mail/fax checkpoints,
 connector availability, and direct fax submissions during reconciliation.
 
@@ -1191,6 +1224,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | 5 | Implemented worker-owned daily-digest scheduling and per-alert Pushover priority | Worker owns due/build/enqueue and persists a locked Discord publication; KaosDiscoord is transport-only for the transitional controls; routine alerts are priority 0 and actionable failures priority 1; 240 Governor + 361 KaosDiscoord tests passed; H3 preflight passed | Locally validated; controlled H3 cutover and next organic 07:00 observation pending |
 | 2026-08-30 | 5 | Promoted worker-owned daily-digest scheduling and per-alert priority to H3 | Commit `58e5237`; owner switched after preserving today's sent-date; no duplicate digest/alert; worker and KaosDiscoord healthy with zero restarts; outbox 0 pending/8 delivered; H4 doctor passes | Production observation started; retained rollback images cover both processes; next organic 07:00 is the gate |
 | 2026-08-30 | 5 | Implemented worker-owned Naver mail and fax polling | Neutral lifecycle workers retain IMAP/fax sources, queue only minimal final alerts, persist cross-process status, lock shared fax state, and leave only source-message deletion in KaosDiscoord; 250 Governor + 368 KaosDiscoord + 321 Brain tests passed; runtime/preflight checks pass | Locally validated; production remains Discord-owned pending the guarded cutover |
+| 2026-08-30 | 5 | Promoted worker-owned Naver mail and fax polling to H3 | Commit `3d98e40`; mail/fax checkpoints and Pushover state preserved; both worker-owned timestamps advanced; Brain list routes returned HTTP 200; both containers and H4 dependencies are healthy | Production observation started; no duplicate alert or Discord archive upload; both prior images and three state snapshots retained |
 | 2026-08-30 | 6 | Recorded deferred Shortcut deep-link support for opening a selected Memos item | Existing Memos route and ID mapping verified as `/m/{memo-id}`; iOS external-link/PWA limitation documented | None; planning only |
 
 ## How to Update This Tracker
