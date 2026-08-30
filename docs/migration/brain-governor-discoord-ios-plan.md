@@ -59,9 +59,9 @@ H4, office-service, and stateful-service cutovers.
   PWA accepts a real `#/calendar?date=YYYY-MM-DD` deep link for Shortcuts,
   ignores invalid dates, and performs no backend operation. Both host profiles
   serve the committed helper and the portal retained zero restarts.
-- Phase 6 slice 2 is locally validated: the personal profile uses one native
-  selector for Agenda, Calendar, Tasks, Memos, Documents, Fax, Mail, Utils, and
-  Settings. Family navigation is unchanged; Fax and Mail are honest
+- Phase 6 slice 2 is deployed in commit `216d1ba`: the personal profile uses
+  one native selector for Agenda, Calendar, Tasks, Memos, Documents, Fax, Mail,
+  Utils, and Settings. Family navigation is unchanged; Fax and Mail are honest
   transitional routes rather than false working controls.
 - Database schema in production: additive migration `005`.
 - Working rule: finish and verify one boundary before moving another domain.
@@ -76,7 +76,7 @@ H4, office-service, and stateful-service cutovers.
 | 3 | Route every meaningful mutation through Governor | Task slices and Memos slices 1-2 implemented | Task slices and Memos slice 1 observed; Memos slice 2 deployed 2026-08-30 | Production observation |
 | 4 | Make Brain transport-neutral | Not started | Not deployed | Planned |
 | 5 | Retain brain-only KaosDiscoord; detach workers and notifications | Package, Pushover, digest, and fax/mail worker slices implemented | Digest and fax/mail observations active | In progress |
-| 6 | Retain the personal PWA and add stable iOS integrations | Selected-date deep link plus compact personal-menu selector implemented | Deep-link slice deployed 2026-08-30; menu slice awaiting promotion | In progress |
+| 6 | Retain the personal PWA and add stable iOS integrations | Selected-date deep link plus compact personal-menu selector implemented | Both slices deployed 2026-08-30 | In progress |
 | 7 | Remove compatibility debt and finish documentation/CI | Not started | Not deployed | Planned |
 | 8 | Add governed Brain system operations | Architecture accepted; current Guard remains deny-by-default | Not deployed | Planned |
 
@@ -1264,6 +1264,25 @@ Phase 6 slice 2 local validation (2026-08-30):
 - JavaScript syntax, deploy-helper Bash syntax, and `git diff --check` pass
 - no production asset or service changed during local validation
 
+Phase 6 slice 2 production deployment (2026-08-30):
+
+- commit `216d1ba` was pushed to `main`
+- `family-portal-sync` validated nginx, reloaded the static portal, and passed
+  migrated-service preflight
+- both `kaosgdd.net` and `family.kaosgdd.net` return HTTP 200 for the portal
+  and versioned navigation helper
+- deployed HTML, application JavaScript, navigation contract, and CSS match
+  repository sources byte-for-byte
+- the deployed selector reports the exact accepted nine-item order and retains
+  Utils ownership for service subroutes
+- portal, Caddy, calendar adapter, Governor API, worker, and KaosDiscoord remain
+  healthy/running with zero restarts
+- no API, credential, task, event, memo, document, fax, mail, notification, or
+  authoritative backend was changed
+
+Rollback: restore the static portal from commit `c9f1bc0` and run
+`family-portal-sync`. No data reconciliation is required.
+
 ## Phase 7 — Cleanup, CI, and Deprecation
 
 Status: planned.
@@ -1376,6 +1395,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | 6 | Promoted the selected-date PWA/Shortcut deep link | Commit `0d9448a`; nginx validation/reload and service preflight passed; both personal and Family host profiles returned HTTP 200 and served a byte-matching helper; portal zero restarts; H4 synced and doctor healthy | Slice 1 deployed; rollback is the prior static source at `d70dabf`; no backend/runtime restart or data migration |
 | 2026-08-30 | Decision | Reconciled the host migration plan, production plan, and repository overview with the retained personal-PWA decision | Cross-document search removed the stale no-personal-portal and native-UI-primary assumptions | Documentation only; deployed services and data unchanged |
 | 2026-08-30 | 6 | Implemented and locally validated the compact personal main-menu selector | Exact nine-item order, subroute ownership, fallback, and asset load order covered by focused tests; existing deep-link tests and syntax checks pass | Awaiting controlled static-portal promotion; Family navigation and all backends unchanged |
+| 2026-08-30 | 6 | Promoted the compact personal main-menu selector | Commit `216d1ba`; both host profiles serve byte-matching versioned assets; exact menu order verified; migrated-service preflight passed; related containers retained zero restarts | Slice 2 deployed; rollback is static commit `c9f1bc0`; no backend or data change |
 
 ## How to Update This Tracker
 
