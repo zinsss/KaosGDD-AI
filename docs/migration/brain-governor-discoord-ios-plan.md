@@ -17,8 +17,9 @@ H4, office-service, and stateful-service cutovers.
   and confirmation payloads were promoted on 2026-08-30, then reconciled
   against a normal user-approved task creation and its authoritative calendar
   result.
-- Active implementation: Phase 3 task-handler slice 1 was deployed to H3 on
-  2026-08-30 and is in production observation.
+- Active implementation: Phase 3 task-handler slice 1 is complete after H3
+  production observation. The next task slice is direct Discord task/supplies
+  writers; it has not started.
 - H4 Brain correction: Korean task-create requests using `만들어` or `생성`
   were corrected and deployed in commit `99011fb` on 2026-08-30. This was an
   intent parser deployment only and did not promote the Phase 3 Governor
@@ -36,7 +37,7 @@ H4, office-service, and stateful-service cutovers.
 | 0 | Audit current architecture and flows | Complete | No change | Complete |
 | 1 | Establish the Governor operation boundary | Complete and tested | Deployed and observed 2026-08-30 | Complete |
 | 2 | Persist operations, confirmations, and pending payloads | Complete and tested | Deployed and observed 2026-08-30 | Complete |
-| 3 | Route every meaningful mutation through Governor | Task tool handler slice 1 complete and tested | Deployed 2026-08-30 | Production observation |
+| 3 | Route every meaningful mutation through Governor | Task tool handler slice 1 complete; later writers remain | Slice 1 deployed and observed 2026-08-30 | In progress |
 | 4 | Make Brain transport-neutral | Not started | Not deployed | Planned |
 | 5 | Isolate KaosDiscoord and notification delivery | Not started | Not deployed | Planned |
 | 6 | Add stable iOS APIs and lightweight clients | Pilot read endpoint only | Pilot active | Planned |
@@ -326,8 +327,8 @@ Production promotion evidence (2026-08-30):
 
 ## Phase 3 — Route Mutations Through Governor
 
-Status: in progress. Task tool handler slice 1 deployed to H3 on 2026-08-30;
-production observation in progress.
+Status: in progress. Task tool handler slice 1 completed H3 production
+observation on 2026-08-30; later writers and domains remain.
 
 Objective:
 
@@ -351,7 +352,7 @@ Mutation inventory and current routing:
 
 | Surface | Current writer path | Governor lifecycle | Domain handler | Migration state |
 | --- | --- | --- | --- | --- |
-| Brain/iOS task proposals | `BrainToolServer` confirmation routes | Yes | `TaskMutationService` locally | Slice 1 validated locally |
+| Brain/iOS task proposals | `BrainToolServer` confirmation routes | Yes | `TaskMutationService` | Slice 1 complete |
 | Discord task/supply buttons and channel commands | `DiscordTasksSurface` to calendar adapter | No | No | Next task slice |
 | Portal task/event writes | Calendar adapter proxy | No | No | Later task/event slice |
 | Recurring task synchronization | Governor API recurring service to calendar adapter | Partial domain ownership, no durable operation | Recurring service only | Later task slice |
@@ -397,8 +398,8 @@ Slice 1 production gate:
 - [x] Phase 2 observation has normal task/memo/event usage evidence
 - [x] Review and commit
 - [x] Controlled H3 deployment
-- [ ] Reconcile operation audit row with the authoritative task result
-- [ ] Slice observation gate
+- [x] Reconcile operation audit row with the authoritative task result
+- [x] Slice observation gate
 
 Slice 1 production promotion evidence (2026-08-30):
 
@@ -415,9 +416,14 @@ Slice 1 production promotion evidence (2026-08-30):
   its persistent views, and completed startup surface initialization. H4
   reports Governor, Discord readiness, and Brain tools as reachable.
 - Both earlier completed operations survived the restart and the durable
-  pending-payload table remained empty. A new normal approved task is still
-  required to reconcile the deployed handler result and close this slice's
-  observation gate.
+  pending-payload table remained empty.
+- A new normal no-date personal task was proposed and approved after the
+  deployment. The operation completed without an error, the confirmation was
+  consumed once, all four lifecycle audit events were present, and its pending
+  payload was removed.
+- The live calendar adapter returned the new active task with a UID exactly
+  matching the Governor operation result. The H3 container remained healthy
+  with zero restarts, closing slice 1's observation gate.
 
 H4 task-create routing correction:
 
@@ -604,6 +610,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | 3 | Corrected Korean `만들어`/`생성` task-create routing discovered during normal H4 observation | Exact parser/tool/bot regressions and all 321 Brain tests passed; deployed runtime parses the reported phrase as task `전염병신고` without a read-only lookup | H4 Brain deployed at `99011fb`, healthy with zero restarts; prior image tagged for rollback; H3 unchanged |
 | 2026-08-30 | 1-2 | Completed the production observation gate with a normal user-approved task creation | Durable operation completed; confirmation approved once; four lifecycle audit events present; pending payload removed; live calendar task UID matched the operation result | Phases 1 and 2 complete; Phase 3 slice 1 is eligible for controlled H3 deployment |
 | 2026-08-30 | 3 | Promoted the task-handler slice to H3 through the guarded Discord/Governor restart | New handler present and wired; container healthy with zero restarts; Discord ready; H4 dependency checks pass; durable operations retained with zero pending payloads | Production observation started; rollback image `kaosgdd-ai-governor-discord:rollback-11b18be` retained |
+| 2026-08-30 | 3 | Completed task-handler slice 1 production observation | Post-deployment task completed through the handler; confirmation approved once; four audit events present; payload removed; authoritative calendar UID matched the operation result; zero restarts | Slice 1 complete; direct Discord task/supplies writers remain the next task slice |
 
 ## How to Update This Tracker
 
