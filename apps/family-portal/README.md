@@ -9,6 +9,7 @@ calendar/task operations go through the server-side calendar adapter.
 
 - `#/today`
 - `#/calendar`
+- `#/calendar?date=YYYY-MM-DD` (selects a calendar day for PWA/Shortcut links)
 - `#/calendar?weather=YYYY-MM-DD` (opens the existing detailed-weather popup)
 - `#/tasks`
 - `#/services`
@@ -35,7 +36,8 @@ Future adapters:
 
 ## Source Layout
 
-This directory is the canonical static web root for `family.kaosgdd.net`.
+This directory is the canonical shared static web root for `kaosgdd.net` and
+`family.kaosgdd.net`; hostname selects the personal or family profile.
 Do not keep a second nested copy such as `apps/family-portal/app/`; nginx serves
 the files from the root of this directory.
 

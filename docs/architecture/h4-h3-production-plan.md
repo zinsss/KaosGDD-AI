@@ -12,16 +12,15 @@ Build the next Kaos platform around two new permanent roles:
 - **H4 Ultra, 32 GB**: KaosBrain, optional KaosAI/OpenClaw planner runtime,
   and local model inference.
 - **H3+, 32 GB**: KaosGovernor, authoritative personal/family backends,
-  Family KaosGDD, and the public/private application edge.
+  Personal and Family KaosGDD PWAs, and the public/private application edge.
 
-Discord retains only the private `#brain` conversational surface. Personal
-events use iOS Calendar; personal/family tasks and supplies use iOS Reminders
-through Radicale; scoped Shortcuts/Scriptable and service PWAs provide other
-on-demand actions. Pushover provides minimal immediate text alerts. The family
-continues to use `family.kaosgdd.net`, including an embedded family-scoped AI
-chat. No main personal KaosGDD web application is deployed in the target
-architecture, but `kaosgdd.net` retains a narrow settings/admin page for
-KaosGDD configuration.
+Discord retains only the private `#brain` conversational surface. The personal
+KaosGDD PWA at `kaosgdd.net` is the primary visual console; Shortcuts provides
+Action Button, Siri, Share Sheet, quick-action, and deep-link integration.
+Native Calendar and Reminders continue syncing Radicale and may retain native
+notifications without being the preferred UI. Pushover provides minimal
+immediate text alerts. The family continues to use `family.kaosgdd.net`,
+including an embedded family-scoped AI chat.
 
 Office Kaos remains a separate clinic-critical system. PACS, DICOM, fax
 hardware, Paperless, RustDesk, and other hardware- or clinic-bound services are
@@ -36,8 +35,9 @@ requires every service to cut over at once.
 flowchart TD
     Discord["Discord: private #brain only"] --> BrainBot["KaosBrain Discord integration"]
     IOS["iOS Calendar + Reminders"] -->|"CalDAV: events, tasks, supplies"| Radicale
-    IOSActions["Shortcuts + Scriptable"] --> Governor
+    IOSActions["Shortcuts + optional Scriptable"] --> Governor
     Governor --> Push["Pushover: minimal text alerts"]
+    PersonalWeb["kaosgdd.net personal PWA"] --> Governor
     FamilyWeb["family.kaosgdd.net"] --> FamilyGateway["Family chat gateway"]
 
     subgraph H4["H4 Ultra 32 GB: AI plane"]
@@ -61,7 +61,7 @@ flowchart TD
         GovDB[("Governor PostgreSQL")]
         Radicale[("Radicale")]
         Memos[("Memos")]
-        FamilyApp["Family KaosGDD web"]
+        FamilyApp["Personal + Family KaosGDD web"]
         Edge["Caddy + cloudflared"]
 
         Governor --> Scheduler
@@ -235,9 +235,9 @@ interrupt PACS, DICOM receipt, fax transport, Paperless, or RustDesk.
 | calendar adapter | H3+ KaosCalendar | Absorb and retire after parity tests |
 | Governor Discord bot | H3+ transitional runtime | Detach schedulers, polling, health/tools, and Pushover from its Discord gateway, then retire the H3 operational bot after replacement observation |
 | upstream Memos web | H3+ | Retain as direct service UI; Memos remains authoritative |
-| custom personal Memos web | Retire after parity | Upstream Memos PWA plus iOS/Brain access replace it |
-| `kaosgdd-portal` personal/main route | Deprecated | Do not carry forward as a personal portal; keep only what is required to serve Family KaosGDD during transition |
-| Family KaosGDD at `family.kaosgdd.net` | H3+ | Retain as the only custom KaosGDD portal and primary family interface |
+| custom personal Memos web | Fold into personal PWA navigation | Memos remains authoritative; retain links to upstream Memos for advanced use |
+| `kaosgdd-portal` personal/main route | H3+ personal PWA | Preserve personal colors and variations; evolve incrementally with scoped Governor APIs |
+| Family KaosGDD at `family.kaosgdd.net` | H3+ | Retain as the family-scoped portal and primary family interface |
 | Caddy/cloudflared | H3+ | Move hostname routes one at a time |
 | Vaultwarden | H3+ | Migrate only after export/backup and client verification |
 | SFTPGo | H3+ by default | Verify whether any clinic-only storage should remain office-side |
@@ -252,26 +252,26 @@ deployed. Retirement follows observation and rollback periods.
 
 | Current feature | Target implementation | Authority |
 | --- | --- | --- |
-| Personal Today/agenda | Native iOS and on-demand `#brain`/mobile summaries | Source services, never a copied agenda table |
+| Personal Today/agenda | Personal KaosGDD PWA plus Shortcuts and on-demand `#brain` summaries | Source services, never a copied agenda table |
 | Family Today/agenda | Family KaosGDD backed by Governor aggregate reads | Source services, never a copied agenda table |
-| Personal calendar | iOS Calendar plus scoped Governor/mobile operations | Radicale VEVENT |
-| Personal/family tasks | iOS Reminders plus scoped Governor/mobile operations | Radicale VTODO |
+| Personal calendar | Personal KaosGDD PWA; native Calendar remains a CalDAV sync/notification client | Radicale VEVENT |
+| Personal/family tasks | Personal/Family PWAs; native Reminders remains a CalDAV sync/notification client | Radicale VTODO |
 | Event presets | KaosCalendar typed templates | Governor PostgreSQL |
 | Repeating/custom tasks | KaosCalendar rules triggered by Scheduler | Governor rules plus Radicale instances |
 | Market day, claim day, holidays | KaosCalendar deterministic generators | Governor rules/exceptions plus Radicale output |
 | Weather and weather history | KaosCalendar weather adapter and journal writer | Provider forecast; saved history in approved Radicale journals |
-| Personal Memos | Upstream Memos PWA; Shortcuts/Scriptable; `Ask Kaos` in `#brain` | Memos |
+| Personal Memos | Personal KaosGDD PWA with upstream Memos links; Shortcuts; `Ask Kaos` | Memos |
 | Family Memos | Family KaosGDD simplified UI; upstream Memos remains available | Memos |
-| Supplies | iOS Reminders list plus scoped Shortcuts/Governor actions | Dedicated Radicale VTODO collection |
+| Supplies | Personal KaosGDD PWA plus scoped Shortcuts/Governor actions | Dedicated Radicale VTODO collection |
 | Rouny timetable | KaosCalendar family extension | Governor durable domain state |
 | Caregiver hours/summary | Family Governor domain with deterministic calculations | Migrated family records; final authority documented before cutover |
 | Family ledger/dues | Family Governor domain with XLSX export/backup | Governor PostgreSQL |
 | Mail organizer | KaosMail/Governor workers, Pushover alert, and on-demand `#brain` query | Naver IMAP |
-| Fax intake/send/status | KaosFax plus Office Fax Connector | HylaFAX transport and Governor operation records |
-| Document inbox/search | Paperless PWA, iOS Share Sheet/KaosInbox API, and `Ask Kaos` | Paperless |
+| Fax intake/send/status | Personal KaosGDD PWA plus KaosFax/Office Fax Connector | HylaFAX transport and Governor operation records |
+| Document inbox/search | Personal KaosGDD PWA, Paperless PWA, Share Sheet/KaosInbox API, and `Ask Kaos` | Paperless |
 | PDF processing | Optional Governor job calling office Stirling-PDF | Paperless/original file according to completed workflow |
 | HWP handoff | Manual Polaris flow by default | Original user file |
-| Service administration | Narrow settings/admin UI, service-native UIs, and authenticated `#brain` operations | Governor health and service-native health APIs |
+| Service administration | Personal PWA admin view, service-native UIs, and authenticated governed `#brain` operations | Governor health state and restricted host executors |
 
 The caregiver authority is intentionally unresolved until current records are
 inventoried. Migration must choose one durable representation and test totals;
@@ -336,17 +336,19 @@ Family Web Push may deliver AI-initiated or Governor-initiated messages. Chat
 messages and pending notifications are durable in Governor; model context is
 not the message source of truth.
 
-### 5.3 Personal native clients and backend UIs
+### 5.3 Personal PWA, iOS integration, and backend UIs
 
-No personal main KaosGDD web application is planned in the target architecture.
-The normal personal interaction model is:
+The personal KaosGDD PWA is retained as the normal visual console. The normal
+personal interaction model is:
 
-- iOS Calendar for personal and shared family VEVENT collections
-- iOS Reminders for personal tasks, shared family tasks, and the dedicated
-  supplies VTODO collection
+- personal KaosGDD Today, calendar, tasks, supplies, fax, Memos, documents, and
+  settings views
+- iOS Calendar and Reminders as background CalDAV synchronization and optional
+  native notification clients
 - Discord `#brain` only for KaosBrain conversation, proposals, confirmations,
   requested results/files, and operation receipts
-- Shortcuts and Scriptable for deterministic on-demand lists and actions
+- Shortcuts for Action Button, Siri, Share Sheet, quick actions, and stable PWA
+  deep links; Scriptable only for a justified widget or focused UI gap
 - Pushover for immediate minimal text notifications and Apple Watch delivery
 - upstream Memos, Paperless, Vaultwarden, SFTPGo, and Stirling-PDF web UIs only
   when direct service interaction is useful
@@ -354,21 +356,17 @@ The normal personal interaction model is:
 Native app notifications remain authoritative for calendar and task reminders.
 Governor must not duplicate them through direct Discord notification channels.
 
-The existing main KaosGDD repository may be retained as design and migration
-reference, but it is not deployed as a fallback. A future personal UI starts as
-a separately justified project if native apps and Discord expose a concrete
-workflow gap. A limited `kaosgdd.net` settings page remains in scope for system
-configuration. This includes Family-style settings for selected weather
-location and managed/imported public holiday sources used by KaosCalendar. This
-decision does not affect Family KaosGDD.
+This decision is recorded in [Personal KaosGDD PWA and iOS
+Shortcuts](personal-pwa-shortcuts.md). The existing personal colors and
+variations are preserved while business rules and authority continue moving
+behind Governor.
 
 During the H3 migration, the legacy `kaosgdd-brain` service may be renamed to
 `kaosgovernor-legacy-api` to make its deterministic backend role explicit. That name is
 transitional: its remaining domain logic must still move into KaosGovernor
-modules before the legacy service and database are retired. The old
-`kaosgdd-portal` main/personal route is deprecated; `family.kaosgdd.net` is the
-only retained full custom KaosGDD portal. `kaosgdd.net` remains settings/admin
-only.
+modules before the legacy service and database are retired. Retaining the
+personal PWA does not retain direct database writes or deterministic business
+rules in its presentation layer.
 
 ## 6. Data Ownership
 

@@ -10,16 +10,16 @@ Implementation phases and current progress are tracked in the
 ## Overview
 
 ```text
-Discord #brain only   Shortcuts / Scriptable       Family KaosGDD PWA
-   |                    |                           |
-   v                    |                           |
-KaosDiscoord            |                           |
-   |                    |                           |
-   +---- deterministic calls ----------------------+
-   |                    |                           |
+Discord #brain only   Shortcuts / optional Scriptable
+   |                    |                  |
+   v                    |                  |
+KaosDiscoord            |       Personal + Family KaosGDD PWAs
+   |                    |                  |
+   +---- deterministic calls -------------+
+   |                    |                  |
    +-> KaosBrain on H4 <-+ when interpretation is needed
-          |              |                           |
-          +--------------+---------------------------+
+          |              |                  |
+          +--------------+------------------+
                          |
                          v
                 KaosGovernor on H3+ backend
@@ -35,15 +35,18 @@ iOS Calendar and Reminders
 ```
 
 KaosBrain communicates with backends only through KaosGovernor. KaosDiscoord
-is retained only for the private Discord `#brain` conversation. Shortcuts,
-Scriptable, and the family UI may call Governor directly for deterministic
-operations. Family AI receives a separate family-scoped Governor credential.
+is retained only for the private Discord `#brain` conversation. The personal
+and family PWAs, Shortcuts, and an optional focused Scriptable client may call
+Governor directly for deterministic operations. Family AI receives a separate
+family-scoped Governor credential.
 
 Native clients may still use service-native interfaces:
 
 - iOS Calendar and Reminders use Radicale over CalDAV.
-- Personal events, tasks, and supplies use those native iOS apps as their
-  primary UI.
+- Personal events, tasks, supplies, fax, Memos, and documents use the personal
+  KaosGDD PWA as their primary visual console.
+- Native Calendar and Reminders may continue CalDAV synchronization and native
+  notifications without being the preferred visual interface.
 - Family KaosGDD remains the custom family UI and uses Governor/service APIs.
 - Memos may be opened through its native web UI when direct editing is useful.
 - Paperless users may use the Paperless UI.
@@ -61,9 +64,11 @@ Brain. Ready-made backend services keep their native
 operational identities, such as Radicale, Memos, Vaultwarden, SFTPGo, Caddy,
 and cloudflared, rather than being renamed to `kaosgdd-*`.
 
-No main personal KaosGDD web application is planned. Its repository may remain
-as reference, and a new personal UI may be considered later only when native
-iOS clients and Discord leave a concrete workflow unmet.
+The existing personal KaosGDD profile is retained and evolved rather than
+recreated inside Scriptable. See [Personal KaosGDD PWA and iOS
+Shortcuts](personal-pwa-shortcuts.md). Brain's future system-operator role is a
+separately governed capability described in [Brain as Kaos Gateway and System
+Operator](brain-system-operations.md).
 
 ## KaosGovernor
 

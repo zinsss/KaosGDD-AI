@@ -64,6 +64,20 @@ credentials or direct backend credentials.
 
 Confirmations are bound to the normalized operation hash, actor, expiry, and current object version. A generic model-interpreted `yes` is insufficient.
 
+## Governed System Operations
+
+Brain may eventually query health, explain failures, and propose typed system
+operations. It does not become a privileged runner. Governor validates the
+actor, exact target, requested version, preconditions, confirmation, and audit
+record. A restricted executor beside each managed host runs only a versioned
+allowlisted runbook.
+
+The model never receives SSH keys, sudo access, a Docker socket, service
+secrets, raw package-manager arguments, or arbitrary command execution.
+PACS/database/OS upgrades require a separately hardened maintenance flow with
+verified backup, explicit downtime, and rollback details. See [Brain as Kaos
+Gateway and System Operator](brain-system-operations.md).
+
 ## Untrusted Content
 
 Mail, memos, PDFs, OCR text, web pages, and fax content are data, not instructions. Retrieved content must never be allowed to expand tool permissions or alter system policy.

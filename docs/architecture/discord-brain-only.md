@@ -20,9 +20,9 @@ Discord #brain -> KaosDiscoord -> KaosBrain -> KaosGovernor
                                       +-> read/answer     Radicale / Memos /
                                                          Paperless / HylaFAX
 
-iOS native apps / Shortcuts / Scriptable -> KaosGovernor
+Personal/Family PWAs / Shortcuts / optional Scriptable -> KaosGovernor
 Pushover <- Governor notification outbox
-Memos PWA / Paperless PWA -> authoritative upstream services
+Native CalDAV clients / Memos PWA / Paperless PWA -> authoritative services
 ```
 
 The `#brain` topic may present Brain answers, structured proposals,
@@ -33,16 +33,16 @@ conversation. It is not the archive or notification engine for other domains.
 
 | Retiring Discord surface | Target replacement | Authority |
 | --- | --- | --- |
-| Tasks and task acknowledgements | iOS Reminders; scoped Shortcuts for on-demand actions | Radicale VTODO through Governor/native CalDAV |
-| Calendar and agenda | iOS Calendar; on-demand Shortcut/Scriptable views | Radicale VEVENT |
-| Supplies | Dedicated iOS Reminders list and scoped Shortcut actions | Dedicated Radicale VTODO collection |
-| Memos capture/search | Memos Home Screen PWA; Shortcuts/Scriptable; `Ask Kaos` in `#brain` | Memos |
-| Document inbox/search | Paperless Home Screen PWA; iOS Share Sheet capture Shortcut; `Ask Kaos` in `#brain` | Paperless |
+| Tasks and task acknowledgements | Personal KaosGDD PWA; scoped Shortcuts; native Reminders remains a sync/notification client | Radicale VTODO through Governor/native CalDAV |
+| Calendar and agenda | Personal KaosGDD PWA; scoped deep links; native Calendar remains a sync/notification client | Radicale VEVENT |
+| Supplies | Personal KaosGDD PWA and scoped Shortcut actions | Dedicated Radicale VTODO collection |
+| Memos capture/search | Personal KaosGDD PWA with authoritative Memos links; Shortcuts; `Ask Kaos` in `#brain` | Memos |
+| Document inbox/search | Personal KaosGDD PWA; Paperless PWA for advanced operations; Share Sheet Shortcut; `Ask Kaos` | Paperless |
 | Mail notification/organizer UI | Minimal Pushover alerts; on-demand `#brain` query; service-backed organizer state | Naver IMAP and Governor state |
-| Fax notification/intake UI | Minimal Pushover final-state alerts; scoped Shortcut or `#brain` send/select flow | HylaFAX and Governor operation records |
+| Fax notification/intake UI | Personal KaosGDD PWA; minimal Pushover final-state alerts; Share Sheet/Shortcut or `#brain` send flow | HylaFAX and Governor operation records |
 | Daily digest | Minimal `Good Morning.` Pushover alert; detail on demand in the retained `#brain` topic or mobile UI | Governor aggregate reads |
 | System/maintenance alerts | Minimal Pushover alerts; detail on demand in `#brain` or settings/admin UI | Governor health/audit state |
-| Service administration | Narrow `kaosgdd.net` settings/admin UI and authenticated `#brain` operations | Governor and service-native health APIs |
+| Service administration | Personal KaosGDD admin view and authenticated governed `#brain` operations | Governor health state and restricted host executors |
 
 Pushover remains intentionally simple and text-only for the Apple Watch. It is
 not a static UI or source of truth. Native Calendar and Reminders notifications
@@ -69,7 +69,8 @@ worker split and replacement gates complete.
    compatibility, and retirement work continues there.
 2. Inventory each active channel, persistent view, scheduler, notification,
    archive dependency, and retained Discord message/history requirement.
-3. Finish scoped mobile APIs and the first useful Shortcuts/Scriptable flows.
+3. Preserve the personal KaosGDD PWA and finish scoped mobile APIs, stable PWA
+   deep links, and the first useful Shortcut flows.
 4. Verify Memos and Paperless PWA access and their iOS capture/search paths.
 5. Move Pushover, mail/fax polling, daily digest, maintenance checks, and other
    workers out of the Discord gateway lifecycle.
@@ -102,3 +103,5 @@ A direct Discord surface may retire only when:
 - Do not route ordinary deterministic mobile actions through an LLM.
 - Do not rewrite Memos, Paperless, Radicale, HylaFAX, mail, or fax merely to
   retire a transport.
+- Do not give Brain shell, SSH, Docker socket, secret, or direct host
+  credentials in order to provide conversational system management.

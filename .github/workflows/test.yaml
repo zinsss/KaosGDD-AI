@@ -31,6 +31,11 @@ jobs:
         run: |
           bash -n deploy/h3-backend/kaos-h3
           bash -n deploy/office-fax-connector/kaos-office-fax
+      - name: Validate KaosGDD PWA JavaScript
+        run: |
+          node --check apps/family-portal/deep-links.js
+          node --check apps/family-portal/app.js
+          node --test tests/family-portal/*.cjs
       - name: Render H3 deployment
         run: |
           cp deploy/h3-backend/.env.example deploy/h3-backend/.env
@@ -66,7 +71,7 @@ jobs:
             -f deploy/office-fax-connector/compose.yaml \
             config --quiet
       - name: Build test image
-        run: docker build --target test --tag kaosgdd-ai-governor-discord:test --file integrations/discord/Dockerfile .
+        run: docker build --target test --tag kaosgdd-ai-governor-discord:test --file integrations/discoord/Dockerfile .
       - name: Run tests
         run: docker run --rm kaosgdd-ai-governor-discord:test
       - name: Run PostgreSQL Governor contract tests

@@ -77,6 +77,7 @@ let rounyRemoteLoadPromise = null;
 let rounyRemoteSavePromise = null;
 let rounyRemoteSavePending = false;
 let openedWeatherDeepLink = "";
+let appliedCalendarDeepLink = "";
 
 function isDesktopLayout() {
   return desktopMedia.matches;
@@ -2751,12 +2752,24 @@ function hashParam(name) {
   return new URLSearchParams(query).get(name) || "";
 }
 
+function hashDateParam(name) {
+  return window.KAOS_DEEP_LINKS?.dateParam(window.location.hash, name) || "";
+}
+
+function pendingCalendarDeepLinkDate() {
+  if (getRoute() !== "calendar") {
+    appliedCalendarDeepLink = "";
+    return "";
+  }
+  const value = hashDateParam("date");
+  if (!value || appliedCalendarDeepLink === window.location.hash) return "";
+  return value;
+}
+
 function pendingWeatherDeepLinkDate() {
   if (getRoute() !== "calendar") return "";
-  const value = hashParam("weather");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || openedWeatherDeepLink === value) return "";
-  const parsed = new Date(`${value}T00:00:00`);
-  return !Number.isNaN(parsed.getTime()) && ymd(parsed) === value ? value : "";
+  const value = hashDateParam("weather");
+  return value && openedWeatherDeepLink !== value ? value : "";
 }
 
 function ymd(date) {
@@ -6711,7 +6724,9 @@ function renderCaregiver() {
 
 function render() {
   const route = getRoute();
+  const calendarDeepLinkDate = pendingCalendarDeepLinkDate();
   const weatherDeepLinkDate = pendingWeatherDeepLinkDate();
+  if (calendarDeepLinkDate) state.selectedDate = calendarDeepLinkDate;
   if (weatherDeepLinkDate) state.selectedDate = weatherDeepLinkDate;
   const view = document.getElementById("view");
   const overlayRoot = document.getElementById("overlayRoot");
@@ -6773,6 +6788,7 @@ function render() {
     openedWeatherDeepLink = weatherDeepLinkDate;
     void openWeatherLocationPopup(weatherDeepLinkDate);
   }
+  if (calendarDeepLinkDate) appliedCalendarDeepLink = window.location.hash;
   document.querySelector(".ledgerDetailsScroller")?.addEventListener("scroll", updateTopBarShadow, { passive: true });
   updateTopBarShadow();
 }

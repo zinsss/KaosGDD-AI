@@ -35,6 +35,16 @@ H4, office-service, and stateful-service cutovers.
   topic. Direct operational channels are now compatibility surfaces scheduled
   for gated retirement; see
   [Discord Brain-Only Target](../architecture/discord-brain-only.md).
+- Interface decision: retain the existing personal KaosGDD PWA as the primary
+  visual console and use Shortcuts for Action Button, Siri, Share Sheet,
+  quick-action, and deep-link integration. Native Calendar/Reminders remain
+  Radicale sync and notification clients rather than mandatory daily UIs; see
+  [Personal KaosGDD PWA and iOS Shortcuts](../architecture/personal-pwa-shortcuts.md).
+- Brain direction: `#brain` remains a natural-language KaosGDD gateway and may
+  grow into a conversational system-operations console. Brain never becomes a
+  privileged runner; Governor and restricted host executors own typed,
+  confirmed, audited runbooks. See [Brain as Kaos Gateway and System
+  Operator](../architecture/brain-system-operations.md).
 - Phase 5 started with the Governor-side Discord adapter package extraction.
   Commit `20732fa` is deployed on H3: the canonical package/path is
   `kaosdiscoord` under `integrations/discoord`, while legacy imports and the
@@ -45,6 +55,9 @@ H4, office-service, and stateful-service cutovers.
 - Phase 5 worker slice 4 is deployed in commit `3d98e40`: Naver mail and fax
   polling are owned by `kaos-governor-worker` without uploading messages or
   attachments to Discord. Organic mail/fax observation is active.
+- Phase 6 slice 1 is locally validated: the shared personal/family PWA accepts
+  a real `#/calendar?date=YYYY-MM-DD` deep link for Shortcuts, ignores invalid
+  dates, and performs no backend operation. Production is unchanged.
 - Database schema in production: additive migration `005`.
 - Working rule: finish and verify one boundary before moving another domain.
 
@@ -58,8 +71,9 @@ H4, office-service, and stateful-service cutovers.
 | 3 | Route every meaningful mutation through Governor | Task slices and Memos slices 1-2 implemented | Task slices and Memos slice 1 observed; Memos slice 2 deployed 2026-08-30 | Production observation |
 | 4 | Make Brain transport-neutral | Not started | Not deployed | Planned |
 | 5 | Retain brain-only KaosDiscoord; detach workers and notifications | Package, Pushover, digest, and fax/mail worker slices implemented | Digest and fax/mail observations active | In progress |
-| 6 | Add stable iOS APIs and lightweight clients | Pilot read endpoint only; replacement matrix accepted | Pilot active | Planned |
+| 6 | Retain the personal PWA and add stable iOS integrations | Selected-date deep-link slice started; pilot read endpoint exists | Pilot active | In progress |
 | 7 | Remove compatibility debt and finish documentation/CI | Not started | Not deployed | Planned |
+| 8 | Add governed Brain system operations | Architecture accepted; current Guard remains deny-by-default | Not deployed | Planned |
 
 Status meanings:
 
@@ -76,8 +90,8 @@ Status meanings:
 ```text
 Discord #brain ──> KaosDiscoord ──> KaosBrain ──> KaosGovernor
 
-Web / Shortcuts / Scriptable ─────────────> KaosGovernor
-                    Ask Kaos ─> KaosBrain ─> KaosGovernor
+Personal/Family PWAs / Shortcuts / optional Scriptable ─> KaosGovernor
+                                      Ask Kaos ─> KaosBrain ─> KaosGovernor
 
 KaosGovernor ──> notification outbox ──> Pushover
 
@@ -93,7 +107,8 @@ Ownership rules:
 3. Discoord transports the retained `#brain` conversation and owns no domain
    policy. Direct operational Discord surfaces are transitional.
 4. Domain services execute and preserve their existing sources of truth.
-5. Shortcuts and Scriptable are clients, not state stores.
+5. Personal/Family PWAs, Shortcuts, and Scriptable are clients, not state
+   stores. Scriptable is optional rather than a required calendar container.
 6. Notifications are Governor/domain behavior. Pushover is the target
    immediate text adapter; native iOS apps own task/calendar reminders.
 7. Deterministic callers do not invoke an LLM.
@@ -105,6 +120,8 @@ Ownership rules:
 - No change to the HylaFAX spool, modem, services, or documented
   `setup.cache`/`setup.modem` workaround.
 - No second task, memo, calendar, or supplies state store for iOS.
+- No duplicated personal calendar/task implementation inside Scriptable when
+  the existing PWA can provide the visual surface.
 - No broad Governor bearer token stored on an iPhone.
 - No API duplication for Discord and iOS.
 - No removal of compatibility routes or Discord channels before replacement
@@ -1090,15 +1107,31 @@ Rollback: retain current process commands, bot tokens, channel IDs, state
 paths, and disabled channel configuration through each replacement's
 observation period.
 
-## Phase 6 — Stable iOS Interfaces
+## Phase 6 — Personal PWA and Stable iOS Interfaces
 
-Status: planned; read-only supplies pilot exists.
+Status: in progress; read-only supplies pilot exists and stable PWA deep links
+are the first implementation slice.
 
 Objective:
 
-- Provide narrow authenticated APIs for Shortcuts and a small Scriptable client
-  without duplicating source-of-truth data. These are required replacements
-  for the retiring direct Discord surfaces, not optional Discord companions.
+- Retain and incrementally evolve the existing personal KaosGDD PWA as the
+  primary visual console.
+- Provide stable deep links and narrow authenticated APIs for Shortcuts without
+  duplicating source-of-truth data.
+- Use Scriptable only when a widget or focused interaction is materially better
+  than the PWA and Shortcuts. It is not a required application container.
+- Replace retiring direct Discord surfaces only after their PWA/Shortcut path
+  passes production observation.
+
+PWA surface target:
+
+- Today and daily digest detail
+- calendar and tasks
+- supplies
+- fax send/recent status
+- Memos recent/search/create with authoritative upstream links
+- Paperless inbox/search/capture status with authoritative upstream links
+- system status/settings where the actor is authorized
 
 Planned API capabilities:
 
@@ -1133,20 +1166,51 @@ Rules:
 - use scoped mobile credentials, never the broad Governor token
 - deterministic actions call Governor directly
 - `Ask Kaos` is the only normal mobile path that requires Brain
-- continue using native Calendar/Reminders through Radicale where they are the
-  better interface
+- continue synchronizing native Calendar/Reminders through Radicale for native
+  scheduled notifications; their visual UI is optional
+- preserve strict hostname, actor, and server-side scope separation between
+  personal and Family PWA requests
 - keep `/shortcuts/supplies` as a compatibility route during migration
 
 Required deliverables:
 
 - versioned API contract and authentication tests
 - committed example Shortcuts instructions
-- focused Scriptable client for richer on-demand lists/actions
-- Memos and Paperless Home Screen PWA instructions
+- personal KaosGDD Home Screen installation and stable deep-link instructions
+- optional focused Scriptable client only for an identified widget/UI gap
+- authoritative Memos and Paperless exact-item link instructions
 - iOS Share Sheet capture into Paperless through a scoped endpoint
 - on-demand mail/fax/status views or Brain queries for information previously
   shown in direct Discord channels
 - no background state database on iOS
+
+Phase 6 slice 1 — stable selected-date PWA link:
+
+- support `#/calendar?date=YYYY-MM-DD` in the existing personal/family portal
+- validate real calendar dates before changing presentation state
+- do not perform a write, expand scope, or add an authentication bypass
+- retain the existing `?weather=YYYY-MM-DD` behavior
+- document the route as the first Shortcut-safe PWA entry point
+
+Risk: low. This changes initial calendar presentation only. Invalid dates are
+ignored and the existing selected date remains unchanged.
+
+Rollback: remove the `date` deep-link parser and retain `#/calendar`; no API,
+database, Radicale object, credential, or deployment state changes.
+
+Phase 6 slice 1 local validation (2026-08-30):
+
+- four focused Node tests cover real/leap dates, invalid normalized dates,
+  parameter selection, and missing values
+- `node --check` passes for `deep-links.js` and the existing `app.js`
+- H3 deploy-helper Bash validation and the live `services-preflight` pass
+- CI now runs the PWA checks and uses the canonical
+  `integrations/discoord/Dockerfile` path
+- the corrected canonical test-image path builds successfully; 250 Governor
+  tests (11 PostgreSQL integration tests skipped in the unit image) and 368
+  KaosDiscoord tests pass
+- no production asset, API, database, Radicale object, credential, or runtime
+  process changed
 
 ## Phase 7 — Cleanup, CI, and Deprecation
 
@@ -1175,6 +1239,34 @@ Exit criteria:
 - stable scoped mobile interfaces
 - no duplicate authoritative state
 - all compatibility removals have completed observation and rollback gates
+
+## Phase 8 — Governed Brain System Operations
+
+Status: planned. The current Brain Guard continues to reject system, shell,
+Docker, database, and restart intents.
+
+Objective:
+
+- Make `#brain` and future Ask Kaos clients a conversational system-operations
+  console without giving the model privileged host access.
+
+Planned implementation:
+
+1. Move read-only system inventory and health aggregation out of KaosDiscoord
+   and behind Governor-owned APIs.
+2. Add read-only `system.status` to Brain Guard and the personal admin PWA.
+3. Define versioned runbook contracts and dry-run-only restricted host
+   executors.
+4. Add one allowlisted non-critical restart with exact confirmation, audit,
+   verification, and a deterministic non-AI caller.
+5. Add pinned Kaos application deployment/rollback only after backup and
+   recovery tests pass.
+6. Keep PACS/database/OS upgrades in a separately hardened maintenance track.
+
+Security and rollback requirements are defined in [Brain as Kaos Gateway and
+System Operator](../architecture/brain-system-operations.md). No phase may
+replace the deny-by-default Guard with arbitrary commands, SSH, sudo, Docker
+socket access, or model-visible secrets.
 
 ## Confirmation Policy Target
 
@@ -1226,6 +1318,9 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | 5 | Implemented worker-owned Naver mail and fax polling | Neutral lifecycle workers retain IMAP/fax sources, queue only minimal final alerts, persist cross-process status, lock shared fax state, and leave only source-message deletion in KaosDiscoord; 250 Governor + 368 KaosDiscoord + 321 Brain tests passed; runtime/preflight checks pass | Locally validated; production remains Discord-owned pending the guarded cutover |
 | 2026-08-30 | 5 | Promoted worker-owned Naver mail and fax polling to H3 | Commit `3d98e40`; mail/fax checkpoints and Pushover state preserved; both worker-owned timestamps advanced; Brain list routes returned HTTP 200; both containers and H4 dependencies are healthy | Production observation started; no duplicate alert or Discord archive upload; both prior images and three state snapshots retained |
 | 2026-08-30 | 6 | Recorded deferred Shortcut deep-link support for opening a selected Memos item | Existing Memos route and ID mapping verified as `/m/{memo-id}`; iOS external-link/PWA limitation documented | None; planning only |
+| 2026-08-30 | Decision | Retained the personal KaosGDD PWA as the primary visual console with Shortcuts as the iOS integration layer | Architecture, authority, personal/family scope, native CalDAV relationship, Scriptable optionality, and incremental delivery recorded | Supersedes the earlier no-personal-PWA assumption; no production route changed |
+| 2026-08-30 | Decision | Defined Brain's future as both a KaosGDD language gateway and a governed system-operations console | Typed operation, host-executor, confirmation, upgrade, PACS-isolation, and availability boundaries recorded | Current system/restart Guard rejection remains active; no privileged capability added |
+| 2026-08-30 | 6 | Implemented and locally validated the first personal-PWA/Shortcut deep link | Four focused tests, both portal syntax checks, deploy-helper Bash validation, `git diff --check`, H3 `services-preflight`, 250 Governor tests, and 368 KaosDiscoord tests passed; CI covers the route helper | `#/calendar?date=YYYY-MM-DD` is ready for controlled sync; no backend or production change |
 
 ## How to Update This Tracker
 

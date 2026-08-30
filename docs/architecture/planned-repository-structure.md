@@ -22,7 +22,8 @@ KaosGDD-AI/
 │   │       ├── paperless/
 │   │       ├── stirling/
 │   │       └── imap/
-│   └── family-ai-gateway/
+│   ├── family-ai-gateway/
+│   └── family-portal/       shared personal/family KaosGDD PWA source
 ├── integrations/
 │   ├── openclaw/
 │   │   ├── skills/
@@ -60,34 +61,30 @@ KaosGDD-AI/
 - deterministic Governor code
 - KaosAI/OpenClaw planner integration behind KaosBrain Guard
 - Family AI gateway code
+- the shared personal/family KaosGDD PWA source currently deployed from
+  `apps/family-portal`
 - Discord adapters and interaction contracts
 - the office Fax Connector
 - schemas and deployment definitions
 - migration and operations documentation
 
-### `zinsss/KaosGDD` continues to own
+The current canonical deployed static source is `apps/family-portal`, which
+already selects personal or family presentation by hostname. Preserve the
+personal colors and route variations at `kaosgdd.net`, while retaining strict
+server-side personal/family authorization. The earlier standalone KaosGDD web
+repository remains migration and design reference until its retained history
+and ownership are explicitly reconciled; do not maintain two divergent live
+copies.
 
-- Family KaosGDD web UI
-- family browser presentation, embedded AI chat, and PWA behavior
-
-The main KaosGDD web repository is retained only as reference. It is not part
-of the target deployment. A future personal UI should begin only after a
-specific unmet workflow justifies it. A narrow `kaosgdd.net` settings/admin
-page remains in scope for KaosGDD configuration.
-
-The old `kaosgdd-portal` personal/main route is deprecated during migration.
-`family.kaosgdd.net` is the only retained full custom KaosGDD portal, while
-`kaosgdd.net` remains settings/admin only. If the old
+If the old
 `kaosgdd-brain` service still has deterministic API duties during host
 migration, rename it to transitional `kaosgovernor-legacy-api` and continue absorbing its
 modules into KaosGovernor.
 
-The target architecture does not require a custom personal Memos frontend.
-Personal Memos workflows use the upstream Memos PWA, scoped iOS clients, and
-the retained Discord `#brain` conversation when AI is useful. Direct Discord
-Memos channels retire under the brain-only decision. The family frontend may
-retain its simplified Memos experience because Family KaosGDD remains a
-supported product.
+The personal PWA may provide recent/search/create Memos workflows and exact
+links while upstream Memos remains authoritative and available for advanced
+editing. Direct Discord Memos channels retire under the brain-only decision.
+The family frontend retains its simplified family-scoped Memos experience.
 
 ### Upstream projects continue to own
 
