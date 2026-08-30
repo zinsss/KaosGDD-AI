@@ -66,7 +66,7 @@ H4, office-service, and stateful-service cutovers.
   one native selector for Agenda, Calendar, Tasks, Memos, Documents, Fax, Mail,
   Utils, and Settings. Family navigation is unchanged; Fax and Mail are honest
   transitional routes rather than false working controls.
-- Phase 6 slice 3 is deployed from the current `main` workstream: the existing
+- Phase 6 slice 3 is deployed in commit `e0a7ac9`: the existing
   Kaos Memos client now runs locally for the personal route, and Documents is a
   KaosGDD-owned read-only Paperless browser. Normal user UI observation is
   pending before the slice is closed.
@@ -1323,6 +1323,8 @@ slice.
 
 Phase 6 slice 3 validation and deployment (2026-08-31):
 
+- commit `e0a7ac9` was pushed to `main`, fast-forwarded to the clean H4
+  checkout, and H4 doctor passed without restarting Brain
 - 11 focused portal tests pass, including Paperless normalization and search
   pagination; both JavaScript files pass syntax validation
 - six new Paperless API tests, all 15 existing Paperless adapter tests, and all
@@ -1466,7 +1468,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | 6 | Flattened the personal title selector | Commit `d7b7c2d`; transparent borderless selector with `•` indicator; versioned CSS matches production; portal retained zero restarts | Presentation-only follow-up; no backend or data change |
 | 2026-08-30 | 6 | Kept the selector borderless while focused or active | Commit `a7a8643`; focus/active outline, shadow, background, border, and tap highlight removed; versioned CSS matches production | Presentation-only follow-up; no backend or data change |
 | 2026-08-31 | 5 | Completed worker-owned daily-digest production observation | Organic `Good Morning.` scheduled at 07:00:12 KST and delivered by Pushover at 07:00:13 KST; outbox reached 9 delivered/0 pending; no errors; user confirmed receipt; worker and KaosDiscoord healthy with zero restarts | Slice 3 complete; no synthetic notification needed |
-| 2026-08-31 | 6 | Restored the existing personal Kaos Memos client and deployed the KaosGDD Paperless browser | 11 portal tests; 6 new API + 15 adapter + 6 relay tests; canonical 256 Governor/368 KaosDiscoord suite; Memos personal config served locally; Paperless reports 26 documents; unauthenticated edge/API reads fail HTTP 401 | Read-only Paperless and personal Memos UI deployed; authenticated user observation open; rollback API image retained |
+| 2026-08-31 | 6 | Restored the existing personal Kaos Memos client and deployed the KaosGDD Paperless browser | Commit `e0a7ac9`; 11 portal tests; 6 new API + 15 adapter + 6 relay tests; canonical 256 Governor/368 KaosDiscoord suite; H4 synced/healthy; Memos personal config served locally; Paperless reports 26 documents; unauthenticated edge/API reads fail HTTP 401 | Read-only Paperless and personal Memos UI deployed; authenticated user observation open; rollback API image retained |
 
 ## How to Update This Tracker
 
