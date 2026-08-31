@@ -2859,15 +2859,15 @@ function renderTopNav(route) {
   if (portalProfile() === "main") {
     const selectedRoute = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(activeRoute) || "today";
     nav.innerHTML = `
-      <label class="mainMenuPicker">
+      <div class="mainMenuPicker">
         <span>Main menu</span>
-        <small aria-hidden="true">kaosgdd.net</small>
+        <a class="mainHostLink" href="https://kaosgsd.net" target="_blank" rel="noreferrer" aria-label="Open https://kaosgsd.net">kaosgsd.net</a>
         <select data-main-menu aria-label="Main menu">
           ${profileConfig().nav.map((item) => `
             <option value="${escapeHtml(item.route)}" ${item.route === selectedRoute ? "selected" : ""}>${escapeHtml(item.label)}</option>
           `).join("")}
         </select>
-      </label>
+      </div>
     `;
     return;
   }
