@@ -439,17 +439,20 @@ html.isAgendaSuppliesEmbed body {
 .mainMenuPicker {
   position: relative;
   display: grid;
-  justify-self: end;
-  width: min(100%, 210px);
-  min-width: 148px;
+  grid-template-columns: auto minmax(12px, 1fr) auto;
+  align-items: center;
+  justify-self: stretch;
+  width: 100%;
+  min-width: 0;
 }
 
 .mainMenuPicker small {
+  grid-column: 3;
   justify-self: end;
-  margin: 0 0 -4px;
+  margin: 0;
   color: rgba(216, 222, 233, 0.38);
-  font-size: 0.62rem;
-  font-weight: 500;
+  font-size: 1.18rem;
+  font-weight: 700;
   line-height: 1;
   letter-spacing: 0;
   pointer-events: none;
@@ -470,8 +473,10 @@ html.isAgendaSuppliesEmbed body {
   -webkit-appearance: none;
   -webkit-tap-highlight-color: transparent;
   appearance: none;
-  width: 100%;
-  min-height: 32px;
+  grid-column: 1;
+  width: auto;
+  max-width: 100%;
+  min-height: 44px;
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -550,7 +555,7 @@ html.isAgendaSuppliesEmbed body {
   }
 
   .app[data-profile="main"] .mainMenuPicker {
-    width: min(100%, 190px);
+    width: 100%;
   }
 
   .app[data-profile="main"] .mainMenuPicker select {
