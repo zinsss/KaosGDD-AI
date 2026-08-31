@@ -1542,6 +1542,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-31 | 6 | Added faint host label above the personal dropdown | The right-side menu now includes a faint `kaosgdd.net` label above the selected page while keeping the dropdown functional; versioned `styles.css?v=240` and `app.js?v=226`; 15 portal tests, JavaScript syntax check, and `git diff --check` pass | Presentation-only follow-up; static portal promotion pending |
 | 2026-08-31 | 6 | Removed personal pill chrome from owner/automation/all-day labels | Personal `calendarPill` and `timelineAllDayPill` labels keep their semantic text colors but no longer render borders, backgrounds, rounded boxes, or padding; versioned `styles.css?v=241` | Presentation-only follow-up; static portal promotion pending |
 | 2026-08-31 | 6 | Aligned the personal host label with the header row | `kaosgdd.net` now sits on the same baseline as the selected menu text, uses matching header size, and remains faint/right-aligned; versioned `styles.css?v=242` | Presentation-only follow-up; static portal promotion pending |
+| 2026-08-31 | 6 | Corrected personal header row placement | Forced the selected menu and `kaosgdd.net` host label onto the same CSS grid row after mobile Safari rendered them on separate rows; versioned `styles.css?v=243` | Presentation-only follow-up; static portal promotion pending |
 
 ## How to Update This Tracker
 

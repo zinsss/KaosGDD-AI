@@ -448,6 +448,7 @@ html.isAgendaSuppliesEmbed body {
 
 .mainMenuPicker small {
   grid-column: 3;
+  grid-row: 1;
   justify-self: end;
   margin: 0;
   color: rgba(216, 222, 233, 0.38);
@@ -474,6 +475,7 @@ html.isAgendaSuppliesEmbed body {
   -webkit-tap-highlight-color: transparent;
   appearance: none;
   grid-column: 1;
+  grid-row: 1;
   width: auto;
   max-width: 100%;
   min-height: 44px;
