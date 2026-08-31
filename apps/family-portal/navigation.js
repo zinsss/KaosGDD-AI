@@ -7,6 +7,7 @@
     Object.freeze({ route: "today", label: "Agenda" }),
     Object.freeze({ route: "calendar", label: "Calendar" }),
     Object.freeze({ route: "tasks", label: "Tasks" }),
+    Object.freeze({ route: "supplies", label: "Supplies" }),
     Object.freeze({ route: "memos", label: "Memos" }),
     Object.freeze({ route: "documents", label: "Documents" }),
     Object.freeze({ route: "fax", label: "Fax" }),
@@ -22,7 +23,6 @@
     "add-task": "tasks",
     "edit-task": "tasks",
     service: "services",
-    supplies: "services",
   });
 
   function selectedPersonalRoute(route) {

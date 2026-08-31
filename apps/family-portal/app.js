@@ -3068,7 +3068,7 @@ function profileConfig() {
 function activeNavRoute(route) {
   if (route === "add" || route === "add-event" || route === "edit-event" || route === "caregiver") return "calendar";
   if (route === "add-task" || route === "edit-task") return "tasks";
-  if (route === "supplies" || route === "service") return "services";
+  if (route === "service") return "services";
   return route;
 }
 

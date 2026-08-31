@@ -1556,6 +1556,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-31 | 6 | Stacked caregiver month-cell duration text | Family `돌봄` monthly grid cells now render mixed durations as `3시간` then `30분` on separate lines while totals/daily rows stay one-line; versioned `styles.css?v=249` and `app.js?v=235` | Presentation-only follow-up; static portal promotion pending |
 | 2026-08-31 | 6 | Added caregiver monthly summary copying | Family `돌봄` monthly details now include a `복사` action that copies a sendable plain-text month/payment/daily summary for the caregiver; versioned `styles.css?v=250` and `app.js?v=236` | Presentation-only follow-up; static portal promotion pending |
 | 2026-08-31 | 6 | Changed caregiver sharing to an image preview | The Family `돌봄` `복사` action now opens a rendered monthly calendar/payment image preview with save and text-copy actions; versioned `styles.css?v=251` and `app.js?v=237` | Presentation-only follow-up; static portal promotion pending |
+| 2026-09-01 | 6 | Restored Supplies as a first-class personal menu item | Personal dropdown now includes `Supplies` after `Tasks`, and `#/supplies` selects the Supplies menu instead of aliasing to Utils; versioned `navigation.js?v=2` and `app.js?v=238` | Presentation-only follow-up; static portal promotion pending |
 
 ## How to Update This Tracker
 
