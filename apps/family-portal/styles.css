@@ -4306,6 +4306,26 @@ h3 {
   align-items: center;
 }
 
+.app[data-profile="main"] .taskFilters .taskAddSlot {
+  display: flex !important;
+  align-items: flex-end !important;
+  align-self: end !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  max-height: 44px !important;
+  overflow: hidden;
+}
+
+.app[data-profile="main"] .taskFilters .taskAddButton {
+  align-self: flex-end !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  max-height: 44px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  line-height: 1 !important;
+}
+
 .app[data-profile="family"] {
   color-scheme: light;
   font-family:
