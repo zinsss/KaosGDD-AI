@@ -4609,18 +4609,13 @@ function renderFax() {
   const rows = items
     .map((item) => {
       const date = formatFaxDate(item);
-      const correspondent = faxCounterparty(item);
       const title = item.title || item.filename || "Fax";
-      const status = item.direction === "incoming" ? "RX" : item.status.toUpperCase();
-      const meta = [item.pages ? `${item.pages}p` : "", item.hylafaxJobId ? `JOB ${item.hylafaxJobId}` : ""].filter(Boolean).join(" // ");
       return `
         <li class="archiveRecord ${selected?.key === item.key ? "isSelected" : ""}">
           <button class="archiveRecordButton" type="button" data-fax-open="${escapeHtml(item.key)}" aria-current="${selected?.key === item.key ? "true" : "false"}">
             <span class="archiveRecordId">${escapeHtml(item.direction === "incoming" ? "IN" : "OUT")} ${escapeHtml(item.id.slice(0, 6).toUpperCase())}</span>
             <time class="archiveRecordDate" datetime="${escapeHtml(date.raw)}">${escapeHtml(date.label)}</time>
-            <span class="archiveRecordCorrespondent">${escapeHtml(correspondent || "UNKNOWN")}</span>
             <strong class="archiveRecordTitle">${escapeHtml(title)}</strong>
-            <span class="archiveRecordStatus ${archiveStatusClass(item.status)}">${escapeHtml(status)}${meta ? ` // ${escapeHtml(meta)}` : ""}</span>
           </button>
           ${
             item.documentAvailable && item.documentUrl
@@ -4904,14 +4899,12 @@ function renderDocuments() {
   const rows = documents.items
     .map((item) => {
       const title = item.title || `Document ${item.id}`;
-      const correspondent = item.correspondent || "UNKNOWN";
       const date = archiveDateParts(item.created);
       return `
         <li class="archiveRecord ${String(documents.selectedId) === String(item.id) ? "isSelected" : ""}">
           <button class="archiveRecordButton" type="button" data-paperless-open="${escapeHtml(item.id)}" aria-current="${String(documents.selectedId) === String(item.id) ? "true" : "false"}">
             <span class="archiveRecordId">#${escapeHtml(item.id)}</span>
             <time class="archiveRecordDate" datetime="${escapeHtml(date.raw)}">${escapeHtml(date.label)}</time>
-            <span class="archiveRecordCorrespondent">${escapeHtml(correspondent)}</span>
             <strong class="archiveRecordTitle">${escapeHtml(title)}</strong>
           </button>
           ${item.url ? `<a class="archiveSourceLink" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" aria-label="Open ${escapeHtml(title)} in Paperless" title="Open in Paperless">SRC</a>` : `<span class="archiveSourceLink isDisabled">--</span>`}
@@ -4992,7 +4985,7 @@ function renderDocuments() {
             <p class="archiveStatusMessage" role="status" aria-live="polite">${documents.checked && !documents.error ? escapeHtml(summary) : documents.loading ? "LOADING DOCUMENT BOARD" : "DOCUMENT BOARD STANDBY"}</p>
           </header>
           <div class="archiveColumnHeader" aria-hidden="true">
-            <span>ID</span><span>DATE</span><span>FROM</span><span>TITLE</span>
+            <span>NO.</span><span>DATE</span><span>TITLE</span>
           </div>
           ${
             documents.error

@@ -6063,13 +6063,11 @@ h3 {
   grid-template-columns: max-content minmax(0, 1fr);
   grid-template-areas:
     "id date"
-    "title title"
-    "from from"
-    "status status";
+    "title title";
   gap: 4px 10px;
   width: 100%;
   min-width: 0;
-  min-height: 78px;
+  min-height: 62px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -6094,6 +6092,7 @@ h3 {
 }
 
 .app[data-profile="main"] .archiveRecordCorrespondent {
+  display: none;
   grid-area: from;
   color: var(--archive-muted);
   font-size: 0.74rem;
@@ -6108,12 +6107,12 @@ h3 {
   font-size: 0.9rem;
   line-height: 1.3;
   overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app[data-profile="main"] .archiveRecordStatus {
+  display: none;
   grid-area: status;
   color: var(--archive-amber);
   font-size: 0.7rem;
@@ -6239,7 +6238,7 @@ h3 {
 
   .app[data-profile="main"] .archiveColumnHeader {
     display: grid;
-    grid-template-columns: 8ch 13ch minmax(12ch, 0.75fr) minmax(0, 1.4fr) 48px;
+    grid-template-columns: 8ch 13ch minmax(0, 1fr) 48px;
     gap: 10px;
     padding: 0 58px 7px 10px;
     color: var(--archive-cyan);
@@ -6248,14 +6247,10 @@ h3 {
   }
 
   .app[data-profile="main"] .archiveRecordButton {
-    grid-template-columns: 8ch 13ch minmax(12ch, 0.75fr) minmax(0, 1.4fr);
-    grid-template-areas: "id date from title" "status status status status";
+    grid-template-columns: 8ch 13ch minmax(0, 1fr);
+    grid-template-areas: "id date title";
     min-height: 58px;
     align-items: center;
-  }
-
-  .app[data-profile="main"] .archiveRecordTitle {
-    -webkit-line-clamp: 1;
   }
 
   .app[data-profile="main"] .archiveRecordDate {
