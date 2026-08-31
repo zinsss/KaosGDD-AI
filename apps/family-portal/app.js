@@ -4746,13 +4746,6 @@ function renderSupplies(options = {}) {
   const emptyText = active ? "No supplies queued." : "No done supplies.";
   return `
     <section class="panel ${compact ? "embedSuppliesPanel" : ""}">
-      ${compact ? "" : `<div class="panelHeader">
-        <div>
-          <p class="label">Supplies</p>
-          <h2>Buy list</h2>
-        </div>
-        <a class="openButton" href="#/services">Utils</a>
-      </div>`}
       <form class="composer supplyComposer" data-create-supply>
         <label>
           <span>Item</span>
