@@ -1562,6 +1562,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-09-01 | 6 | Forced Tasks Add button to the dropdown control height | Commit `4b1fb98`; added a late personal-profile override that caps the Tasks Add slot and button at 44 px with high specificity; versioned `styles.css?v=253`; served CSS and byte sync verified | H3 promoted; H4 synced and KaosBrain doctor passes |
 | 2026-09-01 | 6 | Aligned Tasks Add button to the dropdown row | Commit `5df6bd9`; replaced the over-capped Add container with a hidden label spacer plus fixed 44 px button row so mobile Safari aligns Add with the select controls; versioned `styles.css?v=254`; served CSS and byte sync verified | H3 promoted; H4 synced and KaosBrain doctor passes |
 | 2026-09-01 | 6 | Moved Tasks Add into the collection selector row | Commit `5d9d5c6`; Tasks now renders `All / Family / GDDZiN / Add`, with Add as a highlighted rectangular collection-row action; the lower filter row is only Tasks and Order; versioned `styles.css?v=255` and `app.js?v=239`; served assets and byte sync verified | H3 promoted; H4 synced and KaosBrain doctor passes |
+| 2026-09-01 | 6 | Matched Documents top controls to the Memos layout | Documents search now uses a wide rectangular search box with a compact highlighted `↻` refresh action on the right; search submits with Return and clear is inline; versioned `styles.css?v=256` and `app.js?v=240` | Presentation-only follow-up; promotion pending |
 
 ## How to Update This Tracker
 

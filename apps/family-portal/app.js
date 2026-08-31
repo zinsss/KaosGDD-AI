@@ -4976,16 +4976,14 @@ function renderDocuments() {
         : "";
   return `
     <section class="archiveTerminal" data-archive-kind="documents" aria-label="Document archive">
-      <form class="archiveCommand" data-document-search role="search">
-        <label class="archiveCommandLine" for="paperlessQuery">
-          <span>SEARCH&gt;</span>
-          <input id="paperlessQuery" name="query" type="search" value="${escapeHtml(documents.query)}" placeholder="title / sender / OCR" autocomplete="off" />
+      <form class="archiveCommand archiveSearchBar" data-document-search role="search">
+        <label class="archiveSearchBox" for="paperlessQuery">
+          <span class="archiveSearchIcon" aria-hidden="true">⌕</span>
+          <input id="paperlessQuery" name="query" type="search" value="${escapeHtml(documents.query)}" placeholder="Search documents" autocomplete="off" />
+          ${documents.appliedQuery ? `<button class="archiveSearchClear" type="button" data-documents-clear aria-label="Clear document search">×</button>` : ""}
         </label>
-        <div class="archiveCommandActions">
-          ${documents.appliedQuery ? `<button class="archiveAction" type="button" data-documents-clear>CLEAR</button>` : ""}
-          <button class="archiveAction" type="submit" ${documents.loading ? "disabled" : ""}>SEARCH</button>
-          <button class="archiveAction" type="button" data-documents-refresh ${documents.loading ? "disabled" : ""}>REFRESH</button>
-        </div>
+        <button class="archiveAction archiveTopAction" type="button" data-documents-refresh aria-label="Refresh documents" title="Refresh documents" ${documents.loading ? "disabled" : ""}>↻</button>
+        <button class="srOnly" type="submit">Search</button>
       </form>
       <div class="archiveWorkspace ${hasDetail ? "hasDetail" : ""}">
         <section class="archiveIndex" aria-labelledby="documentsIndexTitle" aria-busy="${documents.loading}">
