@@ -1,0 +1,23 @@
+input,
+textarea,
+select,
+.searchBox,
+.primaryButton,
+.loadMore,
+.iconButton,
+.errorBanner,
+.editorPanel,
+.memoCard {
+  border-radius: 0 !important;
+}
+
+.searchBox input,
+.searchBox .iconButton,
+.memoActions button {
+  border-radius: 0 !important;
+}
+
+.tagFilters button,
+.tagRow button {
+  border-radius: 999px !important;
+}
