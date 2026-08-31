@@ -1064,7 +1064,8 @@ h3 {
   overflow: hidden;
 }
 
-.collectionRail button {
+.collectionRail button,
+.collectionRail a {
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
@@ -1084,15 +1085,27 @@ h3 {
   white-space: nowrap;
 }
 
+.collectionRail a {
+  text-decoration: none;
+}
+
 .collectionRail button.isActive {
   border-color: rgba(180, 142, 173, 0.62);
   background: rgba(180, 142, 173, 0.14);
   color: var(--nord15);
 }
 
+.collectionRail .collectionAddButton {
+  justify-content: center;
+  flex: 0 0 86px;
+  border-color: rgba(136, 192, 208, 0.68);
+  background: rgba(136, 192, 208, 0.22);
+  color: var(--nord8);
+}
+
 .taskFilters {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: end;
   gap: 10px;
 }
@@ -4183,6 +4196,7 @@ h3 {
 .app[data-profile="main"] .panel,
 .app[data-profile="main"] .composer,
 .app[data-profile="main"] .collectionRail button,
+.app[data-profile="main"] .collectionRail a,
 .app[data-profile="main"] .segmentedTabs button,
 .app[data-profile="main"] .taskFilters select,
 .app[data-profile="main"] .taskAddButton,
@@ -4239,6 +4253,7 @@ h3 {
 }
 
 .app[data-profile="main"] .collectionRail button,
+.app[data-profile="main"] .collectionRail a,
 .app[data-profile="main"] .segmentedTabs button,
 .app[data-profile="main"] .openButton,
 .app[data-profile="main"] .primaryButton,
@@ -4252,6 +4267,7 @@ h3 {
 
 .app[data-profile="main"] .topNav a,
 .app[data-profile="main"] .collectionRail button,
+.app[data-profile="main"] .collectionRail a,
 .app[data-profile="main"] .taskFilters select,
 .app[data-profile="main"] .segmentedTabs button,
 .app[data-profile="main"] .openButton,
@@ -4309,6 +4325,12 @@ h3 {
 
 .app[data-profile="main"] .timeline li {
   align-items: center;
+}
+
+.app[data-profile="main"] .collectionRail .collectionAddButton {
+  border-color: rgba(136, 192, 208, 0.72);
+  background: rgba(136, 192, 208, 0.22);
+  color: var(--nord8);
 }
 
 .app[data-profile="main"] .taskFilters .taskAddSlot {
@@ -5503,6 +5525,11 @@ h3 {
     font-size: 0.84rem;
   }
 
+  .collectionRail a {
+    min-height: 40px;
+    font-size: 0.84rem;
+  }
+
   .panelHeader {
     min-height: 68px;
     padding: 15px 16px;
@@ -5618,7 +5645,7 @@ h3 {
   }
 
   .taskFilters {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     justify-content: start;
   }
 

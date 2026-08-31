@@ -3257,10 +3257,11 @@ function renderAddDatePicker({ title, allowNoDate = false }) {
   `;
 }
 
-function renderCollectionRail() {
+function renderCollectionRail(options = {}) {
   if (portalProfile() === "family") return "";
+  const showTaskAdd = Boolean(options.taskAdd);
   return `
-    <section class="collectionRail" aria-label="${uiText("collection.aria", "Radicale collections")}">
+    <section class="collectionRail ${showTaskAdd ? "hasAction" : ""}" aria-label="${uiText("collection.aria", "Radicale collections")}">
       ${mockAdapter
         .getCollections()
         .map(
@@ -3271,6 +3272,7 @@ function renderCollectionRail() {
           `,
         )
         .join("")}
+      ${showTaskAdd ? `<a class="collectionAddButton" href="#/add-task">${uiText("common.add", "Add")}</a>` : ""}
     </section>
   `;
 }
@@ -4152,9 +4154,6 @@ function renderTaskFilters() {
           <option value="created" ${state.taskSort === "created" ? "selected" : ""}>${uiText("task.creation", "Creation")}</option>
         </select>
       </label>
-      <div class="taskAddSlot">
-        <a class="openButton taskAddButton" href="#/add-task">${uiText("common.add", "Add")}</a>
-      </div>
     </section>
   `;
 }
@@ -4186,7 +4185,7 @@ function renderTaskEmptyContext() {
 function renderTaskWorkspace(contextHtml = renderTaskEmptyContext()) {
   const tasks = mockAdapter.getTasks().filter((task) => taskMatchesMode(task, state.taskMode));
   return `
-    ${renderCollectionRail()}
+    ${renderCollectionRail({ taskAdd: true })}
     <div class="taskDesktopGrid workspaceSplit">
       <div class="taskMiddlePane">
         ${renderTaskFilters()}
@@ -4199,7 +4198,7 @@ function renderTaskWorkspace(contextHtml = renderTaskEmptyContext()) {
 
 function renderTasks() {
   return isDesktopLayout() ? renderTaskWorkspace() : `
-    ${renderCollectionRail()}
+    ${renderCollectionRail({ taskAdd: true })}
     ${renderTaskFilters()}
     ${renderTaskListPanel(mockAdapter.getTasks().filter((task) => taskMatchesMode(task, state.taskMode)))}
   `;
