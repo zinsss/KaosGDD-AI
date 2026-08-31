@@ -1553,6 +1553,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-31 | 6 | Corrected the personal host label text | The faint non-clickable header label now reads exactly `https://kaosgdd.net`; versioned `app.js?v=232` | Presentation-only follow-up; static portal promotion pending |
 | 2026-08-31 | 6 | Corrected the personal owner display label | Portal-owned UI now displays the personal collection label as `GDDZiN` instead of `GDD_ZiN`; versioned `app.js?v=233` | Presentation-only follow-up; static portal promotion pending |
 | 2026-08-31 | 6 | Moved Fax refresh into the mode row | Fax archive refresh now renders as a compact `↻` button on the same line as the board filters; versioned `styles.css?v=248` and `app.js?v=234` | Presentation-only follow-up; static portal promotion pending |
+| 2026-08-31 | 6 | Stacked caregiver month-cell duration text | Family `돌봄` monthly grid cells now render mixed durations as `3시간` then `30분` on separate lines while totals/daily rows stay one-line; versioned `styles.css?v=249` and `app.js?v=235` | Presentation-only follow-up; static portal promotion pending |
 
 ## How to Update This Tracker
 

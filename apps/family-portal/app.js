@@ -2138,6 +2138,15 @@ function formatCaregiverHours(minutes) {
   return `${hours}${uiText("caregiver.hoursSuffix", "h")} ${remainder}${uiText("caregiver.minutesSuffix", "m")}`;
 }
 
+function formatCaregiverMonthCellHours(minutes) {
+  const safeMinutes = Math.max(0, Math.round(Number(minutes) || 0));
+  const hours = Math.floor(safeMinutes / 60);
+  const remainder = safeMinutes % 60;
+  const hourText = `${hours}${uiText("caregiver.hoursSuffix", "h")}`;
+  if (!remainder) return escapeHtml(hourText);
+  return `${escapeHtml(hourText)}<br>${escapeHtml(`${remainder}${uiText("caregiver.minutesSuffix", "m")}`)}`;
+}
+
 function caregiverTimeMinutes(value) {
   const match = String(value || "").match(/^(\d{2}):(\d{2})$/);
   if (!match) return null;
@@ -7010,7 +7019,7 @@ function renderCaregiver() {
                       return `
                         <span class="caregiverMonthDay">
                           <span>${cell.label}</span>
-                          <strong>${item?.minutes ? escapeHtml(formatCaregiverHours(item.minutes)) : ""}</strong>
+                          <strong>${item?.minutes ? formatCaregiverMonthCellHours(item.minutes) : ""}</strong>
                         </span>
                       `;
                     })

@@ -4838,10 +4838,11 @@ h3 {
 }
 
 .caregiverMonthDay strong {
+  display: block;
   overflow-wrap: anywhere;
   color: #8c4f83;
   font-size: 0.62rem;
-  line-height: 1.2;
+  line-height: 1.12;
 }
 
 .caregiverDailyRow {
