@@ -75,6 +75,8 @@ const ROUNY_DRAG_MOVE_THRESHOLD = 8;
 const desktopMedia = window.matchMedia(DESKTOP_MEDIA_QUERY);
 let rounyPointerDrag = null;
 let suppressRounyGridClick = false;
+let topAddLongPressTimer = null;
+let suppressTopAddClick = false;
 let rounyRemoteLoadPromise = null;
 let rounyRemoteSavePromise = null;
 let rounyRemoteSavePending = false;
@@ -3072,21 +3074,68 @@ function activeNavRoute(route) {
   return route;
 }
 
+function topAddActionForRoute(route) {
+  const selectedRoute = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(activeNavRoute(route)) || "today";
+  if (selectedRoute === "today" || selectedRoute === "calendar") return "event";
+  if (selectedRoute === "tasks") return "task";
+  if (selectedRoute === "supplies") return "supply";
+  if (selectedRoute === "memos") return "memo";
+  if (selectedRoute === "documents") return "document";
+  if (selectedRoute === "fax") return "fax";
+  if (selectedRoute === "mail") return "mail";
+  return "menu";
+}
+
+function topAddMenuItems(route) {
+  const currentAction = topAddActionForRoute(route);
+  const items = [
+    { action: "task", label: "Task" },
+    { action: "event", label: "Event" },
+    { action: "supply", label: "Supply" },
+    { action: "memo", label: "Memo", note: "Later" },
+    { action: "document", label: "Document", note: "Later" },
+    { action: "fax", label: "Fax", note: "Later" },
+    { action: "mail", label: "Mail", note: "Later" },
+  ];
+  return items.sort((left, right) => {
+    if (left.action === currentAction) return -1;
+    if (right.action === currentAction) return 1;
+    return 0;
+  });
+}
+
+function renderTopAddMenu(route) {
+  return `
+    <div class="topAddMenu" data-top-add-menu hidden>
+      ${topAddMenuItems(route).map((item) => `
+        <button class="${item.note ? "isDummy" : ""}" type="button" data-top-add-menu-action="${escapeHtml(item.action)}">
+          <span>${escapeHtml(item.label)}</span>
+          ${item.note ? `<small>${escapeHtml(item.note)}</small>` : ""}
+        </button>
+      `).join("")}
+    </div>
+  `;
+}
+
 function renderTopNav(route) {
   const nav = document.getElementById("topNav");
   if (!nav) return;
   const activeRoute = activeNavRoute(route);
   if (portalProfile() === "main") {
     const selectedRoute = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(activeRoute) || "today";
+    const topAction = topAddActionForRoute(route);
     nav.innerHTML = `
       <div class="mainMenuPicker">
         <span>Main menu</span>
-        <small class="mainHostLabel" aria-hidden="true">https://kaosgdd.net</small>
         <select data-main-menu aria-label="Main menu">
           ${profileConfig().nav.map((item) => `
             <option value="${escapeHtml(item.route)}" ${item.route === selectedRoute ? "selected" : ""}>${escapeHtml(item.label)}</option>
           `).join("")}
         </select>
+        <div class="topAddWrap">
+          <button class="topAddButton" type="button" data-top-add="${escapeHtml(topAction)}" aria-label="Add" aria-haspopup="menu" aria-expanded="false">+</button>
+          ${renderTopAddMenu(route)}
+        </div>
       </div>
     `;
     return;
@@ -3100,6 +3149,77 @@ function renderTopNav(route) {
       `,
     )
     .join("");
+}
+
+function closeTopAddMenu() {
+  const menu = document.querySelector("[data-top-add-menu]");
+  const button = document.querySelector("[data-top-add]");
+  if (menu) {
+    menu.hidden = true;
+    menu.classList.remove("isOpen");
+  }
+  if (button) button.setAttribute("aria-expanded", "false");
+}
+
+function openTopAddMenu() {
+  const menu = document.querySelector("[data-top-add-menu]");
+  const button = document.querySelector("[data-top-add]");
+  if (!menu || !button) return;
+  menu.hidden = false;
+  menu.classList.add("isOpen");
+  button.setAttribute("aria-expanded", "true");
+}
+
+function clearTopAddLongPress() {
+  if (!topAddLongPressTimer) return;
+  window.clearTimeout(topAddLongPressTimer);
+  topAddLongPressTimer = null;
+}
+
+function focusSupplyInputSoon() {
+  window.setTimeout(() => {
+    document.querySelector('[data-create-supply] input[name="title"]')?.focus();
+  }, 0);
+}
+
+async function runTopAddAction(action) {
+  closeTopAddMenu();
+  if (action === "event") {
+    window.location.hash = "#/add-event";
+    return;
+  }
+  if (action === "task") {
+    window.location.hash = "#/add-task";
+    return;
+  }
+  if (action === "supply") {
+    if (getRoute() !== "supplies") {
+      window.location.hash = "#/supplies";
+      focusSupplyInputSoon();
+      return;
+    }
+    const form = document.querySelector("[data-create-supply]");
+    const input = form?.querySelector('input[name="title"]');
+    if (!form || !input) return;
+    if (input.value.trim()) {
+      form.requestSubmit?.();
+      if (!form.requestSubmit) form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    } else {
+      input.focus();
+    }
+    return;
+  }
+  if (action === "menu") {
+    openTopAddMenu();
+    return;
+  }
+  const labels = {
+    memo: "Memo creation from the top + is not wired yet. Use the Memos + for now.",
+    document: "Document upload from the top + is not wired yet.",
+    fax: "Fax sending from the top + is not wired yet.",
+    mail: "Mail compose/import from the top + is not wired yet.",
+  };
+  window.alert(labels[action] || "This add action is not wired yet.");
 }
 
 function hashParam(name) {
@@ -3257,11 +3377,10 @@ function renderAddDatePicker({ title, allowNoDate = false }) {
   `;
 }
 
-function renderCollectionRail(options = {}) {
+function renderCollectionRail() {
   if (portalProfile() === "family") return "";
-  const showTaskAdd = Boolean(options.taskAdd);
   return `
-    <section class="collectionRail ${showTaskAdd ? "hasAction" : ""}" aria-label="${uiText("collection.aria", "Radicale collections")}">
+    <section class="collectionRail" aria-label="${uiText("collection.aria", "Radicale collections")}">
       ${mockAdapter
         .getCollections()
         .map(
@@ -3272,7 +3391,6 @@ function renderCollectionRail(options = {}) {
           `,
         )
         .join("")}
-      ${showTaskAdd ? `<a class="collectionAddButton" href="#/add-task">${uiText("common.add", "Add")}</a>` : ""}
     </section>
   `;
 }
@@ -4048,7 +4166,7 @@ function renderCalendarMonthPanel(options = {}) {
             <button class="monthNavButton" type="button" data-month-shift="1" aria-label="${uiText("calendar.nextMonth", "Next month")}">&gt;&gt;</button>
           </div>
           ${!compact && portalProfile() === "family" ? `<a class="openButton" href="#/caregiver">${uiText("caregiver.label", "Caregiver")}</a>` : ""}
-          ${!compact ? `<a class="openButton" href="#/add-event">${uiText("common.add", "Add")}</a>` : ""}
+          ${!compact && portalProfile() === "family" ? `<a class="openButton" href="#/add-event">${uiText("common.add", "Add")}</a>` : ""}
         </div>
       </div>
       <div class="calendarGrid" aria-label="${uiText("calendar.monthGridAria", "Month grid")}">
@@ -4185,7 +4303,7 @@ function renderTaskEmptyContext() {
 function renderTaskWorkspace(contextHtml = renderTaskEmptyContext()) {
   const tasks = mockAdapter.getTasks().filter((task) => taskMatchesMode(task, state.taskMode));
   return `
-    ${renderCollectionRail({ taskAdd: true })}
+    ${renderCollectionRail()}
     <div class="taskDesktopGrid workspaceSplit">
       <div class="taskMiddlePane">
         ${renderTaskFilters()}
@@ -4198,7 +4316,7 @@ function renderTaskWorkspace(contextHtml = renderTaskEmptyContext()) {
 
 function renderTasks() {
   return isDesktopLayout() ? renderTaskWorkspace() : `
-    ${renderCollectionRail({ taskAdd: true })}
+    ${renderCollectionRail()}
     ${renderTaskFilters()}
     ${renderTaskListPanel(mockAdapter.getTasks().filter((task) => taskMatchesMode(task, state.taskMode)))}
   `;
@@ -4751,7 +4869,7 @@ function renderSupplies(options = {}) {
           <span>Item</span>
           <input name="title" type="text" autocomplete="off" placeholder="gauze" required />
         </label>
-        <button class="openButton supplyAddButton" type="submit">Add</button>
+        ${compact ? `<button class="openButton supplyAddButton" type="submit">Add</button>` : ""}
       </form>
       <div class="panelBody">
         <div class="segmentedTabs supplyModeTabs" role="group" aria-label="Supply mode">
@@ -7345,6 +7463,26 @@ function updateTopBarShadow() {
 }
 
 document.addEventListener("click", async (event) => {
+  const topAddMenuAction = event.target.closest("[data-top-add-menu-action]");
+  if (topAddMenuAction) {
+    event.preventDefault();
+    await runTopAddAction(topAddMenuAction.dataset.topAddMenuAction || "");
+    return;
+  }
+
+  const topAdd = event.target.closest("[data-top-add]");
+  if (topAdd) {
+    event.preventDefault();
+    if (suppressTopAddClick) {
+      suppressTopAddClick = false;
+      return;
+    }
+    await runTopAddAction(topAdd.dataset.topAdd || "menu");
+    return;
+  }
+
+  if (!event.target.closest(".topAddWrap")) closeTopAddMenu();
+
   const embedView = event.target.closest("[data-embed-view]");
   if (embedView) {
     const nextView = embedView.dataset.embedView;
@@ -8486,6 +8624,19 @@ document.addEventListener("keydown", (event) => {
 });
 
 document.addEventListener("pointerdown", (event) => {
+  const topAdd = event.target.closest("[data-top-add]");
+  if (topAdd) {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    clearTopAddLongPress();
+    suppressTopAddClick = false;
+    topAddLongPressTimer = window.setTimeout(() => {
+      topAddLongPressTimer = null;
+      suppressTopAddClick = true;
+      openTopAddMenu();
+    }, 520);
+    return;
+  }
+
   const handle = event.target.closest("[data-rouny-block-handle]");
   const block = handle?.closest("[data-rouny-grid-item]");
   if (!block || (event.pointerType === "mouse" && event.button !== 0)) return;
@@ -8508,6 +8659,13 @@ document.addEventListener("pointerdown", (event) => {
     target: null,
     element: block,
   };
+});
+
+document.addEventListener("pointerup", clearTopAddLongPress);
+document.addEventListener("pointercancel", clearTopAddLongPress);
+document.addEventListener("contextmenu", (event) => {
+  if (!event.target.closest("[data-top-add]")) return;
+  event.preventDefault();
 });
 
 document.addEventListener("pointermove", (event) => {

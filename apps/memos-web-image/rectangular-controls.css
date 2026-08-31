@@ -48,6 +48,14 @@ select,
   padding-bottom: 0 !important;
 }
 
+.memoApp.isEmbedded .controlBar {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.memoApp.isEmbedded .addButton {
+  display: none !important;
+}
+
 .tagFilters button,
 .tagRow button {
   border-radius: 999px !important;

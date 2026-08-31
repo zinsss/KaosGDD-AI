@@ -447,18 +447,77 @@ html.isAgendaSuppliesEmbed body {
   min-width: 0;
 }
 
-.mainHostLabel {
+.topAddWrap {
+  position: relative;
   grid-column: 3;
   grid-row: 1;
   justify-self: end;
-  margin: 0;
-  color: rgba(216, 222, 233, 0.12);
-  font-size: 1.18rem;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: 0;
-  pointer-events: none;
-  white-space: nowrap;
+}
+
+.topAddButton {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  border: 1px solid rgba(136, 192, 208, 0.72);
+  border-radius: 0;
+  background: rgba(136, 192, 208, 0.22);
+  color: var(--nord8);
+  padding: 0;
+  font: 700 1.5rem/1 "Sarasa Gothic Mono", ui-monospace, monospace;
+}
+
+.topAddButton:active,
+.topAddButton[aria-expanded="true"] {
+  border-color: rgba(235, 203, 139, 0.72);
+  color: var(--nord13);
+  background: rgba(235, 203, 139, 0.13);
+}
+
+.topAddMenu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  display: grid;
+  gap: 1px;
+  min-width: 172px;
+  border: 1px solid rgba(136, 192, 208, 0.32);
+  background: rgba(136, 192, 208, 0.32);
+  box-shadow: 0 14px 26px rgba(9, 12, 18, 0.42);
+}
+
+.topAddMenu[hidden] {
+  display: none;
+}
+
+.topAddMenu button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 42px;
+  border: 0;
+  border-radius: 0;
+  background: rgba(46, 52, 64, 0.98);
+  color: var(--nord6);
+  padding: 0 12px;
+  font: 600 0.88rem/1 "Sarasa Gothic Mono", ui-monospace, monospace;
+  text-align: left;
+}
+
+.topAddMenu button:first-child {
+  color: var(--nord13);
+}
+
+.topAddMenu button.isDummy {
+  color: rgba(216, 222, 233, 0.58);
+}
+
+.topAddMenu small {
+  color: rgba(136, 192, 208, 0.62);
+  font-size: 0.68rem;
 }
 
 .mainMenuPicker > span {
@@ -1096,14 +1155,6 @@ h3 {
   color: var(--nord15);
 }
 
-.collectionRail .collectionAddButton {
-  justify-content: center;
-  flex: 0 0 86px;
-  border-color: rgba(136, 192, 208, 0.68);
-  background: rgba(136, 192, 208, 0.22);
-  color: var(--nord8);
-}
-
 .taskFilters {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -1114,18 +1165,6 @@ h3 {
 .taskFilters label {
   display: grid;
   gap: 5px;
-}
-
-.taskFilters .taskAddSlot {
-  display: grid;
-  align-self: stretch;
-  gap: 5px;
-}
-
-.taskFilters .taskAddSlot::before {
-  content: "";
-  display: block;
-  min-height: 0.82rem;
 }
 
 .taskFilters span {
@@ -1489,6 +1528,10 @@ h3 {
   align-items: end;
   column-gap: 8px;
   row-gap: 5px;
+}
+
+.panel:not(.embedSuppliesPanel) > .supplyComposer {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .supplyComposer label {
@@ -4326,38 +4369,6 @@ h3 {
 
 .app[data-profile="main"] .timeline li {
   align-items: center;
-}
-
-.app[data-profile="main"] .collectionRail .collectionAddButton {
-  border-color: rgba(136, 192, 208, 0.72);
-  background: rgba(136, 192, 208, 0.22);
-  color: var(--nord8);
-}
-
-.app[data-profile="main"] .taskFilters .taskAddSlot {
-  display: grid !important;
-  align-self: stretch !important;
-  gap: 5px !important;
-  height: auto !important;
-  min-height: 0 !important;
-  max-height: none !important;
-  overflow: visible;
-}
-
-.app[data-profile="main"] .taskFilters .taskAddSlot::before {
-  content: "";
-  display: block;
-  min-height: 0.82rem;
-}
-
-.app[data-profile="main"] .taskFilters .taskAddButton {
-  align-self: flex-end !important;
-  height: 44px !important;
-  min-height: 44px !important;
-  max-height: 44px !important;
-  padding-top: 0 !important;
-  padding-bottom: 0 !important;
-  line-height: 1 !important;
 }
 
 .app[data-profile="family"] {
