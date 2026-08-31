@@ -446,26 +446,18 @@ html.isAgendaSuppliesEmbed body {
   min-width: 0;
 }
 
-.mainHostLink {
+.mainHostLabel {
   grid-column: 3;
   grid-row: 1;
   justify-self: end;
   margin: 0;
-  color: rgba(216, 222, 233, 0.2);
+  color: rgba(216, 222, 233, 0.12);
   font-size: 1.18rem;
   font-weight: 700;
   line-height: 1;
   letter-spacing: 0;
-  text-decoration: none;
+  pointer-events: none;
   white-space: nowrap;
-}
-
-.mainHostLink:focus,
-.mainHostLink:focus-visible,
-.mainHostLink:active {
-  outline: 0;
-  color: rgba(216, 222, 233, 0.28);
-  text-decoration: none;
 }
 
 .mainMenuPicker > span {
