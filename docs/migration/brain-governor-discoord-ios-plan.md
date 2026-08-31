@@ -1535,6 +1535,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-31 | 6 | Simplified the personal selector and Archive Terminal action labels | Removed the top selector `•` indicator and bracketed Archive Terminal button text; versioned `styles.css?v=233` and `app.js?v=223`; 15 portal tests, JavaScript syntax checks, and `git diff --check` pass | Presentation-only follow-up; static portal promotion pending |
 | 2026-08-31 | 6 | Corrected the Tasks Add button height | Forced the Add control to the same 44 px block size as the task filters and versioned `styles.css?v=234`; 15 portal tests, JavaScript syntax check, and `git diff --check` pass | Presentation-only follow-up; static portal promotion pending |
 | 2026-08-31 | 6 | Corrected the Tasks Add button row placement | Added a filter-row spacer slot so Add occupies only the select row; versioned `styles.css?v=235` and `app.js?v=224`; 15 portal tests, JavaScript syntax check, and `git diff --check` pass | Presentation-only follow-up; static portal promotion pending |
+| 2026-08-31 | 6 | Extended the Archive Terminal visual language across the personal PWA | Personal profile now uses Sarasa Gothic Mono by default and ignores prior non-mono font preferences; common personal panels, controls, rows, and calendar surfaces use darker Nord variables and rectangular corners; versioned `styles.css?v=236` and `app.js?v=225` | Presentation-only follow-up; Family styling unchanged; static portal promotion pending |
 
 ## How to Update This Tracker
 

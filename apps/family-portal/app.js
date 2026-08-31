@@ -2688,7 +2688,7 @@ function setFamilyFontPreference(value) {
 
 function mainFontPreference() {
   const stored = window.localStorage.getItem(MAIN_FONT_STORAGE_KEY) || "";
-  return MAIN_FONT_OPTIONS.has(stored) ? stored : "pretendard";
+  return MAIN_FONT_OPTIONS.has(stored) ? stored : "sarasa";
 }
 
 function applyMainFontPreference(value = mainFontPreference()) {
@@ -2698,11 +2698,11 @@ function applyMainFontPreference(value = mainFontPreference()) {
     delete app.dataset.mainFont;
     return;
   }
-  app.dataset.mainFont = MAIN_FONT_OPTIONS.has(value) ? value : "pretendard";
+  app.dataset.mainFont = MAIN_FONT_OPTIONS.has(value) ? value : "sarasa";
 }
 
 function setMainFontPreference(value) {
-  const normalized = MAIN_FONT_OPTIONS.has(value) ? value : "pretendard";
+  const normalized = MAIN_FONT_OPTIONS.has(value) ? value : "sarasa";
   window.localStorage.setItem(MAIN_FONT_STORAGE_KEY, normalized);
   applyMainFontPreference(normalized);
 }
@@ -6517,13 +6517,7 @@ function renderSettings() {
               : `
                 <div>
                   <dt>Font</dt>
-                  <dd>
-                    <select data-main-font-setting aria-label="Font">
-                      <option value="pretendard" ${mainFontPreference() === "pretendard" ? "selected" : ""}>Pretendard</option>
-                      <option value="orbit" ${mainFontPreference() === "orbit" ? "selected" : ""}>Orbit</option>
-                      <option value="sarasa" ${mainFontPreference() === "sarasa" ? "selected" : ""}>Sarasa Gothic</option>
-                    </select>
-                  </dd>
+                  <dd>Sarasa Gothic Mono</dd>
                 </div>
               `
           }

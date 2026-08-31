@@ -4115,22 +4115,94 @@ h3 {
   font-weight: 900;
 }
 
-.app[data-profile="main"] {
-  font-family:
-    "Pretendard", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-    "Segoe UI", sans-serif;
-}
-
-.app[data-profile="main"][data-main-font="orbit"] {
-  font-family:
-    "Orbit", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-    "Segoe UI", sans-serif;
-}
-
+.app[data-profile="main"],
+.app[data-profile="main"][data-main-font="pretendard"],
+.app[data-profile="main"][data-main-font="orbit"],
 .app[data-profile="main"][data-main-font="sarasa"] {
+  --bg: #252b36;
+  --panel: #2d3441;
+  --surface: #28303c;
+  --raised: #343c4a;
+  --line: rgba(136, 192, 208, 0.24);
+  --line-strong: rgba(216, 222, 233, 0.34);
+  --shadow: rgba(9, 12, 18, 0.38);
   font-family:
     "Sarasa Gothic Mono", ui-monospace, "SFMono-Regular", Consolas,
     "Liberation Mono", monospace;
+}
+
+.app[data-profile="main"] {
+  background: var(--bg);
+}
+
+.app[data-profile="main"] .panel,
+.app[data-profile="main"] .composer,
+.app[data-profile="main"] .collectionRail button,
+.app[data-profile="main"] .segmentedTabs button,
+.app[data-profile="main"] .taskFilters select,
+.app[data-profile="main"] .taskAddButton,
+.app[data-profile="main"] .openButton,
+.app[data-profile="main"] .primaryButton,
+.app[data-profile="main"] .dangerButton,
+.app[data-profile="main"] .plainButton,
+.app[data-profile="main"] .iconTextButton,
+.app[data-profile="main"] .monthNavButton,
+.app[data-profile="main"] .monthTodayButton,
+.app[data-profile="main"] .calendarGrid,
+.app[data-profile="main"] .day,
+.app[data-profile="main"] .timeline,
+.app[data-profile="main"] .timeline li,
+.app[data-profile="main"] .taskRow,
+.app[data-profile="main"] .taskBadge,
+.app[data-profile="main"] .eventContextBar a,
+.app[data-profile="main"] .calendarPill,
+.app[data-profile="main"] .timelineAllDayPill,
+.app[data-profile="main"] .metric,
+.app[data-profile="main"] .serviceRow,
+.app[data-profile="main"] .settingsList select,
+.app[data-profile="main"] .composer input,
+.app[data-profile="main"] .composer select,
+.app[data-profile="main"] .composer textarea,
+.app[data-profile="main"] .ledgerEditorFields input,
+.app[data-profile="main"] .ledgerEditorFields select,
+.app[data-profile="main"] .ledgerTable input,
+.app[data-profile="main"] .ledgerTable select {
+  border-radius: 0;
+}
+
+.app[data-profile="main"] .panel,
+.app[data-profile="main"] .composer,
+.app[data-profile="main"] .calendarGrid,
+.app[data-profile="main"] .timeline,
+.app[data-profile="main"] .taskList,
+.app[data-profile="main"] .settingsDisclosure {
+  border-color: var(--line);
+  background: var(--panel);
+}
+
+.app[data-profile="main"] .composer input,
+.app[data-profile="main"] .composer select,
+.app[data-profile="main"] .composer textarea,
+.app[data-profile="main"] .taskFilters select,
+.app[data-profile="main"] .settingsList select,
+.app[data-profile="main"] .ledgerEditorFields input,
+.app[data-profile="main"] .ledgerEditorFields select,
+.app[data-profile="main"] .ledgerTable input,
+.app[data-profile="main"] .ledgerTable select {
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+.app[data-profile="main"] .collectionRail button,
+.app[data-profile="main"] .segmentedTabs button,
+.app[data-profile="main"] .openButton,
+.app[data-profile="main"] .primaryButton,
+.app[data-profile="main"] .dangerButton,
+.app[data-profile="main"] .monthNavButton,
+.app[data-profile="main"] .monthTodayButton,
+.app[data-profile="main"] .iconTextButton {
+  border-color: var(--line);
+  background: rgba(67, 76, 94, 0.28);
 }
 
 .app[data-profile="main"] .topNav a,
