@@ -4442,21 +4442,13 @@ function renderFax() {
       </section>
     `
     : "";
-  const statusText = fax.error ? "ERROR" : fax.loading ? "BUSY" : "ONLINE";
   const summary = fax.checked && !fax.error
     ? `${items.length} RECORDS // ${mode.toUpperCase()} BOARD`
     : fax.loading
       ? "LOADING FAX BOARD"
       : "FAX BOARD STANDBY";
   return `
-    <section class="archiveTerminal" data-archive-kind="fax" aria-labelledby="faxArchiveTitle">
-      <header class="archiveMasthead">
-        <div>
-          <p class="archiveNodeLabel">KAOS ARCHIVE NODE // HYLAFAX</p>
-          <h2 id="faxArchiveTitle" class="archiveTitle">FAX BOARD</h2>
-        </div>
-        <p class="archiveLinkState ${archiveLinkStateClass(statusText)}" role="status">${escapeHtml(statusText)}</p>
-      </header>
+    <section class="archiveTerminal" data-archive-kind="fax" aria-label="Fax board">
       <div class="archiveCommand" aria-label="Fax board modes">
         <div class="archiveCommandActions">${modeButtons}</div>
         <button class="archiveAction" type="button" data-fax-refresh ${fax.loading ? "disabled" : ""}>REFRESH</button>
@@ -4764,16 +4756,8 @@ function renderDocuments() {
           </section>
         `
         : "";
-  const statusText = documents.error ? "ERROR" : documents.loading ? "BUSY" : "ONLINE";
   return `
-    <section class="archiveTerminal" data-archive-kind="documents" aria-labelledby="documentsArchiveTitle">
-      <header class="archiveMasthead">
-        <div>
-          <p class="archiveNodeLabel">KAOS ARCHIVE NODE // PAPERLESS</p>
-          <h2 id="documentsArchiveTitle" class="archiveTitle">DOCUMENT ARCHIVE</h2>
-        </div>
-        <p class="archiveLinkState ${archiveLinkStateClass(statusText)}" role="status">${escapeHtml(statusText)}</p>
-      </header>
+    <section class="archiveTerminal" data-archive-kind="documents" aria-label="Document archive">
       <form class="archiveCommand" data-document-search role="search">
         <label class="archiveCommandLine" for="paperlessQuery">
           <span>SEARCH&gt;</span>
