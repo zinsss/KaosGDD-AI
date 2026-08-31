@@ -2130,6 +2130,10 @@ function formatCaregiverWon(value) {
   return `₩${Math.max(0, Math.round(Number(value) || 0)).toLocaleString("ko-KR")}`;
 }
 
+function formatCaregiverPlainWon(value) {
+  return `${Math.max(0, Math.round(Number(value) || 0)).toLocaleString("ko-KR")}원`;
+}
+
 function formatCaregiverHours(minutes) {
   const safeMinutes = Math.max(0, Math.round(Number(minutes) || 0));
   const hours = Math.floor(safeMinutes / 60);
@@ -2145,6 +2149,44 @@ function formatCaregiverMonthCellHours(minutes) {
   const hourText = `${hours}${uiText("caregiver.hoursSuffix", "h")}`;
   if (!remainder) return escapeHtml(hourText);
   return `${escapeHtml(hourText)}<br>${escapeHtml(`${remainder}${uiText("caregiver.minutesSuffix", "m")}`)}`;
+}
+
+function caregiverMonthCopyText(month, data) {
+  const summary = data?.summary || {
+    days: 0,
+    minutes: 0,
+    basePay: 0,
+    extras: 0,
+    transportFee: 0,
+    total: 0,
+  };
+  const recordedDays = (Array.isArray(data?.daily) ? data.daily : [])
+    .filter((item) => Number(item.minutes) > 0 || Number(item.extras) > 0)
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+  const lines = [
+    `${monthTitle(month)} 돌봄 내역`,
+    `합계: ${summary.days}${uiText("caregiver.daysSuffix", "d")} / ${formatCaregiverHours(summary.minutes)}`,
+    `기본 급여: ${formatCaregiverPlainWon(summary.basePay)}`,
+    `추가 요금: ${formatCaregiverPlainWon(summary.extras)}`,
+    `교통비: ${formatCaregiverPlainWon(summary.transportFee)}`,
+    `총 지급액: ${formatCaregiverPlainWon(summary.total)}`,
+    "",
+    "일별 내역",
+  ];
+  if (!recordedDays.length) {
+    lines.push("기록 없음");
+    return lines.join("\n");
+  }
+  recordedDays.forEach((item) => {
+    const parts = [
+      `${String(item.date || "").slice(5)} ${item.weekday || ""}`.trim(),
+      formatCaregiverHours(item.minutes),
+    ];
+    if (Number(item.extras) > 0) parts.push(`추가 ${formatCaregiverPlainWon(item.extras)}`);
+    if (item.notes) parts.push(String(item.notes));
+    lines.push(parts.filter(Boolean).join(" · "));
+  });
+  return lines.join("\n");
 }
 
 function caregiverTimeMinutes(value) {
@@ -7010,6 +7052,10 @@ function renderCaregiver() {
             <details class="panel caregiverDetailPanel">
               <summary class="caregiverDetailSummary">${uiText("caregiver.details", "Monthly details")}</summary>
               <div class="panelBody caregiverDetailBody">
+                <div class="caregiverDetailTools">
+                  <span>${escapeHtml(monthTitle(month))} 공유용 요약</span>
+                  <button class="openButton" type="button" data-caregiver-copy-month>복사</button>
+                </div>
                 <div class="caregiverMonthGrid" aria-label="${uiText("caregiver.monthGridAria", "Monthly care hours")}">
                   ${calendarWeekdays().map((day) => `<span class="caregiverWeekday">${day}</span>`).join("")}
                   ${monthCells(month)
@@ -7453,6 +7499,19 @@ document.addEventListener("click", async (event) => {
   if (event.target.closest("[data-caregiver-retry]")) {
     state.caregiver = { key: "", loadingKey: "", error: "", data: null };
     render();
+    return;
+  }
+
+  if (event.target.closest("[data-caregiver-copy-month]")) {
+    const month = state.selectedDate.slice(0, 7);
+    const data = state.caregiver.key === month ? state.caregiver.data : null;
+    if (!data) return;
+    try {
+      await writeTextToClipboard(caregiverMonthCopyText(month, data));
+      window.alert("돌봄 월간 요약을 복사했습니다.");
+    } catch (error) {
+      window.alert(`복사 실패: ${error.message || "unknown error"}`);
+    }
     return;
   }
 

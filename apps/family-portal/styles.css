@@ -4804,6 +4804,16 @@ h3 {
   gap: 14px;
 }
 
+.caregiverDetailTools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
 .caregiverMonthGrid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
