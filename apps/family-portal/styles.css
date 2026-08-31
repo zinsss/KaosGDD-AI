@@ -3710,17 +3710,18 @@ h3 {
   left: 6px;
   right: 6px;
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  align-items: center;
-  gap: 7px;
+  grid-template-rows: auto minmax(0, 1fr);
+  justify-items: center;
+  align-content: center;
+  gap: 3px;
   min-width: 0;
   overflow: hidden;
   border: 1px solid rgba(129, 161, 193, 0.6);
   border-radius: 10px;
-  padding: 5px 20px 5px 8px;
+  padding: 5px 20px 6px 8px;
   background: var(--surface);
   color: #2e3440;
-  text-align: left;
+  text-align: center;
   box-shadow: none;
   cursor: pointer;
   touch-action: pan-y;
@@ -3754,7 +3755,7 @@ h3 {
   align-items: center;
   justify-content: center;
   width: 32px;
-  height: 32px;
+  height: 22px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -3773,7 +3774,11 @@ h3 {
   font-weight: 900;
   line-height: 1.08;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .rounyBlock.isDragging {
@@ -4888,9 +4893,10 @@ h3 {
   .rounyBlock {
     left: 3px;
     right: 3px;
-    grid-template-columns: 24px minmax(0, 1fr);
-    gap: 3px;
-    padding: 4px 18px 4px 4px;
+    grid-template-columns: none;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 2px;
+    padding: 4px 18px 5px 4px;
     border-radius: 8px;
   }
 
@@ -4902,13 +4908,14 @@ h3 {
 
   .rounyBlockIcon {
     width: 22px;
-    height: 22px;
+    height: 18px;
     border-radius: 7px;
     font-size: 0.84rem;
   }
 
   .rounyBlock strong {
     font-size: 0.72rem;
+    -webkit-line-clamp: 2;
   }
 
   .rounyItemGrid {
@@ -6175,8 +6182,9 @@ h3 {
     border-color: rgba(46, 52, 64, 0.28) !important;
     left: 5px;
     right: 5px;
-    grid-template-columns: 28px minmax(0, 1fr);
-    gap: 5px;
+    grid-template-columns: none;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 2px;
     min-height: 16px;
     border-radius: 8px;
     padding: 4px 6px;
@@ -6184,7 +6192,7 @@ h3 {
 
   .rounyBlockIcon {
     width: 26px;
-    height: 26px;
+    height: 18px;
     border-radius: 6px;
     font-size: 10pt;
   }
