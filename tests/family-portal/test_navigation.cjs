@@ -40,9 +40,9 @@ test("unknown personal routes safely select Agenda", () => {
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
   const navigationIndex = index.indexOf('src="/navigation.js?v=1"');
-  const documentsIndex = index.indexOf('src="/documents.js?v=1"');
+  const documentsIndex = index.indexOf('src="/documents.js?v=2"');
   const faxIndex = index.indexOf('src="/fax.js?v=1"');
-  const applicationIndex = index.indexOf('src="/app.js?v=230"');
+  const applicationIndex = index.indexOf('src="/app.js?v=231"');
   assert.ok(navigationIndex >= 0);
   assert.ok(documentsIndex > navigationIndex);
   assert.ok(faxIndex > documentsIndex);

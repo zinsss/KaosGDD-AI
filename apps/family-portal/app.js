@@ -4684,8 +4684,8 @@ function renderDocuments() {
   const documents = state.documents;
   const rows = documents.items
     .map((item) => {
-      const title = item.title || item.filename || `Document ${item.id}`;
-      const correspondent = item.correspondent || item.filename || "UNKNOWN";
+      const title = item.title || `Document ${item.id}`;
+      const correspondent = item.correspondent || "UNKNOWN";
       const date = archiveDateParts(item.created);
       return `
         <li class="archiveRecord ${String(documents.selectedId) === String(item.id) ? "isSelected" : ""}">
@@ -4737,14 +4737,13 @@ function renderDocuments() {
             <header class="archiveDetailHeader">
               <div>
                 <p>PAPERLESS #${escapeHtml(selected.id)}</p>
-                <h3 id="archiveDetailTitle">${escapeHtml(selected.title || selected.filename || "Document")}</h3>
+                <h3 id="archiveDetailTitle">${escapeHtml(selected.title || `Document ${selected.id}`)}</h3>
               </div>
               <button class="archiveAction" type="button" data-paperless-close>BACK</button>
             </header>
             <dl class="archiveMetadata">
               ${archiveMeta("Correspondent", selected.correspondent || "unknown")}
               ${archiveMeta("Created", selected.created ? formatDocumentDate(selected.created) : "")}
-              ${archiveMeta("Filename", selected.filename || "")}
             </dl>
             <div class="archiveActions">
               ${selected.url ? `<a class="archiveAction" href="${escapeHtml(selected.url)}" target="_blank" rel="noopener noreferrer">OPEN PAPERLESS</a>` : ""}

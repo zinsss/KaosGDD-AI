@@ -13,7 +13,7 @@
     const id = positiveInteger(item.id, 0);
     return Object.freeze({
       id,
-      title: String(item.title || item.filename || (id ? `Document ${id}` : "Document")),
+      title: String(item.title || (id ? `Document ${id}` : "Document")),
       created: String(item.created || ""),
       filename: String(item.filename || ""),
       correspondent: String(item.correspondent || ""),
