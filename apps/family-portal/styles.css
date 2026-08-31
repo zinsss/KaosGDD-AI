@@ -1098,8 +1098,11 @@ h3 {
 }
 
 .taskFilters .taskAddButton {
+  align-self: end;
+  box-sizing: border-box;
   height: 44px;
   min-height: 44px;
+  max-height: 44px;
   padding: 0 16px;
 }
 
