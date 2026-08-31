@@ -1551,6 +1551,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-31 | 6 | Removed redundant Documents and Fax archive mastheads | Dropped the in-content `DOCUMENT ARCHIVE` and `FAX BOARD` masthead blocks so the top page selector remains the only page title; versioned `app.js?v=230` | Presentation-only follow-up; static portal promotion pending |
 | 2026-08-31 | 6 | Removed visible filename fallbacks from Documents | Document rows and details now show title/correspondent only, falling back to `Document #id` and `UNKNOWN` instead of filenames; versioned `documents.js?v=2` and `app.js?v=231` | Presentation-only follow-up; static portal promotion pending |
 | 2026-08-31 | 6 | Corrected the personal host label text | The faint non-clickable header label now reads exactly `https://kaosgdd.net`; versioned `app.js?v=232` | Presentation-only follow-up; static portal promotion pending |
+| 2026-08-31 | 6 | Corrected the personal owner display label | Portal-owned UI now displays the personal collection label as `GDDZiN` instead of `GDD_ZiN`; versioned `app.js?v=233` | Presentation-only follow-up; static portal promotion pending |
 
 ## How to Update This Tracker
 

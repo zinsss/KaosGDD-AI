@@ -521,7 +521,7 @@ function collectionViews() {
 
 function calendarOwnerLabel(owner, collection = null) {
   const labels = {
-    zin: "GDD_ZiN",
+    zin: "GDDZiN",
     family: uiText("collection.family", "Family"),
     wife: uiText("collection.wife", "Bling02"),
   };
@@ -6331,7 +6331,7 @@ function recurringStatusPolicyLabel(policy) {
 function recurringStatusOwnerLabel(item) {
   if (item.shareFamily || item.owner === "family") return "Family";
   if (item.owner === "wife") return "Bling02";
-  return "GDD_ZiN";
+  return "GDDZiN";
 }
 
 function recurringStatusDateLabel(item) {
