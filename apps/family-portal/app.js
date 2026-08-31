@@ -2861,7 +2861,7 @@ function renderTopNav(route) {
     nav.innerHTML = `
       <div class="mainMenuPicker">
         <span>Main menu</span>
-        <small class="mainHostLabel" aria-hidden="true">kaosgsd.net</small>
+        <small class="mainHostLabel" aria-hidden="true">https://kaosgdd.net</small>
         <select data-main-menu aria-label="Main menu">
           ${profileConfig().nav.map((item) => `
             <option value="${escapeHtml(item.route)}" ${item.route === selectedRoute ? "selected" : ""}>${escapeHtml(item.label)}</option>
