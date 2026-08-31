@@ -440,18 +440,6 @@ html.isAgendaSuppliesEmbed body {
   min-width: 148px;
 }
 
-.mainMenuPicker::after {
-  content: "•";
-  position: absolute;
-  top: 50%;
-  right: 8px;
-  color: var(--nord8);
-  font-size: 1.2rem;
-  line-height: 1;
-  pointer-events: none;
-  transform: translateY(-50%);
-}
-
 .mainMenuPicker > span {
   position: absolute;
   width: 1px;
@@ -469,7 +457,7 @@ html.isAgendaSuppliesEmbed body {
   appearance: none;
   width: 100%;
   min-height: 44px;
-  padding: 6px 30px 6px 0;
+  padding: 6px 0;
   border: 0;
   border-radius: 0;
   background: transparent;

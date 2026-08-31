@@ -4381,7 +4381,7 @@ function renderFax() {
     .map((itemMode) => {
       const active = itemMode === mode;
       const count = fax.counts[itemMode] || 0;
-      return `<button class="archiveAction ${active ? "isActive" : ""}" type="button" data-fax-mode="${escapeHtml(itemMode)}" aria-pressed="${active}">[ ${escapeHtml(itemMode.toUpperCase())} ${escapeHtml(count)} ]</button>`;
+      return `<button class="archiveAction ${active ? "isActive" : ""}" type="button" data-fax-mode="${escapeHtml(itemMode)}" aria-pressed="${active}">${escapeHtml(itemMode.toUpperCase())} ${escapeHtml(count)}</button>`;
     })
     .join("");
   const rows = items
@@ -4417,7 +4417,7 @@ function renderFax() {
             <p>${escapeHtml(selected.direction === "incoming" ? "RECEIVED FAX" : "SENT FAX")} #${escapeHtml(selected.id.slice(0, 8).toUpperCase())}</p>
             <h3 id="faxDetailTitle">${escapeHtml(selected.title || selected.filename || "Fax")}</h3>
           </div>
-          <button class="archiveAction" type="button" data-fax-close>[ BACK ]</button>
+          <button class="archiveAction" type="button" data-fax-close>BACK</button>
         </header>
         <dl class="archiveMetadata">
           ${archiveMeta("Direction", selected.direction === "incoming" ? "Incoming" : "Outgoing")}
@@ -4432,8 +4432,8 @@ function renderFax() {
         <div class="archiveActions">
           ${
             selected.documentAvailable && selected.documentUrl
-              ? `<a class="archiveAction" href="${escapeHtml(selected.documentUrl)}" target="_blank" rel="noopener noreferrer">[ OPEN PDF ]</a>`
-              : `<span class="archiveAction isDisabled">[ PDF NOT RETAINED ]</span>`
+              ? `<a class="archiveAction" href="${escapeHtml(selected.documentUrl)}" target="_blank" rel="noopener noreferrer">OPEN PDF</a>`
+              : `<span class="archiveAction isDisabled">PDF NOT RETAINED</span>`
           }
         </div>
       </section>
@@ -4456,7 +4456,7 @@ function renderFax() {
       </header>
       <div class="archiveCommand" aria-label="Fax board modes">
         <div class="archiveCommandActions">${modeButtons}</div>
-        <button class="archiveAction" type="button" data-fax-refresh ${fax.loading ? "disabled" : ""}>[ REFRESH ]</button>
+        <button class="archiveAction" type="button" data-fax-refresh ${fax.loading ? "disabled" : ""}>REFRESH</button>
       </div>
       <div class="archiveWorkspace ${hasDetail ? "hasDetail" : ""}">
         <section class="archiveIndex" aria-labelledby="faxIndexTitle" aria-busy="${fax.loading}">
@@ -4469,7 +4469,7 @@ function renderFax() {
           </div>
           ${
             fax.error
-              ? `<div class="archiveError" role="alert"><p>${escapeHtml(fax.error)}</p><button class="archiveAction" type="button" data-fax-refresh>[ RETRY ]</button></div>`
+              ? `<div class="archiveError" role="alert"><p>${escapeHtml(fax.error)}</p><button class="archiveAction" type="button" data-fax-refresh>RETRY</button></div>`
               : fax.loading && !fax.checked
                 ? `<p class="archiveStatusMessage">Reading HylaFAX archive...</p>`
                 : rows
@@ -4718,7 +4718,7 @@ function renderDocuments() {
             <p>DOCUMENT DETAIL</p>
             <h3 id="archiveDetailTitle">Loading document...</h3>
           </div>
-          <button class="archiveAction" type="button" data-paperless-close>[ BACK ]</button>
+          <button class="archiveAction" type="button" data-paperless-close>BACK</button>
         </header>
         <p class="archiveStatusMessage">Reading OCR packet...</p>
       </section>
@@ -4731,7 +4731,7 @@ function renderDocuments() {
               <p>DOCUMENT DETAIL</p>
               <h3 id="archiveDetailTitle">Document unavailable</h3>
             </div>
-            <button class="archiveAction" type="button" data-paperless-close>[ BACK ]</button>
+            <button class="archiveAction" type="button" data-paperless-close>BACK</button>
           </header>
           <div class="archiveError" role="alert"><p>${escapeHtml(documents.detailError)}</p></div>
         </section>
@@ -4744,7 +4744,7 @@ function renderDocuments() {
                 <p>PAPERLESS #${escapeHtml(selected.id)}</p>
                 <h3 id="archiveDetailTitle">${escapeHtml(selected.title || selected.filename || "Document")}</h3>
               </div>
-              <button class="archiveAction" type="button" data-paperless-close>[ BACK ]</button>
+              <button class="archiveAction" type="button" data-paperless-close>BACK</button>
             </header>
             <dl class="archiveMetadata">
               ${archiveMeta("Correspondent", selected.correspondent || "unknown")}
@@ -4752,7 +4752,7 @@ function renderDocuments() {
               ${archiveMeta("Filename", selected.filename || "")}
             </dl>
             <div class="archiveActions">
-              ${selected.url ? `<a class="archiveAction" href="${escapeHtml(selected.url)}" target="_blank" rel="noopener noreferrer">[ OPEN PAPERLESS ]</a>` : ""}
+              ${selected.url ? `<a class="archiveAction" href="${escapeHtml(selected.url)}" target="_blank" rel="noopener noreferrer">OPEN PAPERLESS</a>` : ""}
             </div>
             <div class="archiveOcrRegion" role="region" aria-label="OCR text" tabindex="0">
               <p>OCR TEXT</p>
@@ -4777,9 +4777,9 @@ function renderDocuments() {
           <input id="paperlessQuery" name="query" type="search" value="${escapeHtml(documents.query)}" placeholder="title / sender / OCR" autocomplete="off" />
         </label>
         <div class="archiveCommandActions">
-          ${documents.appliedQuery ? `<button class="archiveAction" type="button" data-documents-clear>[ CLEAR ]</button>` : ""}
-          <button class="archiveAction" type="submit" ${documents.loading ? "disabled" : ""}>[ SEARCH ]</button>
-          <button class="archiveAction" type="button" data-documents-refresh ${documents.loading ? "disabled" : ""}>[ REFRESH ]</button>
+          ${documents.appliedQuery ? `<button class="archiveAction" type="button" data-documents-clear>CLEAR</button>` : ""}
+          <button class="archiveAction" type="submit" ${documents.loading ? "disabled" : ""}>SEARCH</button>
+          <button class="archiveAction" type="button" data-documents-refresh ${documents.loading ? "disabled" : ""}>REFRESH</button>
         </div>
       </form>
       <div class="archiveWorkspace ${hasDetail ? "hasDetail" : ""}">
@@ -4793,7 +4793,7 @@ function renderDocuments() {
           </div>
           ${
             documents.error
-              ? `<div class="archiveError" role="alert"><p>${escapeHtml(documents.error)}</p><button class="archiveAction" type="button" data-documents-refresh>[ RETRY ]</button></div>`
+              ? `<div class="archiveError" role="alert"><p>${escapeHtml(documents.error)}</p><button class="archiveAction" type="button" data-documents-refresh>RETRY</button></div>`
               : documents.loading && !documents.checked
                 ? `<p class="archiveStatusMessage">Searching Paperless archive...</p>`
                 : !documents.error && documents.checked && !rows
@@ -4806,9 +4806,9 @@ function renderDocuments() {
             !documents.error && documents.checked && documents.pageCount > 1
               ? `
                 <nav class="archivePager" aria-label="Document pages">
-                  <button class="archiveAction" type="button" aria-label="Previous document page" data-documents-page="${documents.page - 1}" ${documents.page <= 1 ? "disabled" : ""}>[ &lt; ]</button>
+                  <button class="archiveAction" type="button" aria-label="Previous document page" data-documents-page="${documents.page - 1}" ${documents.page <= 1 ? "disabled" : ""}>&lt;</button>
                   <span>PAGE ${documents.page}/${documents.pageCount}</span>
-                  <button class="archiveAction" type="button" aria-label="Next document page" data-documents-page="${documents.page + 1}" ${documents.page >= documents.pageCount ? "disabled" : ""}>[ &gt; ]</button>
+                  <button class="archiveAction" type="button" aria-label="Next document page" data-documents-page="${documents.page + 1}" ${documents.page >= documents.pageCount ? "disabled" : ""}>&gt;</button>
                 </nav>
               `
               : ""
