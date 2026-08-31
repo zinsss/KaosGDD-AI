@@ -39,6 +39,15 @@ select,
   padding: 0 !important;
 }
 
+.memoApp .appBody,
+.memoApp.isEmbedded .appBody {
+  padding-bottom: max(8px, env(safe-area-inset-bottom, 0px)) !important;
+}
+
+.memoApp.isEmbedded .memoFeed {
+  padding-bottom: 0 !important;
+}
+
 .tagFilters button,
 .tagRow button {
   border-radius: 999px !important;
