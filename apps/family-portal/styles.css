@@ -1103,10 +1103,15 @@ h3 {
 }
 
 .taskFilters .taskAddSlot {
-  display: flex;
-  align-items: flex-end;
-  align-self: end;
-  height: 44px;
+  display: grid;
+  align-self: stretch;
+  gap: 5px;
+}
+
+.taskFilters .taskAddSlot::before {
+  content: "";
+  display: block;
+  min-height: 0.82rem;
 }
 
 .taskFilters span {
@@ -4307,13 +4312,19 @@ h3 {
 }
 
 .app[data-profile="main"] .taskFilters .taskAddSlot {
-  display: flex !important;
-  align-items: flex-end !important;
-  align-self: end !important;
-  height: 44px !important;
-  min-height: 44px !important;
-  max-height: 44px !important;
-  overflow: hidden;
+  display: grid !important;
+  align-self: stretch !important;
+  gap: 5px !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: visible;
+}
+
+.app[data-profile="main"] .taskFilters .taskAddSlot::before {
+  content: "";
+  display: block;
+  min-height: 0.82rem;
 }
 
 .app[data-profile="main"] .taskFilters .taskAddButton {
