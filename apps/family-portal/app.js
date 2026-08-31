@@ -4451,7 +4451,7 @@ function renderFax() {
     <section class="archiveTerminal" data-archive-kind="fax" aria-label="Fax board">
       <div class="archiveCommand" aria-label="Fax board modes">
         <div class="archiveCommandActions">${modeButtons}</div>
-        <button class="archiveAction" type="button" data-fax-refresh ${fax.loading ? "disabled" : ""}>REFRESH</button>
+        <button class="archiveAction archiveRefreshAction" type="button" data-fax-refresh aria-label="Refresh fax board" title="Refresh fax board" ${fax.loading ? "disabled" : ""}>↻</button>
       </div>
       <div class="archiveWorkspace ${hasDetail ? "hasDetail" : ""}">
         <section class="archiveIndex" aria-labelledby="faxIndexTitle" aria-busy="${fax.loading}">

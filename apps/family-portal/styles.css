@@ -5703,6 +5703,12 @@ h3 {
   padding: 10px;
 }
 
+.app[data-profile="main"] [data-archive-kind="fax"] .archiveCommand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .app[data-profile="main"] .archiveCommandLine {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -5749,6 +5755,13 @@ h3 {
   text-decoration: none;
   text-transform: uppercase;
   cursor: pointer;
+}
+
+.app[data-profile="main"] .archiveRefreshAction {
+  flex: 0 0 auto;
+  width: 44px;
+  padding: 0;
+  font-size: 1.05rem;
 }
 
 .app[data-profile="main"] .archiveAction:hover,
