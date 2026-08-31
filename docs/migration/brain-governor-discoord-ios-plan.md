@@ -1540,6 +1540,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-31 | 6 | Matched iOS bottom safe-area color to personal content | Personal body and view now use the same dark content background and view padding includes `safe-area-inset-bottom`; versioned `styles.css?v=238`; 15 portal tests, JavaScript syntax check, and `git diff --check` pass | Presentation-only follow-up; static portal promotion pending |
 | 2026-08-31 | 6 | Reordered the personal header to brand then menu | Mobile personal header now renders `KaosGDD` on the left and the selected-page dropdown on the right; versioned `styles.css?v=239`; 15 portal tests, JavaScript syntax check, and `git diff --check` pass | Presentation-only follow-up; static portal promotion pending |
 | 2026-08-31 | 6 | Added faint host label above the personal dropdown | The right-side menu now includes a faint `kaosgdd.net` label above the selected page while keeping the dropdown functional; versioned `styles.css?v=240` and `app.js?v=226`; 15 portal tests, JavaScript syntax check, and `git diff --check` pass | Presentation-only follow-up; static portal promotion pending |
+| 2026-08-31 | 6 | Removed personal pill chrome from owner/automation/all-day labels | Personal `calendarPill` and `timelineAllDayPill` labels keep their semantic text colors but no longer render borders, backgrounds, rounded boxes, or padding; versioned `styles.css?v=241` | Presentation-only follow-up; static portal promotion pending |
 
 ## How to Update This Tracker
 

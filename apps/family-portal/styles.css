@@ -4276,6 +4276,17 @@ h3 {
   font-weight: 600;
 }
 
+.app[data-profile="main"] .calendarPill,
+.app[data-profile="main"] .timelineAllDayPill {
+  display: inline;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .app[data-profile="family"] {
   color-scheme: light;
   font-family:
