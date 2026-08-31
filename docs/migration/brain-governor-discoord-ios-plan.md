@@ -1559,7 +1559,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-09-01 | 6 | Restored Supplies as a first-class personal menu item | Personal dropdown now includes `Supplies` after `Tasks`, and `#/supplies` selects the Supplies menu instead of aliasing to Utils; versioned `navigation.js?v=2` and `app.js?v=238` | Presentation-only follow-up; static portal promotion pending |
 | 2026-09-01 | 6 | Kept only Memos tags rounded in the embedded web client | Commit `64aa5d0`; added tracked `kaosgdd-memos-web:0.1.6-rectangular-controls` image layer; portal checks pass; Caddy serves the appended override and both Memos web containers run the new image | H3 promoted; H4 synced and KaosBrain doctor passes |
 | 2026-09-01 | 6 | Normalized personal Tasks and Memos action button heights | Commit `5dd54ad`; Tasks Add no longer stretches to the label row; embedded Memos search and `+` controls share a compact 44 px height while tag chips stay rounded; versioned `styles.css?v=252`; 15 portal tests pass and served files are byte-synced | H3 promoted; H4 synced and KaosBrain doctor passes |
-| 2026-09-01 | 6 | Forced Tasks Add button to the dropdown control height | Added a late personal-profile override that caps the Tasks Add slot and button at 44 px with high specificity; versioned `styles.css?v=253` | Presentation-only follow-up; promotion pending |
+| 2026-09-01 | 6 | Forced Tasks Add button to the dropdown control height | Commit `4b1fb98`; added a late personal-profile override that caps the Tasks Add slot and button at 44 px with high specificity; versioned `styles.css?v=253`; served CSS and byte sync verified | H3 promoted; H4 synced and KaosBrain doctor passes |
 
 ## How to Update This Tracker
 
