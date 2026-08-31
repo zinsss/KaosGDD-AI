@@ -451,7 +451,7 @@ html.isAgendaSuppliesEmbed body {
   grid-row: 1;
   justify-self: end;
   margin: 0;
-  color: rgba(216, 222, 233, 0.38);
+  color: rgba(216, 222, 233, 0.2);
   font-size: 1.18rem;
   font-weight: 700;
   line-height: 1;
