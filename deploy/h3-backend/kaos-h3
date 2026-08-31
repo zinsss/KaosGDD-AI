@@ -552,6 +552,7 @@ family_portal_source_preflight() {
   require_file "${app_source}/app.js"
   require_file "${app_source}/deep-links.js"
   require_file "${app_source}/documents.js"
+  require_file "${app_source}/fax.js"
   require_file "${app_source}/navigation.js"
   require_file "${app_source}/translations.js"
   if [ -d "${app_source}/app" ]; then
@@ -575,6 +576,9 @@ family_portal_source_preflight() {
   fi
   if ! grep -q 'location \^~ /api/paperless/' "${nginx_source}"; then
     die "family portal source must route the scoped Paperless API explicitly"
+  fi
+  if ! grep -q 'location \^~ /api/fax/' "${nginx_source}"; then
+    die "family portal source must route the scoped Fax API explicitly"
   fi
 }
 

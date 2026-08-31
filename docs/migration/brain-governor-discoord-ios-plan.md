@@ -83,7 +83,7 @@ H4, office-service, and stateful-service cutovers.
 | 3 | Route every meaningful mutation through Governor | Task slices and Memos slices 1-2 implemented | Task slices and Memos slice 1 observed; Memos slice 2 deployed 2026-08-30 | Production observation |
 | 4 | Make Brain transport-neutral | Not started | Not deployed | Planned |
 | 5 | Retain brain-only KaosDiscoord; detach workers and notifications | Package, Pushover, digest, and fax/mail worker slices implemented | Pushover and digest observed; fax/mail observation active | In progress |
-| 6 | Retain the personal PWA and add stable iOS integrations | Deep link, compact menu, personal Memos repair, and Paperless browser implemented | UI slices deployed; Memos/Paperless observation active | In progress |
+| 6 | Retain the personal PWA and add stable iOS integrations | Deep link, compact menu, personal Memos repair, Paperless browser, and Archive Terminal slice implemented | UI slices deployed; Memos/Paperless observation active; Archive Terminal promotion pending | In progress |
 | 7 | Remove compatibility debt and finish documentation/CI | Not started | Not deployed | Planned |
 | 8 | Add governed Brain system operations | Architecture accepted; current Guard remains deny-by-default | Not deployed | Planned |
 
@@ -1351,6 +1351,41 @@ Rollback: restore `kaosgdd-ai-governor-api:rollback-pre-paperless-20260831`,
 restore the prior portal assets/config, and remove the personal Memos client
 route. No Memos or Paperless data reconciliation is required.
 
+Phase 6 slice 4 — Archive Terminal for Documents and Fax:
+
+- introduce one scoped personal `Archive Terminal` presentation pattern for
+  BBS-style document boards
+- restyle the existing read-only Paperless browser using that terminal pattern
+  while preserving the same `/api/paperless/documents` API, search, pagination,
+  detail, OCR, and source-link behavior
+- expose a new read-only same-origin `/api/fax/items` browser backed by the
+  existing KaosGovernor HylaFAX archive state
+- expose retained incoming fax PDFs through
+  `/api/fax/items/{fax_id}/document` only after the same personal Cloudflare
+  Access verification used by Paperless
+- mount Fax state read-only into the Governor API container and proxy only
+  `/api/fax/` through the personal portal
+- keep Fax send, retry, delete, Paperless upload, and metadata mutation out of
+  this slice
+
+Risk: medium. This adds a sensitive read path for retained incoming fax PDFs
+and changes the Documents presentation. The API is GET-only, personal-only,
+strictly validates IDs and modes, and does not take a HylaFAX write lock.
+
+Required validation:
+
+- focused portal normalization/navigation tests
+- JavaScript syntax checks for portal scripts
+- focused Fax API and Fax service tests in the Governor test image
+- live H3 smoke against the read-only fax archive mount
+- nginx and Compose validation
+- unauthenticated Governor and edge requests must fail closed
+- authenticated personal observation for Documents and Fax after deployment
+
+Rollback: restore the previous static portal assets, remove the `/api/fax/`
+nginx proxy, and roll Governor API back to the retained pre-Fax image. Fax,
+Paperless, Memos, Radicale, mail, and notification data need no reconciliation.
+
 ## Phase 7 — Cleanup, CI, and Deprecation
 
 Status: planned.
@@ -1470,6 +1505,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-31 | 5 | Completed worker-owned daily-digest production observation | Organic `Good Morning.` scheduled at 07:00:12 KST and delivered by Pushover at 07:00:13 KST; outbox reached 9 delivered/0 pending; no errors; user confirmed receipt; worker and KaosDiscoord healthy with zero restarts | Slice 3 complete; no synthetic notification needed |
 | 2026-08-31 | 6 | Restored the existing personal Kaos Memos client and deployed the KaosGDD Paperless browser | Commit `e0a7ac9`; 11 portal tests; 6 new API + 15 adapter + 6 relay tests; canonical 256 Governor/368 KaosDiscoord suite; H4 synced/healthy; Memos personal config served locally; Paperless reports 26 documents; unauthenticated edge/API reads fail HTTP 401 | Read-only Paperless and personal Memos UI deployed; authenticated user observation open; rollback API image retained |
 | 2026-08-31 | 6 | Rebalanced the personal compact header with the flat page selector on the left, a matching-size `KaosGDD` wordmark on the right, and both vertically centered in the same 44 px row | Versioned stylesheet `v231`; 11 focused portal tests passed; deployed assets and H4 sync are verified during promotion | Presentation-only follow-up; Family header, routes, APIs, data, and Brain runtime remain unchanged |
+| 2026-08-31 | 6 | Implemented and locally validated the first Archive Terminal slice for Documents and Fax | Read-only personal Fax API and PDF route, scoped BBS-style Documents/Fax UI, versioned `fax.js`, source preflight guard, 15 portal tests, syntax checks, `git diff --check`, services/family preflight, and canonical 265 Governor + 368 KaosDiscoord image tests pass | Local validation complete; H3 promotion and authenticated user observation pending |
 
 ## How to Update This Tracker
 

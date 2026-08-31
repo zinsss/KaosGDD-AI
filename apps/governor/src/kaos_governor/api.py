@@ -19,6 +19,7 @@ from kaos_governor.documents import (
     PaperlessConfig,
     PaperlessDocumentService,
 )
+from kaos_governor.fax import FaxConfig, FaxError, FaxService
 from kaos_governor.memos import relay as memos_relay
 from kaos_governor.tasks import PostgresRecurringTaskStore, RecurringTaskDefinition, RecurringTaskError, RecurringTaskService, validate_payload
 
@@ -69,6 +70,18 @@ def bytes_response(
     handler.send_response(status)
     handler.send_header("Content-Type", content_type)
     handler.send_header("Cache-Control", "private, no-store" if private else "no-store")
+    handler.send_header("X-Content-Type-Options", "nosniff")
+    handler.send_header("Content-Length", str(len(data)))
+    handler.end_headers()
+    handler.wfile.write(data)
+
+
+def inline_pdf_response(handler: BaseHTTPRequestHandler, data: bytes, filename: str) -> None:
+    encoded_name = urllib.parse.quote(filename, safe="")
+    handler.send_response(200)
+    handler.send_header("Content-Type", "application/pdf")
+    handler.send_header("Content-Disposition", f"inline; filename*=UTF-8''{encoded_name}")
+    handler.send_header("Cache-Control", "private, no-store")
     handler.send_header("X-Content-Type-Options", "nosniff")
     handler.send_header("Content-Length", str(len(data)))
     handler.end_headers()
@@ -229,6 +242,95 @@ def paperless_document_payload(
 def paperless_document_id(path: str) -> str:
     match = re.fullmatch(r"/api/paperless/documents/([1-9][0-9]*)", path)
     return match.group(1) if match else ""
+
+
+@lru_cache(maxsize=1)
+def fax_service() -> FaxService:
+    return FaxService(FaxConfig.from_env())
+
+
+def fax_status_for_error(exc: Exception) -> int:
+    if isinstance(exc, memos_relay.MemosRelayError):
+        return exc.status
+    code = str(exc)
+    if code in {"main_profile_required", "fax_document_not_found"}:
+        return 404
+    if code in {"fax_mode_invalid", "fax_limit_invalid"}:
+        return 400
+    return 503
+
+
+def _fax_query_int(params: dict[str, list[str]], name: str, default: int) -> int:
+    raw = (params.get(name) or [str(default)])[0]
+    try:
+        value = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise FaxError(f"fax_{name}_invalid") from exc
+    if value < 1 or value > 100:
+        raise FaxError(f"fax_{name}_invalid")
+    return value
+
+
+def _fax_item_matches(item: dict[str, object], mode: str) -> bool:
+    if mode == "all":
+        return True
+    direction = str(item.get("direction") or "").strip().lower()
+    status = str(item.get("status") or "").strip().lower()
+    if mode == "received":
+        return direction == "incoming"
+    return direction == "outgoing" and status == mode
+
+
+def fax_items_payload(
+    query_string: str,
+    service: FaxService | None = None,
+) -> dict[str, object]:
+    active_service = service or fax_service()
+    params = urllib.parse.parse_qs(query_string, keep_blank_values=True)
+    mode = (params.get("mode") or ["all"])[0].strip().lower()
+    if mode not in {"all", "received", "sent", "failed"}:
+        raise FaxError("fax_mode_invalid")
+    limit = _fax_query_int(params, "limit", 50)
+    all_items = active_service.recent_items(limit=None)
+    counts = {
+        candidate: sum(1 for item in all_items if _fax_item_matches(item, candidate))
+        for candidate in ("all", "received", "sent", "failed")
+    }
+    matching = [item for item in all_items if _fax_item_matches(item, mode)]
+    items: list[dict[str, object]] = []
+    for source in matching[:limit]:
+        item = dict(source)
+        fax_id = str(item.get("faxId") or "").strip().lower()
+        item["documentUrl"] = (
+            f"/api/fax/items/{fax_id}/document"
+            if item.get("hasDocument") and re.fullmatch(r"[0-9a-f]{32}", fax_id)
+            else ""
+        )
+        items.append(item)
+    return {
+        "ok": True,
+        "mode": mode,
+        "items": items,
+        "counts": counts,
+        "resultCount": len(matching),
+        "limit": limit,
+    }
+
+
+def fax_document_id(path: str) -> str:
+    match = re.fullmatch(r"/api/fax/items/([0-9a-fA-F]{32})/document", path)
+    return match.group(1).lower() if match else ""
+
+
+def fax_document_payload(
+    fax_id: str,
+    service: FaxService | None = None,
+) -> tuple[bytes, str]:
+    document = (service or fax_service()).incoming_document_bytes(fax_id)
+    content = document.get("content")
+    if not isinstance(content, bytes):
+        raise FaxError("fax_document_invalid")
+    return content, str(document.get("filename") or "incoming-fax.pdf")
 
 
 def recurring_status_for_error(exc: Exception) -> int:
@@ -790,6 +892,30 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 print(f"Paperless detail failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "paperless_request_failed"})
+            return
+        if parsed.path == "/api/fax/items":
+            try:
+                require_main_access(self.headers)
+                json_response(self, 200, fax_items_payload(parsed.query))
+            except (ValueError, FaxError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, memos_relay.MemosRelayError) else str(exc)
+                json_response(self, fax_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Fax archive browse failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "fax_archive_unavailable"})
+            return
+        fax_id = fax_document_id(parsed.path)
+        if fax_id:
+            try:
+                require_main_access(self.headers)
+                content, filename = fax_document_payload(fax_id)
+                inline_pdf_response(self, content, filename)
+            except (ValueError, FaxError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, memos_relay.MemosRelayError) else str(exc)
+                json_response(self, fax_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Fax archive document failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "fax_archive_unavailable"})
             return
         if parsed.path.startswith("/api/memos/"):
             try:

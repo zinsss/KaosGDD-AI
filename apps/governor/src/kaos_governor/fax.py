@@ -701,31 +701,53 @@ class FaxService:
             self._save(state)
             return dict(state["incoming"][incoming_id])
 
-    def incoming_document(self, fax_id: str) -> dict[str, object]:
+    def _incoming_document_path(self, incoming: Mapping[str, object]) -> Path | None:
+        relative = Path(str(incoming.get("documentPath") or ""))
+        archive_root = (self.config.state_path.parent / "archive").resolve()
+        path = (self.config.state_path.parent / relative).resolve()
+        try:
+            if path.parent != archive_root or not path.is_file():
+                return None
+            if path.stat().st_size > self.config.max_pdf_bytes:
+                return None
+        except OSError:
+            return None
+        return path
+
+    def incoming_document_bytes(self, fax_id: str) -> dict[str, object]:
+        """Read a retained incoming PDF without taking the state write lock."""
         normalized_id = str(fax_id or "").strip().lower()
         if not FAX_ID.fullmatch(normalized_id):
             raise FaxError("fax_document_not_found")
-        with self._state_lock():
-            state = self._load()
-            incoming = state["incoming"].get(normalized_id)
-            if not isinstance(incoming, dict):
-                raise FaxError("fax_document_not_found")
-            relative = Path(str(incoming.get("documentPath") or ""))
-            archive_root = (self.config.state_path.parent / "archive").resolve()
-            path = (self.config.state_path.parent / relative).resolve()
-            if path.parent != archive_root or not path.is_file():
-                raise FaxError("fax_document_not_found")
+        state = self._load()
+        incoming = state["incoming"].get(normalized_id)
+        if not isinstance(incoming, dict):
+            raise FaxError("fax_document_not_found")
+        path = self._incoming_document_path(incoming)
+        if path is None:
+            raise FaxError("fax_document_not_found")
+        try:
             content = path.read_bytes()
-            if not content.startswith(b"%PDF-") or len(content) > self.config.max_pdf_bytes:
-                raise FaxError("fax_document_invalid")
-            return {
-                "faxId": normalized_id,
-                "filename": unicodedata.normalize(
-                    "NFC", safe_name(str(incoming.get("filename") or "incoming-fax.pdf"))
-                ),
-                "contentType": "application/pdf",
-                "contentBase64": base64.b64encode(content).decode("ascii"),
-            }
+        except OSError as exc:
+            raise FaxError("fax_document_not_found") from exc
+        if not content.startswith(b"%PDF-") or len(content) > self.config.max_pdf_bytes:
+            raise FaxError("fax_document_invalid")
+        return {
+            "faxId": normalized_id,
+            "filename": unicodedata.normalize(
+                "NFC", safe_name(str(incoming.get("filename") or "incoming-fax.pdf"))
+            ),
+            "contentType": "application/pdf",
+            "content": content,
+        }
+
+    def incoming_document(self, fax_id: str) -> dict[str, object]:
+        document = self.incoming_document_bytes(fax_id)
+        content = document.pop("content")
+        if not isinstance(content, bytes):
+            raise FaxError("fax_document_invalid")
+        document["contentBase64"] = base64.b64encode(content).decode("ascii")
+        return document
 
     @staticmethod
     def _record_incoming_archive(state: dict, action: FaxAction, *, document_path: str = "") -> None:
@@ -755,7 +777,7 @@ class FaxService:
             state["runtime"] = runtime
             self._save(state)
 
-    def recent_items(self, *, limit: int = 50) -> list[dict[str, object]]:
+    def recent_items(self, *, limit: int | None = 50) -> list[dict[str, object]]:
         state = self._load()
         rows: list[dict[str, object]] = []
         for incoming_id, incoming in state["incoming"].items():
@@ -766,11 +788,13 @@ class FaxService:
             pages = str(incoming.get("pages") or "").strip()
             received_at = str(incoming.get("receivedAt") or "")
             archived_at = str(incoming.get("archivedAt") or "")
+            has_document = self._incoming_document_path(incoming) is not None
             rows.append(
                 {
                     "kind": "fax",
                     "direction": "incoming",
                     "title": filename,
+                    "filename": filename,
                     "detail": " · ".join(
                         part
                         for part in (
@@ -787,6 +811,7 @@ class FaxService:
                     "pages": pages,
                     "receivedAt": received_at,
                     "archivedAt": archived_at,
+                    "hasDocument": has_document,
                 }
             )
         for job_id, job in state["jobs"].items():
@@ -802,6 +827,7 @@ class FaxService:
                     "kind": "fax",
                     "direction": "outgoing",
                     "title": filename,
+                    "filename": filename,
                     "detail": " · ".join(
                         part for part in (status, f"to {destination}", completed_at[:16] or created_at[:16]) if part
                     ),
@@ -810,6 +836,8 @@ class FaxService:
                     "destination": destination,
                     "createdAt": created_at,
                     "completedAt": completed_at,
+                    "error": str(job.get("error") or "").strip(),
+                    "hylafaxJobId": str(job.get("hylafaxJobId") or "").strip(),
                 }
             )
         rows.sort(
@@ -818,7 +846,7 @@ class FaxService:
             ),
             reverse=True,
         )
-        return rows[: max(0, limit)]
+        return rows if limit is None else rows[: max(0, limit)]
 
     def status(self) -> dict[str, object]:
         state = self._load()

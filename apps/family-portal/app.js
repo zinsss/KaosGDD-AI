@@ -260,8 +260,18 @@ const state = {
     totalCount: 0,
     items: [],
     selected: null,
+    selectedId: "",
     detailLoading: false,
     detailError: "",
+  },
+  fax: {
+    checked: false,
+    loading: false,
+    error: "",
+    mode: "all",
+    items: [],
+    counts: { all: 0, received: 0, sent: 0, failed: 0 },
+    selectedKey: "",
   },
   holidays: {
     checked: false,
@@ -1683,6 +1693,7 @@ async function loadDocuments(options = {}) {
   if (state.documents.loading) return;
   if (state.documents.checked && !options.force) return;
   state.documents.loading = true;
+  if (getRoute() === "documents") render();
   try {
     const params = new URLSearchParams({
       page: String(state.documents.page),
@@ -1722,7 +1733,73 @@ async function loadDocuments(options = {}) {
   if (getRoute() === "documents") render();
 }
 
+async function loadFax(options = {}) {
+  if (portalProfile() !== "main") return;
+  if (state.fax.loading) return;
+  if (state.fax.checked && !options.force) return;
+  state.fax.loading = true;
+  if (getRoute() === "fax") render();
+  try {
+    const response = await fetch("/api/fax/items?mode=all&limit=100", {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    const archive = window.KAOS_PORTAL_FAX.normalizeArchive(payload);
+    state.fax = {
+      ...state.fax,
+      checked: true,
+      loading: false,
+      error: "",
+      items: archive.items,
+      counts: archive.counts,
+    };
+  } catch (error) {
+    state.fax = {
+      ...state.fax,
+      checked: true,
+      loading: false,
+      error: error.message || "Fax archive is unavailable",
+      items: [],
+      counts: { all: 0, received: 0, sent: 0, failed: 0 },
+      selectedKey: "",
+    };
+  }
+  if (getRoute() === "fax") render();
+}
+
+function refreshFax() {
+  state.fax.checked = false;
+  state.fax.selectedKey = "";
+  return loadFax({ force: true });
+}
+
+function setFaxMode(mode) {
+  state.fax.mode = window.KAOS_PORTAL_FAX.normalizeMode(mode);
+  state.fax.selectedKey = "";
+  render();
+}
+
+function selectFaxRecord(key) {
+  const selected = state.fax.items.find((item) => item.key === String(key || ""));
+  if (!selected) return;
+  state.fax.selectedKey = selected.key;
+  render();
+  const detail = document.querySelector("[data-fax-detail]");
+  detail?.focus();
+  document.getElementById("view")?.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function closeFaxRecord() {
+  const selectedKey = state.fax.selectedKey;
+  state.fax.selectedKey = "";
+  render();
+  document.querySelector(`[data-fax-open="${cssIdentifier(selectedKey)}"]`)?.focus();
+}
+
 async function loadDocumentDetail(id) {
+  state.documents.selectedId = String(id || "");
   state.documents.detailLoading = true;
   state.documents.detailError = "";
   state.documents.selected = null;
@@ -1766,10 +1843,13 @@ async function searchDocuments(query) {
 }
 
 function closeDocumentDetail() {
+  const selectedId = state.documents.selectedId;
+  state.documents.selectedId = "";
   state.documents.selected = null;
   state.documents.detailLoading = false;
   state.documents.detailError = "";
   render();
+  if (selectedId) document.querySelector(`[data-paperless-open="${cssIdentifier(selectedId)}"]`)?.focus();
 }
 
 async function refreshDocuments() {
@@ -1792,6 +1872,48 @@ function formatDocumentDate(value) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function cssIdentifier(value) {
+  const raw = String(value || "");
+  if (typeof CSS !== "undefined" && typeof CSS.escape === "function") return CSS.escape(raw);
+  return raw.replace(/["\\]/g, "\\$&");
+}
+
+function archiveDateParts(value) {
+  const raw = String(value || "");
+  const label = raw ? formatDocumentDate(raw) || raw.slice(0, 16) : "--";
+  return { raw, label };
+}
+
+function formatFaxDate(item) {
+  return archiveDateParts(item.receivedAt || item.completedAt || item.createdAt || item.archivedAt || "");
+}
+
+function faxCounterparty(item) {
+  if (!item) return "";
+  if (item.direction === "incoming") return item.remote || item.destination || "";
+  return item.destination || item.remote || "";
+}
+
+function archiveStatusClass(value) {
+  const status = String(value || "").toLowerCase();
+  if (status === "failed" || status === "error") return "isError";
+  if (status === "sent" || status === "archived" || status === "received") return "isOk";
+  return "isPending";
+}
+
+function archiveLinkStateClass(value) {
+  const status = String(value || "").toLowerCase();
+  if (status === "error") return "isError";
+  if (status === "busy") return "isPending";
+  return "isOnline";
+}
+
+function archiveMeta(label, value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  return `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(text)}</dd></div>`;
 }
 
 function applyLedgerPayload(payload) {
@@ -4249,10 +4371,116 @@ function renderTransitioningDomain(label, detail) {
 }
 
 function renderFax() {
-  return renderTransitioningDomain(
-    "Fax",
-    "HylaFAX processing and notifications continue through KaosGovernor. Fax history and send controls are not connected to this PWA yet.",
-  );
+  const fax = state.fax;
+  const faxApi = window.KAOS_PORTAL_FAX;
+  const mode = faxApi.normalizeMode(fax.mode);
+  const items = faxApi.filterItems(fax.items, mode);
+  const selected = fax.items.find((item) => item.key === fax.selectedKey) || null;
+  const hasDetail = Boolean(selected);
+  const modeButtons = faxApi.modes
+    .map((itemMode) => {
+      const active = itemMode === mode;
+      const count = fax.counts[itemMode] || 0;
+      return `<button class="archiveAction ${active ? "isActive" : ""}" type="button" data-fax-mode="${escapeHtml(itemMode)}" aria-pressed="${active}">[ ${escapeHtml(itemMode.toUpperCase())} ${escapeHtml(count)} ]</button>`;
+    })
+    .join("");
+  const rows = items
+    .map((item) => {
+      const date = formatFaxDate(item);
+      const correspondent = faxCounterparty(item);
+      const title = item.title || item.filename || "Fax";
+      const status = item.direction === "incoming" ? "RX" : item.status.toUpperCase();
+      const meta = [item.pages ? `${item.pages}p` : "", item.hylafaxJobId ? `JOB ${item.hylafaxJobId}` : ""].filter(Boolean).join(" // ");
+      return `
+        <li class="archiveRecord ${selected?.key === item.key ? "isSelected" : ""}">
+          <button class="archiveRecordButton" type="button" data-fax-open="${escapeHtml(item.key)}" aria-current="${selected?.key === item.key ? "true" : "false"}">
+            <span class="archiveRecordId">${escapeHtml(item.direction === "incoming" ? "IN" : "OUT")} ${escapeHtml(item.id.slice(0, 6).toUpperCase())}</span>
+            <time class="archiveRecordDate" datetime="${escapeHtml(date.raw)}">${escapeHtml(date.label)}</time>
+            <span class="archiveRecordCorrespondent">${escapeHtml(correspondent || "UNKNOWN")}</span>
+            <strong class="archiveRecordTitle">${escapeHtml(title)}</strong>
+            <span class="archiveRecordStatus ${archiveStatusClass(item.status)}">${escapeHtml(status)}${meta ? ` // ${escapeHtml(meta)}` : ""}</span>
+          </button>
+          ${
+            item.documentAvailable && item.documentUrl
+              ? `<a class="archiveSourceLink" href="${escapeHtml(item.documentUrl)}" target="_blank" rel="noopener noreferrer" aria-label="Open fax PDF" title="Open fax PDF">PDF</a>`
+              : `<span class="archiveSourceLink isDisabled" aria-label="No retained PDF">--</span>`
+          }
+        </li>
+      `;
+    })
+    .join("");
+  const detail = selected
+    ? `
+      <section class="archiveDetail" data-fax-detail tabindex="-1" aria-labelledby="faxDetailTitle">
+        <header class="archiveDetailHeader">
+          <div>
+            <p>${escapeHtml(selected.direction === "incoming" ? "RECEIVED FAX" : "SENT FAX")} #${escapeHtml(selected.id.slice(0, 8).toUpperCase())}</p>
+            <h3 id="faxDetailTitle">${escapeHtml(selected.title || selected.filename || "Fax")}</h3>
+          </div>
+          <button class="archiveAction" type="button" data-fax-close>[ BACK ]</button>
+        </header>
+        <dl class="archiveMetadata">
+          ${archiveMeta("Direction", selected.direction === "incoming" ? "Incoming" : "Outgoing")}
+          ${archiveMeta("Status", selected.status || "unknown")}
+          ${archiveMeta("Remote", selected.remote || selected.destination || "unknown")}
+          ${archiveMeta("Pages", selected.pages || "unknown")}
+          ${archiveMeta("Received", selected.receivedAt || selected.completedAt || selected.createdAt || "")}
+          ${archiveMeta("Archived", selected.archivedAt || "")}
+          ${archiveMeta("HylaFAX Job", selected.hylafaxJobId || "")}
+          ${selected.error ? archiveMeta("Error", selected.error) : ""}
+        </dl>
+        <div class="archiveActions">
+          ${
+            selected.documentAvailable && selected.documentUrl
+              ? `<a class="archiveAction" href="${escapeHtml(selected.documentUrl)}" target="_blank" rel="noopener noreferrer">[ OPEN PDF ]</a>`
+              : `<span class="archiveAction isDisabled">[ PDF NOT RETAINED ]</span>`
+          }
+        </div>
+      </section>
+    `
+    : "";
+  const statusText = fax.error ? "ERROR" : fax.loading ? "BUSY" : "ONLINE";
+  const summary = fax.checked && !fax.error
+    ? `${items.length} RECORDS // ${mode.toUpperCase()} BOARD`
+    : fax.loading
+      ? "LOADING FAX BOARD"
+      : "FAX BOARD STANDBY";
+  return `
+    <section class="archiveTerminal" data-archive-kind="fax" aria-labelledby="faxArchiveTitle">
+      <header class="archiveMasthead">
+        <div>
+          <p class="archiveNodeLabel">KAOS ARCHIVE NODE // HYLAFAX</p>
+          <h2 id="faxArchiveTitle" class="archiveTitle">FAX BOARD</h2>
+        </div>
+        <p class="archiveLinkState ${archiveLinkStateClass(statusText)}" role="status">${escapeHtml(statusText)}</p>
+      </header>
+      <div class="archiveCommand" aria-label="Fax board modes">
+        <div class="archiveCommandActions">${modeButtons}</div>
+        <button class="archiveAction" type="button" data-fax-refresh ${fax.loading ? "disabled" : ""}>[ REFRESH ]</button>
+      </div>
+      <div class="archiveWorkspace ${hasDetail ? "hasDetail" : ""}">
+        <section class="archiveIndex" aria-labelledby="faxIndexTitle" aria-busy="${fax.loading}">
+          <header class="archiveIndexHeader">
+            <h3 id="faxIndexTitle">RECORD BOARD</h3>
+            <p class="archiveStatusMessage" role="status" aria-live="polite">${escapeHtml(summary)}</p>
+          </header>
+          <div class="archiveColumnHeader" aria-hidden="true">
+            <span>ID</span><span>DATE</span><span>REMOTE</span><span>TITLE</span>
+          </div>
+          ${
+            fax.error
+              ? `<div class="archiveError" role="alert"><p>${escapeHtml(fax.error)}</p><button class="archiveAction" type="button" data-fax-refresh>[ RETRY ]</button></div>`
+              : fax.loading && !fax.checked
+                ? `<p class="archiveStatusMessage">Reading HylaFAX archive...</p>`
+                : rows
+                  ? `<ol class="archiveRecordList">${rows}</ol>`
+                  : `<p class="archiveStatusMessage">No fax records on this board.</p>`
+          }
+        </section>
+        ${detail}
+      </div>
+    </section>
+  `;
 }
 
 function renderMail() {
@@ -4461,103 +4689,132 @@ function renderDocuments() {
   const documents = state.documents;
   const rows = documents.items
     .map((item) => {
+      const title = item.title || item.filename || `Document ${item.id}`;
+      const correspondent = item.correspondent || item.filename || "UNKNOWN";
+      const date = archiveDateParts(item.created);
       return `
-        <article class="paperlessRow">
-          <button class="paperlessRowMain" type="button" data-paperless-open="${escapeHtml(item.id)}">
-            <strong>${escapeHtml(item.title)}</strong>
-            <span>${escapeHtml(item.correspondent || item.filename || `Document ${item.id}`)}</span>
-            <span class="paperlessRowMeta">
-              <span>#${escapeHtml(item.id)}</span>
-              ${item.created ? `<span>${escapeHtml(formatDocumentDate(item.created))}</span>` : ""}
-            </span>
+        <li class="archiveRecord ${String(documents.selectedId) === String(item.id) ? "isSelected" : ""}">
+          <button class="archiveRecordButton" type="button" data-paperless-open="${escapeHtml(item.id)}" aria-current="${String(documents.selectedId) === String(item.id) ? "true" : "false"}">
+            <span class="archiveRecordId">#${escapeHtml(item.id)}</span>
+            <time class="archiveRecordDate" datetime="${escapeHtml(date.raw)}">${escapeHtml(date.label)}</time>
+            <span class="archiveRecordCorrespondent">${escapeHtml(correspondent)}</span>
+            <strong class="archiveRecordTitle">${escapeHtml(title)}</strong>
           </button>
-          ${item.url ? `<a class="paperlessExternal" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" aria-label="Open in Paperless" title="Open in Paperless">↗</a>` : ""}
-        </article>
+          ${item.url ? `<a class="archiveSourceLink" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" aria-label="Open ${escapeHtml(title)} in Paperless" title="Open in Paperless">SRC</a>` : `<span class="archiveSourceLink isDisabled">--</span>`}
+        </li>
       `;
     })
     .join("");
   const summary = documents.appliedQuery
-    ? `${documents.resultCount} matches in ${documents.totalCount} documents`
-    : `${documents.totalCount} documents`;
+    ? `${documents.resultCount} MATCHES // ${documents.totalCount} DOCUMENTS`
+    : `${documents.totalCount} DOCUMENTS`;
   const selected = documents.selected;
+  const hasDetail = documents.detailLoading || documents.detailError || selected;
   const detail = documents.detailLoading
     ? `
-      <section class="panel paperlessDetail">
-        <div class="panelBody"><p class="taskMeta">Loading document...</p></div>
+      <section class="archiveDetail" data-paperless-detail tabindex="-1" aria-busy="true">
+        <header class="archiveDetailHeader">
+          <div>
+            <p>DOCUMENT DETAIL</p>
+            <h3 id="archiveDetailTitle">Loading document...</h3>
+          </div>
+          <button class="archiveAction" type="button" data-paperless-close>[ BACK ]</button>
+        </header>
+        <p class="archiveStatusMessage">Reading OCR packet...</p>
       </section>
     `
     : documents.detailError
       ? `
-        <section class="panel paperlessDetail">
-          <div class="panelHeader">
-            <h2>Document unavailable</h2>
-            <button class="openButton" type="button" data-paperless-close>Close</button>
-          </div>
-          <div class="panelBody"><p class="documentQueueError">${escapeHtml(documents.detailError)}</p></div>
+        <section class="archiveDetail" data-paperless-detail tabindex="-1" aria-labelledby="archiveDetailTitle">
+          <header class="archiveDetailHeader">
+            <div>
+              <p>DOCUMENT DETAIL</p>
+              <h3 id="archiveDetailTitle">Document unavailable</h3>
+            </div>
+            <button class="archiveAction" type="button" data-paperless-close>[ BACK ]</button>
+          </header>
+          <div class="archiveError" role="alert"><p>${escapeHtml(documents.detailError)}</p></div>
         </section>
       `
       : selected
         ? `
-          <section class="panel paperlessDetail">
-            <div class="panelHeader">
+          <section class="archiveDetail" data-paperless-detail tabindex="-1" aria-labelledby="archiveDetailTitle">
+            <header class="archiveDetailHeader">
               <div>
-                <p class="label">Paperless #${escapeHtml(selected.id)}</p>
-                <h2>${escapeHtml(selected.title)}</h2>
+                <p>PAPERLESS #${escapeHtml(selected.id)}</p>
+                <h3 id="archiveDetailTitle">${escapeHtml(selected.title || selected.filename || "Document")}</h3>
               </div>
-              <button class="openButton" type="button" data-paperless-close>Close</button>
+              <button class="archiveAction" type="button" data-paperless-close>[ BACK ]</button>
+            </header>
+            <dl class="archiveMetadata">
+              ${archiveMeta("Correspondent", selected.correspondent || "unknown")}
+              ${archiveMeta("Created", selected.created ? formatDocumentDate(selected.created) : "")}
+              ${archiveMeta("Filename", selected.filename || "")}
+            </dl>
+            <div class="archiveActions">
+              ${selected.url ? `<a class="archiveAction" href="${escapeHtml(selected.url)}" target="_blank" rel="noopener noreferrer">[ OPEN PAPERLESS ]</a>` : ""}
             </div>
-            <div class="panelBody paperlessDetailBody">
-              <div class="paperlessDetailMeta">
-                ${selected.correspondent ? `<span>${escapeHtml(selected.correspondent)}</span>` : ""}
-                ${selected.created ? `<span>${escapeHtml(formatDocumentDate(selected.created))}</span>` : ""}
-                ${selected.filename ? `<span>${escapeHtml(selected.filename)}</span>` : ""}
-              </div>
-              ${selected.url ? `<a class="primaryButton paperlessOpenSource" href="${escapeHtml(selected.url)}" target="_blank" rel="noopener noreferrer">Open in Paperless</a>` : ""}
-              <div class="paperlessOcr">
-                <p class="label">OCR text</p>
-                <pre>${escapeHtml(selected.content || "No recognized text.")}</pre>
-              </div>
+            <div class="archiveOcrRegion" role="region" aria-label="OCR text" tabindex="0">
+              <p>OCR TEXT</p>
+              <pre>${escapeHtml(selected.content || "No recognized text.")}</pre>
             </div>
           </section>
         `
         : "";
+  const statusText = documents.error ? "ERROR" : documents.loading ? "BUSY" : "ONLINE";
   return `
-    ${detail}
-    <section class="panel paperlessLibrary">
-      <div class="panelHeader">
+    <section class="archiveTerminal" data-archive-kind="documents" aria-labelledby="documentsArchiveTitle">
+      <header class="archiveMasthead">
         <div>
-          <p class="label">Paperless</p>
-          <h2>Documents</h2>
+          <p class="archiveNodeLabel">KAOS ARCHIVE NODE // PAPERLESS</p>
+          <h2 id="documentsArchiveTitle" class="archiveTitle">DOCUMENT ARCHIVE</h2>
         </div>
-        <button class="openButton" type="button" data-documents-refresh>Refresh</button>
-      </div>
-      <form class="paperlessSearch" data-document-search>
-        <label class="srOnly" for="paperlessQuery">Search documents</label>
-        <input id="paperlessQuery" name="query" type="search" value="${escapeHtml(documents.query)}" placeholder="Search title, correspondent, OCR..." autocomplete="off" />
-        ${documents.appliedQuery ? `<button class="openButton" type="button" data-documents-clear>Clear</button>` : ""}
-        <button class="primaryButton" type="submit">Search</button>
+        <p class="archiveLinkState ${archiveLinkStateClass(statusText)}" role="status">${escapeHtml(statusText)}</p>
+      </header>
+      <form class="archiveCommand" data-document-search role="search">
+        <label class="archiveCommandLine" for="paperlessQuery">
+          <span>SEARCH&gt;</span>
+          <input id="paperlessQuery" name="query" type="search" value="${escapeHtml(documents.query)}" placeholder="title / sender / OCR" autocomplete="off" />
+        </label>
+        <div class="archiveCommandActions">
+          ${documents.appliedQuery ? `<button class="archiveAction" type="button" data-documents-clear>[ CLEAR ]</button>` : ""}
+          <button class="archiveAction" type="submit" ${documents.loading ? "disabled" : ""}>[ SEARCH ]</button>
+          <button class="archiveAction" type="button" data-documents-refresh ${documents.loading ? "disabled" : ""}>[ REFRESH ]</button>
+        </div>
       </form>
-      <div class="panelBody">
-        ${documents.checked && !documents.error ? `<p class="paperlessSummary">${escapeHtml(summary)}</p>` : ""}
-        ${documents.loading && !documents.checked ? `<p class="taskMeta">Loading documents...</p>` : ""}
-        ${
-          documents.error
-            ? `<div class="documentQueueError"><p>${escapeHtml(documents.error)}</p><button class="openButton" type="button" data-documents-refresh>${uiText("common.retry", "다시 시도")}</button></div>`
-            : ""
-        }
-        ${!documents.error && documents.checked && !rows ? `<p class="taskMeta">No matching documents.</p>` : ""}
-        ${rows ? `<div class="paperlessList">${rows}</div>` : ""}
-        ${
-          !documents.error && documents.checked && documents.pageCount > 1
-            ? `
-              <nav class="paperlessPagination" aria-label="Document pages">
-                <button class="openButton" type="button" data-documents-page="${documents.page - 1}" ${documents.page <= 1 ? "disabled" : ""}>←</button>
-                <span>Page ${documents.page}/${documents.pageCount}</span>
-                <button class="openButton" type="button" data-documents-page="${documents.page + 1}" ${documents.page >= documents.pageCount ? "disabled" : ""}>→</button>
-              </nav>
-            `
-            : ""
-        }
+      <div class="archiveWorkspace ${hasDetail ? "hasDetail" : ""}">
+        <section class="archiveIndex" aria-labelledby="documentsIndexTitle" aria-busy="${documents.loading}">
+          <header class="archiveIndexHeader">
+            <h3 id="documentsIndexTitle">RECORD BOARD</h3>
+            <p class="archiveStatusMessage" role="status" aria-live="polite">${documents.checked && !documents.error ? escapeHtml(summary) : documents.loading ? "LOADING DOCUMENT BOARD" : "DOCUMENT BOARD STANDBY"}</p>
+          </header>
+          <div class="archiveColumnHeader" aria-hidden="true">
+            <span>ID</span><span>DATE</span><span>FROM</span><span>TITLE</span>
+          </div>
+          ${
+            documents.error
+              ? `<div class="archiveError" role="alert"><p>${escapeHtml(documents.error)}</p><button class="archiveAction" type="button" data-documents-refresh>[ RETRY ]</button></div>`
+              : documents.loading && !documents.checked
+                ? `<p class="archiveStatusMessage">Searching Paperless archive...</p>`
+                : !documents.error && documents.checked && !rows
+                  ? `<p class="archiveStatusMessage">No matching documents.</p>`
+                  : rows
+                    ? `<ol class="archiveRecordList">${rows}</ol>`
+                    : ""
+          }
+          ${
+            !documents.error && documents.checked && documents.pageCount > 1
+              ? `
+                <nav class="archivePager" aria-label="Document pages">
+                  <button class="archiveAction" type="button" aria-label="Previous document page" data-documents-page="${documents.page - 1}" ${documents.page <= 1 ? "disabled" : ""}>[ &lt; ]</button>
+                  <span>PAGE ${documents.page}/${documents.pageCount}</span>
+                  <button class="archiveAction" type="button" aria-label="Next document page" data-documents-page="${documents.page + 1}" ${documents.page >= documents.pageCount ? "disabled" : ""}>[ &gt; ]</button>
+                </nav>
+              `
+              : ""
+          }
+        </section>
+        ${detail}
       </div>
     </section>
   `;
@@ -6866,6 +7123,7 @@ function render() {
   if (route === "caregiver" || (route === "calendar" && portalProfile() === "family")) loadCaregiverMonth();
   if (route === "supplies") loadSupplies();
   if (route === "documents") loadDocuments();
+  if (route === "fax") loadFax();
   if (route === "ledger") loadLedger();
   if (route === "settings") {
     loadGovernorSettingsStatus();
@@ -7024,6 +7282,8 @@ document.addEventListener("click", async (event) => {
   const openPaperless = event.target.closest("[data-paperless-open]");
   if (openPaperless) {
     await loadDocumentDetail(openPaperless.dataset.paperlessOpen || "");
+    document.querySelector("[data-paperless-detail]")?.focus();
+    document.getElementById("view")?.scrollTo({ top: 0, behavior: "smooth" });
     return;
   }
 
@@ -7040,6 +7300,28 @@ document.addEventListener("click", async (event) => {
 
   if (event.target.closest("[data-documents-clear]")) {
     await searchDocuments("");
+    return;
+  }
+
+  if (event.target.closest("[data-fax-refresh]")) {
+    await refreshFax();
+    return;
+  }
+
+  const faxMode = event.target.closest("[data-fax-mode]");
+  if (faxMode) {
+    setFaxMode(faxMode.dataset.faxMode || "all");
+    return;
+  }
+
+  const openFax = event.target.closest("[data-fax-open]");
+  if (openFax) {
+    selectFaxRecord(openFax.dataset.faxOpen || "");
+    return;
+  }
+
+  if (event.target.closest("[data-fax-close]")) {
+    closeFaxRecord();
     return;
   }
 

@@ -5493,6 +5493,450 @@ h3 {
   }
 }
 
+.app[data-profile="main"] .archiveTerminal {
+  --archive-bg: rgba(37, 43, 54, 0.96);
+  --archive-surface: rgba(46, 52, 64, 0.86);
+  --archive-raised: rgba(59, 66, 82, 0.72);
+  --archive-line: rgba(136, 192, 208, 0.28);
+  --archive-line-strong: rgba(235, 203, 139, 0.38);
+  --archive-text: var(--nord6);
+  --archive-muted: var(--nord4);
+  --archive-cyan: var(--nord8);
+  --archive-amber: var(--nord13);
+  --archive-ok: var(--nord14);
+  --archive-error: var(--nord11);
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  color: var(--archive-text);
+  font-family: "Sarasa Gothic Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.app[data-profile="main"] .archiveMasthead,
+.app[data-profile="main"] .archiveCommand,
+.app[data-profile="main"] .archiveIndex,
+.app[data-profile="main"] .archiveDetail {
+  border: 1px solid var(--archive-line);
+  background: var(--archive-bg);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.app[data-profile="main"] .archiveMasthead {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px;
+}
+
+.app[data-profile="main"] .archiveNodeLabel,
+.app[data-profile="main"] .archiveDetailHeader p,
+.app[data-profile="main"] .archiveOcrRegion p {
+  margin: 0;
+  color: var(--archive-cyan);
+  font-size: 0.72rem;
+  font-weight: 850;
+  line-height: 1.35;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.app[data-profile="main"] .archiveTitle {
+  margin: 3px 0 0;
+  color: var(--archive-amber);
+  font-size: 1.18rem;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+.app[data-profile="main"] .archiveLinkState {
+  flex: 0 0 auto;
+  min-width: 74px;
+  margin: 0;
+  padding: 4px 7px;
+  border: 1px solid currentColor;
+  color: var(--archive-ok);
+  font-size: 0.72rem;
+  font-weight: 850;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.app[data-profile="main"] .archiveLinkState.isPending {
+  color: var(--archive-amber);
+}
+
+.app[data-profile="main"] .archiveLinkState.isError {
+  color: var(--archive-error);
+}
+
+.app[data-profile="main"] .archiveCommand {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+}
+
+.app[data-profile="main"] .archiveCommandLine {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--archive-amber);
+  font-size: 0.86rem;
+  font-weight: 850;
+}
+
+.app[data-profile="main"] .archiveCommandLine input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid var(--archive-line);
+  border-radius: 0;
+  outline: none;
+  background: rgba(20, 24, 31, 0.48);
+  color: var(--archive-text);
+  padding: 8px 10px;
+  font: 16px/1.35 "Sarasa Gothic Mono", ui-monospace, monospace;
+}
+
+.app[data-profile="main"] .archiveCommandActions,
+.app[data-profile="main"] .archiveActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.app[data-profile="main"] .archiveAction,
+.app[data-profile="main"] .archiveSourceLink {
+  display: inline-grid;
+  place-items: center;
+  min-height: 44px;
+  border: 1px solid var(--archive-line);
+  border-radius: 0;
+  background: rgba(67, 76, 94, 0.34);
+  color: var(--archive-cyan);
+  padding: 0 10px;
+  font: 850 0.76rem/1 "Sarasa Gothic Mono", ui-monospace, monospace;
+  letter-spacing: 0;
+  text-decoration: none;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.app[data-profile="main"] .archiveAction:hover,
+.app[data-profile="main"] .archiveSourceLink:hover,
+.app[data-profile="main"] .archiveRecordButton:hover .archiveRecordTitle {
+  color: var(--archive-amber);
+  border-color: var(--archive-line-strong);
+}
+
+.app[data-profile="main"] .archiveAction:disabled,
+.app[data-profile="main"] .archiveAction.isDisabled,
+.app[data-profile="main"] .archiveSourceLink.isDisabled {
+  color: rgba(216, 222, 233, 0.42);
+  cursor: default;
+}
+
+.app[data-profile="main"] .archiveAction.isActive {
+  border-color: var(--archive-amber);
+  color: var(--archive-amber);
+  background: rgba(235, 203, 139, 0.1);
+}
+
+.app[data-profile="main"] .archiveCommandLine input:focus-visible,
+.app[data-profile="main"] .archiveAction:focus-visible,
+.app[data-profile="main"] .archiveSourceLink:focus-visible,
+.app[data-profile="main"] .archiveRecordButton:focus-visible,
+.app[data-profile="main"] .archiveDetail:focus-visible,
+.app[data-profile="main"] .archiveOcrRegion:focus-visible {
+  outline: 2px solid var(--archive-amber);
+  outline-offset: 2px;
+}
+
+.app[data-profile="main"] .archiveWorkspace {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.app[data-profile="main"] .archiveIndex,
+.app[data-profile="main"] .archiveDetail {
+  min-width: 0;
+  padding: 12px;
+}
+
+.app[data-profile="main"] .archiveIndexHeader,
+.app[data-profile="main"] .archiveDetailHeader {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  margin-bottom: 10px;
+}
+
+.app[data-profile="main"] .archiveIndexHeader h3,
+.app[data-profile="main"] .archiveDetailHeader h3 {
+  margin: 0;
+  color: var(--archive-text);
+  font-size: 1rem;
+  line-height: 1.2;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+
+.app[data-profile="main"] .archiveStatusMessage {
+  margin: 0;
+  color: var(--archive-muted);
+  font-size: 0.76rem;
+  font-weight: 760;
+  line-height: 1.45;
+}
+
+.app[data-profile="main"] .archiveColumnHeader {
+  display: none;
+}
+
+.app[data-profile="main"] .archiveRecordList {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--archive-line);
+  border: 1px solid var(--archive-line);
+}
+
+.app[data-profile="main"] .archiveRecord {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px;
+  min-width: 0;
+  background: var(--archive-surface);
+}
+
+.app[data-profile="main"] .archiveRecord.isSelected {
+  background: rgba(235, 203, 139, 0.08);
+}
+
+.app[data-profile="main"] .archiveRecordButton {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  grid-template-areas:
+    "id date"
+    "title title"
+    "from from"
+    "status status";
+  gap: 4px 10px;
+  width: 100%;
+  min-width: 0;
+  min-height: 78px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.app[data-profile="main"] .archiveRecordId {
+  grid-area: id;
+  color: var(--archive-cyan);
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.app[data-profile="main"] .archiveRecordDate {
+  grid-area: date;
+  justify-self: end;
+  color: var(--archive-muted);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.app[data-profile="main"] .archiveRecordCorrespondent {
+  grid-area: from;
+  color: var(--archive-muted);
+  font-size: 0.74rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app[data-profile="main"] .archiveRecordTitle {
+  grid-area: title;
+  color: var(--archive-text);
+  font-size: 0.9rem;
+  line-height: 1.3;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.app[data-profile="main"] .archiveRecordStatus {
+  grid-area: status;
+  color: var(--archive-amber);
+  font-size: 0.7rem;
+  font-weight: 850;
+}
+
+.app[data-profile="main"] .archiveRecordStatus.isOk {
+  color: var(--archive-ok);
+}
+
+.app[data-profile="main"] .archiveRecordStatus.isError {
+  color: var(--archive-error);
+}
+
+.app[data-profile="main"] .archiveSourceLink {
+  min-width: 48px;
+  min-height: 100%;
+  padding: 0;
+  border-width: 0 0 0 1px;
+  background: rgba(37, 43, 54, 0.82);
+}
+
+.app[data-profile="main"] .archivePager {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) 54px;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  color: var(--archive-muted);
+  font-size: 0.78rem;
+  font-weight: 850;
+  text-align: center;
+}
+
+.app[data-profile="main"] .archiveError {
+  display: grid;
+  gap: 10px;
+  color: var(--archive-error);
+}
+
+.app[data-profile="main"] .archiveError p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.app[data-profile="main"] .archiveMetadata {
+  display: grid;
+  gap: 1px;
+  margin: 0 0 12px;
+  background: var(--archive-line);
+  border: 1px solid var(--archive-line);
+}
+
+.app[data-profile="main"] .archiveMetadata div {
+  display: grid;
+  grid-template-columns: minmax(96px, 0.38fr) minmax(0, 1fr);
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--archive-raised);
+}
+
+.app[data-profile="main"] .archiveMetadata dt,
+.app[data-profile="main"] .archiveMetadata dd {
+  min-width: 0;
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.app[data-profile="main"] .archiveMetadata dt {
+  color: var(--archive-cyan);
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.app[data-profile="main"] .archiveMetadata dd {
+  color: var(--archive-text);
+  overflow-wrap: anywhere;
+}
+
+.app[data-profile="main"] .archiveOcrRegion {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 12px;
+}
+
+.app[data-profile="main"] .archiveOcrRegion pre {
+  max-height: none;
+  margin: 0;
+  padding: 12px;
+  overflow: visible;
+  border: 1px solid var(--archive-line);
+  background: rgba(20, 24, 31, 0.52);
+  color: var(--archive-text);
+  font: 0.82rem/1.6 "Sarasa Gothic Mono", ui-monospace, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1179px) {
+  .app[data-profile="main"] .archiveWorkspace.hasDetail .archiveIndex {
+    display: none;
+  }
+}
+
+@media (min-width: 1180px) {
+  .app[data-profile="main"] .archiveTerminal {
+    gap: 14px;
+  }
+
+  .app[data-profile="main"] .archiveCommand {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .app[data-profile="main"] .archiveWorkspace.hasDetail {
+    display: grid;
+    grid-template-columns: minmax(0, 1.28fr) minmax(340px, 0.72fr);
+    align-items: start;
+    gap: 12px;
+  }
+
+  .app[data-profile="main"] .archiveColumnHeader {
+    display: grid;
+    grid-template-columns: 8ch 13ch minmax(12ch, 0.75fr) minmax(0, 1.4fr) 48px;
+    gap: 10px;
+    padding: 0 58px 7px 10px;
+    color: var(--archive-cyan);
+    font-size: 0.68rem;
+    font-weight: 850;
+  }
+
+  .app[data-profile="main"] .archiveRecordButton {
+    grid-template-columns: 8ch 13ch minmax(12ch, 0.75fr) minmax(0, 1.4fr);
+    grid-template-areas: "id date from title" "status status status status";
+    min-height: 58px;
+    align-items: center;
+  }
+
+  .app[data-profile="main"] .archiveRecordTitle {
+    -webkit-line-clamp: 1;
+  }
+
+  .app[data-profile="main"] .archiveRecordDate {
+    justify-self: start;
+  }
+
+  .app[data-profile="main"] .archiveDetail {
+    position: sticky;
+    top: 0;
+    max-height: calc(100dvh - 32px);
+    overflow: auto;
+  }
+
+  .app[data-profile="main"] .archiveOcrRegion pre {
+    max-height: 52dvh;
+    overflow: auto;
+  }
+}
+
 @media print {
   @page {
     size: A4 landscape;

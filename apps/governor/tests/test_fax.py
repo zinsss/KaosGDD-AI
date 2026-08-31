@@ -361,6 +361,58 @@ class FaxTests(unittest.TestCase):
         self.assertEqual(base64.b64decode(str(payload["contentBase64"])), b"%PDF-retained")
         self.assertNotIn(base64.b64encode(b"%PDF-retained").decode("ascii"), state_text)
 
+    def test_retained_pdf_reader_does_not_create_a_state_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fax_id = "a" * 32
+            archive = root / "archive"
+            archive.mkdir()
+            (archive / f"{fax_id}.pdf").write_bytes(b"%PDF-read-only")
+            (root / "state.json").write_text(
+                json.dumps(
+                    {
+                        "incoming": {
+                            fax_id: {
+                                "filename": "received.pdf",
+                                "documentPath": f"archive/{fax_id}.pdf",
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            service = FaxService(self.config(root))
+
+            document = service.incoming_document_bytes(fax_id)
+            recent = service.recent_items(limit=None)
+
+            self.assertEqual(document["content"], b"%PDF-read-only")
+            self.assertTrue(recent[0]["hasDocument"])
+            self.assertFalse((root / ".state.json.lock").exists())
+
+    def test_retained_pdf_reader_rejects_paths_outside_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fax_id = "b" * 32
+            (root / "outside.pdf").write_bytes(b"%PDF-outside")
+            (root / "state.json").write_text(
+                json.dumps(
+                    {
+                        "incoming": {
+                            fax_id: {
+                                "filename": "outside.pdf",
+                                "documentPath": "outside.pdf",
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            service = FaxService(self.config(root))
+
+            with self.assertRaisesRegex(FaxError, "fax_document_not_found"):
+                service.incoming_document_bytes(fax_id)
+
     def test_connector_token_can_be_loaded_from_secret_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             token = Path(tmp) / "token"

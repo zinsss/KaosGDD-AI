@@ -174,6 +174,9 @@ services:
       PAPERLESS_BASE_URL: "${PAPERLESS_BASE_URL:-}"
       PAPERLESS_PUBLIC_URL: "${PAPERLESS_PUBLIC_URL:-}"
       PAPERLESS_TIMEOUT_SECONDS: "${PAPERLESS_TIMEOUT_SECONDS:-60}"
+      FAX_DISCORD_ENABLED: "false"
+      FAX_DISCORD_MESSAGE_INTAKE: "false"
+      FAX_DISCORD_STATE_PATH: "/data/fax/state.json"
     secrets:
       - paperless_api_token
     group_add:
@@ -182,6 +185,7 @@ services:
       - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:8096:8096"
     volumes:
       - ${KAOS_ROOT:-/srv/kaos}/backups/kaosgdd/ledger:/data/ledger/backups
+      - ${GOVERNOR_STATE_ROOT:-/srv/kaosgdd/kaosgovernor}/fax:/data/fax:ro
     entrypoint: ["kaos-governor-api"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8096/health', timeout=3)"]
