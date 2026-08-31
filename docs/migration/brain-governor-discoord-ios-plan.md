@@ -1547,6 +1547,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-31 | 6 | Restored vertical centering for text-only personal labels | Text-only owner/automation/all-day labels now keep inline-flex centering and agenda rows center their time/title columns; versioned `styles.css?v=245` | Presentation-only follow-up; static portal promotion pending |
 | 2026-08-31 | 6 | Converted the faint personal host label into a URL link | The faint header label now displays `kaosgsd.net` and links to `https://kaosgsd.net`; versioned `styles.css?v=246` and `app.js?v=227`; navigation contract expectation updated | Presentation-only follow-up; static portal promotion pending |
 | 2026-08-31 | 6 | Reverted the personal host text to a very faint static label | Removed the external link behavior and rendered `kaosgsd.net` as a non-clickable label at lower opacity; versioned `styles.css?v=247` and `app.js?v=228` | Presentation-only follow-up; static portal promotion pending |
+| 2026-08-31 | 6 | Matched the Tasks Add button height to the dropdown controls | Removed the fake label spacer above the Add button so it renders as only the 44 px control row; versioned `app.js?v=229` | Presentation-only follow-up; static portal promotion pending |
 
 ## How to Update This Tracker
 

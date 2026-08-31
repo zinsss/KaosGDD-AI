@@ -3933,7 +3933,6 @@ function renderTaskFilters() {
         </select>
       </label>
       <div class="taskAddSlot">
-        <span aria-hidden="true">&nbsp;</span>
         <a class="openButton taskAddButton" href="#/add-task">${uiText("common.add", "Add")}</a>
       </div>
     </section>
