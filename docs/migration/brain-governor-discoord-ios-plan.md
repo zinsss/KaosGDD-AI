@@ -1534,6 +1534,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-31 | 6 | Promoted Archive Terminal Documents/Fax to H3 and synced H4 | Commit `bfbd709`; API image rebuilt with rollback tag retained; portal assets match Git; live Fax archive reports 7 records and 3 retained PDFs; unauthenticated API/portal requests fail HTTP 401; H4 doctor passes at the same commit | Authenticated user observation open; no Fax, Paperless, Memos, Radicale, mail, notification, Discord, or worker mutation occurred |
 | 2026-08-31 | 6 | Simplified the personal selector and Archive Terminal action labels | Removed the top selector `•` indicator and bracketed Archive Terminal button text; versioned `styles.css?v=233` and `app.js?v=223`; 15 portal tests, JavaScript syntax checks, and `git diff --check` pass | Presentation-only follow-up; static portal promotion pending |
 | 2026-08-31 | 6 | Corrected the Tasks Add button height | Forced the Add control to the same 44 px block size as the task filters and versioned `styles.css?v=234`; 15 portal tests, JavaScript syntax check, and `git diff --check` pass | Presentation-only follow-up; static portal promotion pending |
+| 2026-08-31 | 6 | Corrected the Tasks Add button row placement | Added a filter-row spacer slot so Add occupies only the select row; versioned `styles.css?v=235` and `app.js?v=224`; 15 portal tests, JavaScript syntax check, and `git diff --check` pass | Presentation-only follow-up; static portal promotion pending |
 
 ## How to Update This Tracker
 

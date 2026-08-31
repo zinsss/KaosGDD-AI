@@ -1075,6 +1075,12 @@ h3 {
   gap: 5px;
 }
 
+.taskFilters .taskAddSlot {
+  display: grid;
+  align-self: end;
+  gap: 5px;
+}
+
 .taskFilters span {
   color: var(--nord7);
   font-size: 0.68rem;
@@ -1098,7 +1104,6 @@ h3 {
 }
 
 .taskFilters .taskAddButton {
-  align-self: end;
   box-sizing: border-box;
   height: 44px;
   min-height: 44px;
