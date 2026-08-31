@@ -501,7 +501,7 @@ html.isAgendaSuppliesEmbed body {
 
 .app[data-profile="main"] .appIdentity .kicker {
   color: var(--nord8);
-  font-size: 1.55rem;
+  font-size: 1.18rem;
   font-weight: 700;
   line-height: 1;
   text-transform: none;
