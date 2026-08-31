@@ -461,7 +461,7 @@ html.isAgendaSuppliesEmbed body {
   height: 44px;
   min-height: 44px;
   border: 1px solid rgba(136, 192, 208, 0.72);
-  border-radius: 0;
+  border-radius: 999px;
   background: rgba(136, 192, 208, 0.22);
   color: var(--nord8);
   padding: 0;
