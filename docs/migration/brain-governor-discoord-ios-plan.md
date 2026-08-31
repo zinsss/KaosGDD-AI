@@ -1544,6 +1544,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-31 | 6 | Aligned the personal host label with the header row | `kaosgdd.net` now sits on the same baseline as the selected menu text, uses matching header size, and remains faint/right-aligned; versioned `styles.css?v=242` | Presentation-only follow-up; static portal promotion pending |
 | 2026-08-31 | 6 | Corrected personal header row placement | Forced the selected menu and `kaosgdd.net` host label onto the same CSS grid row after mobile Safari rendered them on separate rows; versioned `styles.css?v=243` | Presentation-only follow-up; static portal promotion pending |
 | 2026-08-31 | 6 | Made the personal host label fainter | Reduced the `kaosgdd.net` header label opacity while keeping its row placement and size unchanged; versioned `styles.css?v=244` | Presentation-only follow-up; static portal promotion pending |
+| 2026-08-31 | 6 | Restored vertical centering for text-only personal labels | Text-only owner/automation/all-day labels now keep inline-flex centering and agenda rows center their time/title columns; versioned `styles.css?v=245` | Presentation-only follow-up; static portal promotion pending |
 
 ## How to Update This Tracker
 

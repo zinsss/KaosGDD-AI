@@ -4285,13 +4285,21 @@ h3 {
 
 .app[data-profile="main"] .calendarPill,
 .app[data-profile="main"] .timelineAllDayPill {
-  display: inline;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 0;
   min-height: 0;
   padding: 0;
   border: 0;
   background: transparent;
   box-shadow: none;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+.app[data-profile="main"] .timeline li {
+  align-items: center;
 }
 
 .app[data-profile="family"] {
