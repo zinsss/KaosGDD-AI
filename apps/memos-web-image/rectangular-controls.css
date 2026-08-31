@@ -17,6 +17,28 @@ select,
   border-radius: 0 !important;
 }
 
+.controlBar {
+  align-items: center !important;
+}
+
+.searchBox {
+  min-height: 44px !important;
+  height: 44px !important;
+}
+
+.searchBox input {
+  min-height: 42px !important;
+  height: 42px !important;
+}
+
+.addButton {
+  width: 44px !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  max-height: 44px !important;
+  padding: 0 !important;
+}
+
 .tagFilters button,
 .tagRow button {
   border-radius: 999px !important;
