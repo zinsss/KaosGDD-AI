@@ -2142,13 +2142,22 @@ function formatCaregiverHours(minutes) {
   return `${hours}${uiText("caregiver.hoursSuffix", "h")} ${remainder}${uiText("caregiver.minutesSuffix", "m")}`;
 }
 
-function formatCaregiverMonthCellHours(minutes) {
+function caregiverDurationParts(minutes) {
   const safeMinutes = Math.max(0, Math.round(Number(minutes) || 0));
   const hours = Math.floor(safeMinutes / 60);
   const remainder = safeMinutes % 60;
-  const hourText = `${hours}${uiText("caregiver.hoursSuffix", "h")}`;
-  if (!remainder) return escapeHtml(hourText);
-  return `${escapeHtml(hourText)}<br>${escapeHtml(`${remainder}${uiText("caregiver.minutesSuffix", "m")}`)}`;
+  return {
+    hours,
+    remainder,
+    hourText: `${hours}${uiText("caregiver.hoursSuffix", "h")}`,
+    minuteText: remainder ? `${remainder}${uiText("caregiver.minutesSuffix", "m")}` : "",
+  };
+}
+
+function formatCaregiverMonthCellHours(minutes) {
+  const parts = caregiverDurationParts(minutes);
+  if (!parts.remainder) return escapeHtml(parts.hourText);
+  return `${escapeHtml(parts.hourText)}<br>${escapeHtml(parts.minuteText)}`;
 }
 
 function caregiverMonthCopyText(month, data) {
@@ -2160,9 +2169,7 @@ function caregiverMonthCopyText(month, data) {
     transportFee: 0,
     total: 0,
   };
-  const recordedDays = (Array.isArray(data?.daily) ? data.daily : [])
-    .filter((item) => Number(item.minutes) > 0 || Number(item.extras) > 0)
-    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+  const recordedDays = caregiverMonthDailyRecords(data);
   const lines = [
     `${monthTitle(month)} 돌봄 내역`,
     `합계: ${summary.days}${uiText("caregiver.daysSuffix", "d")} / ${formatCaregiverHours(summary.minutes)}`,
@@ -2187,6 +2194,168 @@ function caregiverMonthCopyText(month, data) {
     lines.push(parts.filter(Boolean).join(" · "));
   });
   return lines.join("\n");
+}
+
+function caregiverMonthDailyRecords(data) {
+  return (Array.isArray(data?.daily) ? data.daily : [])
+    .filter((item) => Number(item.minutes) > 0 || Number(item.extras) > 0)
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+}
+
+function caregiverCanvasFont(size, weight = 700) {
+  return `${weight} ${size}px "NanumBarunPen", "NixgonFont", "Pretendard", system-ui, sans-serif`;
+}
+
+function drawCaregiverRoundedRect(context, x, y, width, height, radius) {
+  context.beginPath();
+  if (typeof context.roundRect === "function") {
+    context.roundRect(x, y, width, height, radius);
+    return;
+  }
+  context.moveTo(x + radius, y);
+  context.lineTo(x + width - radius, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + radius);
+  context.lineTo(x + width, y + height - radius);
+  context.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  context.lineTo(x + radius, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - radius);
+  context.lineTo(x, y + radius);
+  context.quadraticCurveTo(x, y, x + radius, y);
+}
+
+async function caregiverMonthImageDataUrl(month, data) {
+  if (document.fonts?.ready) await document.fonts.ready.catch(() => null);
+  const scale = Math.min(3, Math.max(2, window.devicePixelRatio || 2));
+  const width = 1080;
+  const pad = 54;
+  const gap = 10;
+  const weekdayHeight = 44;
+  const cellWidth = Math.floor((width - pad * 2 - gap * 6) / 7);
+  const cellHeight = 92;
+  const gridTop = 310;
+  const gridHeight = weekdayHeight + cellHeight * 6 + gap * 5;
+  const summaryTop = gridTop + gridHeight + 48;
+  const height = summaryTop + 245;
+  const canvas = document.createElement("canvas");
+  canvas.width = width * scale;
+  canvas.height = height * scale;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("canvas_unavailable");
+  context.scale(scale, scale);
+  context.fillStyle = "#fbf7fc";
+  context.fillRect(0, 0, width, height);
+  context.fillStyle = "#7b4b78";
+  context.font = caregiverCanvasFont(54, 850);
+  context.fillText(`${monthTitle(month)} 돌봄 내역`, pad, 88);
+  const summary = data?.summary || {
+    days: 0,
+    minutes: 0,
+    basePay: 0,
+    extras: 0,
+    transportFee: 0,
+    total: 0,
+  };
+  context.fillStyle = "#594964";
+  context.font = caregiverCanvasFont(31, 750);
+  context.fillText(`${summary.days}${uiText("caregiver.daysSuffix", "d")} / ${formatCaregiverHours(summary.minutes)}`, pad, 145);
+  context.textAlign = "right";
+  context.fillText(`총 지급액 ${formatCaregiverPlainWon(summary.total)}`, width - pad, 145);
+  context.textAlign = "left";
+  context.strokeStyle = "#e0d3e4";
+  context.lineWidth = 2;
+  context.beginPath();
+  context.moveTo(pad, 190);
+  context.lineTo(width - pad, 190);
+  context.stroke();
+
+  const days = calendarWeekdays();
+  context.font = caregiverCanvasFont(28, 850);
+  context.fillStyle = "#826f8a";
+  days.forEach((day, index) => {
+    const x = pad + index * (cellWidth + gap);
+    context.textAlign = "center";
+    context.fillText(day, x + cellWidth / 2, gridTop);
+  });
+  context.textAlign = "left";
+
+  const dailyByDate = new Map((Array.isArray(data?.daily) ? data.daily : []).map((item) => [item.date, item]));
+  monthCells(month).forEach((cell, index) => {
+    const col = index % 7;
+    const row = Math.floor(index / 7);
+    const x = pad + col * (cellWidth + gap);
+    const y = gridTop + weekdayHeight + row * (cellHeight + gap);
+    if (cell.muted) return;
+    context.fillStyle = "#f1e8f4";
+    context.strokeStyle = "#d9cce0";
+    context.lineWidth = 2;
+    drawCaregiverRoundedRect(context, x, y, cellWidth, cellHeight, 9);
+    context.fill();
+    context.stroke();
+    context.fillStyle = "#594964";
+    context.font = caregiverCanvasFont(26, 850);
+    context.fillText(cell.label, x + 13, y + 31);
+    const item = dailyByDate.get(cell.value);
+    if (!item?.minutes) return;
+    const duration = caregiverDurationParts(item.minutes);
+    context.fillStyle = "#8c4f83";
+    context.font = caregiverCanvasFont(24, 850);
+    context.fillText(duration.hourText, x + 13, y + 62);
+    if (duration.minuteText) context.fillText(duration.minuteText, x + 13, y + 85);
+  });
+
+  context.strokeStyle = "#e0d3e4";
+  context.beginPath();
+  context.moveTo(pad, summaryTop - 24);
+  context.lineTo(width - pad, summaryTop - 24);
+  context.stroke();
+  context.fillStyle = "#34283b";
+  context.font = caregiverCanvasFont(34, 850);
+  context.fillText("정산 요약", pad, summaryTop);
+  const rows = [
+    ["기본 급여", formatCaregiverPlainWon(summary.basePay)],
+    ["추가 요금", formatCaregiverPlainWon(summary.extras)],
+    ["교통비", formatCaregiverPlainWon(summary.transportFee)],
+    ["총 지급액", formatCaregiverPlainWon(summary.total)],
+  ];
+  context.font = caregiverCanvasFont(28, 780);
+  rows.forEach(([label, value], index) => {
+    const y = summaryTop + 55 + index * 42;
+    context.fillStyle = index === rows.length - 1 ? "#8c4f83" : "#594964";
+    context.fillText(label, pad, y);
+    context.textAlign = "right";
+    context.fillText(value, width - pad, y);
+    context.textAlign = "left";
+  });
+  return canvas.toDataURL("image/png");
+}
+
+function closeCaregiverMonthImage() {
+  const overlayRoot = document.getElementById("overlayRoot");
+  if (overlayRoot) overlayRoot.innerHTML = "";
+}
+
+async function openCaregiverMonthImage() {
+  const month = state.selectedDate.slice(0, 7);
+  const data = state.caregiver.key === month ? state.caregiver.data : null;
+  if (!data) return;
+  const imageUrl = await caregiverMonthImageDataUrl(month, data);
+  const overlayRoot = document.getElementById("overlayRoot");
+  if (!overlayRoot) return;
+  overlayRoot.innerHTML = `
+    <div class="caregiverImageBackdrop" data-caregiver-image-close></div>
+    <aside class="caregiverImageDialog" role="dialog" aria-modal="true" aria-label="돌봄 공유 이미지">
+      <header>
+        <strong>돌봄 공유 이미지</strong>
+        <button class="openButton" type="button" data-caregiver-image-close>닫기</button>
+      </header>
+      <img class="caregiverImagePreview" src="${imageUrl}" alt="${escapeHtml(monthTitle(month))} 돌봄 월간 달력 이미지" />
+      <div class="caregiverImageActions">
+        <a class="openButton" href="${imageUrl}" download="${escapeHtml(month)}-caregiver.png">이미지 저장</a>
+        <button class="openButton" type="button" data-caregiver-copy-text>텍스트 복사</button>
+      </div>
+      <p>아이폰에서는 이미지를 길게 눌러 저장하거나 공유할 수 있습니다.</p>
+    </aside>
+  `;
 }
 
 function caregiverTimeMinutes(value) {
@@ -7502,7 +7671,21 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (event.target.closest("[data-caregiver-image-close]")) {
+    closeCaregiverMonthImage();
+    return;
+  }
+
   if (event.target.closest("[data-caregiver-copy-month]")) {
+    try {
+      await openCaregiverMonthImage();
+    } catch (error) {
+      window.alert(`이미지 생성 실패: ${error.message || "unknown error"}`);
+    }
+    return;
+  }
+
+  if (event.target.closest("[data-caregiver-copy-text]")) {
     const month = state.selectedDate.slice(0, 7);
     const data = state.caregiver.key === month ? state.caregiver.data : null;
     if (!data) return;

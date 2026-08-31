@@ -4814,6 +4814,61 @@ h3 {
   font-weight: 800;
 }
 
+.caregiverImageBackdrop {
+  position: fixed;
+  inset: var(--kaos-overlay-top, 0px) 0 0;
+  z-index: 45;
+  background: rgba(45, 35, 50, 0.45);
+  backdrop-filter: blur(8px);
+}
+
+.caregiverImageDialog {
+  position: fixed;
+  inset: calc(var(--kaos-overlay-top, 0px) + 14px) 14px 14px;
+  z-index: 46;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  gap: 10px;
+  max-width: 620px;
+  margin: 0 auto;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow: 0 24px 70px rgba(96, 75, 107, 0.28);
+}
+
+.caregiverImageDialog header,
+.caregiverImageActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.caregiverImageDialog header strong {
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.caregiverImagePreview {
+  display: block;
+  width: 100%;
+  max-height: 100%;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fbf7fc;
+  object-fit: contain;
+}
+
+.caregiverImageDialog p {
+  margin: 0;
+  color: var(--dim);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
 .caregiverMonthGrid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
