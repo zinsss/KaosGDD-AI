@@ -286,6 +286,7 @@ const state = {
     inboxLoading: false,
     inboxError: "",
     inboxItems: [],
+    selectedInboxId: "",
     upload: {
       saving: false,
       error: "",
@@ -2294,6 +2295,7 @@ async function showDocumentsPage(page) {
   state.documents.page = target;
   state.documents.checked = false;
   state.documents.selected = null;
+  state.documents.selectedInboxId = "";
   state.documents.detailError = "";
   render();
   await loadDocuments({ force: true });
@@ -2305,6 +2307,7 @@ async function searchDocuments(query) {
   state.documents.page = 1;
   state.documents.checked = false;
   state.documents.selected = null;
+  state.documents.selectedInboxId = "";
   state.documents.detailError = "";
   render();
   await loadDocuments({ force: true });
@@ -2320,12 +2323,46 @@ function closeDocumentDetail() {
   if (selectedId) document.querySelector(`[data-paperless-open="${cssIdentifier(selectedId)}"]`)?.focus();
 }
 
+function selectDocumentInboxRecord(id) {
+  const selected = state.documents.inboxItems.find((item) => item.id === String(id || ""));
+  if (!selected) return;
+  state.documents.selectedInboxId = selected.id;
+  render();
+  document.querySelector("[data-document-inbox-detail]")?.focus();
+  document.getElementById("view")?.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function closeDocumentInboxRecord() {
+  const selectedId = state.documents.selectedInboxId;
+  state.documents.selectedInboxId = "";
+  render();
+  if (selectedId) document.querySelector(`[data-document-inbox-open="${cssIdentifier(selectedId)}"]`)?.focus();
+}
+
+async function refreshDocumentInboxStatus() {
+  const selectedId = state.documents.selectedInboxId;
+  state.documents.inboxChecked = false;
+  await loadDocumentInbox({ force: true, reconcile: true });
+  if (selectedId && state.documents.inboxItems.some((item) => item.id === selectedId)) {
+    state.documents.selectedInboxId = selectedId;
+    render();
+  }
+}
+
+async function openDocumentInboxPaperless(documentId) {
+  if (!documentId) return;
+  state.documents.mode = "archive";
+  state.documents.selectedInboxId = "";
+  render();
+  await loadDocumentDetail(documentId);
+}
+
 async function refreshDocuments() {
   state.documents.selected = null;
+  state.documents.selectedInboxId = "";
   state.documents.detailError = "";
   if (state.documents.mode === "inbox") {
-    state.documents.inboxChecked = false;
-    await loadDocumentInbox({ force: true, reconcile: true });
+    await refreshDocumentInboxStatus();
   } else {
     state.documents.checked = false;
     await loadDocuments({ force: true });
@@ -2338,6 +2375,7 @@ async function setDocumentMode(mode) {
   state.documents.mode = nextMode;
   state.documents.selected = null;
   state.documents.selectedId = "";
+  state.documents.selectedInboxId = "";
   state.documents.detailLoading = false;
   state.documents.detailError = "";
   render();
@@ -5710,6 +5748,9 @@ function renderDocuments() {
   const documents = state.documents;
   const archiveActive = documents.mode !== "inbox";
   const inboxActive = documents.mode === "inbox";
+  const selectedInbox = inboxActive
+    ? documents.inboxItems.find((item) => item.id === documents.selectedInboxId) || null
+    : null;
   const inboxRows = documents.inboxItems
     .map((item) => {
       const date = archiveDateParts(item.submittedAt);
@@ -5718,13 +5759,13 @@ function renderDocuments() {
         ? `<a class="archiveSourceLink" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" aria-label="Open ${escapeHtml(item.title)} in Paperless" title="Open in Paperless">SRC</a>`
         : `<span class="archiveSourceLink isDisabled">${escapeHtml(item.taskId ? "OCR" : "--")}</span>`;
       return `
-        <li class="archiveRecord">
-          <div class="archiveRecordButton archiveRecordStatic">
+        <li class="archiveRecord ${String(documents.selectedInboxId) === String(item.id) ? "isSelected" : ""}">
+          <button class="archiveRecordButton" type="button" data-document-inbox-open="${escapeHtml(item.id)}" aria-current="${String(documents.selectedInboxId) === String(item.id) ? "true" : "false"}">
             <span class="archiveRecordId">#${escapeHtml(item.id)}</span>
             <time class="archiveRecordDate" datetime="${escapeHtml(date.raw)}">${escapeHtml(date.label)}</time>
             <strong class="archiveRecordTitle">${escapeHtml(item.title || "Document")}</strong>
             <span class="archiveRecordStatus ${statusClass}">${escapeHtml(item.statusLabel)}</span>
-          </div>
+          </button>
           ${sourceLink}
         </li>
       `;
@@ -5801,6 +5842,43 @@ function renderDocuments() {
           </section>
         `
         : "";
+  const inboxDetail = selectedInbox
+    ? `
+      <section class="archiveDetail" data-document-inbox-detail tabindex="-1" aria-labelledby="documentInboxDetailTitle">
+        <header class="archiveDetailHeader">
+          <div>
+            <p>INBOX #${escapeHtml(selectedInbox.id)}</p>
+            <h3 id="documentInboxDetailTitle">${escapeHtml(selectedInbox.title || "Document")}</h3>
+          </div>
+          <button class="archiveAction" type="button" data-document-inbox-close>BACK</button>
+        </header>
+        <dl class="archiveMetadata">
+          ${archiveMeta("Status", selectedInbox.statusLabel)}
+          ${archiveMeta("Submitted", selectedInbox.submittedAt ? formatDocumentDate(selectedInbox.submittedAt) : "")}
+          ${archiveMeta("Updated", selectedInbox.updatedAt ? formatDocumentDate(selectedInbox.updatedAt) : "")}
+          ${archiveMeta("File", selectedInbox.filename)}
+          ${archiveMeta("Size", formatBytes(selectedInbox.sizeBytes))}
+          ${archiveMeta("Task", selectedInbox.taskId)}
+          ${archiveMeta("SHA", selectedInbox.sha256 ? selectedInbox.sha256.slice(0, 16) : "")}
+          ${selectedInbox.error ? archiveMeta("Error", selectedInbox.error) : ""}
+        </dl>
+        <div class="archiveActions">
+          <button class="archiveAction" type="button" data-document-inbox-refresh-status ${documents.inboxLoading ? "disabled" : ""}>↻ STATUS</button>
+          ${
+            selectedInbox.documentId
+              ? `<button class="archiveAction isActive" type="button" data-document-inbox-paperless="${escapeHtml(selectedInbox.documentId)}">OPEN DETAIL</button>`
+              : ""
+          }
+          ${
+            selectedInbox.url
+              ? `<a class="archiveAction" href="${escapeHtml(selectedInbox.url)}" target="_blank" rel="noopener noreferrer">SRC</a>`
+              : ""
+          }
+        </div>
+        <p class="archiveStatusMessage">Inbox actions are status/detail only. Metadata, tags, delete, and retry are not exposed here yet.</p>
+      </section>
+    `
+    : "";
   const modeTabs = `
     <div class="segmentedTabs archiveModeTabs" role="tablist" aria-label="Document board mode">
       <button type="button" role="tab" data-document-mode="archive" aria-selected="${archiveActive}" class="${archiveActive ? "isActive" : ""}">Archive</button>
@@ -5853,7 +5931,7 @@ function renderDocuments() {
     </div>
   `;
   const inboxBoard = `
-    <div class="archiveWorkspace">
+    <div class="archiveWorkspace ${selectedInbox ? "hasDetail" : ""}">
       <section class="archiveIndex" aria-labelledby="documentsInboxTitle" aria-busy="${documents.inboxLoading}">
         <header class="archiveIndexHeader">
           <h3 id="documentsInboxTitle">INBOX BOARD</h3>
@@ -5880,6 +5958,7 @@ function renderDocuments() {
                   : ""
         }
       </section>
+      ${inboxDetail}
     </div>
   `;
   return `
@@ -8736,6 +8815,28 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const openInboxDocument = event.target.closest("[data-document-inbox-open]");
+  if (openInboxDocument) {
+    selectDocumentInboxRecord(openInboxDocument.dataset.documentInboxOpen || "");
+    return;
+  }
+
+  if (event.target.closest("[data-document-inbox-close]")) {
+    closeDocumentInboxRecord();
+    return;
+  }
+
+  if (event.target.closest("[data-document-inbox-refresh-status]")) {
+    await refreshDocumentInboxStatus();
+    return;
+  }
+
+  const openInboxPaperless = event.target.closest("[data-document-inbox-paperless]");
+  if (openInboxPaperless) {
+    await openDocumentInboxPaperless(openInboxPaperless.dataset.documentInboxPaperless || "");
+    return;
+  }
+
   if (event.target.closest("[data-paperless-close]")) {
     closeDocumentDetail();
     return;
@@ -9586,6 +9687,7 @@ document.addEventListener("submit", async (event) => {
       if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
       state.documents.upload = { saving: false, error: "" };
       state.documents.mode = "inbox";
+      state.documents.selectedInboxId = String(payload.item?.id || "");
       state.documents.inboxChecked = false;
       window.location.hash = "#/documents";
     } catch (error) {
