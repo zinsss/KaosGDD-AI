@@ -1471,9 +1471,10 @@ Planned implementation:
 6. Keep PACS/database/OS upgrades in a separately hardened maintenance track.
 
 Security and rollback requirements are defined in [Brain as Kaos Gateway and
-System Operator](../architecture/brain-system-operations.md). No phase may
-replace the deny-by-default Guard with arbitrary commands, SSH, sudo, Docker
-socket access, or model-visible secrets.
+System Operator](../architecture/brain-system-operations.md) and
+[KaosSystemOperator Access Plan](../operator/kaos-system-operator-access-plan.md).
+No phase may replace the deny-by-default Guard with arbitrary commands, SSH,
+sudo, Docker socket access, or model-visible secrets.
 
 ## Confirmation Policy Target
 

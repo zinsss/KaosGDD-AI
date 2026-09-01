@@ -104,6 +104,9 @@ Brain Guard still rejects shell, Docker, database, restart, deployment, and
 arbitrary admin intents. That rejection remains in place while the control
 plane is extracted.
 
+The concrete access plan for a separate Codex operator session is maintained in
+[KaosSystemOperator Access Plan](../operator/kaos-system-operator-access-plan.md).
+
 Incremental delivery:
 
 1. Move read-only system inventory and health state behind Governor-owned APIs.
