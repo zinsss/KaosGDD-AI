@@ -307,6 +307,7 @@ class BrainToolServer:
         task_refresh_callback: Callable[[], Awaitable[None]] | None = None,
         calendar_refresh_callback: Callable[[], Awaitable[None]] | None = None,
         import_status_provider: Callable[[], Mapping[str, object]] | None = None,
+        system_status_provider: Callable[[], Mapping[str, object]] | None = None,
         import_items_provider: Callable[[], list[Mapping[str, object]]] | None = None,
         fax_document_provider: Callable[[str], Mapping[str, object]] | None = None,
         mail_messages_provider: Callable[[int], Mapping[str, object]] | None = None,
@@ -328,6 +329,7 @@ class BrainToolServer:
         self._paperless = paperless
         self._calendar_refresh_callback = calendar_refresh_callback or task_refresh_callback
         self._import_status_provider = import_status_provider
+        self._system_status_provider = system_status_provider
         self._import_items_provider = import_items_provider
         self._fax_document_provider = fax_document_provider
         self._mail_messages_provider = mail_messages_provider
@@ -353,6 +355,7 @@ class BrainToolServer:
         app.router.add_get("/tools/calendar/week", self._calendar_week)
         app.router.add_get("/tools/calendar/month-image", self._calendar_month_image)
         app.router.add_get("/tools/imports/recent", self._recent_imports)
+        app.router.add_get("/tools/system/status", self._system_status)
         app.router.add_get("/tools/imports/fax/{fax_id}/document", self._incoming_fax_document)
         app.router.add_get("/tools/mail/naver/list", self._list_naver_mail)
         app.router.add_get("/tools/tasks/active", self._active_tasks)
@@ -544,6 +547,27 @@ class BrainToolServer:
                 "count": len(imports),
                 "imports": imports,
                 "source": "governor-runtime-items" if detailed_imports else "governor-runtime-status",
+            }
+        )
+
+    async def _system_status(self, request: web.Request) -> web.Response:
+        profile = _profile(request)
+        current = _request_date(request, default=self._today_provider())
+        if self._system_status_provider is None:
+            return web.json_response({"error": "system_status_disabled"}, status=503)
+        try:
+            status = await asyncio.to_thread(self._system_status_provider)
+        except Exception:
+            LOGGER.exception("Unexpected Brain system status failure")
+            return web.json_response({"error": "internal_error"}, status=500)
+        if not isinstance(status, Mapping):
+            return web.json_response({"error": "system_status_invalid"}, status=502)
+        return web.json_response(
+            {
+                "date": current.isoformat(),
+                "profile": profile,
+                "status": dict(status),
+                "source": "governor-runtime-health",
             }
         )
 

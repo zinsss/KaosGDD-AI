@@ -118,6 +118,38 @@ class GovernorToolRenderingTests(unittest.TestCase):
         context = render_tool_context(ToolRequest(ToolKind.ACTIVE_TASKS), {"tasks": []})
         self.assertEqual(context, "## 할 일\n- 없음")
 
+    def test_render_system_status_context(self) -> None:
+        context = render_tool_context(
+            ToolRequest(ToolKind.SYSTEM_STATUS),
+            {
+                "status": {
+                    "version": "0.6.0",
+                    "discordReady": True,
+                    "startupComplete": True,
+                    "brainTools": {"enabled": True, "host": "127.0.0.1", "port": 8098},
+                    "serviceStatus": {
+                        "enabled": True,
+                        "checks": {
+                            "kaosbrain": {"state": "healthy", "detail": "ok"},
+                            "paperless": {"state": "down", "detail": "HTTP 502"},
+                            "kaosinj": {"state": "planned", "detail": "not deployed"},
+                        },
+                    },
+                    "naverMail": {"enabled": True, "lastScanAt": "2026-09-01T08:00:00+0900"},
+                    "textNotifications": {"enabled": True},
+                }
+            },
+        )
+
+        self.assertIn("## System status", context)
+        self.assertIn("- KaosDiscoord: 0.6.0", context)
+        self.assertIn("- Discord: ready", context)
+        self.assertIn("- Brain tools: enabled", context)
+        self.assertIn("- Services healthy: 1", context)
+        self.assertIn("- Down: Paperless (HTTP 502)", context)
+        self.assertIn("- Planned: KaosInj", context)
+        self.assertIn("- Mail: enabled · scan 2026-09-01T08:00", context)
+
     def test_render_supplies_context_uses_scope_title_and_omits_empty_due(self) -> None:
         context = render_tool_context(
             ToolRequest(ToolKind.ACTIVE_TASKS, profile="supplies"),
@@ -598,6 +630,10 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
         imports = await client.fetch(ToolRequest(ToolKind.RECENT_IMPORTS))
         self.assertEqual(imports["path"], "/tools/imports/recent")
         self.assertEqual(imports["params"], {"profile": "main"})
+
+        system_status = await client.fetch(ToolRequest(ToolKind.SYSTEM_STATUS))
+        self.assertEqual(system_status["path"], "/tools/system/status")
+        self.assertEqual(system_status["params"], {"profile": "main"})
 
         fax_document = await client.fax_document("0123456789ABCDEF0123456789ABCDEF")
         self.assertEqual(

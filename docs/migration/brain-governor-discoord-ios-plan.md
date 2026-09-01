@@ -1,6 +1,6 @@
 # Brain / Governor / Discoord / iOS Migration Plan
 
-Last updated: 2026-08-30
+Last updated: 2026-09-01
 
 This is the canonical implementation and progress tracker for separating
 KaosBrain, KaosGovernor, KaosDiscoord, KaosGDD domain services, notifications,
@@ -70,6 +70,11 @@ H4, office-service, and stateful-service cutovers.
   Kaos Memos client now runs locally for the personal route, and Documents is a
   KaosGDD-owned read-only Paperless browser. Normal user UI observation is
   pending before the slice is closed.
+- Phase 8 slice 1 is implemented locally: H3 KaosDiscoord exposes authenticated
+  read-only `/tools/system/status`, and H4 KaosBrain can answer
+  `system status` / `시스템 상태 확인` through Brain Guard as the
+  `system.status` readonly intent. No restart, deploy, shell, Docker,
+  database, or arbitrary admin execution is enabled.
 - Database schema in production: additive migration `005`.
 - Working rule: finish and verify one boundary before moving another domain.
 
@@ -85,7 +90,7 @@ H4, office-service, and stateful-service cutovers.
 | 5 | Retain brain-only KaosDiscoord; detach workers and notifications | Package, Pushover, digest, and fax/mail worker slices implemented | Pushover and digest observed; fax/mail observation active | In progress |
 | 6 | Retain the personal PWA and add stable iOS integrations | Deep link, compact menu, personal Memos repair, Paperless browser, and Archive Terminal slice implemented | UI slices deployed; Memos/Paperless/Fax authenticated observation active | In progress |
 | 7 | Remove compatibility debt and finish documentation/CI | Not started | Not deployed | Planned |
-| 8 | Add governed Brain system operations | Architecture accepted; current Guard remains deny-by-default | Not deployed | Planned |
+| 8 | Add governed Brain system operations | Read-only `system.status` slice implemented and tested | Not deployed | Validated locally |
 
 Status meanings:
 

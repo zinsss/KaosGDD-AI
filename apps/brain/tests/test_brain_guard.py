@@ -37,6 +37,7 @@ class BrainGuardTests(unittest.TestCase):
         self.assertEqual(INTENT_PARAMETER_KEYS["today.get"], frozenset({"date", "startDate"}))
         self.assertEqual(INTENT_PARAMETER_KEYS["memo.search"], frozenset({"query"}))
         self.assertEqual(INTENT_PARAMETER_KEYS["document.search"], frozenset({"query"}))
+        self.assertEqual(INTENT_PARAMETER_KEYS["system.status"], frozenset())
         self.assertEqual(INTENT_PARAMETER_KEYS["document.update_tags"], frozenset({"documentId", "tags"}))
 
     def test_memo_search_plan_becomes_readonly_governor_tool(self) -> None:
@@ -68,6 +69,19 @@ class BrainGuardTests(unittest.TestCase):
                 assert isinstance(request, ToolRequest)
                 self.assertEqual(request.kind, ToolKind.TODAY)
                 self.assertEqual(request.start, "2026-08-26")
+
+    def test_system_status_plan_becomes_readonly_governor_tool(self) -> None:
+        result = adapt_kaosai_plan(
+            {"intent": "system.status", "parameters": {}},
+            self.context(),
+        )
+
+        self.assertEqual(result.kind, BrainGuardResultKind.READONLY_TOOL)
+        self.assertFalse(result.confirmation_required)
+        self.assertIsInstance(result.request, ToolRequest)
+        request = result.request
+        assert isinstance(request, ToolRequest)
+        self.assertEqual(request.kind, ToolKind.SYSTEM_STATUS)
 
     def test_task_create_plan_requires_confirmation_and_defaults_due_time(self) -> None:
         result = adapt_kaosai_plan(

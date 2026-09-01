@@ -856,6 +856,35 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await client.close()
 
+    async def test_system_status_returns_health_provider_payload(self) -> None:
+        server = BrainToolServer(
+            "127.0.0.1",
+            8098,
+            governor_api_token="governor-secret",
+            calendar_adapter=self.calendar,  # type: ignore[arg-type]
+            memos=self.memos,  # type: ignore[arg-type]
+            paperless=self.paperless,  # type: ignore[arg-type]
+            system_status_provider=lambda: {
+                "discordReady": True,
+                "startupComplete": True,
+                "version": "0.6.0",
+                "brainTools": {"enabled": True, "host": "127.0.0.1", "port": 8098},
+            },
+            today_provider=lambda: date(2026, 8, 14),
+        )
+        client = TestClient(TestServer(server.application()))
+        await client.start_server()
+        try:
+            response = await client.get("/tools/system/status?profile=main", headers=self.headers())
+            self.assertEqual(response.status, 200)
+            payload = await response.json()
+            self.assertEqual(payload["date"], "2026-08-14")
+            self.assertEqual(payload["source"], "governor-runtime-health")
+            self.assertEqual(payload["status"]["version"], "0.6.0")
+            self.assertTrue(payload["status"]["discordReady"])
+        finally:
+            await client.close()
+
     async def test_recent_imports_prefers_detailed_mail_fax_items(self) -> None:
         server = BrainToolServer(
             "127.0.0.1",

@@ -146,6 +146,7 @@ Rules:
 - Use "supplies" only for supplies, shopping, inventory, or household stock items.
 - Default task due time to 10:00 when a due date has no time.
 - Do not produce shell, Docker, database, restart, filesystem, SSH, or admin intents.
+- Use system.status only for read-only health, status, and service-check requests.
 - For supplies, do not include dueDate or dueTime.
 - If the user asks for a state change, set the matching mutation intent. KaosGovernor will ask for confirmation.
 - If the request is ambiguous, return {{"intent":"clarify","scope":"personal","parameters":{{"question":"..."}}}}."""

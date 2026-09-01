@@ -47,6 +47,7 @@ READONLY_INTENTS = {
     "task.list_completed",
     "memo.search",
     "document.search",
+    "system.status",
 }
 
 MUTATION_INTENTS = {
@@ -72,6 +73,7 @@ INTENT_PARAMETER_KEYS: dict[str, frozenset[str]] = {
     "task.list_completed": frozenset({"query", "start", "end"}),
     "memo.search": frozenset({"query"}),
     "document.search": frozenset({"query"}),
+    "system.status": frozenset(),
     "task.create": frozenset({"title", "memo", "dueDate", "dueTime"}),
     "task.update_due": frozenset({"taskTitle", "dueDate", "dueTime"}),
     "task.edit": frozenset({"taskTitle", "title", "memo", "dueDate", "dueTime", "priority"}),
@@ -144,6 +146,8 @@ def _readonly_request(intent: str, parameters: Mapping[str, Any], scope: str, co
     if intent == "document.search":
         query = _required_text(parameters, "query")
         return ToolRequest(ToolKind.DOCUMENT_SEARCH, query, profile=profile, collection_id=collection_id)
+    if intent == "system.status":
+        return ToolRequest(ToolKind.SYSTEM_STATUS, profile=profile, collection_id=collection_id)
     raise BrainGuardError("intent_not_allowed")
 
 

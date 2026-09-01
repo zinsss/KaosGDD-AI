@@ -120,6 +120,16 @@ class ToolIntentTests(unittest.TestCase):
         self.assertEqual(request.kind, ToolKind.ACTIVE_TASKS)
         self.assertEqual(request.profile, "supplies")
 
+    def test_system_status_request(self) -> None:
+        request = parse_tool_request("system status")
+        assert request is not None
+        self.assertEqual(request.kind, ToolKind.SYSTEM_STATUS)
+
+    def test_korean_system_status_request(self) -> None:
+        request = parse_tool_request("시스템 상태 확인")
+        assert request is not None
+        self.assertEqual(request.kind, ToolKind.SYSTEM_STATUS)
+
     def test_remaining_supplies_request_sets_profile(self) -> None:
         request = parse_tool_request("남은 비품 뭐야")
         assert request is not None

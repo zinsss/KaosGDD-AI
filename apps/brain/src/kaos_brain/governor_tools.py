@@ -101,6 +101,8 @@ class GovernorToolClient:
             return await self._get("/tools/imports/recent", {"profile": self._profile(request.profile)})
         if request.kind is ToolKind.MAIL_MESSAGES:
             return await self.mail_messages(limit=50)
+        if request.kind is ToolKind.SYSTEM_STATUS:
+            return await self.system_status(profile=request.profile)
         if request.kind is ToolKind.ACTIVE_TASKS:
             return await self._get("/tools/tasks/active", self._task_params(request.profile, request.collection_id))
         if request.kind is ToolKind.COMPLETED_TASKS:
@@ -125,6 +127,9 @@ class GovernorToolClient:
 
     async def mail_messages(self, *, limit: int = 50) -> dict[str, Any]:
         return await self._get("/tools/mail/naver/list", {"limit": str(limit)})
+
+    async def system_status(self, *, profile: str = "") -> dict[str, Any]:
+        return await self._get("/tools/system/status", {"profile": self._profile(profile)})
 
     async def fax_document(self, fax_id: str) -> dict[str, Any]:
         normalized = str(fax_id or "").strip().lower()
@@ -747,6 +752,8 @@ def render_tool_context(request: ToolRequest, payload: dict[str, Any]) -> str:
         return _render_memos(request.query, payload)
     if request.kind is ToolKind.DOCUMENT_SEARCH:
         return _render_documents(request.query, payload)
+    if request.kind is ToolKind.SYSTEM_STATUS:
+        return _render_system_status(payload)
     return "No usable Governor data."
 
 
@@ -1034,6 +1041,106 @@ def _render_documents(query: str, payload: dict[str, Any]) -> str:
         return "\n".join(lines)
     lines.extend(_document_link_line(item) for item in results[:SEARCH_RESULT_LIMIT])
     return "\n".join(lines)[:1900]
+
+
+def _render_system_status(payload: dict[str, Any]) -> str:
+    status = payload.get("status")
+    if not isinstance(status, dict):
+        return "## System status\n- unavailable"
+    lines = ["## System status"]
+    version = str(status.get("version") or "").strip()
+    if version:
+        lines.append(f"- KaosDiscoord: {version}")
+    lines.append(f"- Discord: {_ready_text(status.get('discordReady'))}")
+    lines.append(f"- Startup: {_ready_text(status.get('startupComplete'))}")
+    brain_tools = status.get("brainTools")
+    if isinstance(brain_tools, dict):
+        lines.append(f"- Brain tools: {_enabled_text(brain_tools.get('enabled'))}")
+    service_status = status.get("serviceStatus")
+    if isinstance(service_status, dict):
+        lines.extend(_service_status_lines(service_status))
+    lines.extend(_runtime_status_line("Mail", status.get("naverMail")))
+    lines.extend(_runtime_status_line("Mail organizer", status.get("naverMailOrganizer")))
+    lines.extend(_runtime_status_line("Fax", status.get("fax")))
+    lines.extend(_runtime_status_line("Pushover", status.get("textNotifications")))
+    lines.extend(_runtime_status_line("Daily digest", status.get("dailyDigest")))
+    return "\n".join(lines)[:1900]
+
+
+def _service_status_lines(service_status: dict[str, Any]) -> list[str]:
+    lines: list[str] = []
+    checks = service_status.get("checks")
+    if not isinstance(checks, dict) or not checks:
+        enabled = _enabled_text(service_status.get("enabled"))
+        return [f"- Service board: {enabled}"]
+    down: list[str] = []
+    unknown: list[str] = []
+    planned: list[str] = []
+    healthy = 0
+    for key, raw in sorted(checks.items()):
+        item = raw if isinstance(raw, dict) else {}
+        state = str(item.get("state") or "").strip().lower()
+        label = _service_label(str(key))
+        if state == "healthy":
+            healthy += 1
+        elif state == "down":
+            detail = str(item.get("detail") or "").strip()
+            down.append(f"{label}{f' ({_truncate(detail, 80)})' if detail else ''}")
+        elif state == "planned":
+            planned.append(label)
+        else:
+            unknown.append(label)
+    lines.append(f"- Services healthy: {healthy}")
+    if down:
+        lines.append(f"- Down: {', '.join(down[:6])}")
+    if unknown:
+        lines.append(f"- Unknown: {', '.join(unknown[:6])}")
+    if planned:
+        lines.append(f"- Planned: {', '.join(planned[:6])}")
+    return lines
+
+
+def _runtime_status_line(label: str, raw: object) -> list[str]:
+    if not isinstance(raw, dict):
+        return []
+    enabled = raw.get("enabled")
+    parts = [_enabled_text(enabled)] if isinstance(enabled, bool) else []
+    for key, display in (
+        ("lastScanAt", "scan"),
+        ("lastCheckAt", "check"),
+        ("lastArchiveAt", "archive"),
+        ("lastDigestAt", "digest"),
+        ("lastSentAt", "sent"),
+        ("lastError", "error"),
+    ):
+        value = str(raw.get(key) or "").strip()
+        if value:
+            parts.append(f"{display} {value[:19]}")
+    return [f"- {label}: {' · '.join(parts) if parts else 'configured'}"]
+
+
+def _ready_text(value: object) -> str:
+    return "ready" if bool(value) else "not ready"
+
+
+def _enabled_text(value: object) -> str:
+    return "enabled" if bool(value) else "disabled"
+
+
+def _service_label(key: str) -> str:
+    return {
+        "kaosbrain": "KaosBrain",
+        "kaosai-second-look": "KaosAI Second-Look",
+        "kaosgovernor": "KaosGovernor",
+        "kaospacs": "KaosPACS",
+        "kaosinj": "KaosInj",
+        "radicale": "Radicale",
+        "memos": "Memos",
+        "paperless": "Paperless",
+        "stirlingpdf": "StirlingPDF",
+        "vaultwarden": "Vaultwarden",
+        "rustdesk": "Rustdesk",
+    }.get(key, key)
 
 
 def _items(value: object) -> list[dict[str, Any]]:

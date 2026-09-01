@@ -78,6 +78,7 @@ class ToolKind(StrEnum):
     CALENDAR_MONTH_IMAGE = "calendar_month_image"
     RECENT_IMPORTS = "recent_imports"
     MAIL_MESSAGES = "mail_messages"
+    SYSTEM_STATUS = "system_status"
     ACTIVE_TASKS = "active_tasks"
     COMPLETED_TASKS = "completed_tasks"
     MEMO_SEARCH = "memo_search"
@@ -115,6 +116,8 @@ def parse_tool_request(content: str, *, today: date | None = None) -> ToolReques
         return ToolRequest(ToolKind.WEATHER, label, start=current.isoformat(), profile=profile, collection_id=city)
     if _asks_today(lowered):
         return ToolRequest(ToolKind.TODAY, start=current.isoformat(), profile=profile)
+    if _asks_system_status(lowered):
+        return ToolRequest(ToolKind.SYSTEM_STATUS, profile=profile)
     completed = _completed_task_request(text, lowered, current, profile=profile, collection_id=collection_id)
     if completed is not None:
         return completed
@@ -244,6 +247,14 @@ def _asks_active_tasks(lowered: str) -> bool:
         or "active task" in lowered
         or "open task" in lowered
         or "todo" in lowered
+    )
+
+
+def _asks_system_status(lowered: str) -> bool:
+    return (
+        any(marker in lowered for marker in ("system status", "service status", "server status", "health check"))
+        or ("시스템" in lowered and any(marker in lowered for marker in ("상태", "점검", "확인", "헬스", "헬스체크")))
+        or ("서버" in lowered and any(marker in lowered for marker in ("상태", "점검", "확인", "헬스", "헬스체크")))
     )
 
 
