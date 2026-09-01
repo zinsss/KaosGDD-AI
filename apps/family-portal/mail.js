@@ -32,6 +32,7 @@
     const source = value && typeof value === "object" ? value : {};
     const filename = clean(source.filename, 240) || "attachment";
     return Object.freeze({
+      index: Math.max(0, Number(source.index) || 0),
       filename,
       contentType: clean(source.contentType, 120) || "application/octet-stream",
       sizeBytes: Math.max(0, Number(source.sizeBytes) || 0),

@@ -94,6 +94,19 @@ def inline_pdf_response(handler: BaseHTTPRequestHandler, data: bytes, filename: 
     handler.wfile.write(data)
 
 
+def inline_file_response(handler: BaseHTTPRequestHandler, data: bytes, filename: str, content_type: str) -> None:
+    encoded_name = urllib.parse.quote(filename or "attachment", safe="")
+    safe_content_type = re.sub(r"[\r\n;]+", "", content_type or "").strip() or "application/octet-stream"
+    handler.send_response(200)
+    handler.send_header("Content-Type", safe_content_type)
+    handler.send_header("Content-Disposition", f"inline; filename*=UTF-8''{encoded_name}")
+    handler.send_header("Cache-Control", "private, no-store")
+    handler.send_header("X-Content-Type-Options", "nosniff")
+    handler.send_header("Content-Length", str(len(data)))
+    handler.end_headers()
+    handler.wfile.write(data)
+
+
 def profile_from_headers(headers) -> str:
     host = (headers.get("X-Forwarded-Host") or headers.get("Host") or "").split(":", 1)[0].lower()
     return "family" if host == "family.kaosgdd.net" else "main"
@@ -442,9 +455,9 @@ def mail_status_for_error(exc: Exception) -> int:
     if isinstance(exc, memos_relay.MemosRelayError):
         return exc.status
     code = str(exc)
-    if code in {"main_profile_required", "mail_message_not_found"}:
+    if code in {"main_profile_required", "mail_message_not_found", "mail_attachment_not_found"}:
         return 404
-    if code in {"mail_limit_invalid", "mail_uid_invalid", "mail_mailbox_invalid"}:
+    if code in {"mail_limit_invalid", "mail_uid_invalid", "mail_mailbox_invalid", "mail_attachment_invalid"}:
         return 400
     return 503
 
@@ -504,19 +517,54 @@ def mail_message_payload(
             "attachmentCount": len(mail.attachments),
             "attachments": [
                 {
+                    "index": index,
                     "filename": attachment.filename,
                     "contentType": attachment.content_type,
                     "sizeBytes": len(attachment.content),
                 }
-                for attachment in mail.attachments
+                for index, attachment in enumerate(mail.attachments, start=1)
             ],
         },
     }
 
 
+def mail_attachment_payload(
+    uid: str,
+    attachment_index: str,
+    query_string: str,
+    poller: NaverMailPoller | None = None,
+) -> tuple[bytes, str, str]:
+    params = urllib.parse.parse_qs(query_string, keep_blank_values=True)
+    try:
+        uid_value = int(uid)
+        index_value = int(attachment_index)
+    except (TypeError, ValueError) as exc:
+        raise NaverMailError("mail_attachment_invalid") from exc
+    if uid_value < 1:
+        raise NaverMailError("mail_uid_invalid")
+    if index_value < 1:
+        raise NaverMailError("mail_attachment_invalid")
+    mailbox = (params.get("mailbox") or [""])[0].strip()
+    if not mailbox:
+        raise NaverMailError("mail_mailbox_invalid")
+    mail = (poller or naver_mail_poller()).get_message(mailbox=mailbox, uid=uid_value)
+    try:
+        attachment = mail.attachments[index_value - 1]
+    except IndexError as exc:
+        raise NaverMailError("mail_attachment_not_found") from exc
+    if not attachment.content:
+        raise NaverMailError("mail_attachment_not_found")
+    return attachment.content, attachment.filename, attachment.content_type
+
+
 def mail_message_uid(path: str) -> str:
     match = re.fullmatch(r"/api/mail/messages/([1-9][0-9]*)", path)
     return match.group(1) if match else ""
+
+
+def mail_attachment_path(path: str) -> tuple[str, str]:
+    match = re.fullmatch(r"/api/mail/messages/([1-9][0-9]*)/attachments/([1-9][0-9]*)", path)
+    return (match.group(1), match.group(2)) if match else ("", "")
 
 
 def recurring_status_for_error(exc: Exception) -> int:
@@ -1115,6 +1163,19 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 print(f"Mail browse failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "mail_archive_unavailable"})
+            return
+        mail_attachment_uid, mail_attachment_index = mail_attachment_path(parsed.path)
+        if mail_attachment_uid:
+            try:
+                require_main_access(self.headers)
+                content, filename, content_type = mail_attachment_payload(mail_attachment_uid, mail_attachment_index, parsed.query)
+                inline_file_response(self, content, filename, content_type)
+            except (ValueError, NaverMailError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, memos_relay.MemosRelayError) else str(exc)
+                json_response(self, mail_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Mail attachment failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "mail_attachment_unavailable"})
             return
         mail_uid = mail_message_uid(parsed.path)
         if mail_uid:

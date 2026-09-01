@@ -2276,6 +2276,12 @@ function formatBytes(value) {
   return `${Math.round(bytes / 1024 / 102.4) / 10} MB`;
 }
 
+function mailAttachmentUrl(message, attachmentIndex) {
+  const uid = encodeURIComponent(message?.uid || "");
+  const params = new URLSearchParams({ mailbox: String(message?.mailbox || "") });
+  return `/api/mail/messages/${uid}/attachments/${encodeURIComponent(attachmentIndex)}?${params.toString()}`;
+}
+
 function applyLedgerPayload(payload) {
   state.ledger = {
     ...state.ledger,
@@ -5204,12 +5210,20 @@ function renderMail() {
   const attachmentRows = selected?.attachments?.length
     ? selected.attachments
       .map(
-        (attachment, index) => `
+        (attachment, index) => {
+          const attachmentIndex = attachment.index || index + 1;
+          return `
           <div>
-            <dt>ATT ${index + 1}</dt>
-            <dd>${escapeHtml(attachment.filename)} · ${escapeHtml(attachment.contentType)} · ${escapeHtml(formatBytes(attachment.sizeBytes))}</dd>
+            <dt>ATT ${escapeHtml(attachmentIndex)}</dt>
+            <dd>
+              <a class="archiveInlineLink" href="${escapeHtml(mailAttachmentUrl(selected, attachmentIndex))}" target="_blank" rel="noopener">
+                ${escapeHtml(attachment.filename)}
+              </a>
+              · ${escapeHtml(attachment.contentType)} · ${escapeHtml(formatBytes(attachment.sizeBytes))}
+            </dd>
           </div>
-        `,
+        `;
+        },
       )
       .join("")
     : "";

@@ -84,7 +84,9 @@ class MailApiTests(unittest.TestCase):
         self.assertEqual(api.mail_status_for_error(NaverMailError("mail_limit_invalid")), 400)
         self.assertEqual(api.mail_status_for_error(NaverMailError("mail_uid_invalid")), 400)
         self.assertEqual(api.mail_status_for_error(NaverMailError("mail_mailbox_invalid")), 400)
+        self.assertEqual(api.mail_status_for_error(NaverMailError("mail_attachment_invalid")), 400)
         self.assertEqual(api.mail_status_for_error(NaverMailError("mail_message_not_found")), 404)
+        self.assertEqual(api.mail_status_for_error(NaverMailError("mail_attachment_not_found")), 404)
         self.assertEqual(api.mail_status_for_error(ValueError("main_profile_required")), 404)
         self.assertEqual(api.mail_status_for_error(api.memos_relay.MemosRelayError(401, "cloudflare_access_required")), 401)
         self.assertEqual(api.mail_status_for_error(NaverMailError("naver_not_configured")), 503)
@@ -98,6 +100,7 @@ class MailApiTests(unittest.TestCase):
         message = payload["message"]  # type: ignore[index]
         self.assertEqual(message["preview"], "본문")
         self.assertEqual(message["attachmentCount"], 1)
+        self.assertEqual(message["attachments"][0]["index"], 1)
         self.assertEqual(message["attachments"][0]["filename"], "notice.pdf")
         self.assertEqual(message["attachments"][0]["sizeBytes"], 8)
         self.assertNotIn("content", message["attachments"][0])
@@ -107,6 +110,22 @@ class MailApiTests(unittest.TestCase):
             api.mail_message_payload("abc", "mailbox=INBOX", FakeMailPoller())  # type: ignore[arg-type]
         with self.assertRaisesRegex(NaverMailError, "mail_mailbox_invalid"):
             api.mail_message_payload("7", "", FakeMailPoller())  # type: ignore[arg-type]
+
+    def test_attachment_payload_returns_selected_attachment_bytes(self) -> None:
+        poller = FakeMailPoller()
+
+        content, filename, content_type = api.mail_attachment_payload("49980", "1", "mailbox=INBOX", poller)  # type: ignore[arg-type]
+
+        self.assertEqual(poller.calls, [("INBOX", 49980)])
+        self.assertEqual(content, b"%PDF-1.4")
+        self.assertEqual(filename, "notice.pdf")
+        self.assertEqual(content_type, "application/pdf")
+
+    def test_attachment_payload_validates_index_and_missing_attachment(self) -> None:
+        with self.assertRaisesRegex(NaverMailError, "mail_attachment_invalid"):
+            api.mail_attachment_payload("49980", "abc", "mailbox=INBOX", FakeMailPoller())  # type: ignore[arg-type]
+        with self.assertRaisesRegex(NaverMailError, "mail_attachment_not_found"):
+            api.mail_attachment_payload("49980", "2", "mailbox=INBOX", FakeMailPoller())  # type: ignore[arg-type]
 
     def test_list_handler_rejects_non_personal_cloudflare_identity(self) -> None:
         handler = CaptureHandler("/api/mail/messages", {"Host": "family.kaosgdd.net"})
@@ -151,6 +170,24 @@ class MailApiTests(unittest.TestCase):
 
         self.assertEqual(handler.status, 200)
         detail.assert_called_once_with("49980", "mailbox=INBOX")
+
+    def test_attachment_handler_returns_inline_file_after_personal_access(self) -> None:
+        handler = CaptureHandler(
+            "/api/mail/messages/49980/attachments/1?mailbox=INBOX",
+            {"Host": "kaosgdd.net", "Cf-Access-Jwt-Assertion": "verified-by-test"},
+        )
+
+        with (
+            patch.object(api.memos_relay, "verify_cloudflare_access", return_value=("personal", "zin@example.com")),
+            patch.object(api, "mail_attachment_payload", return_value=(b"%PDF-1.4", "notice.pdf", "application/pdf")) as attachment,
+        ):
+            handler.do_GET()
+
+        self.assertEqual(handler.status, 200)
+        self.assertEqual(handler.response_headers["Content-Type"], "application/pdf")
+        self.assertIn("filename*=UTF-8''notice.pdf", handler.response_headers["Content-Disposition"])
+        self.assertEqual(handler.wfile.getvalue(), b"%PDF-1.4")
+        attachment.assert_called_once_with("49980", "1", "mailbox=INBOX")
 
 
 if __name__ == "__main__":

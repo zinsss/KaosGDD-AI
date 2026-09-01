@@ -6146,6 +6146,15 @@ h3 {
   border-color: var(--archive-line-strong);
 }
 
+.app[data-profile="main"] .archiveInlineLink {
+  color: var(--archive-cyan);
+  text-decoration: none;
+}
+
+.app[data-profile="main"] .archiveInlineLink:hover {
+  color: var(--archive-amber);
+}
+
 .app[data-profile="main"] .archiveAction:disabled,
 .app[data-profile="main"] .archiveAction.isDisabled,
 .app[data-profile="main"] .archiveSourceLink.isDisabled {
@@ -6162,6 +6171,7 @@ h3 {
 .app[data-profile="main"] .archiveCommandLine input:focus-visible,
 .app[data-profile="main"] .archiveAction:focus-visible,
 .app[data-profile="main"] .archiveSourceLink:focus-visible,
+.app[data-profile="main"] .archiveInlineLink:focus-visible,
 .app[data-profile="main"] .archiveRecordButton:focus-visible,
 .app[data-profile="main"] .archiveDetail:focus-visible,
 .app[data-profile="main"] .archiveOcrRegion:focus-visible {

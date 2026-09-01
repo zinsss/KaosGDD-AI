@@ -12,12 +12,13 @@ test("normalizes Naver mail headers for the portal", () => {
     preview: "본문 미리보기",
     receivedAt: "2026-09-01T07:00:00+09:00",
     attachmentCount: 2,
-    attachments: [{ filename: "notice.pdf", contentType: "application/pdf", sizeBytes: 8 }],
+    attachments: [{ index: 1, filename: "notice.pdf", contentType: "application/pdf", sizeBytes: 8 }],
   });
 
   assert.equal(message.id, "INBOX:49980");
   assert.equal(message.subject, "공지");
   assert.equal(message.attachmentCount, 2);
+  assert.equal(message.attachments[0].index, 1);
   assert.equal(message.attachments[0].filename, "notice.pdf");
 });
 
