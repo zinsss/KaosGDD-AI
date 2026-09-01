@@ -5,6 +5,7 @@ import os
 import re
 import urllib.parse
 import urllib.request
+from dataclasses import replace
 from datetime import UTC, datetime
 from email.parser import BytesParser
 from email.policy import default as email_policy
@@ -24,7 +25,8 @@ from kaos_governor.documents import (
     PaperlessDocumentService,
 )
 from kaos_governor.fax import FaxConfig, FaxError, FaxService
-from kaos_governor.mail.naver import NaverMailConfig, NaverMailError, NaverMailPoller
+from kaos_governor.mail import MailOrganizerConfig, MailOrganizerError, NaverMailOrganizer
+from kaos_governor.mail.naver import KST, NaverMailConfig, NaverMailError, NaverMailPoller
 from kaos_governor.memos import relay as memos_relay
 from kaos_governor.tasks import PostgresRecurringTaskStore, RecurringTaskDefinition, RecurringTaskError, RecurringTaskService, validate_payload
 
@@ -451,6 +453,14 @@ def naver_mail_poller() -> NaverMailPoller:
     return NaverMailPoller(NaverMailConfig.from_env())
 
 
+@lru_cache(maxsize=8)
+def naver_mail_organizer(max_items: int | None = None) -> NaverMailOrganizer:
+    config = MailOrganizerConfig.from_env()
+    if max_items is not None:
+        config = replace(config, max_items=max(5, min(50, max_items)))
+    return NaverMailOrganizer(config, NaverMailConfig.from_env())
+
+
 def mail_status_for_error(exc: Exception) -> int:
     if isinstance(exc, memos_relay.MemosRelayError):
         return exc.status
@@ -503,6 +513,72 @@ def mail_messages_payload(
     }
 
 
+def _mail_unread_received_at(received_epoch: float) -> str:
+    if received_epoch <= 0:
+        return "(Unknown)"
+    return datetime.fromtimestamp(received_epoch, KST).strftime("%Y-%m-%d %H:%M KST")
+
+
+def _mail_message_dict(mail, *, unread: bool = False, uidvalidity: str = "") -> dict[str, object]:
+    return {
+        "kind": "mail",
+        "direction": "incoming",
+        "unread": unread,
+        "mailbox": mail.mailbox,
+        "uid": mail.uid,
+        "uidValidity": uidvalidity,
+        "sender": mail.sender,
+        "subject": mail.subject,
+        "preview": mail.preview,
+        "receivedAt": mail.received_at,
+        "attachmentCount": len(mail.attachments),
+        "attachments": [
+            {
+                "index": index,
+                "filename": attachment.filename,
+                "contentType": attachment.content_type,
+                "sizeBytes": len(attachment.content),
+            }
+            for index, attachment in enumerate(mail.attachments, start=1)
+        ],
+    }
+
+
+def mail_unread_payload(
+    query_string: str,
+    organizer: NaverMailOrganizer | None = None,
+) -> dict[str, object]:
+    params = urllib.parse.parse_qs(query_string, keep_blank_values=True)
+    limit = _mail_query_int(params, "limit", 50)
+    active_organizer = organizer or naver_mail_organizer(limit)
+    entries, total = active_organizer.list_unread()
+    rows = [
+        {
+            "kind": "mail",
+            "direction": "incoming",
+            "unread": True,
+            "mailbox": entry.mailbox_name,
+            "uid": entry.uid,
+            "uidValidity": entry.uidvalidity,
+            "sender": entry.sender,
+            "subject": entry.subject,
+            "preview": "",
+            "receivedAt": _mail_unread_received_at(entry.received_epoch),
+            "attachmentCount": 0,
+            "attachments": [],
+        }
+        for entry in entries[:limit]
+    ]
+    return {
+        "ok": True,
+        "limit": limit,
+        "totalUnread": total,
+        "mailboxCount": len({entry.mailbox_name for entry in entries}),
+        "folders": sorted({entry.mailbox_name for entry in entries}),
+        "messages": rows,
+    }
+
+
 def mail_message_payload(
     uid: str,
     query_string: str,
@@ -519,29 +595,26 @@ def mail_message_payload(
     if not mailbox:
         raise NaverMailError("mail_mailbox_invalid")
     mail = (poller or naver_mail_poller()).get_message(mailbox=mailbox, uid=uid_value)
-    return {
-        "ok": True,
-        "message": {
-            "kind": "mail",
-            "direction": "incoming",
-            "mailbox": mail.mailbox,
-            "uid": mail.uid,
-            "sender": mail.sender,
-            "subject": mail.subject,
-            "preview": mail.preview,
-            "receivedAt": mail.received_at,
-            "attachmentCount": len(mail.attachments),
-            "attachments": [
-                {
-                    "index": index,
-                    "filename": attachment.filename,
-                    "contentType": attachment.content_type,
-                    "sizeBytes": len(attachment.content),
-                }
-                for index, attachment in enumerate(mail.attachments, start=1)
-            ],
-        },
-    }
+    return {"ok": True, "message": _mail_message_dict(mail)}
+
+
+def mail_unread_message_payload(
+    uid: str,
+    query_string: str,
+    organizer: NaverMailOrganizer | None = None,
+) -> dict[str, object]:
+    params = urllib.parse.parse_qs(query_string, keep_blank_values=True)
+    try:
+        uid_value = int(uid)
+    except (TypeError, ValueError) as exc:
+        raise MailOrganizerError("mail_uid_invalid") from exc
+    if uid_value < 1:
+        raise MailOrganizerError("mail_uid_invalid")
+    mailbox = (params.get("mailbox") or [""])[0].strip()
+    if not mailbox:
+        raise MailOrganizerError("mail_mailbox_invalid")
+    mail = (organizer or naver_mail_organizer()).fetch_message(mailbox_name=mailbox, uid=uid_value)
+    return {"ok": True, "message": _mail_message_dict(mail, unread=True)}
 
 
 def mail_attachment_payload(
@@ -573,6 +646,35 @@ def mail_attachment_payload(
     return attachment.content, attachment.filename, attachment.content_type
 
 
+def mail_unread_attachment_payload(
+    uid: str,
+    attachment_index: str,
+    query_string: str,
+    organizer: NaverMailOrganizer | None = None,
+) -> tuple[bytes, str, str]:
+    params = urllib.parse.parse_qs(query_string, keep_blank_values=True)
+    try:
+        uid_value = int(uid)
+        index_value = int(attachment_index)
+    except (TypeError, ValueError) as exc:
+        raise MailOrganizerError("mail_attachment_invalid") from exc
+    if uid_value < 1:
+        raise MailOrganizerError("mail_uid_invalid")
+    if index_value < 1:
+        raise MailOrganizerError("mail_attachment_invalid")
+    mailbox = (params.get("mailbox") or [""])[0].strip()
+    if not mailbox:
+        raise MailOrganizerError("mail_mailbox_invalid")
+    mail = (organizer or naver_mail_organizer()).fetch_message(mailbox_name=mailbox, uid=uid_value)
+    try:
+        attachment = mail.attachments[index_value - 1]
+    except IndexError as exc:
+        raise MailOrganizerError("mail_attachment_not_found") from exc
+    if not attachment.content:
+        raise MailOrganizerError("mail_attachment_not_found")
+    return attachment.content, attachment.filename, attachment.content_type
+
+
 def mail_message_uid(path: str) -> str:
     match = re.fullmatch(r"/api/mail/messages/([1-9][0-9]*)", path)
     return match.group(1) if match else ""
@@ -580,6 +682,16 @@ def mail_message_uid(path: str) -> str:
 
 def mail_attachment_path(path: str) -> tuple[str, str]:
     match = re.fullmatch(r"/api/mail/messages/([1-9][0-9]*)/attachments/([1-9][0-9]*)", path)
+    return (match.group(1), match.group(2)) if match else ("", "")
+
+
+def mail_unread_message_uid(path: str) -> str:
+    match = re.fullmatch(r"/api/mail/unread/messages/([1-9][0-9]*)", path)
+    return match.group(1) if match else ""
+
+
+def mail_unread_attachment_path(path: str) -> tuple[str, str]:
+    match = re.fullmatch(r"/api/mail/unread/messages/([1-9][0-9]*)/attachments/([1-9][0-9]*)", path)
     return (match.group(1), match.group(2)) if match else ("", "")
 
 
@@ -1173,12 +1285,48 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 require_main_access(self.headers)
                 json_response(self, 200, mail_messages_payload(parsed.query))
-            except (ValueError, NaverMailError, memos_relay.MemosRelayError) as exc:
+            except (ValueError, NaverMailError, MailOrganizerError, memos_relay.MemosRelayError) as exc:
                 code = exc.code if isinstance(exc, memos_relay.MemosRelayError) else str(exc)
                 json_response(self, mail_status_for_error(exc), {"ok": False, "error": code})
             except Exception as exc:
                 print(f"Mail browse failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "mail_archive_unavailable"})
+            return
+        if parsed.path == "/api/mail/unread":
+            try:
+                require_main_access(self.headers)
+                json_response(self, 200, mail_unread_payload(parsed.query))
+            except (ValueError, NaverMailError, MailOrganizerError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, memos_relay.MemosRelayError) else str(exc)
+                json_response(self, mail_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Unread mail browse failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "mail_unread_unavailable"})
+            return
+        unread_attachment_uid, unread_attachment_index = mail_unread_attachment_path(parsed.path)
+        if unread_attachment_uid:
+            try:
+                require_main_access(self.headers)
+                content, filename, content_type = mail_unread_attachment_payload(unread_attachment_uid, unread_attachment_index, parsed.query)
+                inline_file_response(self, content, filename, content_type)
+            except (ValueError, NaverMailError, MailOrganizerError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, memos_relay.MemosRelayError) else str(exc)
+                json_response(self, mail_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Unread mail attachment failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "mail_attachment_unavailable"})
+            return
+        unread_mail_uid = mail_unread_message_uid(parsed.path)
+        if unread_mail_uid:
+            try:
+                require_main_access(self.headers)
+                json_response(self, 200, mail_unread_message_payload(unread_mail_uid, parsed.query))
+            except (ValueError, NaverMailError, MailOrganizerError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, memos_relay.MemosRelayError) else str(exc)
+                json_response(self, mail_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Unread mail detail failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "mail_detail_unavailable"})
             return
         mail_attachment_uid, mail_attachment_index = mail_attachment_path(parsed.path)
         if mail_attachment_uid:
@@ -1186,7 +1334,7 @@ class Handler(BaseHTTPRequestHandler):
                 require_main_access(self.headers)
                 content, filename, content_type = mail_attachment_payload(mail_attachment_uid, mail_attachment_index, parsed.query)
                 inline_file_response(self, content, filename, content_type)
-            except (ValueError, NaverMailError, memos_relay.MemosRelayError) as exc:
+            except (ValueError, NaverMailError, MailOrganizerError, memos_relay.MemosRelayError) as exc:
                 code = exc.code if isinstance(exc, memos_relay.MemosRelayError) else str(exc)
                 json_response(self, mail_status_for_error(exc), {"ok": False, "error": code})
             except Exception as exc:
@@ -1198,7 +1346,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 require_main_access(self.headers)
                 json_response(self, 200, mail_message_payload(mail_uid, parsed.query))
-            except (ValueError, NaverMailError, memos_relay.MemosRelayError) as exc:
+            except (ValueError, NaverMailError, MailOrganizerError, memos_relay.MemosRelayError) as exc:
                 code = exc.code if isinstance(exc, memos_relay.MemosRelayError) else str(exc)
                 json_response(self, mail_status_for_error(exc), {"ok": False, "error": code})
             except Exception as exc:

@@ -7,6 +7,8 @@ test("normalizes Naver mail headers for the portal", () => {
   const message = normalizeMessage({
     mailbox: "INBOX",
     uid: 49980,
+    uidValidity: "80",
+    unread: true,
     sender: "Naver <notice@example.com>",
     subject: "공지",
     preview: "본문 미리보기",
@@ -17,6 +19,8 @@ test("normalizes Naver mail headers for the portal", () => {
 
   assert.equal(message.id, "INBOX:49980");
   assert.equal(message.subject, "공지");
+  assert.equal(message.uidValidity, "80");
+  assert.equal(message.unread, true);
   assert.equal(message.attachmentCount, 2);
   assert.equal(message.attachments[0].index, 1);
   assert.equal(message.attachments[0].filename, "notice.pdf");
@@ -61,14 +65,15 @@ test("filters scoped mail rows by board tab", () => {
   const page = normalizePage({
     messages: [
       { mailbox: "영덕군보건소", uid: 1, subject: "보건소", attachmentCount: 1 },
-      { mailbox: "세무사", uid: 2, subject: "세무사" },
+      { mailbox: "세무사", uid: 2, subject: "세무사", unread: true },
     ],
   });
 
   assert.equal(normalizeMode("bad"), "all");
-  assert.deepEqual(counts(page.items), { all: 2, yeongdeok: 1, tax: 1, attachments: 1 });
+  assert.deepEqual(counts(page.items), { all: 2, yeongdeok: 1, tax: 1, attachments: 1, unread: 1 });
   assert.equal(filterItems(page.items, "all").length, 2);
   assert.equal(filterItems(page.items, "yeongdeok")[0].subject, "보건소");
   assert.equal(filterItems(page.items, "tax")[0].subject, "세무사");
   assert.equal(filterItems(page.items, "attachments")[0].mailbox, "영덕군보건소");
+  assert.equal(filterItems(page.items, "unread")[0].mailbox, "세무사");
 });

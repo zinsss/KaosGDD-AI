@@ -314,6 +314,10 @@ const state = {
     error: "",
     mode: "all",
     items: [],
+    unreadItems: [],
+    unreadChecked: false,
+    unreadLoading: false,
+    unreadError: "",
     folders: [],
     mailboxCount: 0,
     limit: 50,
@@ -2089,6 +2093,15 @@ async function loadMail(options = {}) {
 }
 
 function refreshMail() {
+  if (state.mail.mode === "unread") {
+    state.mail.unreadChecked = false;
+    state.mail.unreadItems = [];
+    state.mail.selectedKey = "";
+    state.mail.selected = null;
+    state.mail.detailLoading = false;
+    state.mail.detailError = "";
+    return loadUnreadMail({ force: true });
+  }
   state.mail.checked = false;
   state.mail.selectedKey = "";
   state.mail.selected = null;
@@ -2097,7 +2110,46 @@ function refreshMail() {
   return loadMail({ force: true });
 }
 
-function setMailMode(modeValue) {
+async function loadUnreadMail(options = {}) {
+  if (portalProfile() !== "main") return;
+  if (state.mail.unreadLoading) return;
+  if (state.mail.unreadChecked && !options.force) return;
+  state.mail.unreadLoading = true;
+  state.mail.unreadError = "";
+  if (getRoute() === "mail") render();
+  try {
+    const params = new URLSearchParams({ limit: String(state.mail.limit || 50) });
+    const response = await fetch(`/api/mail/unread?${params.toString()}`, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    const page = window.KAOS_PORTAL_MAIL.normalizePage(payload);
+    state.mail = {
+      ...state.mail,
+      unreadChecked: true,
+      unreadLoading: false,
+      unreadError: "",
+      unreadItems: page.items,
+    };
+  } catch (error) {
+    state.mail = {
+      ...state.mail,
+      unreadChecked: true,
+      unreadLoading: false,
+      unreadError: error.message || "Unread mail is unavailable",
+      unreadItems: [],
+      selectedKey: "",
+      selected: null,
+      detailLoading: false,
+      detailError: "",
+    };
+  }
+  if (getRoute() === "mail") render();
+}
+
+async function setMailMode(modeValue) {
   const mode = window.KAOS_PORTAL_MAIL.normalizeMode(modeValue);
   if (state.mail.mode === mode) return;
   state.mail.mode = mode;
@@ -2106,10 +2158,12 @@ function setMailMode(modeValue) {
   state.mail.detailLoading = false;
   state.mail.detailError = "";
   render();
+  if (mode === "unread") await loadUnreadMail();
 }
 
 async function selectMailRecord(key) {
-  const selected = state.mail.items.find((item) => item.id === String(key || ""));
+  const selected = state.mail.items.find((item) => item.id === String(key || ""))
+    || state.mail.unreadItems.find((item) => item.id === String(key || ""));
   if (!selected) return;
   state.mail.selectedKey = selected.id;
   state.mail.selected = null;
@@ -2118,7 +2172,8 @@ async function selectMailRecord(key) {
   if (getRoute() === "mail") render();
   try {
     const params = new URLSearchParams({ mailbox: selected.mailbox });
-    const response = await fetch(`/api/mail/messages/${encodeURIComponent(selected.uid)}?${params.toString()}`, {
+    const basePath = selected.unread ? "/api/mail/unread/messages" : "/api/mail/messages";
+    const response = await fetch(`${basePath}/${encodeURIComponent(selected.uid)}?${params.toString()}`, {
       headers: { Accept: "application/json" },
       cache: "no-store",
     });
@@ -2293,7 +2348,8 @@ function formatBytes(value) {
 function mailAttachmentUrl(message, attachmentIndex) {
   const uid = encodeURIComponent(message?.uid || "");
   const params = new URLSearchParams({ mailbox: String(message?.mailbox || "") });
-  return `/api/mail/messages/${uid}/attachments/${encodeURIComponent(attachmentIndex)}?${params.toString()}`;
+  const basePath = message?.unread ? "/api/mail/unread/messages" : "/api/mail/messages";
+  return `${basePath}/${uid}/attachments/${encodeURIComponent(attachmentIndex)}?${params.toString()}`;
 }
 
 function applyLedgerPayload(payload) {
@@ -5200,8 +5256,12 @@ function renderMail() {
   const mail = state.mail;
   const mailApi = window.KAOS_PORTAL_MAIL;
   const mode = mailApi.normalizeMode(mail.mode);
-  const counts = mailApi.counts(mail.items);
-  const items = mailApi.filterItems(mail.items, mode);
+  const regularCounts = mailApi.counts(mail.items);
+  const counts = { ...regularCounts, unread: mail.unreadChecked ? mail.unreadItems.length : "?" };
+  const items = mode === "unread" ? mail.unreadItems : mailApi.filterItems(mail.items, mode);
+  const activeLoading = mode === "unread" ? mail.unreadLoading : mail.loading;
+  const activeChecked = mode === "unread" ? mail.unreadChecked : mail.checked;
+  const activeError = mode === "unread" ? mail.unreadError : mail.error;
   const selectedListItem = items.find((item) => item.id === mail.selectedKey) || null;
   const selected = mail.selected || selectedListItem;
   const hasDetail = mail.detailLoading || mail.detailError || Boolean(selected);
@@ -5229,9 +5289,9 @@ function renderMail() {
       `;
     })
     .join("");
-  const summary = mail.checked && !mail.error
+  const summary = activeChecked && !activeError
     ? `${items.length} MESSAGES // ${modeLabel} BOARD`
-    : mail.loading
+    : activeLoading
       ? "LOADING MAIL BOARD"
       : "MAIL BOARD STANDBY";
   const attachmentRows = selected?.attachments?.length
@@ -5308,10 +5368,10 @@ function renderMail() {
     <section class="archiveTerminal" data-archive-kind="mail" aria-label="Mail board">
       <div class="archiveCommand" aria-label="Mail board actions">
         <div class="archiveCommandActions">${modeButtons}</div>
-        <button class="archiveAction archiveRefreshAction" type="button" data-mail-refresh aria-label="Refresh mail board" title="Refresh mail board" ${mail.loading ? "disabled" : ""}>↻</button>
+        <button class="archiveAction archiveRefreshAction" type="button" data-mail-refresh aria-label="Refresh mail board" title="Refresh mail board" ${activeLoading ? "disabled" : ""}>↻</button>
       </div>
       <div class="archiveWorkspace ${hasDetail ? "hasDetail" : ""}">
-        <section class="archiveIndex" aria-labelledby="mailIndexTitle" aria-busy="${mail.loading}">
+        <section class="archiveIndex" aria-labelledby="mailIndexTitle" aria-busy="${activeLoading}">
           <header class="archiveIndexHeader">
             <h3 id="mailIndexTitle">RECORD BOARD</h3>
             <p class="archiveStatusMessage" role="status" aria-live="polite">${escapeHtml(summary)}</p>
@@ -5320,11 +5380,11 @@ function renderMail() {
             <span>NO.</span><span>DATE</span><span>TITLE</span>
           </div>
           ${
-            mail.error
-              ? `<div class="archiveError" role="alert"><p>${escapeHtml(mail.error)}</p><button class="archiveAction" type="button" data-mail-refresh>RETRY</button></div>`
-              : mail.loading && !mail.checked
-                ? `<p class="archiveStatusMessage">Reading Naver Mail headers...</p>`
-                : mail.checked && !rows
+            activeError
+              ? `<div class="archiveError" role="alert"><p>${escapeHtml(activeError)}</p><button class="archiveAction" type="button" data-mail-refresh>RETRY</button></div>`
+              : activeLoading && !activeChecked
+                ? `<p class="archiveStatusMessage">${mode === "unread" ? "Reading unread Naver Mail..." : "Reading Naver Mail headers..."}</p>`
+                : activeChecked && !rows
                   ? `<p class="archiveStatusMessage">No messages on this board.</p>`
                   : rows
                     ? `<ol class="archiveRecordList">${rows}</ol>`
@@ -8454,7 +8514,7 @@ document.addEventListener("click", async (event) => {
 
   const mailMode = event.target.closest("[data-mail-mode]");
   if (mailMode) {
-    setMailMode(mailMode.dataset.mailMode || "all");
+    await setMailMode(mailMode.dataset.mailMode || "all");
     return;
   }
 

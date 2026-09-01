@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from kaos_governor import api
+from kaos_governor.mail import UnreadMail
 from kaos_governor.mail.naver import Attachment, MailMessage, NaverMailError
 
 
@@ -43,6 +44,49 @@ class FakeMailPoller:
             preview="본문",
             received_at="2026-09-01 16:00 KST",
             attachments=(Attachment("notice.pdf", "application/pdf", b"%PDF-1.4"),),
+        )
+
+
+class FakeUnreadOrganizer:
+    def __init__(self) -> None:
+        self.calls: list[object] = []
+
+    def list_unread(self):
+        self.calls.append("list_unread")
+        return (
+            [
+                UnreadMail(
+                    uid=49980,
+                    sender="Inbox <inbox@example.com>",
+                    subject="Unread inbox",
+                    mailbox_raw="INBOX",
+                    mailbox_name="INBOX",
+                    uidvalidity="80",
+                    received_epoch=1785542400.0,
+                ),
+                UnreadMail(
+                    uid=7,
+                    sender="Tax <tax@example.com>",
+                    subject="Unread tax",
+                    mailbox_raw="세무사",
+                    mailbox_name="세무사",
+                    uidvalidity="81",
+                    received_epoch=1785546000.0,
+                ),
+            ],
+            2,
+        )
+
+    def fetch_message(self, *, mailbox_name: str, uid: int) -> MailMessage:
+        self.calls.append((mailbox_name, uid))
+        return MailMessage(
+            mailbox=mailbox_name,
+            uid=uid,
+            sender="Unread <notice@example.com>",
+            subject="Unread detail",
+            preview="읽지 않은 본문",
+            received_at="2026-09-01 17:00 KST",
+            attachments=(Attachment("unread.pdf", "application/pdf", b"%PDF-1.4"),),
         )
 
 
@@ -135,6 +179,44 @@ class MailApiTests(unittest.TestCase):
         with self.assertRaisesRegex(NaverMailError, "mail_attachment_not_found"):
             api.mail_attachment_payload("49980", "2", "mailbox=INBOX", FakeMailPoller())  # type: ignore[arg-type]
 
+    def test_unread_payload_reads_all_incoming_unread_headers(self) -> None:
+        organizer = FakeUnreadOrganizer()
+
+        payload = api.mail_unread_payload("limit=5", organizer)  # type: ignore[arg-type]
+
+        self.assertEqual(organizer.calls, ["list_unread"])
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["limit"], 5)
+        self.assertEqual(payload["totalUnread"], 2)
+        self.assertEqual(payload["mailboxCount"], 2)
+        self.assertEqual(payload["folders"], ["INBOX", "세무사"])
+        first = payload["messages"][0]  # type: ignore[index]
+        self.assertTrue(first["unread"])
+        self.assertEqual(first["mailbox"], "INBOX")
+        self.assertEqual(first["uidValidity"], "80")
+        self.assertEqual(first["subject"], "Unread inbox")
+
+    def test_unread_message_payload_fetches_read_only_body(self) -> None:
+        organizer = FakeUnreadOrganizer()
+
+        payload = api.mail_unread_message_payload("49980", "mailbox=INBOX", organizer)  # type: ignore[arg-type]
+
+        self.assertEqual(organizer.calls, [("INBOX", 49980)])
+        message = payload["message"]  # type: ignore[index]
+        self.assertTrue(message["unread"])
+        self.assertEqual(message["preview"], "읽지 않은 본문")
+        self.assertEqual(message["attachmentCount"], 1)
+
+    def test_unread_attachment_payload_returns_selected_attachment_bytes(self) -> None:
+        organizer = FakeUnreadOrganizer()
+
+        content, filename, content_type = api.mail_unread_attachment_payload("49980", "1", "mailbox=INBOX", organizer)  # type: ignore[arg-type]
+
+        self.assertEqual(organizer.calls, [("INBOX", 49980)])
+        self.assertEqual(content, b"%PDF-1.4")
+        self.assertEqual(filename, "unread.pdf")
+        self.assertEqual(content_type, "application/pdf")
+
     def test_list_handler_rejects_non_personal_cloudflare_identity(self) -> None:
         handler = CaptureHandler("/api/mail/messages", {"Host": "family.kaosgdd.net"})
         browse = Mock(return_value={"ok": True, "messages": []})
@@ -194,6 +276,53 @@ class MailApiTests(unittest.TestCase):
         self.assertEqual(handler.status, 200)
         self.assertEqual(handler.response_headers["Content-Type"], "application/pdf")
         self.assertIn("filename*=UTF-8''notice.pdf", handler.response_headers["Content-Disposition"])
+        self.assertEqual(handler.wfile.getvalue(), b"%PDF-1.4")
+        attachment.assert_called_once_with("49980", "1", "mailbox=INBOX")
+
+    def test_unread_list_handler_returns_messages_after_personal_access(self) -> None:
+        handler = CaptureHandler(
+            "/api/mail/unread?limit=5",
+            {"Host": "kaosgdd.net", "Cf-Access-Jwt-Assertion": "verified-by-test"},
+        )
+
+        with (
+            patch.object(api.memos_relay, "verify_cloudflare_access", return_value=("personal", "zin@example.com")),
+            patch.object(api, "mail_unread_payload", return_value={"ok": True, "messages": []}) as browse,
+        ):
+            handler.do_GET()
+
+        self.assertEqual(handler.status, 200)
+        browse.assert_called_once_with("limit=5")
+
+    def test_unread_detail_handler_returns_message_after_personal_access(self) -> None:
+        handler = CaptureHandler(
+            "/api/mail/unread/messages/49980?mailbox=INBOX",
+            {"Host": "kaosgdd.net", "Cf-Access-Jwt-Assertion": "verified-by-test"},
+        )
+
+        with (
+            patch.object(api.memos_relay, "verify_cloudflare_access", return_value=("personal", "zin@example.com")),
+            patch.object(api, "mail_unread_message_payload", return_value={"ok": True, "message": {"uid": 49980}}) as detail,
+        ):
+            handler.do_GET()
+
+        self.assertEqual(handler.status, 200)
+        detail.assert_called_once_with("49980", "mailbox=INBOX")
+
+    def test_unread_attachment_handler_returns_inline_file_after_personal_access(self) -> None:
+        handler = CaptureHandler(
+            "/api/mail/unread/messages/49980/attachments/1?mailbox=INBOX",
+            {"Host": "kaosgdd.net", "Cf-Access-Jwt-Assertion": "verified-by-test"},
+        )
+
+        with (
+            patch.object(api.memos_relay, "verify_cloudflare_access", return_value=("personal", "zin@example.com")),
+            patch.object(api, "mail_unread_attachment_payload", return_value=(b"%PDF-1.4", "notice.pdf", "application/pdf")) as attachment,
+        ):
+            handler.do_GET()
+
+        self.assertEqual(handler.status, 200)
+        self.assertEqual(handler.response_headers["Content-Type"], "application/pdf")
         self.assertEqual(handler.wfile.getvalue(), b"%PDF-1.4")
         attachment.assert_called_once_with("49980", "1", "mailbox=INBOX")
 

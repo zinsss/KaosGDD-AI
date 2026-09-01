@@ -442,6 +442,29 @@ class NaverMailOrganizer:
                 raise MailOrganizerError("imap_message_missing")
             return parse_message(raw, mailbox.display_name, int(item["uid"]), self.naver_config.preview_characters)
 
+    def fetch_message(self, *, mailbox_name: str, uid: int) -> MailMessage:
+        mailbox_name = str(mailbox_name or "").strip()
+        if not mailbox_name:
+            raise MailOrganizerError("mail_mailbox_invalid")
+        if uid < 1:
+            raise MailOrganizerError("mail_uid_invalid")
+        with self._client() as client:
+            mailbox = next((item for item in self._mailboxes(client) if item.display_name == mailbox_name), None)
+            if mailbox is None:
+                raise MailOrganizerError("mail_message_not_found")
+            self._select(client, mailbox, readonly=True)
+            status, rows = client.uid("fetch", str(uid), "(BODY.PEEK[])")
+            if status != "OK":
+                raise MailOrganizerError("imap_fetch_message_failed")
+            raw = b"".join(
+                row[1]
+                for row in rows or []
+                if isinstance(row, tuple) and len(row) > 1 and isinstance(row[1], bytes)
+            )
+            if not raw:
+                raise MailOrganizerError("imap_message_missing")
+            return parse_message(raw, mailbox.display_name, uid, self.naver_config.preview_characters)
+
     def mark_read(self, digest_id: str, item_id: str) -> dict[str, object]:
         return self._mutate_and_remove(digest_id, [item_id], "read")
 

@@ -180,6 +180,27 @@ class MailOrganizerTests(unittest.TestCase):
         self.assertEqual(server.mailboxes["INBOX"]["seen"], set())
         self.assertIn("(BODY.PEEK[])", server.fetch_specs)
 
+    def test_fetch_message_reads_selected_incoming_folder_without_marking_read(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            server = FakeOrganizerServer()
+            service = organizer(Path(tmp), server)
+            mail = service.fetch_message(mailbox_name="INBOX", uid=7)
+
+        self.assertEqual(mail.subject, "Newest unread")
+        self.assertEqual(mail.preview, "Newest body")
+        self.assertEqual(server.mailboxes["INBOX"]["seen"], set())
+        self.assertIn("(BODY.PEEK[])", server.fetch_specs)
+        self.assertTrue(server.readonly_values[-1])
+
+    def test_fetch_message_rejects_excluded_or_unknown_mailbox(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            server = FakeOrganizerServer()
+            service = organizer(Path(tmp), server)
+            with self.assertRaisesRegex(Exception, "mail_message_not_found"):
+                service.fetch_message(mailbox_name="Deleted Messages", uid=1)
+            with self.assertRaisesRegex(Exception, "mail_message_not_found"):
+                service.fetch_message(mailbox_name="Missing", uid=1)
+
     def test_import_progress_is_checkpointed_without_storing_content(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             server = FakeOrganizerServer()

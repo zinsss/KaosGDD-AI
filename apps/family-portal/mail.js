@@ -3,12 +3,13 @@
   if (typeof module === "object" && module.exports) module.exports = api;
   if (root) root.KAOS_PORTAL_MAIL = api;
 })(typeof globalThis === "object" ? globalThis : this, function createPortalMail() {
-  const modes = Object.freeze(["all", "yeongdeok", "tax", "attachments"]);
+  const modes = Object.freeze(["all", "unread", "yeongdeok", "tax", "attachments"]);
   const modeLabels = Object.freeze({
     all: "ALL",
     yeongdeok: "영덕군보건소",
     tax: "세무사",
     attachments: "ATT",
+    unread: "UNREAD",
   });
 
   function clean(value, maximum = 240) {
@@ -25,6 +26,8 @@
       id: `${mailbox}:${uid}`,
       mailbox,
       uid,
+      uidValidity: clean(source.uidValidity, 80),
+      unread: Boolean(source.unread),
       sender: clean(source.sender, 240),
       subject: clean(source.subject, 240) || "(No subject)",
       preview: clean(source.preview, 3000),
@@ -60,6 +63,7 @@
   function filterItems(items, modeValue) {
     const mode = normalizeMode(modeValue);
     const source = Array.isArray(items) ? items : [];
+    if (mode === "unread") return Object.freeze(source.filter((item) => item.unread));
     if (mode === "attachments") return Object.freeze(source.filter((item) => item.attachmentCount > 0));
     if (mode === "yeongdeok") return Object.freeze(source.filter((item) => item.mailbox === "영덕군보건소"));
     if (mode === "tax") return Object.freeze(source.filter((item) => item.mailbox === "세무사"));
@@ -73,6 +77,7 @@
       yeongdeok: source.filter((item) => item.mailbox === "영덕군보건소").length,
       tax: source.filter((item) => item.mailbox === "세무사").length,
       attachments: source.filter((item) => item.attachmentCount > 0).length,
+      unread: source.filter((item) => item.unread).length,
     });
   }
 

@@ -40,6 +40,9 @@ The personal PWA reads recent Naver headers through Governor:
 GET /api/mail/messages?limit=50&folder=영덕군보건소&folder=세무사
 GET /api/mail/messages/{uid}?mailbox={display-mailbox}
 GET /api/mail/messages/{uid}/attachments/{index}?mailbox={display-mailbox}
+GET /api/mail/unread?limit=50
+GET /api/mail/unread/messages/{uid}?mailbox={display-mailbox}
+GET /api/mail/unread/messages/{uid}/attachments/{index}?mailbox={display-mailbox}
 ```
 
 This route requires the main Cloudflare Access profile. It is intentionally
@@ -54,11 +57,17 @@ The response is a compact archive-board payload with the requested folders,
 mailbox count, and recent message headers. The personal PWA currently requests
 only `영덕군보건소` and `세무사`; `INBOX` remains configured for lifecycle polling
 and notifications but is not fetched for the PWA Mail board. The PWA tabs
-(`ALL`, `영덕군보건소`, `세무사`, `ATT`) filter this already-scoped payload locally;
-switching tabs does not trigger an additional IMAP fetch. Selecting a row fetches
-the normalized text body and attachment metadata only. Opening an attachment
-streams that one attachment inline from Naver for viewing/downloading inside
-Mail; it does not create a Documents Inbox item or Paperless document.
+(`ALL`, `영덕군보건소`, `세무사`, `ATT`) filter this already-scoped payload locally.
+The `UNREAD` tab is the exception: it performs a separate on-demand read-only
+scan across all incoming/user folders, including `INBOX`, through the organizer
+service. Selecting an unread row fetches the body with `BODY.PEEK[]` through the
+same organizer scope, returns the normalized text body and attachment metadata
+only, and does not mark the source message read. Opening an attachment streams
+that one attachment inline from Naver for viewing/downloading inside Mail; it
+does not create a Documents Inbox item or Paperless document. Batch
+mark-read/delete actions are intentionally not exposed in the PWA yet; those
+mutations should be added later as explicit Governor operations with a
+confirmation policy.
 
 ## Daily unread organizer
 
