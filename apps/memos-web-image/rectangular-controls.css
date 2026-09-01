@@ -41,15 +41,34 @@ select,
 
 .memoApp .appBody,
 .memoApp.isEmbedded .appBody {
+  padding-top: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
   padding-bottom: max(8px, env(safe-area-inset-bottom, 0px)) !important;
 }
 
 .memoApp.isEmbedded .memoFeed {
+  gap: 12px !important;
   padding-bottom: 0 !important;
 }
 
 .memoApp.isEmbedded .controlBar {
   grid-template-columns: minmax(0, 1fr) !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.memoApp.isEmbedded .tagFilters {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding: 12px 0 !important;
+}
+
+.memoApp.isEmbedded .memoCard {
+  border: 1px solid var(--line) !important;
+  border-left: 1px solid var(--line) !important;
+  border-right: 1px solid var(--line) !important;
+  background: var(--panel) !important;
 }
 
 .memoApp.isEmbedded .addButton {

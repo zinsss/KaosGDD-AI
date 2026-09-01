@@ -4492,13 +4492,16 @@ h3 {
 }
 
 .app[data-profile="main"][data-route="memos"] .memosWorkspace {
+  border: 0;
   height: 100%;
   min-height: 0;
   overflow: hidden;
+  background: transparent;
+  box-shadow: none;
 }
 
 .app[data-profile="main"][data-route="memos"] .memosFrame {
-  background: var(--panel);
+  background: transparent;
 }
 
 .app[data-profile="family"] {
