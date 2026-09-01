@@ -4371,6 +4371,106 @@ h3 {
   align-items: center;
 }
 
+.app[data-profile="main"] .view {
+  align-content: start;
+  gap: 12px;
+  background: var(--bg);
+  padding-top: 14px;
+  padding-bottom: var(--page-bottom-reserve);
+}
+
+.app[data-profile="main"] .panel,
+.app[data-profile="main"] .memosWorkspace,
+.app[data-profile="main"] .archiveCommand,
+.app[data-profile="main"] .archiveIndex,
+.app[data-profile="main"] .archiveDetail,
+.app[data-profile="main"] .serviceRow,
+.app[data-profile="main"] .settingsPolicyNote,
+.app[data-profile="main"] .settingsStatusPanel,
+.app[data-profile="main"] .settingsStatusGrid div,
+.app[data-profile="main"] .settingsRecurringStatus {
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--panel);
+  box-shadow: none;
+}
+
+.app[data-profile="main"] .panelHeader,
+.app[data-profile="main"] .archiveIndexHeader,
+.app[data-profile="main"] .archiveDetailHeader {
+  align-items: center;
+  min-height: 56px;
+  padding: 12px 14px;
+}
+
+.app[data-profile="main"] .panelBody {
+  padding: 10px;
+}
+
+.app[data-profile="main"] .panelHeader h2,
+.app[data-profile="main"] .archiveIndexHeader h3,
+.app[data-profile="main"] .archiveDetailHeader h3 {
+  color: var(--text);
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.app[data-profile="main"] .collectionRail,
+.app[data-profile="main"] .taskFilters,
+.app[data-profile="main"] .segmentedTabs,
+.app[data-profile="main"] .archiveTerminal,
+.app[data-profile="main"] .archiveWorkspace,
+.app[data-profile="main"] .servicesGrid,
+.app[data-profile="main"] .settingsRecurringStatusList {
+  gap: 12px;
+}
+
+.app[data-profile="main"] .collectionRail button,
+.app[data-profile="main"] .collectionRail a,
+.app[data-profile="main"] .taskFilters select,
+.app[data-profile="main"] .segmentedTabs button,
+.app[data-profile="main"] .openButton,
+.app[data-profile="main"] .primaryButton,
+.app[data-profile="main"] .dangerButton,
+.app[data-profile="main"] .archiveAction,
+.app[data-profile="main"] .archiveSourceLink,
+.app[data-profile="main"] .archiveSearchBox,
+.app[data-profile="main"] .archiveCommandLine input,
+.app[data-profile="main"] .composer input,
+.app[data-profile="main"] .composer select,
+.app[data-profile="main"] .composer textarea {
+  min-height: 44px;
+  border-radius: 0;
+}
+
+.app[data-profile="main"] .openButton,
+.app[data-profile="main"] .primaryButton,
+.app[data-profile="main"] .dangerButton,
+.app[data-profile="main"] .archiveAction,
+.app[data-profile="main"] .archiveSourceLink {
+  padding: 0 12px;
+}
+
+.app[data-profile="main"][data-route="memos"] .view {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  width: auto;
+  max-width: 100%;
+  margin-left: 0;
+  padding: 14px 0 var(--page-bottom-reserve);
+  overflow: hidden;
+}
+
+.app[data-profile="main"][data-route="memos"] .memosWorkspace {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app[data-profile="main"][data-route="memos"] .memosFrame {
+  background: var(--panel);
+}
+
 .app[data-profile="family"] {
   color-scheme: light;
   font-family:
