@@ -32,6 +32,27 @@ renders the original decoded filename as escaped text and uses a stable
 ASCII-only multipart filename. Korean filenames therefore remain visible in all
 Discord clients without changing the source attachment.
 
+## Personal PWA mail board
+
+The personal PWA reads recent Naver headers through Governor:
+
+```text
+GET /api/mail/messages?limit=50
+```
+
+This route requires the main Cloudflare Access profile. It is intentionally
+read-only: the poller selects IMAP folders in read-only mode and uses
+`BODY.PEEK[HEADER]`, so opening the PWA board does not mark messages read,
+archive mail, move mail, import attachments, or alter checkpoint state.
+The `governor-api` container receives the same Naver host/user/folder/password
+configuration as the lifecycle worker, but its `/data/mail` mount is read-only.
+
+The response is a compact archive-board payload with configured folders,
+mailbox count, and recent message headers. Body preview is empty in this
+first board because only headers are fetched. Mail bodies and attachment import
+remain owned by the existing lifecycle/organizer workflows until a governed
+manual import action is added.
+
 ## Daily unread organizer
 
 The organizer is a separate scheduled workflow over the same Naver account. It

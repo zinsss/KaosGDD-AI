@@ -307,6 +307,16 @@ const state = {
     counts: { all: 0, received: 0, sent: 0, failed: 0 },
     selectedKey: "",
   },
+  mail: {
+    checked: false,
+    loading: false,
+    error: "",
+    items: [],
+    folders: [],
+    mailboxCount: 0,
+    limit: 50,
+    selectedKey: "",
+  },
   holidays: {
     checked: false,
     loading: false,
@@ -2027,6 +2037,68 @@ function closeFaxRecord() {
   state.fax.selectedKey = "";
   render();
   document.querySelector(`[data-fax-open="${cssIdentifier(selectedKey)}"]`)?.focus();
+}
+
+async function loadMail(options = {}) {
+  if (portalProfile() !== "main") return;
+  if (state.mail.loading) return;
+  if (state.mail.checked && !options.force) return;
+  state.mail.loading = true;
+  if (getRoute() === "mail") render();
+  try {
+    const params = new URLSearchParams({ limit: String(state.mail.limit || 50) });
+    const response = await fetch(`/api/mail/messages?${params.toString()}`, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    const page = window.KAOS_PORTAL_MAIL.normalizePage(payload);
+    state.mail = {
+      ...state.mail,
+      checked: true,
+      loading: false,
+      error: "",
+      items: page.items,
+      folders: page.folders,
+      mailboxCount: page.mailboxCount,
+      limit: page.limit,
+    };
+  } catch (error) {
+    state.mail = {
+      ...state.mail,
+      checked: true,
+      loading: false,
+      error: error.message || "Mail board is unavailable",
+      items: [],
+      folders: [],
+      mailboxCount: 0,
+      selectedKey: "",
+    };
+  }
+  if (getRoute() === "mail") render();
+}
+
+function refreshMail() {
+  state.mail.checked = false;
+  state.mail.selectedKey = "";
+  return loadMail({ force: true });
+}
+
+function selectMailRecord(key) {
+  const selected = state.mail.items.find((item) => item.id === String(key || ""));
+  if (!selected) return;
+  state.mail.selectedKey = selected.id;
+  render();
+  document.querySelector("[data-mail-detail]")?.focus();
+  document.getElementById("view")?.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function closeMailRecord() {
+  const selectedKey = state.mail.selectedKey;
+  state.mail.selectedKey = "";
+  render();
+  document.querySelector(`[data-mail-open="${cssIdentifier(selectedKey)}"]`)?.focus();
 }
 
 async function loadDocumentDetail(id) {
@@ -5066,10 +5138,83 @@ function renderFax() {
 }
 
 function renderMail() {
-  return renderTransitioningDomain(
-    "Mail",
-    "Naver Mail polling and notifications continue through KaosGovernor. The personal mail view is not connected to this PWA yet.",
-  );
+  const mail = state.mail;
+  const selected = mail.items.find((item) => item.id === mail.selectedKey) || null;
+  const hasDetail = Boolean(selected);
+  const rows = mail.items
+    .map((item) => {
+      const date = archiveDateParts(item.receivedAt);
+      return `
+        <li class="archiveRecord ${selected?.id === item.id ? "isSelected" : ""}">
+          <button class="archiveRecordButton" type="button" data-mail-open="${escapeHtml(item.id)}" aria-current="${selected?.id === item.id ? "true" : "false"}">
+            <span class="archiveRecordId">#${escapeHtml(item.uid)}</span>
+            <time class="archiveRecordDate" datetime="${escapeHtml(date.raw)}">${escapeHtml(date.label)}</time>
+            <strong class="archiveRecordTitle">${escapeHtml(item.subject)}</strong>
+          </button>
+          <span class="archiveSourceLink isDisabled">${escapeHtml(item.attachmentCount ? `ATT ${item.attachmentCount}` : "MAIL")}</span>
+        </li>
+      `;
+    })
+    .join("");
+  const summary = mail.checked && !mail.error
+    ? `${mail.items.length} MESSAGES // ${mail.mailboxCount || mail.folders.length} MAILBOXES`
+    : mail.loading
+      ? "LOADING MAIL BOARD"
+      : "MAIL BOARD STANDBY";
+  const detail = selected
+    ? `
+      <section class="archiveDetail" data-mail-detail tabindex="-1" aria-labelledby="mailDetailTitle">
+        <header class="archiveDetailHeader">
+          <div>
+            <p>MAIL #${escapeHtml(selected.uid)}</p>
+            <h3 id="mailDetailTitle">${escapeHtml(selected.subject)}</h3>
+          </div>
+          <button class="archiveAction" type="button" data-mail-close>BACK</button>
+        </header>
+        <dl class="archiveMetadata">
+          ${archiveMeta("Mailbox", selected.mailbox)}
+          ${archiveMeta("From", selected.sender || "unknown")}
+          ${archiveMeta("Received", selected.receivedAt ? formatDocumentDate(selected.receivedAt) : "")}
+          ${archiveMeta("Attachments", selected.attachmentCount ? String(selected.attachmentCount) : "")}
+        </dl>
+        <div class="archiveOcrRegion" role="region" aria-label="Mail preview" tabindex="0">
+          <p>PREVIEW</p>
+          <pre>${escapeHtml(selected.preview || "Header-only preview. Body fetch is not enabled in this read-only board yet.")}</pre>
+        </div>
+      </section>
+    `
+    : "";
+  return `
+    <section class="archiveTerminal" data-archive-kind="mail" aria-label="Mail board">
+      <div class="archiveCommand" aria-label="Mail board actions">
+        <div class="archiveStatusMessage">${escapeHtml(mail.folders.length ? mail.folders.join(" // ") : "INBOX // 세무사 // 영덕군보건소")}</div>
+        <button class="archiveAction archiveRefreshAction" type="button" data-mail-refresh aria-label="Refresh mail board" title="Refresh mail board" ${mail.loading ? "disabled" : ""}>↻</button>
+      </div>
+      <div class="archiveWorkspace ${hasDetail ? "hasDetail" : ""}">
+        <section class="archiveIndex" aria-labelledby="mailIndexTitle" aria-busy="${mail.loading}">
+          <header class="archiveIndexHeader">
+            <h3 id="mailIndexTitle">RECORD BOARD</h3>
+            <p class="archiveStatusMessage" role="status" aria-live="polite">${escapeHtml(summary)}</p>
+          </header>
+          <div class="archiveColumnHeader" aria-hidden="true">
+            <span>NO.</span><span>DATE</span><span>TITLE</span>
+          </div>
+          ${
+            mail.error
+              ? `<div class="archiveError" role="alert"><p>${escapeHtml(mail.error)}</p><button class="archiveAction" type="button" data-mail-refresh>RETRY</button></div>`
+              : mail.loading && !mail.checked
+                ? `<p class="archiveStatusMessage">Reading Naver Mail headers...</p>`
+                : mail.checked && !rows
+                  ? `<p class="archiveStatusMessage">No messages in configured mailboxes.</p>`
+                  : rows
+                    ? `<ol class="archiveRecordList">${rows}</ol>`
+                    : ""
+          }
+        </section>
+        ${detail}
+      </div>
+    </section>
+  `;
 }
 
 function renderDesktopService() {
@@ -7925,6 +8070,7 @@ function render() {
   if (route === "documents" && state.documents.mode !== "inbox") loadDocuments();
   if (route === "documents" && state.documents.mode === "inbox") loadDocumentInbox();
   if (route === "fax") loadFax();
+  if (route === "mail") loadMail();
   if (route === "ledger") loadLedger();
   if (route === "add-memo") {
     window.setTimeout(() => document.querySelector("[data-memo-content]")?.focus(), 0);
@@ -8178,6 +8324,22 @@ document.addEventListener("click", async (event) => {
 
   if (event.target.closest("[data-fax-close]")) {
     closeFaxRecord();
+    return;
+  }
+
+  if (event.target.closest("[data-mail-refresh]")) {
+    await refreshMail();
+    return;
+  }
+
+  const openMail = event.target.closest("[data-mail-open]");
+  if (openMail) {
+    selectMailRecord(openMail.dataset.mailOpen || "");
+    return;
+  }
+
+  if (event.target.closest("[data-mail-close]")) {
+    closeMailRecord();
     return;
   }
 

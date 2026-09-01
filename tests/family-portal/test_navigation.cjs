@@ -45,9 +45,11 @@ test("the navigation contract loads before the portal application", () => {
   const navigationIndex = index.indexOf('src="/navigation.js?v=3"');
   const documentsIndex = index.indexOf('src="/documents.js?v=3"');
   const faxIndex = index.indexOf('src="/fax.js?v=1"');
-  const applicationIndex = index.indexOf('src="/app.js?v=247"');
+  const mailIndex = index.indexOf('src="/mail.js?v=1"');
+  const applicationIndex = index.indexOf('src="/app.js?v=248"');
   assert.ok(navigationIndex >= 0);
   assert.ok(documentsIndex > navigationIndex);
   assert.ok(faxIndex > documentsIndex);
-  assert.ok(applicationIndex > faxIndex);
+  assert.ok(mailIndex > faxIndex);
+  assert.ok(applicationIndex > mailIndex);
 });

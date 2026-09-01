@@ -182,8 +182,18 @@ services:
       FAX_DISCORD_MESSAGE_INTAKE: "false"
       FAX_DISCORD_STATE_PATH: "/data/fax/state.json"
       DOCUMENT_INTAKE_STATE_PATH: "/data/documents/intake.json"
+      MAIL_NAVER_ENABLED: "${MAIL_NAVER_ENABLED:-false}"
+      MAIL_NAVER_HOST: "${MAIL_NAVER_HOST:-imap.naver.com}"
+      MAIL_NAVER_PORT: "${MAIL_NAVER_PORT:-993}"
+      MAIL_NAVER_USERNAME: "${MAIL_NAVER_USERNAME:-}"
+      MAIL_NAVER_PASSWORD_FILE: "/run/secrets/naver_mail_password"
+      MAIL_NAVER_FOLDERS: "${MAIL_NAVER_FOLDERS:-INBOX,세무사,영덕군보건소}"
+      MAIL_NAVER_STATE_PATH: "/data/mail/naver-discord.json"
+      MAIL_NAVER_TIMEOUT_SECONDS: "${MAIL_NAVER_TIMEOUT_SECONDS:-20}"
+      MAIL_NAVER_PREVIEW_CHARS: "${MAIL_NAVER_PREVIEW_CHARS:-2200}"
     secrets:
       - paperless_api_token
+      - naver_mail_password
     group_add:
       - "${KAOS_HOST_GID:-1000}"
     ports:
@@ -191,6 +201,7 @@ services:
     volumes:
       - ${KAOS_ROOT:-/srv/kaos}/backups/kaosgdd/ledger:/data/ledger/backups
       - ${GOVERNOR_STATE_ROOT:-/srv/kaosgdd/kaosgovernor}/fax:/data/fax:ro
+      - ${GOVERNOR_STATE_ROOT:-/srv/kaosgdd/kaosgovernor}/mail:/data/mail:ro
       - ${GOVERNOR_STATE_ROOT:-/srv/kaosgdd/kaosgovernor}/documents:/data/documents
     entrypoint: ["kaos-governor-api"]
     healthcheck:

@@ -24,6 +24,7 @@ from kaos_governor.documents import (
     PaperlessDocumentService,
 )
 from kaos_governor.fax import FaxConfig, FaxError, FaxService
+from kaos_governor.mail.naver import NaverMailConfig, NaverMailError, NaverMailPoller
 from kaos_governor.memos import relay as memos_relay
 from kaos_governor.tasks import PostgresRecurringTaskStore, RecurringTaskDefinition, RecurringTaskError, RecurringTaskService, validate_payload
 
@@ -430,6 +431,47 @@ def fax_document_payload(
     if not isinstance(content, bytes):
         raise FaxError("fax_document_invalid")
     return content, str(document.get("filename") or "incoming-fax.pdf")
+
+
+@lru_cache(maxsize=1)
+def naver_mail_poller() -> NaverMailPoller:
+    return NaverMailPoller(NaverMailConfig.from_env())
+
+
+def mail_status_for_error(exc: Exception) -> int:
+    if isinstance(exc, memos_relay.MemosRelayError):
+        return exc.status
+    code = str(exc)
+    if code == "main_profile_required":
+        return 404
+    if code == "mail_limit_invalid":
+        return 400
+    return 503
+
+
+def _mail_query_int(params: dict[str, list[str]], name: str, default: int) -> int:
+    raw = (params.get(name) or [str(default)])[0]
+    try:
+        value = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise NaverMailError(f"mail_{name}_invalid") from exc
+    if value < 1 or value > 100:
+        raise NaverMailError(f"mail_{name}_invalid")
+    return value
+
+
+def mail_messages_payload(
+    query_string: str,
+    poller: NaverMailPoller | None = None,
+) -> dict[str, object]:
+    params = urllib.parse.parse_qs(query_string, keep_blank_values=True)
+    limit = _mail_query_int(params, "limit", 50)
+    payload = (poller or naver_mail_poller()).list_messages(limit=limit)
+    return {
+        "ok": True,
+        "limit": limit,
+        **payload,
+    }
 
 
 def recurring_status_for_error(exc: Exception) -> int:
@@ -1017,6 +1059,17 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 print(f"Fax archive browse failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "fax_archive_unavailable"})
+            return
+        if parsed.path == "/api/mail/messages":
+            try:
+                require_main_access(self.headers)
+                json_response(self, 200, mail_messages_payload(parsed.query))
+            except (ValueError, NaverMailError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, memos_relay.MemosRelayError) else str(exc)
+                json_response(self, mail_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Mail browse failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "mail_archive_unavailable"})
             return
         fax_id = fax_document_id(parsed.path)
         if fax_id:

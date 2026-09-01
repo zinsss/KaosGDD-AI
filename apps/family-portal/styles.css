@@ -6010,7 +6010,8 @@ h3 {
   padding: 0;
 }
 
-.app[data-profile="main"] [data-archive-kind="fax"] .archiveCommand {
+.app[data-profile="main"] [data-archive-kind="fax"] .archiveCommand,
+.app[data-profile="main"] [data-archive-kind="mail"] .archiveCommand {
   display: flex;
   align-items: center;
   justify-content: space-between;
