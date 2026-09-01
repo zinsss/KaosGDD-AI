@@ -73,8 +73,9 @@ H4, office-service, and stateful-service cutovers.
 - Phase 8 slice 1 is deployed in commit `1f2a5e0`: H3 KaosDiscoord exposes
   authenticated read-only `/tools/system/status`, and H4 KaosBrain can answer
   `system status` / `시스템 상태 확인` through Brain Guard as the
-  `system.status` readonly intent. No restart, deploy, shell, Docker,
-  database, or arbitrary admin execution is enabled.
+  `system.status` readonly intent. The live Discord `#brain` response was
+  confirmed on 2026-09-01. No restart, deploy, shell, Docker, database, or
+  arbitrary admin execution is enabled.
 - Database schema in production: additive migration `005`.
 - Working rule: finish and verify one boundary before moving another domain.
 
@@ -90,7 +91,7 @@ H4, office-service, and stateful-service cutovers.
 | 5 | Retain brain-only KaosDiscoord; detach workers and notifications | Package, Pushover, digest, and fax/mail worker slices implemented | Pushover and digest observed; fax/mail observation active | In progress |
 | 6 | Retain the personal PWA and add stable iOS integrations | Deep link, compact menu, personal Memos repair, Paperless browser, and Archive Terminal slice implemented | UI slices deployed; Memos/Paperless/Fax authenticated observation active | In progress |
 | 7 | Remove compatibility debt and finish documentation/CI | Not started | Not deployed | Planned |
-| 8 | Add governed Brain system operations | Read-only `system.status` slice implemented and tested | Deployed to H3/H4 2026-09-01 | Production observation |
+| 8 | Add governed Brain system operations | Read-only `system.status` slice implemented and tested | Deployed to H3/H4 and Discord-confirmed 2026-09-01 | Slice complete; next work planned |
 
 Status meanings:
 
@@ -1446,7 +1447,7 @@ Exit criteria:
 
 ## Phase 8 — Governed Brain System Operations
 
-Status: production observation for read-only `system.status`; Phase 2
+Status: read-only `system.status` production observation complete; Phase 2
 repository-only runbook planning is locally implemented. Brain Guard continues
 to reject shell, Docker, database, restart, deployment, and arbitrary admin
 intents. No runbook executor is enabled.
@@ -1518,6 +1519,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | 1 | Added `GovernorOperations`, store protocol, tool delegation, boundary tests, and stable Brain date injection | 193 Governor + 345 Discord + 317 Brain tests passed | None; not deployed |
 | 2026-08-30 | Plan | Added this canonical tracker and aligned architecture terminology | Documentation review and `git diff --check` | None |
 | 2026-09-01 | 8 | Added the Phase 2 runbook planning baseline with a version 1 schema and five dry-run-only catalog entries | JSON syntax/schema validation and `git diff --check` pass | None; no executor, deployment, host access, or production write enabled |
+| 2026-09-01 | 8 | Completed production observation for the read-only Brain system status slice | User confirmed the deployed Discord `#brain` `system status` response; H3 smoke and H4 doctor were healthy after deployment | `system.status` slice complete; Phase 8 continues with PWA/admin status and runbook review; no write executor enabled |
 | 2026-08-30 | 2 | Started PostgreSQL operation persistence and pending-payload inventory | Implementation in progress | None |
 | 2026-08-30 | 2 | Added migration 005, PostgreSQL store, durable versioned payloads, restart recovery, expiry/interruption cleanup, production store wiring, and CI PostgreSQL coverage | 200 Governor unit/contract + 9 PostgreSQL integration + 349 Discord + 317 Brain tests; H3 preflight and Compose render passed | None; not deployed, production remains on migration 004 |
 | 2026-08-30 | 1-2 | Promoted commit `11b18be`, migration 005, and the PostgreSQL-backed Discord operation store after pre/post recovery exercises | Both custom-format backups restored into isolated PostgreSQL 16; live proposal/approval/completion/audit/payload cleanup passed; API, Discord, and PostgreSQL healthy with zero restarts | Production observation started; compatibility and memory-store rollback path retained |

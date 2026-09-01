@@ -1,6 +1,7 @@
 # KaosSystemOperator Access Plan
 
-Status: Phase 2 runbook planning implemented; execution remains disabled.
+Status: Phase 2 runbook planning implemented; read-only `system.status`
+confirmed in Discord; execution remains disabled.
 
 Last updated: 2026-09-01
 
@@ -50,7 +51,8 @@ or execute arbitrary generated commands on production systems.
 | 5 | High-risk systems | PACS, databases, OS/security, firewall, secrets, destructive cleanup | Separate hardened maintenance flow; not normal chat approval |
 
 Current production state: Stage 1 partial. `system.status` is deployed through
-KaosBrain and KaosDiscoord. Stage 2-5 execution is not enabled.
+KaosBrain and KaosDiscoord and was confirmed working from Discord `#brain` on
+2026-09-01. Stage 2-5 execution is not enabled.
 
 Current repository state: the initial Stage 2 schema and five dry-run-only
 catalog entries are under [`runbooks/`](../../runbooks/README.md). They are

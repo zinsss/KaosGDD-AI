@@ -9,6 +9,8 @@ Last updated: 2026-09-01
 - H3 KaosDiscoord exposes authenticated read-only `/tools/system/status`.
 - H4 KaosBrain can answer `system status` / `시스템 상태 확인` in Discord
   `#brain` through the readonly `system.status` intent.
+- User confirmed the live Discord `#brain` `system status` response on
+  2026-09-01.
 - No read/write system executor is enabled.
 - Brain Guard still blocks shell, Docker, database, restart, deploy, reboot,
   and arbitrary admin intents.
@@ -26,23 +28,18 @@ Last updated: 2026-09-01
 - Documentation baseline before this operator access plan: `8fc2e5c`.
 - H3 smoke passed after deploying `1f2a5e0`.
 - H4 `kaosbrain doctor` passed after syncing `8fc2e5c`.
+- Discord `#brain` production observation for `system.status` is complete.
 - KaosBrain container image currently contains code from `1f2a5e0`; `8fc2e5c`
   is documentation-only.
 
 ## Next Safe Actions
 
-1. Test Discord `#brain` with:
-
-   ```text
-   system status
-   ```
-
-2. Add read-only system status to the personal KaosGDD PWA Settings/Admin page.
-3. Review the version 1 runbook contract and target allowlists before adding
+1. Add read-only system status to the personal KaosGDD PWA Settings/Admin page.
+2. Review the version 1 runbook contract and target allowlists before adding
    any executor code.
-4. In a separate phase, design and test a restricted dry-run executor that
+3. In a separate phase, design and test a restricted dry-run executor that
    consumes only validated catalog entries; keep production writes disabled.
-5. Do not enable `service.restart` until Governor authorization, normalized
+4. Do not enable `service.restart` until Governor authorization, normalized
    expiring confirmation, audit, verification, and failure handling are
    implemented and separately approved.
 

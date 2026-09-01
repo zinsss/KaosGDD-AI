@@ -2,7 +2,8 @@
 
 Decision date: 2026-08-30
 
-Status: read-only status slice deployed; execution capabilities are not yet enabled.
+Status: read-only status slice deployed and Discord-confirmed; execution
+capabilities are not yet enabled.
 
 ## Decision
 
@@ -98,7 +99,8 @@ KaosDiscoord restart path with an explicit allowlist, dry-run default, timeout,
 and audit state. Brain now exposes the first operator operation:
 `system.status`. It is read-only, deployed in commit `1f2a5e0`, goes through
 the authenticated Governor Brain tools API, and renders existing KaosDiscoord
-health/service state in the H4 `#brain` path.
+health/service state in the H4 `#brain` path. The user confirmed the live
+Discord response on 2026-09-01.
 
 Brain Guard still rejects shell, Docker, database, restart, deployment, and
 arbitrary admin intents. That rejection remains in place while the control
