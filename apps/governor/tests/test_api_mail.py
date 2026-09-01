@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from kaos_governor import api
-from kaos_governor.mail.naver import NaverMailError
+from kaos_governor.mail.naver import Attachment, MailMessage, NaverMailError
 
 
 class FakeMailPoller:
@@ -32,6 +32,18 @@ class FakeMailPoller:
                 }
             ],
         }
+
+    def get_message(self, *, mailbox: str, uid: int) -> MailMessage:
+        self.calls.append((mailbox, uid))
+        return MailMessage(
+            mailbox=mailbox,
+            uid=uid,
+            sender="Naver <notice@example.com>",
+            subject="공지",
+            preview="본문",
+            received_at="2026-09-01 16:00 KST",
+            attachments=(Attachment("notice.pdf", "application/pdf", b"%PDF-1.4"),),
+        )
 
 
 class CaptureHandler(api.Handler):
@@ -70,9 +82,31 @@ class MailApiTests(unittest.TestCase):
                 api.mail_messages_payload(query, FakeMailPoller())  # type: ignore[arg-type]
 
         self.assertEqual(api.mail_status_for_error(NaverMailError("mail_limit_invalid")), 400)
+        self.assertEqual(api.mail_status_for_error(NaverMailError("mail_uid_invalid")), 400)
+        self.assertEqual(api.mail_status_for_error(NaverMailError("mail_mailbox_invalid")), 400)
+        self.assertEqual(api.mail_status_for_error(NaverMailError("mail_message_not_found")), 404)
         self.assertEqual(api.mail_status_for_error(ValueError("main_profile_required")), 404)
         self.assertEqual(api.mail_status_for_error(api.memos_relay.MemosRelayError(401, "cloudflare_access_required")), 401)
         self.assertEqual(api.mail_status_for_error(NaverMailError("naver_not_configured")), 503)
+
+    def test_message_payload_returns_body_and_attachment_metadata_only(self) -> None:
+        poller = FakeMailPoller()
+
+        payload = api.mail_message_payload("49980", "mailbox=INBOX", poller)  # type: ignore[arg-type]
+
+        self.assertEqual(poller.calls, [("INBOX", 49980)])
+        message = payload["message"]  # type: ignore[index]
+        self.assertEqual(message["preview"], "본문")
+        self.assertEqual(message["attachmentCount"], 1)
+        self.assertEqual(message["attachments"][0]["filename"], "notice.pdf")
+        self.assertEqual(message["attachments"][0]["sizeBytes"], 8)
+        self.assertNotIn("content", message["attachments"][0])
+
+    def test_message_payload_validates_uid_and_mailbox(self) -> None:
+        with self.assertRaisesRegex(NaverMailError, "mail_uid_invalid"):
+            api.mail_message_payload("abc", "mailbox=INBOX", FakeMailPoller())  # type: ignore[arg-type]
+        with self.assertRaisesRegex(NaverMailError, "mail_mailbox_invalid"):
+            api.mail_message_payload("7", "", FakeMailPoller())  # type: ignore[arg-type]
 
     def test_list_handler_rejects_non_personal_cloudflare_identity(self) -> None:
         handler = CaptureHandler("/api/mail/messages", {"Host": "family.kaosgdd.net"})
@@ -102,6 +136,21 @@ class MailApiTests(unittest.TestCase):
 
         self.assertEqual(handler.status, 200)
         browse.assert_called_once_with("limit=5")
+
+    def test_detail_handler_returns_message_after_personal_access(self) -> None:
+        handler = CaptureHandler(
+            "/api/mail/messages/49980?mailbox=INBOX",
+            {"Host": "kaosgdd.net", "Cf-Access-Jwt-Assertion": "verified-by-test"},
+        )
+
+        with (
+            patch.object(api.memos_relay, "verify_cloudflare_access", return_value=("personal", "zin@example.com")),
+            patch.object(api, "mail_message_payload", return_value={"ok": True, "message": {"uid": 49980}}) as detail,
+        ):
+            handler.do_GET()
+
+        self.assertEqual(handler.status, 200)
+        detail.assert_called_once_with("49980", "mailbox=INBOX")
 
 
 if __name__ == "__main__":

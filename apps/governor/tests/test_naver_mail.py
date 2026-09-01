@@ -4,6 +4,7 @@ import unittest
 
 from kaos_governor.mail.naver import (
     NaverMailConfig,
+    NaverMailError,
     NaverMailPoller,
     decode_modified_utf7,
     encode_modified_utf7,
@@ -254,6 +255,31 @@ class NaverMailTests(unittest.TestCase):
             server.fetch_specs,
             ["(BODY.PEEK[HEADER])", "(BODY.PEEK[HEADER])", "(BODY.PEEK[HEADER])"],
         )
+
+    def test_get_message_fetches_body_read_only_by_display_mailbox(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            server = FakeMailboxServer()
+            tax = encode_modified_utf7("세무사")
+            server.mailboxes[tax]["messages"][7] = server.message("세무사 본문", attachment=True)
+            poller = NaverMailPoller(target_config(Path(tmp) / "state.json"), server.factory)
+
+            message = poller.get_message(mailbox="세무사", uid=7)
+
+        self.assertEqual(message.subject, "세무사 본문")
+        self.assertEqual(message.preview, "Preview body")
+        self.assertEqual(message.attachments[0].filename, "notice.pdf")
+        self.assertTrue(all(server.last_client.readonly_values))
+        self.assertEqual(server.fetch_specs, ["(BODY.PEEK[])"])
+
+    def test_get_message_rejects_unknown_mailbox_before_fetching_body(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            server = FakeMailboxServer()
+            poller = NaverMailPoller(target_config(Path(tmp) / "state.json"), server.factory)
+
+            with self.assertRaisesRegex(NaverMailError, "mail_message_not_found"):
+                poller.get_message(mailbox="없는폴더", uid=7)
+
+        self.assertEqual(server.fetch_specs, [])
 
     def test_progress_prevents_duplicate_summary_after_attachment_retry(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

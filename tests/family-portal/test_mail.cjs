@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-const { normalizeMessage, normalizePage } = require("../../apps/family-portal/mail.js");
+const { normalizeDetail, normalizeMessage, normalizePage } = require("../../apps/family-portal/mail.js");
 
 test("normalizes Naver mail headers for the portal", () => {
   const message = normalizeMessage({
@@ -12,11 +12,13 @@ test("normalizes Naver mail headers for the portal", () => {
     preview: "본문 미리보기",
     receivedAt: "2026-09-01T07:00:00+09:00",
     attachmentCount: 2,
+    attachments: [{ filename: "notice.pdf", contentType: "application/pdf", sizeBytes: 8 }],
   });
 
   assert.equal(message.id, "INBOX:49980");
   assert.equal(message.subject, "공지");
   assert.equal(message.attachmentCount, 2);
+  assert.equal(message.attachments[0].filename, "notice.pdf");
 });
 
 test("drops malformed mail rows and preserves mailbox metadata", () => {
@@ -34,4 +36,22 @@ test("drops malformed mail rows and preserves mailbox metadata", () => {
   assert.equal(page.items[0].subject, "(No subject)");
   assert.deepEqual(page.folders, ["INBOX", "세무사"]);
   assert.equal(page.mailboxCount, 2);
+});
+
+test("normalizes full mail detail payloads", () => {
+  const message = normalizeDetail({
+    message: {
+      mailbox: "세무사",
+      uid: 7,
+      subject: "세무사 본문",
+      preview: "본문",
+      attachments: [{ filename: "", contentType: "", sizeBytes: -1 }],
+    },
+  });
+
+  assert.equal(message.id, "세무사:7");
+  assert.equal(message.preview, "본문");
+  assert.equal(message.attachments[0].filename, "attachment");
+  assert.equal(message.attachments[0].contentType, "application/octet-stream");
+  assert.equal(message.attachments[0].sizeBytes, 0);
 });

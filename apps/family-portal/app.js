@@ -316,6 +316,9 @@ const state = {
     mailboxCount: 0,
     limit: 50,
     selectedKey: "",
+    selected: null,
+    detailLoading: false,
+    detailError: "",
   },
   holidays: {
     checked: false,
@@ -2074,6 +2077,9 @@ async function loadMail(options = {}) {
       folders: [],
       mailboxCount: 0,
       selectedKey: "",
+      selected: null,
+      detailLoading: false,
+      detailError: "",
     };
   }
   if (getRoute() === "mail") render();
@@ -2082,21 +2088,47 @@ async function loadMail(options = {}) {
 function refreshMail() {
   state.mail.checked = false;
   state.mail.selectedKey = "";
+  state.mail.selected = null;
+  state.mail.detailLoading = false;
+  state.mail.detailError = "";
   return loadMail({ force: true });
 }
 
-function selectMailRecord(key) {
+async function selectMailRecord(key) {
   const selected = state.mail.items.find((item) => item.id === String(key || ""));
   if (!selected) return;
   state.mail.selectedKey = selected.id;
-  render();
-  document.querySelector("[data-mail-detail]")?.focus();
-  document.getElementById("view")?.scrollTo({ top: 0, behavior: "smooth" });
+  state.mail.selected = null;
+  state.mail.detailLoading = true;
+  state.mail.detailError = "";
+  if (getRoute() === "mail") render();
+  try {
+    const params = new URLSearchParams({ mailbox: selected.mailbox });
+    const response = await fetch(`/api/mail/messages/${encodeURIComponent(selected.uid)}?${params.toString()}`, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    state.mail.selected = window.KAOS_PORTAL_MAIL.normalizeDetail(payload);
+  } catch (error) {
+    state.mail.detailError = error.message || "Mail detail is unavailable";
+  } finally {
+    state.mail.detailLoading = false;
+  }
+  if (getRoute() === "mail") {
+    render();
+    document.querySelector("[data-mail-detail]")?.focus();
+    document.getElementById("view")?.scrollTo({ top: 0, behavior: "smooth" });
+  }
 }
 
 function closeMailRecord() {
   const selectedKey = state.mail.selectedKey;
   state.mail.selectedKey = "";
+  state.mail.selected = null;
+  state.mail.detailLoading = false;
+  state.mail.detailError = "";
   render();
   document.querySelector(`[data-mail-open="${cssIdentifier(selectedKey)}"]`)?.focus();
 }
@@ -2235,6 +2267,13 @@ function archiveMeta(label, value) {
   const text = String(value || "").trim();
   if (!text) return "";
   return `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(text)}</dd></div>`;
+}
+
+function formatBytes(value) {
+  const bytes = Math.max(0, Number(value) || 0);
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 102.4) / 10} KB`;
+  return `${Math.round(bytes / 1024 / 102.4) / 10} MB`;
 }
 
 function applyLedgerPayload(payload) {
@@ -5139,14 +5178,15 @@ function renderFax() {
 
 function renderMail() {
   const mail = state.mail;
-  const selected = mail.items.find((item) => item.id === mail.selectedKey) || null;
-  const hasDetail = Boolean(selected);
+  const selectedListItem = mail.items.find((item) => item.id === mail.selectedKey) || null;
+  const selected = mail.selected || selectedListItem;
+  const hasDetail = mail.detailLoading || mail.detailError || Boolean(selected);
   const rows = mail.items
     .map((item) => {
       const date = archiveDateParts(item.receivedAt);
       return `
-        <li class="archiveRecord ${selected?.id === item.id ? "isSelected" : ""}">
-          <button class="archiveRecordButton" type="button" data-mail-open="${escapeHtml(item.id)}" aria-current="${selected?.id === item.id ? "true" : "false"}">
+        <li class="archiveRecord ${selectedListItem?.id === item.id ? "isSelected" : ""}">
+          <button class="archiveRecordButton" type="button" data-mail-open="${escapeHtml(item.id)}" aria-current="${selectedListItem?.id === item.id ? "true" : "false"}">
             <span class="archiveRecordId">#${escapeHtml(item.uid)}</span>
             <time class="archiveRecordDate" datetime="${escapeHtml(date.raw)}">${escapeHtml(date.label)}</time>
             <strong class="archiveRecordTitle">${escapeHtml(item.subject)}</strong>
@@ -5161,8 +5201,46 @@ function renderMail() {
     : mail.loading
       ? "LOADING MAIL BOARD"
       : "MAIL BOARD STANDBY";
-  const detail = selected
+  const attachmentRows = selected?.attachments?.length
+    ? selected.attachments
+      .map(
+        (attachment, index) => `
+          <div>
+            <dt>ATT ${index + 1}</dt>
+            <dd>${escapeHtml(attachment.filename)} · ${escapeHtml(attachment.contentType)} · ${escapeHtml(formatBytes(attachment.sizeBytes))}</dd>
+          </div>
+        `,
+      )
+      .join("")
+    : "";
+  const detail = mail.detailLoading
     ? `
+      <section class="archiveDetail" data-mail-detail tabindex="-1" aria-busy="true">
+        <header class="archiveDetailHeader">
+          <div>
+            <p>MAIL DETAIL</p>
+            <h3 id="mailDetailTitle">Loading mail...</h3>
+          </div>
+          <button class="archiveAction" type="button" data-mail-close>BACK</button>
+        </header>
+        <p class="archiveStatusMessage">Reading Naver Mail body with PEEK...</p>
+      </section>
+    `
+    : mail.detailError
+      ? `
+        <section class="archiveDetail" data-mail-detail tabindex="-1" aria-labelledby="mailDetailTitle">
+          <header class="archiveDetailHeader">
+            <div>
+              <p>MAIL DETAIL</p>
+              <h3 id="mailDetailTitle">Mail unavailable</h3>
+            </div>
+            <button class="archiveAction" type="button" data-mail-close>BACK</button>
+          </header>
+          <div class="archiveError" role="alert"><p>${escapeHtml(mail.detailError)}</p></div>
+        </section>
+      `
+      : selected
+        ? `
       <section class="archiveDetail" data-mail-detail tabindex="-1" aria-labelledby="mailDetailTitle">
         <header class="archiveDetailHeader">
           <div>
@@ -5176,14 +5254,15 @@ function renderMail() {
           ${archiveMeta("From", selected.sender || "unknown")}
           ${archiveMeta("Received", selected.receivedAt ? formatDocumentDate(selected.receivedAt) : "")}
           ${archiveMeta("Attachments", selected.attachmentCount ? String(selected.attachmentCount) : "")}
+          ${attachmentRows}
         </dl>
         <div class="archiveOcrRegion" role="region" aria-label="Mail preview" tabindex="0">
-          <p>PREVIEW</p>
-          <pre>${escapeHtml(selected.preview || "Header-only preview. Body fetch is not enabled in this read-only board yet.")}</pre>
+          <p>BODY</p>
+          <pre>${escapeHtml(selected.preview || "No readable text body.")}</pre>
         </div>
       </section>
     `
-    : "";
+        : "";
   return `
     <section class="archiveTerminal" data-archive-kind="mail" aria-label="Mail board">
       <div class="archiveCommand" aria-label="Mail board actions">
@@ -8334,7 +8413,7 @@ document.addEventListener("click", async (event) => {
 
   const openMail = event.target.closest("[data-mail-open]");
   if (openMail) {
-    selectMailRecord(openMail.dataset.mailOpen || "");
+    await selectMailRecord(openMail.dataset.mailOpen || "");
     return;
   }
 

@@ -483,6 +483,37 @@ class NaverMailPoller:
             except (imaplib.IMAP4.error, OSError):
                 pass
 
+    def get_message(self, *, mailbox: str, uid: int) -> MailMessage:
+        if not self.config.configured:
+            raise NaverMailError("naver_not_configured")
+        if uid < 1:
+            raise NaverMailError("mail_uid_invalid")
+        mailbox_name = str(mailbox or "").strip()
+        if not mailbox_name:
+            raise NaverMailError("mail_mailbox_invalid")
+        client = self.imap_factory(self.config.host, self.config.port, timeout=self.config.timeout_seconds)
+        try:
+            status, _data = client.login(self.config.username, self.config.password)
+            if status != "OK":
+                raise NaverMailError("imap_login_failed")
+            mailboxes = discover_mailboxes(client, self.config.folder_roots)
+            selected = next((item for item in mailboxes if item.display_name == mailbox_name), None)
+            if not selected:
+                raise NaverMailError("mail_message_not_found")
+            status, _data = client.select(quoted_mailbox(selected.raw_name), readonly=True)
+            if status != "OK":
+                raise NaverMailError("imap_select_failed")
+            return self._fetch_message(client, selected, uid)
+        finally:
+            try:
+                client.close()
+            except (imaplib.IMAP4.error, OSError):
+                pass
+            try:
+                client.logout()
+            except (imaplib.IMAP4.error, OSError):
+                pass
+
     def _poll(
         self,
         state: dict[str, object],

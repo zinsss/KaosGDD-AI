@@ -22,7 +22,25 @@
       preview: clean(source.preview, 3000),
       receivedAt,
       attachmentCount: Math.max(0, Number(source.attachmentCount) || 0),
+      attachments: Object.freeze(
+        (Array.isArray(source.attachments) ? source.attachments : []).map(normalizeAttachment).filter(Boolean),
+      ),
     });
+  }
+
+  function normalizeAttachment(value) {
+    const source = value && typeof value === "object" ? value : {};
+    const filename = clean(source.filename, 240) || "attachment";
+    return Object.freeze({
+      filename,
+      contentType: clean(source.contentType, 120) || "application/octet-stream",
+      sizeBytes: Math.max(0, Number(source.sizeBytes) || 0),
+    });
+  }
+
+  function normalizeDetail(payload) {
+    const source = payload && typeof payload === "object" ? payload : {};
+    return normalizeMessage(source.message || source);
   }
 
   function normalizePage(payload) {
@@ -40,5 +58,5 @@
     });
   }
 
-  return Object.freeze({ normalizeMessage, normalizePage });
+  return Object.freeze({ normalizeAttachment, normalizeDetail, normalizeMessage, normalizePage });
 });

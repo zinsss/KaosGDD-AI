@@ -442,9 +442,9 @@ def mail_status_for_error(exc: Exception) -> int:
     if isinstance(exc, memos_relay.MemosRelayError):
         return exc.status
     code = str(exc)
-    if code == "main_profile_required":
+    if code in {"main_profile_required", "mail_message_not_found"}:
         return 404
-    if code == "mail_limit_invalid":
+    if code in {"mail_limit_invalid", "mail_uid_invalid", "mail_mailbox_invalid"}:
         return 400
     return 503
 
@@ -472,6 +472,51 @@ def mail_messages_payload(
         "limit": limit,
         **payload,
     }
+
+
+def mail_message_payload(
+    uid: str,
+    query_string: str,
+    poller: NaverMailPoller | None = None,
+) -> dict[str, object]:
+    params = urllib.parse.parse_qs(query_string, keep_blank_values=True)
+    try:
+        uid_value = int(uid)
+    except (TypeError, ValueError) as exc:
+        raise NaverMailError("mail_uid_invalid") from exc
+    if uid_value < 1:
+        raise NaverMailError("mail_uid_invalid")
+    mailbox = (params.get("mailbox") or [""])[0].strip()
+    if not mailbox:
+        raise NaverMailError("mail_mailbox_invalid")
+    mail = (poller or naver_mail_poller()).get_message(mailbox=mailbox, uid=uid_value)
+    return {
+        "ok": True,
+        "message": {
+            "kind": "mail",
+            "direction": "incoming",
+            "mailbox": mail.mailbox,
+            "uid": mail.uid,
+            "sender": mail.sender,
+            "subject": mail.subject,
+            "preview": mail.preview,
+            "receivedAt": mail.received_at,
+            "attachmentCount": len(mail.attachments),
+            "attachments": [
+                {
+                    "filename": attachment.filename,
+                    "contentType": attachment.content_type,
+                    "sizeBytes": len(attachment.content),
+                }
+                for attachment in mail.attachments
+            ],
+        },
+    }
+
+
+def mail_message_uid(path: str) -> str:
+    match = re.fullmatch(r"/api/mail/messages/([1-9][0-9]*)", path)
+    return match.group(1) if match else ""
 
 
 def recurring_status_for_error(exc: Exception) -> int:
@@ -1070,6 +1115,18 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 print(f"Mail browse failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "mail_archive_unavailable"})
+            return
+        mail_uid = mail_message_uid(parsed.path)
+        if mail_uid:
+            try:
+                require_main_access(self.headers)
+                json_response(self, 200, mail_message_payload(mail_uid, parsed.query))
+            except (ValueError, NaverMailError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, memos_relay.MemosRelayError) else str(exc)
+                json_response(self, mail_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Mail detail failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "mail_detail_unavailable"})
             return
         fax_id = fax_document_id(parsed.path)
         if fax_id:

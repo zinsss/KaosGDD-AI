@@ -38,20 +38,22 @@ The personal PWA reads recent Naver headers through Governor:
 
 ```text
 GET /api/mail/messages?limit=50
+GET /api/mail/messages/{uid}?mailbox={display-mailbox}
 ```
 
 This route requires the main Cloudflare Access profile. It is intentionally
 read-only: the poller selects IMAP folders in read-only mode and uses
-`BODY.PEEK[HEADER]`, so opening the PWA board does not mark messages read,
-archive mail, move mail, import attachments, or alter checkpoint state.
+`BODY.PEEK[HEADER]` for the list and `BODY.PEEK[]` for a selected detail, so
+opening the PWA board does not mark messages read, archive mail, move mail,
+import attachments, or alter checkpoint state.
 The `governor-api` container receives the same Naver host/user/folder/password
 configuration as the lifecycle worker, but its `/data/mail` mount is read-only.
 
 The response is a compact archive-board payload with configured folders,
-mailbox count, and recent message headers. Body preview is empty in this
-first board because only headers are fetched. Mail bodies and attachment import
-remain owned by the existing lifecycle/organizer workflows until a governed
-manual import action is added.
+mailbox count, and recent message headers. Selecting a row fetches the normalized
+text body and attachment metadata only. Attachment bytes, download, and document
+import remain unavailable from the PWA until a governed manual import action is
+added.
 
 ## Daily unread organizer
 
