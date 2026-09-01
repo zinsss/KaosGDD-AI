@@ -23,6 +23,7 @@
     "add-task": "tasks",
     "edit-task": "tasks",
     "add-memo": "memos",
+    "add-document": "documents",
     service: "services",
   });
 

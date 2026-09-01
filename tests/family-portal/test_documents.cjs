@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-const { normalizeDocument, normalizePage } = require("../../apps/family-portal/documents.js");
+const { normalizeDocument, normalizeInbox, normalizePage } = require("../../apps/family-portal/documents.js");
 
 test("normalizes Paperless browse pages for the portal", () => {
   const page = normalizePage({
@@ -34,4 +34,22 @@ test("normalizes Paperless document OCR without creating another state store", (
 
   assert.equal(document.content, "Recognized text");
   assert.deepEqual(document.tagIds, [3, 4]);
+});
+
+test("normalizes document intake inbox records", () => {
+  const inbox = normalizeInbox({
+    items: [
+      {
+        id: "doc-1",
+        title: "Clinic PDF",
+        submittedAt: "2026-09-01T00:00:00Z",
+        sizeBytes: 123,
+        taskId: "paperless-task",
+        status: "ocr_pending",
+      },
+    ],
+  });
+
+  assert.equal(inbox.items[0].id, "doc-1");
+  assert.equal(inbox.items[0].statusLabel, "OCR PENDING");
 });

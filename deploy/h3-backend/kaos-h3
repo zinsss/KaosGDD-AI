@@ -100,6 +100,7 @@ install_state_directories() {
     "${root}/discord-supplies" \
     "${root}/discord-inbox" \
     "${root}/discord-system" \
+    "${root}/documents" \
     "${root}/notifications" 2>/dev/null; then
     chmod 0770 \
       "${root}/mail" \
@@ -109,6 +110,7 @@ install_state_directories() {
       "${root}/discord-supplies" \
       "${root}/discord-inbox" \
       "${root}/discord-system" \
+      "${root}/documents" \
       "${root}/notifications"
     return
   fi
@@ -121,6 +123,7 @@ install_state_directories() {
     "${root}/discord-supplies" \
     "${root}/discord-inbox" \
     "${root}/discord-system" \
+    "${root}/documents" \
     "${root}/notifications"
 }
 

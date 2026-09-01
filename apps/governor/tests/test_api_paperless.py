@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+from io import BytesIO
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
 from kaos_governor import api
 from kaos_governor.documents import (
+    DocumentIntakeStore,
     DocumentIntakeError,
     PaperlessConfig,
     PaperlessDocument,
+    PaperlessResult,
     PaperlessSearchPage,
     PaperlessSearchResult,
 )
@@ -35,6 +40,18 @@ class FakePaperless:
     def get(self, document_id: object) -> PaperlessDocument:
         self.calls.append(("get", document_id))
         return PaperlessDocument(7, "Fax report", "2026-08-29", "fax.pdf", content="OCR text")
+
+    def submit_pdf(
+        self,
+        filename: str,
+        content: bytes,
+        *,
+        title: str = "",
+        tags=(),
+        source: str = "discord",
+    ) -> PaperlessResult:
+        self.calls.append(("submit", filename, title, source, len(content)))
+        return PaperlessResult(True, "paperless-task-1", filename, "sha-from-paperless", len(content))
 
 
 class PaperlessApiTests(unittest.TestCase):
@@ -91,7 +108,64 @@ class PaperlessApiTests(unittest.TestCase):
             api.paperless_page_payload("page=nope", FakePaperless())  # type: ignore[arg-type]
 
         self.assertEqual(api.paperless_status_for_error(DocumentIntakeError("paperless_page_invalid")), 400)
+        self.assertEqual(api.paperless_status_for_error(DocumentIntakeError("invalid_pdf_signature")), 400)
         self.assertEqual(api.paperless_status_for_error(ValueError("main_profile_required")), 404)
+
+    def test_upload_pdf_submits_to_paperless_and_records_inbox(self) -> None:
+        boundary = "KaosBoundary"
+        content = b"%PDF-1.7\nbody\n%%EOF"
+        body = (
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="title"\r\n\r\n'
+            "Clinic upload\r\n"
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="document"; filename="clinic.pdf"\r\n'
+            "Content-Type: application/pdf\r\n\r\n"
+        ).encode("utf-8") + content + f"\r\n--{boundary}--\r\n".encode("utf-8")
+
+        class Handler:
+            headers = {
+                "Content-Type": f"multipart/form-data; boundary={boundary}",
+                "Content-Length": str(len(body)),
+            }
+            rfile = BytesIO(body)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store = DocumentIntakeStore(Path(tmp) / "intake.json")
+            service = FakePaperless()
+            payload = api.paperless_upload_payload(Handler(), service=service, store=store)  # type: ignore[arg-type]
+            inbox = api.paperless_inbox_payload(store)
+
+        self.assertFalse(payload["duplicate"])
+        self.assertEqual(payload["item"]["title"], "Clinic upload")  # type: ignore[index]
+        self.assertEqual(inbox["items"][0]["taskId"], "paperless-task-1")  # type: ignore[index]
+        self.assertEqual(service.calls[-1], ("submit", "clinic.pdf", "Clinic upload", "pwa", len(content)))
+
+    def test_upload_pdf_dedupes_existing_inbox_sha(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = DocumentIntakeStore(Path(tmp) / "intake.json")
+            content = b"%PDF-1.7\nbody\n%%EOF"
+            store.add_submitted(title="Existing", filename="existing.pdf", content=content, task_id="old-task")
+            boundary = "KaosBoundary"
+            body = (
+                f"--{boundary}\r\n"
+                'Content-Disposition: form-data; name="document"; filename="again.pdf"\r\n'
+                "Content-Type: application/pdf\r\n\r\n"
+            ).encode("utf-8") + content + f"\r\n--{boundary}--\r\n".encode("utf-8")
+
+            class Handler:
+                headers = {
+                    "Content-Type": f"multipart/form-data; boundary={boundary}",
+                    "Content-Length": str(len(body)),
+                }
+                rfile = BytesIO(body)
+
+            service = FakePaperless()
+            payload = api.paperless_upload_payload(Handler(), service=service, store=store)  # type: ignore[arg-type]
+
+        self.assertTrue(payload["duplicate"])
+        self.assertEqual(payload["item"]["title"], "Existing")  # type: ignore[index]
+        self.assertEqual(service.calls, [])
 
 
 if __name__ == "__main__":

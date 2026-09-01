@@ -1,5 +1,6 @@
 """Document intake adapters for KaosGovernor."""
 
+from .intake import DocumentInboxRecord, DocumentIntakeStore
 from .paperless import (
     DocumentIntakeError,
     PaperlessConfig,
@@ -14,6 +15,8 @@ from .paperless import (
 
 __all__ = (
     "DocumentIntakeError",
+    "DocumentInboxRecord",
+    "DocumentIntakeStore",
     "PaperlessConfig",
     "PaperlessDocument",
     "PaperlessDocumentService",

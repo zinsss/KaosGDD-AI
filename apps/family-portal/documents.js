@@ -50,5 +50,37 @@
     });
   }
 
-  return Object.freeze({ normalizeDocument, normalizeItem, normalizePage });
+  function normalizeInboxItem(value) {
+    const item = value && typeof value === "object" ? value : {};
+    const id = String(item.id || "");
+    const title = String(item.title || item.filename || "Document").trim() || "Document";
+    const status = String(item.status || "ocr_pending");
+    const labels = {
+      ocr_pending: "OCR PENDING",
+      review: "REVIEW",
+      archived: "ARCHIVED",
+      failed: "FAILED",
+    };
+    return Object.freeze({
+      id,
+      title,
+      submittedAt: String(item.submittedAt || ""),
+      filename: String(item.filename || ""),
+      sha256: String(item.sha256 || ""),
+      sizeBytes: Math.max(0, Number(item.sizeBytes) || 0),
+      taskId: String(item.taskId || ""),
+      source: String(item.source || "pwa"),
+      status,
+      statusLabel: labels[status] || status.toUpperCase(),
+    });
+  }
+
+  function normalizeInbox(payload) {
+    const source = payload && typeof payload === "object" ? payload : {};
+    return Object.freeze({
+      items: Object.freeze((Array.isArray(source.items) ? source.items : []).map(normalizeInboxItem).filter((item) => item.id)),
+    });
+  }
+
+  return Object.freeze({ normalizeDocument, normalizeInbox, normalizeInboxItem, normalizeItem, normalizePage });
 });

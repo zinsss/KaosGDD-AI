@@ -28,6 +28,7 @@ test("personal subroutes select their owning main menu", () => {
   assert.equal(selectedPersonalRoute("add-event"), "calendar");
   assert.equal(selectedPersonalRoute("edit-task"), "tasks");
   assert.equal(selectedPersonalRoute("add-memo"), "memos");
+  assert.equal(selectedPersonalRoute("add-document"), "documents");
   assert.equal(selectedPersonalRoute("service"), "services");
   assert.equal(selectedPersonalRoute("supplies"), "supplies");
   assert.equal(selectedPersonalRoute("documents"), "documents");
@@ -42,9 +43,9 @@ test("unknown personal routes safely select Agenda", () => {
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
   const navigationIndex = index.indexOf('src="/navigation.js?v=3"');
-  const documentsIndex = index.indexOf('src="/documents.js?v=2"');
+  const documentsIndex = index.indexOf('src="/documents.js?v=3"');
   const faxIndex = index.indexOf('src="/fax.js?v=1"');
-  const applicationIndex = index.indexOf('src="/app.js?v=246"');
+  const applicationIndex = index.indexOf('src="/app.js?v=247"');
   assert.ok(navigationIndex >= 0);
   assert.ok(documentsIndex > navigationIndex);
   assert.ok(faxIndex > documentsIndex);

@@ -6,15 +6,19 @@ import re
 import urllib.parse
 import urllib.request
 from datetime import UTC, datetime
+from email.parser import BytesParser
+from email.policy import default as email_policy
 from functools import lru_cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import uuid
+import hashlib
 
 from kaos_governor import ledger
 from kaos_governor.calendar import GeneratedCalendarSettings
 from kaos_governor.database import connect, database_status, wait_for_database_and_migrate
 from kaos_governor.documents import (
+    DocumentIntakeStore,
     DocumentIntakeError,
     PaperlessConfig,
     PaperlessDocumentService,
@@ -27,6 +31,7 @@ from kaos_governor.tasks import PostgresRecurringTaskStore, RecurringTaskDefinit
 PORT = int(os.environ.get("GOVERNOR_API_PORT", "8096"))
 MIGRATIONS = Path(os.environ.get("GOVERNOR_MIGRATIONS_DIR", "/usr/local/share/kaos-governor/migrations"))
 MAX_REQUEST_BYTES = 500_000
+MAX_MULTIPART_OVERHEAD_BYTES = 256_000
 CALENDAR_ADAPTER_INTERNAL_URL = os.environ.get("CALENDAR_ADAPTER_INTERNAL_URL", "http://calendar-adapter:8091").rstrip("/")
 CALENDAR_ADAPTER_TIMEOUT_SECONDS = float(os.environ.get("CALENDAR_ADAPTER_TIMEOUT_SECONDS", "20"))
 WEATHER_LOCATIONS = {
@@ -133,6 +138,44 @@ def json_request(handler: BaseHTTPRequestHandler) -> dict[str, object]:
     return payload
 
 
+def multipart_form_request(
+    handler: BaseHTTPRequestHandler,
+    *,
+    max_bytes: int,
+) -> tuple[dict[str, str], dict[str, tuple[str, bytes]]]:
+    content_type = handler.headers.get("Content-Type") or ""
+    if "multipart/form-data" not in content_type.lower():
+        raise DocumentIntakeError("multipart_form_required")
+    try:
+        length = int(handler.headers.get("Content-Length") or "0")
+    except ValueError as exc:
+        raise ValueError("invalid_body_length") from exc
+    if length <= 0 or length > max_bytes:
+        raise ValueError("invalid_body_length")
+    body = handler.rfile.read(length)
+    message = BytesParser(policy=email_policy).parsebytes(
+        f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode("utf-8") + body
+    )
+    if not message.is_multipart():
+        raise DocumentIntakeError("multipart_form_required")
+    fields: dict[str, str] = {}
+    files: dict[str, tuple[str, bytes]] = {}
+    for part in message.iter_parts():
+        if part.get_content_disposition() != "form-data":
+            continue
+        name = part.get_param("name", header="content-disposition")
+        if not name:
+            continue
+        filename = part.get_filename()
+        payload = part.get_payload(decode=True) or b""
+        if filename is None:
+            charset = part.get_content_charset() or "utf-8"
+            fields[str(name)] = payload.decode(charset, errors="replace")
+        else:
+            files[str(name)] = (filename, payload)
+    return fields, files
+
+
 def ledger_status_for_error(exc: Exception) -> int:
     message = str(exc)
     if message == "ledger_entry_not_found":
@@ -169,6 +212,11 @@ def paperless_service() -> PaperlessDocumentService:
     return PaperlessDocumentService(PaperlessConfig.from_env())
 
 
+@lru_cache(maxsize=1)
+def document_intake_store() -> DocumentIntakeStore:
+    return DocumentIntakeStore(Path(os.environ.get("DOCUMENT_INTAKE_STATE_PATH", "/data/documents/intake.json")))
+
+
 def paperless_status_for_error(exc: Exception) -> int:
     if isinstance(exc, memos_relay.MemosRelayError):
         return exc.status
@@ -180,6 +228,11 @@ def paperless_status_for_error(exc: Exception) -> int:
         "paperless_page_invalid",
         "paperless_query_too_long",
         "paperless_document_id_invalid",
+        "multipart_form_required",
+        "invalid_body_length",
+        "pdf_attachment_required",
+        "pdf_size_invalid",
+        "invalid_pdf_signature",
     }:
         return 400
     return 503
@@ -237,6 +290,52 @@ def paperless_document_payload(
     payload = document.as_dict()
     payload["url"] = paperless_document_url(active_service, document.document_id)
     return {"ok": True, "document": payload}
+
+
+def paperless_inbox_payload(store: DocumentIntakeStore | None = None) -> dict[str, object]:
+    records = (store or document_intake_store()).list_records()
+    pending = sum(1 for record in records if record.status == "ocr_pending")
+    review = sum(1 for record in records if record.status == "review")
+    return {
+        "ok": True,
+        "items": [record.as_dict() for record in records],
+        "counts": {
+            "all": len(records),
+            "pending": pending,
+            "review": review,
+        },
+    }
+
+
+def paperless_upload_payload(
+    handler: BaseHTTPRequestHandler,
+    *,
+    service: PaperlessDocumentService | None = None,
+    store: DocumentIntakeStore | None = None,
+) -> dict[str, object]:
+    active_service = service or paperless_service()
+    active_store = store or document_intake_store()
+    max_bytes = active_service.config.max_document_bytes + MAX_MULTIPART_OVERHEAD_BYTES
+    fields, files = multipart_form_request(handler, max_bytes=max_bytes)
+    filename, content = files.get("document") or files.get("file") or ("", b"")
+    if not filename or not content:
+        raise DocumentIntakeError("pdf_attachment_required")
+    if not str(filename).lower().endswith(".pdf"):
+        raise DocumentIntakeError("pdf_attachment_required")
+    sha256 = hashlib.sha256(content).hexdigest()
+    existing = active_store.find_active_by_sha(sha256)
+    if existing:
+        return {"ok": True, "duplicate": True, "item": existing.as_dict()}
+    title = fields.get("title") or ""
+    result = active_service.submit_pdf(filename, content, title=title, source="pwa")
+    record = active_store.add_submitted(
+        title=title or result.filename,
+        filename=result.filename,
+        content=content,
+        task_id=result.task_id,
+        source="pwa",
+    )
+    return {"ok": True, "duplicate": False, "item": record.as_dict(), "paperless": result.as_dict()}
 
 
 def paperless_document_id(path: str) -> str:
@@ -877,6 +976,21 @@ class Handler(BaseHTTPRequestHandler):
                 print(f"Paperless browse failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "paperless_request_failed"})
             return
+        if parsed.path == "/api/paperless/inbox":
+            try:
+                require_main_access(self.headers)
+                json_response(self, 200, paperless_inbox_payload())
+            except (ValueError, DocumentIntakeError, memos_relay.MemosRelayError) as exc:
+                code = (
+                    exc.code
+                    if isinstance(exc, (DocumentIntakeError, memos_relay.MemosRelayError))
+                    else str(exc)
+                )
+                json_response(self, paperless_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Paperless inbox failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "paperless_inbox_unavailable"})
+            return
         paperless_id = paperless_document_id(parsed.path)
         if paperless_id:
             try:
@@ -975,6 +1089,21 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == "/api/paperless/documents/upload":
+            try:
+                require_main_access(self.headers)
+                json_response(self, 201, paperless_upload_payload(self))
+            except (ValueError, DocumentIntakeError, memos_relay.MemosRelayError) as exc:
+                code = (
+                    exc.code
+                    if isinstance(exc, (DocumentIntakeError, memos_relay.MemosRelayError))
+                    else str(exc)
+                )
+                json_response(self, paperless_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Paperless upload failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "paperless_upload_failed"})
+            return
         if parsed.path == "/api/memos/bootstrap":
             try:
                 json_response(self, 200, memos_relay.bootstrap(self.headers, json_request(self)))

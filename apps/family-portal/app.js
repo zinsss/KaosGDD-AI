@@ -13,6 +13,7 @@ const routes = {
   "add-task": "Add Task",
   "edit-task": "Edit Task",
   "add-memo": "Add Memo",
+  "add-document": "Add Document",
   services: "Utils",
   service: "Service",
   rouny: "Rouny",
@@ -274,6 +275,14 @@ const state = {
   documents: {
     checked: false,
     loading: false,
+    inboxChecked: false,
+    inboxLoading: false,
+    inboxError: "",
+    inboxItems: [],
+    upload: {
+      saving: false,
+      error: "",
+    },
     mode: "archive",
     error: "",
     query: "",
@@ -1923,6 +1932,38 @@ async function loadDocuments(options = {}) {
   if (getRoute() === "documents") render();
 }
 
+async function loadDocumentInbox(options = {}) {
+  if (portalProfile() !== "main") return;
+  if (state.documents.inboxLoading) return;
+  if (state.documents.inboxChecked && !options.force) return;
+  state.documents.inboxLoading = true;
+  if (getRoute() === "documents") render();
+  try {
+    const response = await fetch("/api/paperless/inbox", {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    state.documents = {
+      ...state.documents,
+      inboxChecked: true,
+      inboxLoading: false,
+      inboxError: "",
+      inboxItems: window.KAOS_PORTAL_DOCUMENTS.normalizeInbox(payload).items,
+    };
+  } catch (error) {
+    state.documents = {
+      ...state.documents,
+      inboxChecked: true,
+      inboxLoading: false,
+      inboxError: error.message || "Document inbox is unavailable",
+      inboxItems: [],
+    };
+  }
+  if (getRoute() === "documents") render();
+}
+
 async function loadFax(options = {}) {
   if (portalProfile() !== "main") return;
   if (state.fax.loading) return;
@@ -2043,10 +2084,15 @@ function closeDocumentDetail() {
 }
 
 async function refreshDocuments() {
-  state.documents.checked = false;
   state.documents.selected = null;
   state.documents.detailError = "";
-  await loadDocuments({ force: true });
+  if (state.documents.mode === "inbox") {
+    state.documents.inboxChecked = false;
+    await loadDocumentInbox({ force: true });
+  } else {
+    state.documents.checked = false;
+    await loadDocuments({ force: true });
+  }
 }
 
 async function setDocumentMode(mode) {
@@ -2059,6 +2105,7 @@ async function setDocumentMode(mode) {
   state.documents.detailError = "";
   render();
   if (nextMode === "archive") await loadDocuments();
+  else await loadDocumentInbox();
 }
 
 function formatDocumentDate(value) {
@@ -3074,7 +3121,7 @@ function getRoute() {
   const route = raw.split("?", 1)[0];
   if (!routes[route]) return profileConfig().defaultRoute;
   if (portalProfile() === "family" && route === "services") return profileConfig().defaultRoute;
-  if (portalProfile() === "family" && ["supplies", "documents", "fax", "mail"].includes(route)) return profileConfig().defaultRoute;
+  if (portalProfile() === "family" && ["supplies", "documents", "add-document", "fax", "mail"].includes(route)) return profileConfig().defaultRoute;
   if (portalProfile() === "main" && (route === "rouny" || route === "caregiver" || route === "ledger")) return profileConfig().defaultRoute;
   return route;
 }
@@ -3271,6 +3318,7 @@ function activeNavRoute(route) {
   if (route === "add" || route === "add-event" || route === "edit-event" || route === "caregiver") return "calendar";
   if (route === "add-task" || route === "edit-task") return "tasks";
   if (route === "add-memo") return "memos";
+  if (route === "add-document") return "documents";
   if (route === "service") return "services";
   return route;
 }
@@ -3414,12 +3462,15 @@ async function runTopAddAction(action) {
     window.location.hash = "#/add-memo";
     return;
   }
+  if (action === "document") {
+    window.location.hash = "#/add-document";
+    return;
+  }
   if (action === "menu") {
     openTopAddMenu();
     return;
   }
   const labels = {
-    document: "Document upload from the top + is not wired yet.",
     fax: "Fax sending from the top + is not wired yet.",
     mail: "Mail compose/import from the top + is not wired yet.",
   };
@@ -5213,6 +5264,23 @@ function renderDocuments() {
   const documents = state.documents;
   const archiveActive = documents.mode !== "inbox";
   const inboxActive = documents.mode === "inbox";
+  const inboxRows = documents.inboxItems
+    .map((item) => {
+      const date = archiveDateParts(item.submittedAt);
+      const statusClass = item.status === "failed" ? "isError" : item.status === "archived" ? "isOk" : "";
+      return `
+        <li class="archiveRecord">
+          <div class="archiveRecordButton archiveRecordStatic">
+            <span class="archiveRecordId">#${escapeHtml(item.id)}</span>
+            <time class="archiveRecordDate" datetime="${escapeHtml(date.raw)}">${escapeHtml(date.label)}</time>
+            <strong class="archiveRecordTitle">${escapeHtml(item.title || "Document")}</strong>
+            <span class="archiveRecordStatus ${statusClass}">${escapeHtml(item.statusLabel)}</span>
+          </div>
+          <span class="archiveSourceLink isDisabled">${escapeHtml(item.taskId ? "OCR" : "--")}</span>
+        </li>
+      `;
+    })
+    .join("");
   const rows = documents.items
     .map((item) => {
       const title = item.title || `Document ${item.id}`;
@@ -5337,15 +5405,31 @@ function renderDocuments() {
   `;
   const inboxBoard = `
     <div class="archiveWorkspace">
-      <section class="archiveIndex" aria-labelledby="documentsInboxTitle">
+      <section class="archiveIndex" aria-labelledby="documentsInboxTitle" aria-busy="${documents.inboxLoading}">
         <header class="archiveIndexHeader">
           <h3 id="documentsInboxTitle">INBOX BOARD</h3>
-          <p class="archiveStatusMessage" role="status">0 PENDING // OCR QUEUE READY</p>
+          <p class="archiveStatusMessage" role="status">${
+            documents.inboxChecked && !documents.inboxError
+              ? `${documents.inboxItems.length} RECORDS // OCR QUEUE`
+              : documents.inboxLoading
+                ? "LOADING DOCUMENT INBOX"
+                : "DOCUMENT INBOX STANDBY"
+          }</p>
         </header>
         <div class="archiveColumnHeader" aria-hidden="true">
           <span>NO.</span><span>DATE</span><span>TITLE</span>
         </div>
-        <p class="archiveStatusMessage">Document intake records will appear here after upload. Next slice wires PDF upload, Paperless OCR status, and manual title/tag review.</p>
+        ${
+          documents.inboxError
+            ? `<div class="archiveError" role="alert"><p>${escapeHtml(documents.inboxError)}</p><button class="archiveAction" type="button" data-documents-refresh>RETRY</button></div>`
+            : documents.inboxLoading && !documents.inboxChecked
+              ? `<p class="archiveStatusMessage">Reading document intake board...</p>`
+              : documents.inboxChecked && !inboxRows
+                ? `<p class="archiveStatusMessage">No pending document intake records.</p>`
+                : inboxRows
+                  ? `<ol class="archiveRecordList">${inboxRows}</ol>`
+                  : ""
+        }
       </section>
     </div>
   `;
@@ -5354,6 +5438,42 @@ function renderDocuments() {
       ${modeTabs}
       ${archiveActive ? archiveBoard : inboxBoard}
     </section>
+  `;
+}
+
+function renderAddDocument() {
+  const upload = state.documents.upload || { saving: false, error: "" };
+  return `
+    <form class="archiveTerminal archiveUploadPanel" data-upload-document aria-label="Upload document">
+      <section class="archiveIndex">
+        <header class="archiveIndexHeader">
+          <div>
+            <h3>UPLOAD DOCUMENT</h3>
+            <p class="archiveStatusMessage">PDF enters Inbox first. Paperless OCR runs in the background.</p>
+          </div>
+          <a class="archiveAction" href="#/documents">BACK</a>
+        </header>
+        <div class="archiveUploadGrid">
+          <label class="archiveCommandLine">
+            <span>FILE</span>
+            <input name="document" type="file" accept="application/pdf,.pdf" required />
+          </label>
+          <label class="archiveCommandLine">
+            <span>TITLE</span>
+            <input name="title" type="text" autocomplete="off" placeholder="optional; filename is used if blank" />
+          </label>
+        </div>
+        ${
+          upload.error
+            ? `<div class="archiveError" role="alert"><p>${escapeHtml(upload.error)}</p></div>`
+            : `<p class="archiveStatusMessage">Use this for scanned clinic/caregiver documents. OCR/tags can be reviewed later from Inbox.</p>`
+        }
+        <div class="archiveActions">
+          <button class="archiveAction isActive" type="submit" ${upload.saving ? "disabled" : ""}>${upload.saving ? "UPLOADING" : "UPLOAD"}</button>
+          <a class="archiveAction" href="#/documents">CANCEL</a>
+        </div>
+      </section>
+    </form>
   `;
 }
 
@@ -7785,6 +7905,7 @@ function render() {
   else if (route === "service") view.innerHTML = renderDesktopService();
   else if (route === "supplies") view.innerHTML = renderSupplies();
   else if (route === "documents") view.innerHTML = renderDocuments();
+  else if (route === "add-document") view.innerHTML = renderAddDocument();
   else if (route === "fax") view.innerHTML = renderFax();
   else if (route === "mail") view.innerHTML = renderMail();
   else if (route === "rouny") view.innerHTML = renderRouny();
@@ -7802,10 +7923,14 @@ function render() {
   if (route === "supplies") loadSupplies();
   if (route === "memos" && portalProfile() === "main") loadMemos();
   if (route === "documents" && state.documents.mode !== "inbox") loadDocuments();
+  if (route === "documents" && state.documents.mode === "inbox") loadDocumentInbox();
   if (route === "fax") loadFax();
   if (route === "ledger") loadLedger();
   if (route === "add-memo") {
     window.setTimeout(() => document.querySelector("[data-memo-content]")?.focus(), 0);
+  }
+  if (route === "add-document") {
+    window.setTimeout(() => document.querySelector('[data-upload-document] input[type="file"]')?.focus(), 0);
   }
   if (route === "settings") {
     loadGovernorSettingsStatus();
@@ -8789,6 +8914,34 @@ document.addEventListener("click", async (event) => {
 });
 
 document.addEventListener("submit", async (event) => {
+  const documentUploadForm = event.target.closest("[data-upload-document]");
+  if (documentUploadForm) {
+    event.preventDefault();
+    const formData = new FormData(documentUploadForm);
+    state.documents.upload = { saving: true, error: "" };
+    render();
+    try {
+      const response = await fetch("/api/paperless/documents/upload", {
+        method: "POST",
+        headers: { Accept: "application/json" },
+        body: formData,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+      state.documents.upload = { saving: false, error: "" };
+      state.documents.mode = "inbox";
+      state.documents.inboxChecked = false;
+      window.location.hash = "#/documents";
+    } catch (error) {
+      state.documents.upload = {
+        saving: false,
+        error: error.message || "Could not upload document",
+      };
+      render();
+    }
+    return;
+  }
+
   const mailOrganizerForm = event.target.closest("[data-mail-organizer-form]");
   if (mailOrganizerForm) {
     event.preventDefault();
