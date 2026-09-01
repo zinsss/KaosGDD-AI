@@ -116,7 +116,8 @@ Incremental delivery:
    health state.
 2. Expose `system.status` to the personal admin PWA as read-only display only.
    The PWA must not expose restart, deploy, reboot, shell, package-update, or
-   other system write controls.
+   other system write controls. It may include a navigation-only link to
+   Discord `#brain` for operator conversation.
 3. Define signed/versioned runbook contracts and a dry-run-only executor.
 4. Add one non-critical restart operation with exact confirmation and audit.
 5. Add pinned application deployment and rollback only after backup and
