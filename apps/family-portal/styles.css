@@ -5895,6 +5895,25 @@ h3 {
   font-family: "Sarasa Gothic Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
+.app[data-profile="main"] .archiveModeTabs {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.app[data-profile="main"] .archiveModeTabs button {
+  min-height: 44px;
+  border-color: var(--archive-line);
+  background: rgba(67, 76, 94, 0.34);
+  color: var(--archive-muted);
+  font: 850 0.82rem/1 "Sarasa Gothic Mono", ui-monospace, monospace;
+  text-transform: uppercase;
+}
+
+.app[data-profile="main"] .archiveModeTabs button.isActive {
+  border-color: var(--archive-line-strong);
+  background: rgba(235, 203, 139, 0.1);
+  color: var(--archive-amber);
+}
+
 .app[data-profile="main"] .archiveMasthead,
 .app[data-profile="main"] .archiveCommand,
 .app[data-profile="main"] .archiveIndex,

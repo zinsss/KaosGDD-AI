@@ -259,6 +259,7 @@ const state = {
   documents: {
     checked: false,
     loading: false,
+    mode: "archive",
     error: "",
     query: "",
     appliedQuery: "",
@@ -1882,6 +1883,18 @@ async function refreshDocuments() {
   state.documents.selected = null;
   state.documents.detailError = "";
   await loadDocuments({ force: true });
+}
+
+async function setDocumentMode(mode) {
+  const nextMode = mode === "inbox" ? "inbox" : "archive";
+  if (state.documents.mode === nextMode) return;
+  state.documents.mode = nextMode;
+  state.documents.selected = null;
+  state.documents.selectedId = "";
+  state.documents.detailLoading = false;
+  state.documents.detailError = "";
+  render();
+  if (nextMode === "archive") await loadDocuments();
 }
 
 function formatDocumentDate(value) {
@@ -5034,6 +5047,8 @@ function renderCalendarTasksSuppliesEmbed() {
 
 function renderDocuments() {
   const documents = state.documents;
+  const archiveActive = documents.mode !== "inbox";
+  const inboxActive = documents.mode === "inbox";
   const rows = documents.items
     .map((item) => {
       const title = item.title || `Document ${item.id}`;
@@ -5105,51 +5120,75 @@ function renderDocuments() {
           </section>
         `
         : "";
+  const modeTabs = `
+    <div class="segmentedTabs archiveModeTabs" role="tablist" aria-label="Document board mode">
+      <button type="button" role="tab" data-document-mode="archive" aria-selected="${archiveActive}" class="${archiveActive ? "isActive" : ""}">Archive</button>
+      <button type="button" role="tab" data-document-mode="inbox" aria-selected="${inboxActive}" class="${inboxActive ? "isActive" : ""}">Inbox</button>
+    </div>
+  `;
+  const archiveBoard = `
+    <form class="archiveCommand archiveSearchBar" data-document-search role="search">
+      <label class="archiveSearchBox" for="paperlessQuery">
+        <span class="archiveSearchIcon" aria-hidden="true">⌕</span>
+        <input id="paperlessQuery" name="query" type="search" value="${escapeHtml(documents.query)}" placeholder="Search documents" autocomplete="off" />
+        ${documents.appliedQuery ? `<button class="archiveSearchClear" type="button" data-documents-clear aria-label="Clear document search">×</button>` : ""}
+      </label>
+      <button class="archiveAction archiveTopAction" type="button" data-documents-refresh aria-label="Refresh documents" title="Refresh documents" ${documents.loading ? "disabled" : ""}>↻</button>
+      <button class="srOnly" type="submit">Search</button>
+    </form>
+    <div class="archiveWorkspace ${hasDetail ? "hasDetail" : ""}">
+      <section class="archiveIndex" aria-labelledby="documentsIndexTitle" aria-busy="${documents.loading}">
+        <header class="archiveIndexHeader">
+          <h3 id="documentsIndexTitle">RECORD BOARD</h3>
+          <p class="archiveStatusMessage" role="status" aria-live="polite">${documents.checked && !documents.error ? escapeHtml(summary) : documents.loading ? "LOADING DOCUMENT BOARD" : "DOCUMENT BOARD STANDBY"}</p>
+        </header>
+        <div class="archiveColumnHeader" aria-hidden="true">
+          <span>NO.</span><span>DATE</span><span>TITLE</span>
+        </div>
+        ${
+          documents.error
+            ? `<div class="archiveError" role="alert"><p>${escapeHtml(documents.error)}</p><button class="archiveAction" type="button" data-documents-refresh>RETRY</button></div>`
+            : documents.loading && !documents.checked
+              ? `<p class="archiveStatusMessage">Searching Paperless archive...</p>`
+              : !documents.error && documents.checked && !rows
+                ? `<p class="archiveStatusMessage">No matching documents.</p>`
+                : rows
+                  ? `<ol class="archiveRecordList">${rows}</ol>`
+                  : ""
+        }
+        ${
+          !documents.error && documents.checked && documents.pageCount > 1
+            ? `
+              <nav class="archivePager" aria-label="Document pages">
+                <button class="archiveAction" type="button" aria-label="Previous document page" data-documents-page="${documents.page - 1}" ${documents.page <= 1 ? "disabled" : ""}>&lt;</button>
+                <span>PAGE ${documents.page}/${documents.pageCount}</span>
+                <button class="archiveAction" type="button" aria-label="Next document page" data-documents-page="${documents.page + 1}" ${documents.page >= documents.pageCount ? "disabled" : ""}>&gt;</button>
+              </nav>
+            `
+            : ""
+        }
+      </section>
+      ${detail}
+    </div>
+  `;
+  const inboxBoard = `
+    <div class="archiveWorkspace">
+      <section class="archiveIndex" aria-labelledby="documentsInboxTitle">
+        <header class="archiveIndexHeader">
+          <h3 id="documentsInboxTitle">INBOX BOARD</h3>
+          <p class="archiveStatusMessage" role="status">0 PENDING // OCR QUEUE READY</p>
+        </header>
+        <div class="archiveColumnHeader" aria-hidden="true">
+          <span>NO.</span><span>DATE</span><span>TITLE</span>
+        </div>
+        <p class="archiveStatusMessage">Document intake records will appear here after upload. Next slice wires PDF upload, Paperless OCR status, and manual title/tag review.</p>
+      </section>
+    </div>
+  `;
   return `
     <section class="archiveTerminal" data-archive-kind="documents" aria-label="Document archive">
-      <form class="archiveCommand archiveSearchBar" data-document-search role="search">
-        <label class="archiveSearchBox" for="paperlessQuery">
-          <span class="archiveSearchIcon" aria-hidden="true">⌕</span>
-          <input id="paperlessQuery" name="query" type="search" value="${escapeHtml(documents.query)}" placeholder="Search documents" autocomplete="off" />
-          ${documents.appliedQuery ? `<button class="archiveSearchClear" type="button" data-documents-clear aria-label="Clear document search">×</button>` : ""}
-        </label>
-        <button class="archiveAction archiveTopAction" type="button" data-documents-refresh aria-label="Refresh documents" title="Refresh documents" ${documents.loading ? "disabled" : ""}>↻</button>
-        <button class="srOnly" type="submit">Search</button>
-      </form>
-      <div class="archiveWorkspace ${hasDetail ? "hasDetail" : ""}">
-        <section class="archiveIndex" aria-labelledby="documentsIndexTitle" aria-busy="${documents.loading}">
-          <header class="archiveIndexHeader">
-            <h3 id="documentsIndexTitle">RECORD BOARD</h3>
-            <p class="archiveStatusMessage" role="status" aria-live="polite">${documents.checked && !documents.error ? escapeHtml(summary) : documents.loading ? "LOADING DOCUMENT BOARD" : "DOCUMENT BOARD STANDBY"}</p>
-          </header>
-          <div class="archiveColumnHeader" aria-hidden="true">
-            <span>NO.</span><span>DATE</span><span>TITLE</span>
-          </div>
-          ${
-            documents.error
-              ? `<div class="archiveError" role="alert"><p>${escapeHtml(documents.error)}</p><button class="archiveAction" type="button" data-documents-refresh>RETRY</button></div>`
-              : documents.loading && !documents.checked
-                ? `<p class="archiveStatusMessage">Searching Paperless archive...</p>`
-                : !documents.error && documents.checked && !rows
-                  ? `<p class="archiveStatusMessage">No matching documents.</p>`
-                  : rows
-                    ? `<ol class="archiveRecordList">${rows}</ol>`
-                    : ""
-          }
-          ${
-            !documents.error && documents.checked && documents.pageCount > 1
-              ? `
-                <nav class="archivePager" aria-label="Document pages">
-                  <button class="archiveAction" type="button" aria-label="Previous document page" data-documents-page="${documents.page - 1}" ${documents.page <= 1 ? "disabled" : ""}>&lt;</button>
-                  <span>PAGE ${documents.page}/${documents.pageCount}</span>
-                  <button class="archiveAction" type="button" aria-label="Next document page" data-documents-page="${documents.page + 1}" ${documents.page >= documents.pageCount ? "disabled" : ""}>&gt;</button>
-                </nav>
-              `
-              : ""
-          }
-        </section>
-        ${detail}
-      </div>
+      ${modeTabs}
+      ${archiveActive ? archiveBoard : inboxBoard}
     </section>
   `;
 }
@@ -7492,7 +7531,7 @@ function render() {
   }
   if (route === "caregiver" || (route === "calendar" && portalProfile() === "family")) loadCaregiverMonth();
   if (route === "supplies") loadSupplies();
-  if (route === "documents") loadDocuments();
+  if (route === "documents" && state.documents.mode !== "inbox") loadDocuments();
   if (route === "fax") loadFax();
   if (route === "ledger") loadLedger();
   if (route === "add-memo") {
@@ -7669,6 +7708,12 @@ document.addEventListener("click", async (event) => {
 
   if (event.target.closest("[data-documents-refresh]")) {
     await refreshDocuments();
+    return;
+  }
+
+  const documentMode = event.target.closest("[data-document-mode]");
+  if (documentMode) {
+    await setDocumentMode(documentMode.dataset.documentMode || "archive");
     return;
   }
 
