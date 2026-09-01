@@ -22,6 +22,7 @@
     "edit-event": "calendar",
     "add-task": "tasks",
     "edit-task": "tasks",
+    "add-memo": "memos",
     service: "services",
   });
 

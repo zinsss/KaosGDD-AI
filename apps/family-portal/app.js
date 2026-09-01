@@ -12,6 +12,7 @@ const routes = {
   "edit-event": "Edit Event",
   "add-task": "Add Task",
   "edit-task": "Edit Task",
+  "add-memo": "Add Memo",
   services: "Utils",
   service: "Service",
   rouny: "Rouny",
@@ -30,6 +31,7 @@ const familyRoutes = {
   "edit-event": uiText("route.editEvent", "Edit Event"),
   "add-task": uiText("route.addTask", "Add Task"),
   "edit-task": uiText("route.editTask", "Edit Task"),
+  "add-memo": uiText("route.addMemo", "Add Memo"),
   services: uiText("route.services", "Utils"),
   service: uiText("route.services", "Utils"),
   rouny: uiText("route.rouny", "Rouny"),
@@ -148,6 +150,11 @@ const state = {
   addEventMode: "normal",
   addEventDraft: null,
   addTaskDraft: null,
+  memoComposer: {
+    content: "",
+    saving: false,
+    error: "",
+  },
   eventPresetDraft: null,
   addMonthExpanded: false,
   taskDueEnabled: false,
@@ -1652,6 +1659,22 @@ async function createSupply(title) {
   await loadSupplies({ force: true });
 }
 
+async function createMemo(content) {
+  const normalized = String(content || "").trim();
+  if (!normalized) throw new Error("memo_content_required");
+  const response = await fetch("/api/memos/api/v1/memos", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ content: normalized, visibility: "PRIVATE" }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || payload.message || `HTTP ${response.status}`);
+  return payload;
+}
+
 async function useSupplyPreset(name) {
   const response = await fetch("/api/supplies/presets/use", {
     method: "POST",
@@ -3070,6 +3093,7 @@ function profileConfig() {
 function activeNavRoute(route) {
   if (route === "add" || route === "add-event" || route === "edit-event" || route === "caregiver") return "calendar";
   if (route === "add-task" || route === "edit-task") return "tasks";
+  if (route === "add-memo") return "memos";
   if (route === "service") return "services";
   return route;
 }
@@ -3092,7 +3116,7 @@ function topAddMenuItems(route) {
     { action: "task", label: "Task" },
     { action: "event", label: "Event" },
     { action: "supply", label: "Supply" },
-    { action: "memo", label: "Memo", note: "Later" },
+    { action: "memo", label: "Memo" },
     { action: "document", label: "Document", note: "Later" },
     { action: "fax", label: "Fax", note: "Later" },
     { action: "mail", label: "Mail", note: "Later" },
@@ -3209,12 +3233,15 @@ async function runTopAddAction(action) {
     }
     return;
   }
+  if (action === "memo") {
+    window.location.hash = "#/add-memo";
+    return;
+  }
   if (action === "menu") {
     openTopAddMenu();
     return;
   }
   const labels = {
-    memo: "Memo creation from the top + is not wired yet. Use the Memos + for now.",
     document: "Document upload from the top + is not wired yet.",
     fax: "Fax sending from the top + is not wired yet.",
     mail: "Mail compose/import from the top + is not wired yet.",
@@ -6586,6 +6613,43 @@ function renderMemos() {
   `;
 }
 
+function renderAddMemo() {
+  const composer = state.memoComposer;
+  return `
+    <form class="panel memoComposerPanel" data-create-memo>
+      <div class="panelHeader">
+        <div>
+          <p class="label">Memos</p>
+          <h2>Add memo</h2>
+        </div>
+        <a class="openButton" href="#/memos">Cancel</a>
+      </div>
+      <div class="composer memoComposer">
+        <label>
+          <span>Memo</span>
+          <textarea
+            name="content"
+            rows="12"
+            autocomplete="off"
+            placeholder="# Title&#10;memo body&#10;#tag"
+            required
+            data-memo-content
+          >${escapeHtml(composer.content)}</textarea>
+        </label>
+        ${
+          composer.error
+            ? `<p class="formNote isError" role="alert">${escapeHtml(composer.error)}</p>`
+            : `<p class="formNote">One plain Memos content box. Title and tags are parsed from the text.</p>`
+        }
+        <div class="formActions">
+          <a class="dangerButton" href="#/memos">Cancel</a>
+          <button class="primaryButton" type="submit" ${composer.saving ? "disabled" : ""}>${composer.saving ? "Saving..." : "Save memo"}</button>
+        </div>
+      </div>
+    </form>
+  `;
+}
+
 function renderGovernorSettingsStatus() {
   const status = state.governorSettings;
   if (!status.checked || (status.loading && !status.checked)) {
@@ -7417,6 +7481,7 @@ function render() {
   else if (route === "mail") view.innerHTML = renderMail();
   else if (route === "rouny") view.innerHTML = renderRouny();
   else if (route === "memos") view.innerHTML = renderMemos();
+  else if (route === "add-memo") view.innerHTML = renderAddMemo();
   else if (route === "ledger") view.innerHTML = renderLedger();
   else if (route === "settings") view.innerHTML = renderSettings();
   else view.innerHTML = renderToday();
@@ -7430,6 +7495,9 @@ function render() {
   if (route === "documents") loadDocuments();
   if (route === "fax") loadFax();
   if (route === "ledger") loadLedger();
+  if (route === "add-memo") {
+    window.setTimeout(() => document.querySelector("[data-memo-content]")?.focus(), 0);
+  }
   if (route === "settings") {
     loadGovernorSettingsStatus();
     loadWeatherSettings();
@@ -8412,6 +8480,28 @@ document.addEventListener("submit", async (event) => {
     event.preventDefault();
     const formData = new FormData(documentSearchForm);
     await searchDocuments(formData.get("query"));
+    return;
+  }
+
+  const memoForm = event.target.closest("[data-create-memo]");
+  if (memoForm) {
+    event.preventDefault();
+    const formData = new FormData(memoForm);
+    const content = String(formData.get("content") || "");
+    state.memoComposer = { content, saving: true, error: "" };
+    render();
+    try {
+      await createMemo(content);
+      state.memoComposer = { content: "", saving: false, error: "" };
+      window.location.hash = "#/memos";
+    } catch (error) {
+      state.memoComposer = {
+        content,
+        saving: false,
+        error: error.message || "Could not save memo",
+      };
+      render();
+    }
     return;
   }
 

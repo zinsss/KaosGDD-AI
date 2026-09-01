@@ -1633,6 +1633,23 @@ h3 {
   padding: 9px 10px;
 }
 
+.memoComposerPanel .memoComposer {
+  border-bottom: 0;
+}
+
+.memoComposer textarea {
+  min-height: min(44dvh, 360px);
+  line-height: 1.5;
+}
+
+.memoComposer .formNote {
+  margin: 0;
+}
+
+.memoComposer .formNote.isError {
+  color: var(--nord11);
+}
+
 .composer input::placeholder,
 .composer textarea::placeholder {
   color: #7f8b9e;

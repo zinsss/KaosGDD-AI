@@ -10,6 +10,7 @@ window.KAOS_TRANSLATIONS = {
     "route.editEvent": "일정 수정",
     "route.addTask": "할 일 추가",
     "route.editTask": "할 일 수정",
+    "route.addMemo": "메모 추가",
     "route.services": "도구",
     "route.rouny": "로운이",
     "route.memos": "메모",
