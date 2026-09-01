@@ -70,8 +70,8 @@ H4, office-service, and stateful-service cutovers.
   Kaos Memos client now runs locally for the personal route, and Documents is a
   KaosGDD-owned read-only Paperless browser. Normal user UI observation is
   pending before the slice is closed.
-- Phase 8 slice 1 is implemented locally: H3 KaosDiscoord exposes authenticated
-  read-only `/tools/system/status`, and H4 KaosBrain can answer
+- Phase 8 slice 1 is deployed in commit `1f2a5e0`: H3 KaosDiscoord exposes
+  authenticated read-only `/tools/system/status`, and H4 KaosBrain can answer
   `system status` / `시스템 상태 확인` through Brain Guard as the
   `system.status` readonly intent. No restart, deploy, shell, Docker,
   database, or arbitrary admin execution is enabled.
@@ -90,7 +90,7 @@ H4, office-service, and stateful-service cutovers.
 | 5 | Retain brain-only KaosDiscoord; detach workers and notifications | Package, Pushover, digest, and fax/mail worker slices implemented | Pushover and digest observed; fax/mail observation active | In progress |
 | 6 | Retain the personal PWA and add stable iOS integrations | Deep link, compact menu, personal Memos repair, Paperless browser, and Archive Terminal slice implemented | UI slices deployed; Memos/Paperless/Fax authenticated observation active | In progress |
 | 7 | Remove compatibility debt and finish documentation/CI | Not started | Not deployed | Planned |
-| 8 | Add governed Brain system operations | Read-only `system.status` slice implemented and tested | Not deployed | Validated locally |
+| 8 | Add governed Brain system operations | Read-only `system.status` slice implemented and tested | Deployed to H3/H4 2026-09-01 | Production observation |
 
 Status meanings:
 
@@ -1446,8 +1446,9 @@ Exit criteria:
 
 ## Phase 8 — Governed Brain System Operations
 
-Status: planned. The current Brain Guard continues to reject system, shell,
-Docker, database, and restart intents.
+Status: production observation. Read-only `system.status` is deployed on H3/H4;
+Brain Guard continues to reject shell, Docker, database, restart, deployment,
+and arbitrary admin intents.
 
 Objective:
 
@@ -1457,8 +1458,10 @@ Objective:
 Planned implementation:
 
 1. Move read-only system inventory and health aggregation out of KaosDiscoord
-   and behind Governor-owned APIs.
+   and behind Governor-owned APIs. Initial status slice uses the existing
+   KaosDiscoord health provider.
 2. Add read-only `system.status` to Brain Guard and the personal admin PWA.
+   Brain support is deployed; personal admin PWA support remains pending.
 3. Define versioned runbook contracts and dry-run-only restricted host
    executors.
 4. Add one allowlisted non-critical restart with exact confirmation, audit,

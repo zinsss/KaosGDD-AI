@@ -2,7 +2,7 @@
 
 Decision date: 2026-08-30
 
-Status: read-only status slice implemented; execution capabilities are not yet enabled.
+Status: read-only status slice deployed; execution capabilities are not yet enabled.
 
 ## Decision
 
@@ -96,9 +96,9 @@ actor, target versions, and expiry. A model-interpreted `yes` is insufficient.
 The repository already contains read-only maintenance/health probes and a
 KaosDiscoord restart path with an explicit allowlist, dry-run default, timeout,
 and audit state. Brain now exposes the first operator operation:
-`system.status`. It is read-only, goes through the authenticated Governor Brain
-tools API, and renders existing KaosDiscoord health/service state in the H4
-`#brain` path.
+`system.status`. It is read-only, deployed in commit `1f2a5e0`, goes through
+the authenticated Governor Brain tools API, and renders existing KaosDiscoord
+health/service state in the H4 `#brain` path.
 
 Brain Guard still rejects shell, Docker, database, restart, deployment, and
 arbitrary admin intents. That rejection remains in place while the control
