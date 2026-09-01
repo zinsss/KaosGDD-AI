@@ -16,3 +16,11 @@ test("memo composer posts one private content payload through the Governor relay
   assert.match(appSource, /fetch\("\/api\/memos\/api\/v1\/memos"/);
   assert.match(appSource, /JSON\.stringify\(\{ content: normalized, visibility: "PRIVATE" \}\)/);
 });
+
+test("main memos route renders native archive board controls", () => {
+  assert.match(appSource, /data-archive-kind="memos"/);
+  assert.match(appSource, /data-memo-search/);
+  assert.match(appSource, /data-memos-refresh/);
+  assert.match(appSource, /data-memo-open/);
+  assert.match(appSource, /if \(route === "memos" && portalProfile\(\) === "main"\) loadMemos\(\);/);
+});

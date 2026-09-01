@@ -155,6 +155,21 @@ const state = {
     saving: false,
     error: "",
   },
+  memos: {
+    checked: false,
+    loading: false,
+    error: "",
+    query: "",
+    appliedQuery: "",
+    pageSize: 50,
+    resultCount: 0,
+    totalCount: 0,
+    items: [],
+    selected: null,
+    selectedName: "",
+    detailLoading: false,
+    detailError: "",
+  },
   eventPresetDraft: null,
   addMonthExpanded: false,
   taskDueEnabled: false,
@@ -1674,6 +1689,155 @@ async function createMemo(content) {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.error || payload.message || `HTTP ${response.status}`);
   return payload;
+}
+
+function memoNameId(name) {
+  const raw = String(name || "").trim();
+  return raw.startsWith("memos/") ? raw.slice("memos/".length) : raw;
+}
+
+function memoDisplayNumber(memo) {
+  const id = memoNameId(memo?.name);
+  return id || "--";
+}
+
+function memoTitleFromContent(content, fallback = "") {
+  const lines = String(content || "").split(/\r?\n/);
+  const line = lines.find((item) => item.trim()) || "";
+  const stripped = line
+    .replace(/^\s{0,3}#{1,6}\s+/, "")
+    .replace(/^\s*[-*+]\s+/, "")
+    .replace(/^\s*>\s*/, "")
+    .replace(/\s+#\S+\s*$/g, "")
+    .trim();
+  return stripped || fallback || "Untitled memo";
+}
+
+function normalizeMemo(item) {
+  const source = item && typeof item === "object" ? item : {};
+  const name = String(source.name || "");
+  const content = String(source.content || "");
+  const id = memoNameId(name);
+  const rawTags = Array.isArray(source.tags) ? source.tags : [];
+  return {
+    name,
+    id,
+    title: memoTitleFromContent(content, id ? `Memo ${id}` : "Untitled memo"),
+    content,
+    created: String(source.createTime || source.createdTs || source.createdAt || ""),
+    updated: String(source.updateTime || source.updatedTs || source.updatedAt || ""),
+    visibility: String(source.visibility || ""),
+    pinned: Boolean(source.pinned),
+    tags: rawTags.map((tag) => String(tag || "").trim()).filter(Boolean),
+  };
+}
+
+function normalizeMemosPage(payload) {
+  const rawItems = Array.isArray(payload?.memos)
+    ? payload.memos
+    : Array.isArray(payload?.items)
+      ? payload.items
+      : [];
+  const items = rawItems.map(normalizeMemo).filter((memo) => memo.name);
+  const total = Number(payload?.totalSize ?? payload?.totalCount ?? payload?.total ?? items.length);
+  return {
+    items,
+    totalCount: Number.isFinite(total) && total >= 0 ? total : items.length,
+  };
+}
+
+function memoSearchFilter(query) {
+  const terms = String(query || "")
+    .trim()
+    .split(/\s+/)
+    .map((term) => term.trim())
+    .filter(Boolean)
+    .slice(0, 8);
+  return terms.map((term) => `content.contains(${JSON.stringify(term)})`).join(" && ");
+}
+
+async function loadMemos(options = {}) {
+  if (state.memos.loading) return;
+  if (state.memos.checked && !options.force) return;
+  state.memos.loading = true;
+  if (getRoute() === "memos") render();
+  try {
+    const params = new URLSearchParams({
+      pageSize: String(state.memos.pageSize),
+      orderBy: "pinned desc, create_time desc",
+    });
+    const filter = memoSearchFilter(state.memos.appliedQuery);
+    if (filter) params.set("filter", filter);
+    const response = await fetch(`/api/memos/api/v1/memos?${params.toString()}`, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || payload.message || `HTTP ${response.status}`);
+    const page = normalizeMemosPage(payload);
+    state.memos = {
+      ...state.memos,
+      checked: true,
+      loading: false,
+      error: "",
+      items: page.items,
+      resultCount: page.totalCount,
+      totalCount: page.totalCount,
+    };
+  } catch (error) {
+    state.memos = {
+      ...state.memos,
+      checked: true,
+      loading: false,
+      error: error.message || "Memos are unavailable",
+      items: [],
+      selected: null,
+      selectedName: "",
+      detailError: "",
+      detailLoading: false,
+    };
+  }
+  if (getRoute() === "memos") render();
+}
+
+async function refreshMemos() {
+  state.memos.checked = false;
+  state.memos.selected = null;
+  state.memos.selectedName = "";
+  state.memos.detailError = "";
+  await loadMemos({ force: true });
+}
+
+async function searchMemos(query) {
+  state.memos.query = String(query || "").trim();
+  state.memos.appliedQuery = state.memos.query;
+  state.memos.checked = false;
+  state.memos.selected = null;
+  state.memos.selectedName = "";
+  state.memos.detailError = "";
+  render();
+  await loadMemos({ force: true });
+}
+
+async function loadMemoDetail(name) {
+  const normalizedName = String(name || "").trim();
+  if (!normalizedName) return;
+  const selected = state.memos.items.find((memo) => memo.name === normalizedName) || null;
+  state.memos.selectedName = normalizedName;
+  state.memos.detailLoading = false;
+  state.memos.detailError = selected ? "" : "Memo is unavailable";
+  state.memos.selected = selected;
+  if (getRoute() === "memos") render();
+}
+
+function closeMemoDetail() {
+  const selectedName = state.memos.selectedName;
+  state.memos.selectedName = "";
+  state.memos.selected = null;
+  state.memos.detailLoading = false;
+  state.memos.detailError = "";
+  render();
+  if (selectedName) document.querySelector(`[data-memo-open="${cssIdentifier(selectedName)}"]`)?.focus();
 }
 
 async function useSupplyPreset(name) {
@@ -6639,15 +6803,120 @@ function renderLedger() {
 }
 
 function renderMemos() {
+  if (portalProfile() === "family") {
+    return `
+      <section class="memosWorkspace">
+        <iframe
+          class="memosFrame"
+          src="/memos-app/"
+          title="${escapeHtml(uiText("memos.label", "Memos"))}"
+          allow="clipboard-read; clipboard-write"
+          referrerpolicy="strict-origin-when-cross-origin"
+        ></iframe>
+      </section>
+    `;
+  }
+  const memos = state.memos;
+  const rows = memos.items
+    .map((item) => {
+      const date = archiveDateParts(item.updated || item.created);
+      return `
+        <li class="archiveRecord ${String(memos.selectedName) === String(item.name) ? "isSelected" : ""}">
+          <button class="archiveRecordButton" type="button" data-memo-open="${escapeHtml(item.name)}" aria-current="${String(memos.selectedName) === String(item.name) ? "true" : "false"}">
+            <span class="archiveRecordId">#${escapeHtml(memoDisplayNumber(item))}</span>
+            <time class="archiveRecordDate" datetime="${escapeHtml(date.raw)}">${escapeHtml(date.label)}</time>
+            <strong class="archiveRecordTitle">${escapeHtml(item.title)}</strong>
+          </button>
+        </li>
+      `;
+    })
+    .join("");
+  const selected = memos.selected;
+  const hasDetail = memos.detailLoading || memos.detailError || selected;
+  const summary = memos.appliedQuery
+    ? `${memos.resultCount} MATCHES // MEMOS`
+    : `${memos.totalCount} MEMOS`;
+  const detail = memos.detailLoading
+    ? `
+      <section class="archiveDetail" data-memo-detail tabindex="-1" aria-busy="true">
+        <header class="archiveDetailHeader">
+          <div>
+            <p>MEMO DETAIL</p>
+            <h3 id="memoDetailTitle">Loading memo...</h3>
+          </div>
+          <button class="archiveAction" type="button" data-memo-close>BACK</button>
+        </header>
+        <p class="archiveStatusMessage">Reading Memos packet...</p>
+      </section>
+    `
+    : memos.detailError
+      ? `
+        <section class="archiveDetail" data-memo-detail tabindex="-1" aria-labelledby="memoDetailTitle">
+          <header class="archiveDetailHeader">
+            <div>
+              <p>MEMO DETAIL</p>
+              <h3 id="memoDetailTitle">Memo unavailable</h3>
+            </div>
+            <button class="archiveAction" type="button" data-memo-close>BACK</button>
+          </header>
+          <div class="archiveError" role="alert"><p>${escapeHtml(memos.detailError)}</p></div>
+        </section>
+      `
+      : selected
+        ? `
+          <section class="archiveDetail" data-memo-detail tabindex="-1" aria-labelledby="memoDetailTitle">
+            <header class="archiveDetailHeader">
+              <div>
+                <p>MEMO #${escapeHtml(memoDisplayNumber(selected))}</p>
+                <h3 id="memoDetailTitle">${escapeHtml(selected.title)}</h3>
+              </div>
+              <button class="archiveAction" type="button" data-memo-close>BACK</button>
+            </header>
+            <dl class="archiveMetadata">
+              ${archiveMeta("Updated", selected.updated ? formatDocumentDate(selected.updated) : "")}
+              ${archiveMeta("Created", selected.created ? formatDocumentDate(selected.created) : "")}
+            </dl>
+            <div class="archiveOcrRegion" role="region" aria-label="Memo content" tabindex="0">
+              <p>MEMO TEXT</p>
+              <pre>${escapeHtml(selected.content || "No memo content.")}</pre>
+            </div>
+          </section>
+        `
+        : "";
   return `
-    <section class="memosWorkspace">
-      <iframe
-        class="memosFrame"
-        src="/memos-app/"
-        title="${escapeHtml(uiText("memos.label", "Memos"))}"
-        allow="clipboard-read; clipboard-write"
-        referrerpolicy="strict-origin-when-cross-origin"
-      ></iframe>
+    <section class="archiveTerminal" data-archive-kind="memos" aria-label="Memo archive">
+      <form class="archiveCommand archiveSearchBar" data-memo-search role="search">
+        <label class="archiveSearchBox" for="memoQuery">
+          <span class="archiveSearchIcon" aria-hidden="true">⌕</span>
+          <input id="memoQuery" name="query" type="search" value="${escapeHtml(memos.query)}" placeholder="Search memos" autocomplete="off" />
+          ${memos.appliedQuery ? `<button class="archiveSearchClear" type="button" data-memos-clear aria-label="Clear memo search">×</button>` : ""}
+        </label>
+        <button class="archiveAction archiveTopAction" type="button" data-memos-refresh aria-label="Refresh memos" title="Refresh memos" ${memos.loading ? "disabled" : ""}>↻</button>
+        <button class="srOnly" type="submit">Search</button>
+      </form>
+      <div class="archiveWorkspace ${hasDetail ? "hasDetail" : ""}">
+        <section class="archiveIndex" aria-labelledby="memosIndexTitle" aria-busy="${memos.loading}">
+          <header class="archiveIndexHeader">
+            <h3 id="memosIndexTitle">RECORD BOARD</h3>
+            <p class="archiveStatusMessage" role="status" aria-live="polite">${memos.checked && !memos.error ? escapeHtml(summary) : memos.loading ? "LOADING MEMO BOARD" : "MEMO BOARD STANDBY"}</p>
+          </header>
+          <div class="archiveColumnHeader" aria-hidden="true">
+            <span>NO.</span><span>DATE</span><span>TITLE</span>
+          </div>
+          ${
+            memos.error
+              ? `<div class="archiveError" role="alert"><p>${escapeHtml(memos.error)}</p><button class="archiveAction" type="button" data-memos-refresh>RETRY</button></div>`
+              : memos.loading && !memos.checked
+                ? `<p class="archiveStatusMessage">Reading Memos archive...</p>`
+                : !memos.error && memos.checked && !rows
+                  ? `<p class="archiveStatusMessage">No matching memos.</p>`
+                  : rows
+                    ? `<ol class="archiveRecordList">${rows}</ol>`
+                    : ""
+          }
+        </section>
+        ${detail}
+      </div>
     </section>
   `;
 }
@@ -7531,6 +7800,7 @@ function render() {
   }
   if (route === "caregiver" || (route === "calendar" && portalProfile() === "family")) loadCaregiverMonth();
   if (route === "supplies") loadSupplies();
+  if (route === "memos" && portalProfile() === "main") loadMemos();
   if (route === "documents" && state.documents.mode !== "inbox") loadDocuments();
   if (route === "fax") loadFax();
   if (route === "ledger") loadLedger();
@@ -7738,6 +8008,29 @@ document.addEventListener("click", async (event) => {
 
   if (event.target.closest("[data-documents-clear]")) {
     await searchDocuments("");
+    return;
+  }
+
+  if (event.target.closest("[data-memos-refresh]")) {
+    await refreshMemos();
+    return;
+  }
+
+  const openMemo = event.target.closest("[data-memo-open]");
+  if (openMemo) {
+    await loadMemoDetail(openMemo.dataset.memoOpen || "");
+    document.querySelector("[data-memo-detail]")?.focus();
+    document.getElementById("view")?.scrollTo({ top: 0, behavior: "smooth" });
+    return;
+  }
+
+  if (event.target.closest("[data-memo-close]")) {
+    closeMemoDetail();
+    return;
+  }
+
+  if (event.target.closest("[data-memos-clear]")) {
+    await searchMemos("");
     return;
   }
 
@@ -8528,6 +8821,14 @@ document.addEventListener("submit", async (event) => {
     return;
   }
 
+  const memoSearchForm = event.target.closest("[data-memo-search]");
+  if (memoSearchForm) {
+    event.preventDefault();
+    const formData = new FormData(memoSearchForm);
+    await searchMemos(formData.get("query"));
+    return;
+  }
+
   const memoForm = event.target.closest("[data-create-memo]");
   if (memoForm) {
     event.preventDefault();
@@ -8538,6 +8839,7 @@ document.addEventListener("submit", async (event) => {
     try {
       await createMemo(content);
       state.memoComposer = { content: "", saving: false, error: "" };
+      state.memos.checked = false;
       window.location.hash = "#/memos";
     } catch (error) {
       state.memoComposer = {

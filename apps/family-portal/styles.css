@@ -4483,12 +4483,14 @@ h3 {
 
 .app[data-profile="main"][data-route="memos"] .view {
   display: grid;
-  grid-template-rows: minmax(0, 1fr);
+  align-content: start;
+  grid-template-rows: auto;
   width: auto;
   max-width: 100%;
   margin-left: 0;
   padding: 14px 0 var(--page-bottom-reserve);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .app[data-profile="main"][data-route="memos"] .memosWorkspace {
@@ -4502,6 +4504,10 @@ h3 {
 
 .app[data-profile="main"][data-route="memos"] .memosFrame {
   background: transparent;
+}
+
+.app[data-profile="main"] [data-archive-kind="memos"] .archiveRecord {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .app[data-profile="family"] {
@@ -6407,6 +6413,11 @@ h3 {
     color: var(--archive-cyan);
     font-size: 0.68rem;
     font-weight: 850;
+  }
+
+  .app[data-profile="main"] [data-archive-kind="memos"] .archiveColumnHeader {
+    grid-template-columns: 8ch 13ch minmax(0, 1fr);
+    padding-right: 10px;
   }
 
   .app[data-profile="main"] .archiveRecordButton {
