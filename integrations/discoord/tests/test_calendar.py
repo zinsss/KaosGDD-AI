@@ -283,6 +283,7 @@ class DiscordCalendarTests(unittest.IsolatedAsyncioTestCase):
             state_path = Path(temporary) / "calendar.json"
             channel = FakeChannel()
             surface = self.make_surface(state_path, channel)
+            surface.state = DiscordCalendarState(CalendarViewState(2026, 8), month_message_id=0, agenda_message_id=0)
 
             await surface.ensure_messages(today=date(2026, 8, 13))
 

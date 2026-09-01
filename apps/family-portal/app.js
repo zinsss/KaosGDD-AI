@@ -211,6 +211,12 @@ const state = {
     error: "",
     data: null,
   },
+  systemStatus: {
+    checked: false,
+    loading: false,
+    error: "",
+    data: null,
+  },
   weatherLocationPopup: {
     open: false,
     mode: "locations",
@@ -3530,6 +3536,32 @@ async function loadGovernorSettingsStatus({ force = false } = {}) {
   if (getRoute() === "settings") render();
 }
 
+async function loadSystemStatus({ force = false } = {}) {
+  if (portalProfile() !== "main") return;
+  if (state.systemStatus.loading) return;
+  if (state.systemStatus.checked && !force) return;
+  state.systemStatus.loading = true;
+  try {
+    const response = await fetch("/api/system/status", { headers: { Accept: "application/json" } });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    state.systemStatus = {
+      checked: true,
+      loading: false,
+      error: "",
+      data: payload,
+    };
+  } catch (error) {
+    state.systemStatus = {
+      ...state.systemStatus,
+      checked: true,
+      loading: false,
+      error: error.message || "System status is unavailable",
+    };
+  }
+  if (getRoute() === "settings") render();
+}
+
 function interpolateText(template, params = {}) {
   return String(template).replace(/\{(\w+)\}/g, (match, key) => (params[key] === undefined ? match : String(params[key])));
 }
@@ -3568,6 +3600,7 @@ function activeNavRoute(route) {
 
 function topAddActionForRoute(route) {
   const selectedRoute = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(activeNavRoute(route)) || "today";
+  if (selectedRoute === "settings") return "";
   if (selectedRoute === "today" || selectedRoute === "calendar") return "event";
   if (selectedRoute === "tasks") return "task";
   if (selectedRoute === "supplies") return "supply";
@@ -3624,10 +3657,16 @@ function renderTopNav(route) {
             <option value="${escapeHtml(item.route)}" ${item.route === selectedRoute ? "selected" : ""}>${escapeHtml(item.label)}</option>
           `).join("")}
         </select>
-        <div class="topAddWrap">
-          <button class="topAddButton" type="button" data-top-add="${escapeHtml(topAction)}" aria-label="Add" aria-haspopup="menu" aria-expanded="false">+</button>
-          ${renderTopAddMenu(route)}
-        </div>
+        ${
+          topAction
+            ? `
+              <div class="topAddWrap">
+                <button class="topAddButton" type="button" data-top-add="${escapeHtml(topAction)}" aria-label="Add" aria-haspopup="menu" aria-expanded="false">+</button>
+                ${renderTopAddMenu(route)}
+              </div>
+            `
+            : ""
+        }
       </div>
     `;
     return;
@@ -7639,6 +7678,167 @@ function renderGeneratedCalendarPolicyStatus() {
   `;
 }
 
+function statusReadyLabel(value) {
+  if (value === true) return "READY";
+  if (value === false) return "DOWN";
+  return "UNKNOWN";
+}
+
+function statusEnabledLabel(value) {
+  if (value === true) return "ENABLED";
+  if (value === false) return "DISABLED";
+  return "UNKNOWN";
+}
+
+function statusTimestampLabel(value) {
+  if (!value) return "not checked";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 19);
+  return date.toLocaleString("ko-KR", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function serviceStatusSummary(serviceStatus) {
+  const checks = serviceStatus?.checks && typeof serviceStatus.checks === "object" ? serviceStatus.checks : {};
+  const values = Object.values(checks).filter((item) => item && typeof item === "object");
+  const counts = values.reduce((acc, item) => {
+    const status = String(item.state || "unknown").toLowerCase();
+    acc[status] = (acc[status] || 0) + 1;
+    return acc;
+  }, {});
+  if (!values.length) return statusEnabledLabel(serviceStatus?.enabled);
+  return [
+    `OK ${counts.healthy || 0}`,
+    counts.down ? `DOWN ${counts.down}` : "",
+    counts.unknown ? `UNKNOWN ${counts.unknown}` : "",
+    counts.planned ? `PLANNED ${counts.planned}` : "",
+  ].filter(Boolean).join(" · ");
+}
+
+function renderSystemServiceRows(serviceStatus) {
+  const checks = serviceStatus?.checks && typeof serviceStatus.checks === "object" ? serviceStatus.checks : {};
+  const rows = Object.entries(checks).sort(([left], [right]) => left.localeCompare(right));
+  if (!rows.length) {
+    return `<p class="taskMeta">No live service check rows yet.</p>`;
+  }
+  return `
+    <div class="systemServiceList">
+      ${rows.map(([key, raw]) => {
+        const item = raw && typeof raw === "object" ? raw : {};
+        const state = String(item.state || "unknown").toLowerCase();
+        const detail = String(item.detail || "").trim();
+        return `
+          <article class="systemServiceRow" data-system-service="${escapeHtml(key)}">
+            <span>${escapeHtml(key)}</span>
+            <strong class="systemState systemState-${escapeHtml(state)}">${escapeHtml(state.toUpperCase())}</strong>
+            ${detail ? `<small>${escapeHtml(detail.slice(0, 120))}</small>` : ""}
+          </article>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function runtimeStatusLine(label, raw) {
+  if (!raw || typeof raw !== "object") return "";
+  const parts = [];
+  if (typeof raw.enabled === "boolean") parts.push(statusEnabledLabel(raw.enabled));
+  for (const [key, prefix] of [
+    ["lastScanAt", "scan"],
+    ["lastCheckAt", "check"],
+    ["lastArchiveAt", "archive"],
+    ["lastDigestAt", "digest"],
+    ["lastSentAt", "sent"],
+    ["lastError", "error"],
+  ]) {
+    const value = String(raw[key] || "").trim();
+    if (value) parts.push(`${prefix} ${value.slice(0, 19)}`);
+  }
+  if (!parts.length) return "";
+  return `
+    <article class="systemRuntimeRow">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(parts.join(" · "))}</strong>
+    </article>
+  `;
+}
+
+function renderSystemStatusPanel() {
+  if (portalProfile() !== "main") return "";
+  const status = state.systemStatus;
+  if (!status.checked || (status.loading && !status.checked)) {
+    return `<section class="settingsStatusPanel systemStatusPanel"><div class="settingsPolicyNote"><strong>System</strong><span>Loading read-only system status...</span></div></section>`;
+  }
+  if (status.error) {
+    return `
+      <section class="settingsStatusPanel systemStatusPanel">
+        <div class="caregiverError">
+          <span>${escapeHtml(status.error)}</span>
+          <button class="openButton" type="button" data-system-status-retry>${uiText("common.retry", "다시 시도")}</button>
+        </div>
+      </section>
+    `;
+  }
+  const data = status.data || {};
+  const runtime = data.status || {};
+  const brainTools = runtime.brainTools || {};
+  const serviceStatus = runtime.serviceStatus || {};
+  const brainUrl = String(data.brainChannelUrl || "").trim();
+  return `
+    <section class="settingsStatusPanel systemStatusPanel" data-system-status>
+      <div class="settingsStatusHeader">
+        <strong>System Status</strong>
+        <small>READ ONLY // ${escapeHtml(statusTimestampLabel(data.updatedAt))}</small>
+      </div>
+      <div class="settingsActionRow">
+        <button class="openButton" type="button" data-system-status-retry>${status.loading ? "..." : "↻"}</button>
+        ${
+          brainUrl
+            ? `<a class="openButton" href="${escapeHtml(brainUrl)}" target="_blank" rel="noopener noreferrer" data-brain-channel-link>#brain</a>`
+            : `<span class="settingsInlineLink isDisabled" data-brain-channel-missing>#brain link not configured</span>`
+        }
+      </div>
+      <div class="settingsStatusGrid">
+        <div>
+          <span>KaosDiscoord</span>
+          <strong>${escapeHtml(String(runtime.version || "unknown"))}</strong>
+        </div>
+        <div>
+          <span>Discord</span>
+          <strong>${escapeHtml(statusReadyLabel(runtime.discordReady))}</strong>
+        </div>
+        <div>
+          <span>Startup</span>
+          <strong>${escapeHtml(statusReadyLabel(runtime.startupComplete))}</strong>
+        </div>
+        <div>
+          <span>Brain tools</span>
+          <strong>${escapeHtml(statusEnabledLabel(brainTools.enabled))}</strong>
+        </div>
+        <div>
+          <span>Services</span>
+          <strong>${escapeHtml(serviceStatusSummary(serviceStatus))}</strong>
+        </div>
+      </div>
+      ${renderSystemServiceRows(serviceStatus)}
+      <div class="systemRuntimeList">
+        ${[
+          runtimeStatusLine("Mail", runtime.naverMail),
+          runtimeStatusLine("Mail organizer", runtime.naverMailOrganizer),
+          runtimeStatusLine("Fax", runtime.fax),
+          runtimeStatusLine("Pushover", runtime.textNotifications),
+          runtimeStatusLine("Daily digest", runtime.dailyDigest),
+        ].filter(Boolean).join("")}
+      </div>
+      <p class="formNote">Observation only. No restart, deploy, reboot, shell, package-update, or system write controls are exposed in PWA.</p>
+    </section>
+  `;
+}
+
 function renderSettings() {
   ensureEventPresets();
   const config = profileConfig();
@@ -7723,6 +7923,7 @@ function renderSettings() {
               `
           }
         </dl>
+        ${portalProfile() === "main" ? renderSystemStatusPanel() : ""}
         ${renderGovernorSettingsStatus()}
         ${renderHolidaySettings()}
         ${portalProfile() === "main" ? renderMailOrganizerSettings() : ""}
@@ -8342,6 +8543,7 @@ function render() {
     window.setTimeout(() => document.querySelector('[data-upload-document] input[type="file"]')?.focus(), 0);
   }
   if (route === "settings") {
+    loadSystemStatus();
     loadGovernorSettingsStatus();
     loadWeatherSettings();
     loadHolidays();
@@ -8910,6 +9112,13 @@ document.addEventListener("click", async (event) => {
     state.governorSettings.checked = false;
     state.governorSettings.error = "";
     loadGovernorSettingsStatus({ force: true });
+    return;
+  }
+
+  if (event.target.closest("[data-system-status-retry]")) {
+    state.systemStatus.checked = false;
+    state.systemStatus.error = "";
+    loadSystemStatus({ force: true });
     return;
   }
 

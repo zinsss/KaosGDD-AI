@@ -74,8 +74,11 @@ H4, office-service, and stateful-service cutovers.
   authenticated read-only `/tools/system/status`, and H4 KaosBrain can answer
   `system status` / `시스템 상태 확인` through Brain Guard as the
   `system.status` readonly intent. The live Discord `#brain` response was
-  confirmed on 2026-09-01. No restart, deploy, shell, Docker, database, or
-  arbitrary admin execution is enabled.
+  confirmed on 2026-09-01.
+- Phase 8 slice 2 is locally validated: the personal PWA Settings page exposes
+  the same read-only system status through Governor, with a navigation-only
+  `#brain` link and no restart, deploy, shell, Docker, database, or arbitrary
+  admin execution controls.
 - Database schema in production: additive migration `005`.
 - Working rule: finish and verify one boundary before moving another domain.
 
@@ -1620,6 +1623,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-09-01 | 6 | Added read-only personal PWA Unread Mail tab | Commit `5e7f67e`; added protected Governor `GET /api/mail/unread`, `GET /api/mail/unread/messages/{uid}`, and `GET /api/mail/unread/messages/{uid}/attachments/{index}` using the organizer read-only `UNSEEN` scan across incoming folders; the PWA `UNREAD` tab loads on demand next to `ALL` and shares the existing detail/attachment viewer; versioned `mail.js?v=5` and `app.js?v=253`; 23 frontend tests, 27 focused mail tests, and 291 Governor tests pass; live smoke returned 18 unread across 3 mailboxes without printing mail content | Deployed to H3; rollback image `kaosgdd-ai-governor-api:rollback-pre-mail-unread-tab-20260901` retained; batch mark-read/delete remains a future governed mutation slice; H4 synced to tracker commit `6c5be64` and Brain doctor passes |
 | 2026-09-01 | 6 | Added personal PWA unread mail batch actions | Commit `0a16440`; removed counts from Mail tab labels, added per-unread-row mutually exclusive `READ`/`DEL` checkboxes with `READ` as the default, and added a bottom `APPLY` action; protected Governor `POST /api/mail/unread/actions` validates mailbox, UID, UIDVALIDITY, duplicate row conflicts, and action before setting `\Seen` or moving selected mail to Naver Trash; deletion gets explicit browser confirmation; versioned `styles.css?v=270` and `app.js?v=254`; 23 frontend tests, 32 focused mail tests, and 296 Governor tests pass; H3 smoke verified health, static sync, unauthenticated 401, and 18 unread rows without performing a live mutation | Deployed to H3; rollback image `kaosgdd-ai-governor-api:rollback-pre-mail-unread-actions-20260901` retained; H4 synced to tracker commit `6e0459f` and Brain doctor passes |
 | 2026-09-01 | 6 | Simplified Mail and Fax tab labels | Commit `8cac387`; Mail tabs are now only `UNREAD`, `영덕군보건소`, and `세무사`, with Mail defaulting to `UNREAD` and folder tabs lazy-loading the scoped board; Fax tabs keep their existing `ALL`, `RECEIVED`, `SENT`, and `FAILED` modes but no longer show counts in the tab labels; versioned `mail.js?v=6` and `app.js?v=255`; 23 frontend tests pass; served files are byte-synced | H3 static portal promoted; H4 synced and KaosBrain doctor passes |
+| 2026-09-01 | 8 | Added read-only personal PWA System status panel | The Settings route now fetches protected `GET /api/system/status` through Governor, displays KaosDiscoord/service/runtime status, offers a navigation-only `#brain` link when configured, and hides the shell `+` on Settings so system writes are not exposed in PWA; versioned `styles.css?v=271` and `app.js?v=256`; 27 frontend tests and 369 containerized Governor/Discoord/Brain tests pass | Deployment pending; expected production impact is read-only visibility only |
 
 ## How to Update This Tracker
 

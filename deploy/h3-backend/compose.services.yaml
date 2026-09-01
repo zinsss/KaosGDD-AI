@@ -191,9 +191,16 @@ services:
       MAIL_NAVER_STATE_PATH: "/data/mail/naver-discord.json"
       MAIL_NAVER_TIMEOUT_SECONDS: "${MAIL_NAVER_TIMEOUT_SECONDS:-20}"
       MAIL_NAVER_PREVIEW_CHARS: "${MAIL_NAVER_PREVIEW_CHARS:-2200}"
+      GOVERNOR_API_TOKEN_FILE: "/run/secrets/governor_api_token"
+      SYSTEM_STATUS_TOOLS_BASE_URL: "${SYSTEM_STATUS_TOOLS_BASE_URL:-http://governor-discord:8098}"
+      SYSTEM_STATUS_TIMEOUT_SECONDS: "${SYSTEM_STATUS_TIMEOUT_SECONDS:-5}"
+      DISCORD_GUILD_ID: "${DISCORD_GUILD_ID:-}"
+      DISCORD_BRAIN_CHANNEL_ID: "${DISCORD_BRAIN_CHANNEL_ID:-}"
+      DISCORD_BRAIN_CHANNEL_URL: "${DISCORD_BRAIN_CHANNEL_URL:-}"
     secrets:
       - paperless_api_token
       - naver_mail_password
+      - governor_api_token
     group_add:
       - "${KAOS_HOST_GID:-1000}"
     ports:

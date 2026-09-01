@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import replace
@@ -37,12 +38,21 @@ MAX_REQUEST_BYTES = 500_000
 MAX_MULTIPART_OVERHEAD_BYTES = 256_000
 CALENDAR_ADAPTER_INTERNAL_URL = os.environ.get("CALENDAR_ADAPTER_INTERNAL_URL", "http://calendar-adapter:8091").rstrip("/")
 CALENDAR_ADAPTER_TIMEOUT_SECONDS = float(os.environ.get("CALENDAR_ADAPTER_TIMEOUT_SECONDS", "20"))
+SYSTEM_STATUS_TOOLS_BASE_URL = os.environ.get("SYSTEM_STATUS_TOOLS_BASE_URL", "http://governor-discord:8098").rstrip("/")
+SYSTEM_STATUS_TIMEOUT_SECONDS = float(os.environ.get("SYSTEM_STATUS_TIMEOUT_SECONDS", "5"))
 WEATHER_LOCATIONS = {
     "pohang": "포항",
     "daegu": "대구",
     "yeongcheon": "영천",
     "yeonghae": "영해",
 }
+
+
+class SystemStatusError(RuntimeError):
+    def __init__(self, code: str, status: int = 503) -> None:
+        super().__init__(code)
+        self.code = code
+        self.status = status
 
 
 def json_response(handler: BaseHTTPRequestHandler, status: int, payload: dict[str, object]) -> None:
@@ -132,6 +142,74 @@ def request_actor(headers) -> str:
         or headers.get("X-Forwarded-Email")
         or "family"
     )
+
+
+def secret_value(name: str, *, default_file: str = "") -> str:
+    value = os.environ.get(name, "").strip()
+    if value:
+        return value
+    path = os.environ.get(f"{name}_FILE", "").strip() or default_file
+    if not path:
+        return ""
+    try:
+        return Path(path).read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def discord_brain_channel_url() -> str:
+    configured = os.environ.get("DISCORD_BRAIN_CHANNEL_URL", "").strip()
+    if configured.startswith(("https://discord.com/channels/", "discord://")):
+        return configured
+    guild_id = os.environ.get("DISCORD_GUILD_ID", "").strip()
+    channel_id = os.environ.get("DISCORD_BRAIN_CHANNEL_ID", "").strip()
+    if guild_id.isdigit() and channel_id.isdigit():
+        return f"https://discord.com/channels/{guild_id}/{channel_id}"
+    return ""
+
+
+def system_status_payload(profile: str, urlopen=urllib.request.urlopen) -> dict[str, object]:
+    if profile != "main":
+        raise SystemStatusError("main_profile_required", 404)
+    token = secret_value("GOVERNOR_API_TOKEN", default_file="/run/secrets/governor_api_token")
+    if not token:
+        raise SystemStatusError("system_status_token_missing", 503)
+    query = urllib.parse.urlencode({"profile": "main"})
+    request = urllib.request.Request(
+        f"{SYSTEM_STATUS_TOOLS_BASE_URL}/tools/system/status?{query}",
+        headers={
+            "Accept": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+    )
+    try:
+        with urlopen(request, timeout=SYSTEM_STATUS_TIMEOUT_SECONDS) as response:
+            raw = response.read()
+    except urllib.error.HTTPError as exc:
+        try:
+            payload = json.loads(exc.read().decode("utf-8"))
+            code = str(payload.get("error") or f"system_status_http_{exc.code}")
+        except Exception:
+            code = f"system_status_http_{exc.code}"
+        raise SystemStatusError(code, 502) from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise SystemStatusError("system_status_unreachable", 503) from exc
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise SystemStatusError("system_status_invalid_json", 502) from exc
+    if not isinstance(payload, dict) or not isinstance(payload.get("status"), dict):
+        raise SystemStatusError("system_status_invalid_payload", 502)
+    return {
+        "ok": True,
+        "profile": "main",
+        "updatedAt": _utc_now_iso(),
+        "source": str(payload.get("source") or "governor-runtime-health"),
+        "date": str(payload.get("date") or ""),
+        "status": dict(payload["status"]),
+        "brainChannelUrl": discord_brain_channel_url(),
+        "readOnly": True,
+    }
 
 
 def request_body(handler: BaseHTTPRequestHandler) -> bytes:
@@ -1441,6 +1519,22 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 print(f"Settings status read failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "settings_status_unavailable"})
+            return
+        if parsed.path == "/api/system/status":
+            try:
+                require_main_access(self.headers)
+                json_response(self, 200, system_status_payload(profile_from_headers(self.headers)))
+            except (ValueError, SystemStatusError, memos_relay.MemosRelayError) as exc:
+                if isinstance(exc, SystemStatusError):
+                    json_response(self, exc.status, {"ok": False, "error": exc.code})
+                elif isinstance(exc, memos_relay.MemosRelayError):
+                    json_response(self, exc.status, {"ok": False, "error": exc.code})
+                else:
+                    status = 404 if str(exc) == "main_profile_required" else 400
+                    json_response(self, status, {"ok": False, "error": str(exc)})
+            except Exception as exc:
+                print(f"System status read failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "system_status_unavailable"})
             return
         json_response(self, 404, {"error": "not_found"})
 

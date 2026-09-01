@@ -164,6 +164,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
         **kwargs,
     ) -> DiscordTasksSurface:
         channel = channel or FakeChannel()
+        kwargs.setdefault("today_provider", lambda: date(2026, 8, 15))
         surface = DiscordTasksSurface(
             FakeBot(channel),  # type: ignore[arg-type]
             AccessPolicy(100, frozenset({200}), frozenset({300})),
@@ -361,6 +362,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
                 button_prefix="supplies",
                 collection_id="zin:supplies",
                 show_due=False,
+                today_provider=lambda: date(2026, 8, 15),
             )
             surface.message_refresh_delay_seconds = 0
 
@@ -506,6 +508,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
                 button_prefix="supplies",
                 collection_id="zin:supplies",
                 show_due=False,
+                today_provider=lambda: date(2026, 8, 15),
             )
             surface.message_refresh_delay_seconds = 0
             message = SimpleNamespace(
@@ -556,6 +559,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
                 button_prefix="supplies",
                 collection_id="zin:supplies",
                 show_due=False,
+                today_provider=lambda: date(2026, 8, 15),
             )
             surface.message_refresh_delay_seconds = 0
 
@@ -794,6 +798,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
                 profile="main",
                 state_path=Path(temporary) / "tasks.json",
                 adapter=FakeAdapter(),  # type: ignore[arg-type]
+                today_provider=lambda: date(2026, 8, 15),
             )
             surface.message_refresh_delay_seconds = 0
             await surface.ensure_message()
@@ -1146,6 +1151,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
                 button_prefix="supplies",
                 collection_id="zin:supplies",
                 show_due=False,
+                today_provider=lambda: date(2026, 8, 15),
             )
 
             self.assertEqual(await surface.notify_due_tasks(now=datetime(2026, 8, 13, 13, 44)), 0)
@@ -1373,6 +1379,7 @@ class DiscordTasksTests(unittest.IsolatedAsyncioTestCase):
                 button_prefix="supplies",
                 collection_id="zin:supplies",
                 show_due=False,
+                today_provider=lambda: date(2026, 8, 15),
             )
             surface.message_refresh_delay_seconds = 0
 

@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 import re
 import secrets
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 import discord
 from kaos_governor import Actor, GovernorOperations
@@ -72,6 +72,7 @@ class DiscordTasksSurface:
         repeat_interval_minutes: int = 30,
         operations: GovernorOperations | None = None,
         task_mutations: TaskMutationService | None = None,
+        today_provider: Callable[[], date] = date.today,
     ) -> None:
         self.bot = bot
         self.policy = policy
@@ -88,6 +89,7 @@ class DiscordTasksSurface:
         self.repeat_interval_minutes = repeat_interval_minutes
         self.operations = operations or GovernorOperations()
         self.task_mutations = task_mutations or TaskMutationService(adapter)
+        self.today_provider = today_provider
         self.message_refresh_delay_seconds = MESSAGE_REFRESH_DELAY_SECONDS
         self.state = self._load_state()
         self._tasks_by_key: dict[str, dict[str, Any]] = {}
@@ -534,8 +536,9 @@ class DiscordTasksSurface:
         channel: discord.abc.Messageable,
         tasks: list[Mapping[str, Any]],
     ) -> discord.Message:
-        content = render_completed_archive_message(tasks, collection_id=self.collection_id)
-        completed = completed_tasks_for_month(tasks, collection_id=self.collection_id)
+        current = self.today_provider()
+        content = render_completed_archive_message(tasks, collection_id=self.collection_id, month=current)
+        completed = completed_tasks_for_month(tasks, collection_id=self.collection_id, month=current)
         view = CompletedTasksView(self, completed) if completed else None
         message_id = self.state.completed_archive_message_id
         if message_id and hasattr(channel, "fetch_message"):

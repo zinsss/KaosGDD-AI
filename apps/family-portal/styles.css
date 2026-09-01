@@ -3318,6 +3318,80 @@ h3 {
   text-decoration: none;
 }
 
+.settingsInlineLink.isDisabled {
+  align-self: center;
+  color: var(--dim);
+  font-size: 0.76rem;
+  opacity: 0.62;
+}
+
+.systemStatusPanel .settingsActionRow {
+  justify-content: flex-start;
+}
+
+.systemServiceList,
+.systemRuntimeList {
+  display: grid;
+  gap: 1px;
+  border: 1px solid var(--line);
+  background: var(--line);
+}
+
+.systemRuntimeList:empty {
+  display: none;
+}
+
+.systemServiceRow,
+.systemRuntimeRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 9px 10px;
+  background: var(--panel);
+}
+
+.systemServiceRow small {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: var(--dim);
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.systemServiceRow span,
+.systemRuntimeRow span {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.systemRuntimeRow strong,
+.systemState {
+  color: var(--nord8);
+  font-size: 0.72rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.systemState-healthy {
+  color: var(--nord14);
+}
+
+.systemState-down {
+  color: var(--nord11);
+}
+
+.systemState-planned,
+.systemState-unknown {
+  color: var(--nord13);
+}
+
 .mailOrganizerForm {
   display: grid;
   gap: 10px;
