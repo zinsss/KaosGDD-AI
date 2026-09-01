@@ -12,6 +12,13 @@ Last updated: 2026-09-01
 - No read/write system executor is enabled.
 - Brain Guard still blocks shell, Docker, database, restart, deploy, reboot,
   and arbitrary admin intents.
+- Phase 2 runbook planning is committed in the repository under `runbooks/`.
+  The JSON Schema forces dry-run-only mode and disables production writes.
+- Five version 1 catalog entries cover `system.status`, `system.git_status`,
+  `system.disk_status`, bounded `system.logs_tail`, and a dry-run-only
+  `service.restart` plan for `kaos-governor-worker` on H3.
+- No executor, trusted command mapping, API wiring, host access, confirmation
+  endpoint, or production deployment was added.
 
 ## Current Production Baseline
 
@@ -31,8 +38,13 @@ Last updated: 2026-09-01
    ```
 
 2. Add read-only system status to the personal KaosGDD PWA Settings/Admin page.
-3. Create repo-controlled runbook schema before enabling any write operation.
-4. Add dry-run executor before any real restart/reboot/update/deploy action.
+3. Review the version 1 runbook contract and target allowlists before adding
+   any executor code.
+4. In a separate phase, design and test a restricted dry-run executor that
+   consumes only validated catalog entries; keep production writes disabled.
+5. Do not enable `service.restart` until Governor authorization, normalized
+   expiring confirmation, audit, verification, and failure handling are
+   implemented and separately approved.
 
 ## Active Constraints
 

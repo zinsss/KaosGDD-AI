@@ -1,0 +1,29 @@
+{
+  "contractVersion": "1.0",
+  "runbookVersion": 1,
+  "operation": "system.logs_tail",
+  "description": "Plan a bounded read-only log tail for the H3 Governor worker.",
+  "safety": { "executionMode": "dry-run-only", "productionWritesEnabled": false },
+  "host": { "id": "kaosgdd", "role": "H3" },
+  "target": { "kind": "service", "id": "kaos-governor-worker" },
+  "action": { "kind": "observe", "summary": "Observe a bounded recent log excerpt", "wouldMutateSystem": false },
+  "parameters": {
+    "allowed": [
+      { "name": "lineCount", "type": "integer", "required": false, "description": "Maximum recent log lines to return.", "minimum": 1, "maximum": 200, "default": 100 }
+    ]
+  },
+  "preflight": {
+    "checks": ["Actor is authorized for H3 bounded log observations", "Target service is allowlisted", "Requested line count is within the declared bound"],
+    "failurePolicy": "stop"
+  },
+  "confirmation": { "required": false, "bindingFields": [] },
+  "verification": {
+    "checks": ["Result contains no more than the requested bounded line count", "Result is marked as untrusted operational data", "No follow or unbounded stream remains open"],
+    "successPolicy": "all"
+  },
+  "rollback": { "available": false, "note": "Read-only bounded log observation has no state to roll back." },
+  "operationLog": {
+    "required": true,
+    "fields": ["timestamp", "actor", "operationId", "operation", "host", "target", "mode", "result", "evidence"]
+  }
+}

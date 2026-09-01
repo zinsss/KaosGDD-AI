@@ -1,0 +1,25 @@
+{
+  "contractVersion": "1.0",
+  "runbookVersion": 1,
+  "operation": "system.status",
+  "description": "Plan a read-only summary of allowlisted H3 service health.",
+  "safety": { "executionMode": "dry-run-only", "productionWritesEnabled": false },
+  "host": { "id": "kaosgdd", "role": "H3" },
+  "target": { "kind": "host", "id": "kaosgdd" },
+  "action": { "kind": "observe", "summary": "Observe aggregate service health", "wouldMutateSystem": false },
+  "parameters": { "allowed": [] },
+  "preflight": {
+    "checks": ["Actor is authorized for H3 read-only system observations", "Health provider is available without privileged host access"],
+    "failurePolicy": "stop"
+  },
+  "confirmation": { "required": false, "bindingFields": [] },
+  "verification": {
+    "checks": ["Result identifies observation time and each reported service", "No state-changing operation is requested or reported"],
+    "successPolicy": "all"
+  },
+  "rollback": { "available": false, "note": "Read-only observation has no system state to roll back." },
+  "operationLog": {
+    "required": true,
+    "fields": ["timestamp", "actor", "operationId", "operation", "host", "target", "mode", "result", "evidence"]
+  }
+}

@@ -1,0 +1,263 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kaosgdd.net/schemas/operator-runbook-v1.json",
+  "title": "KaosSystemOperator dry-run runbook",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "runbookVersion",
+    "operation",
+    "description",
+    "safety",
+    "host",
+    "target",
+    "action",
+    "parameters",
+    "preflight",
+    "confirmation",
+    "verification",
+    "rollback",
+    "operationLog"
+  ],
+  "properties": {
+    "contractVersion": { "const": "1.0" },
+    "runbookVersion": { "type": "integer", "const": 1 },
+    "operation": {
+      "type": "string",
+      "enum": [
+        "system.status",
+        "system.git_status",
+        "system.disk_status",
+        "system.logs_tail",
+        "service.restart"
+      ]
+    },
+    "description": { "type": "string", "minLength": 1, "maxLength": 240 },
+    "safety": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["executionMode", "productionWritesEnabled"],
+      "properties": {
+        "executionMode": { "const": "dry-run-only" },
+        "productionWritesEnabled": { "const": false }
+      }
+    },
+    "host": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "role"],
+      "properties": {
+        "id": { "type": "string", "enum": ["kaosgdd", "kaosbrain"] },
+        "role": { "type": "string", "enum": ["H3", "H4"] }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["host", "repository", "filesystem", "service"]
+        },
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" }
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "summary", "wouldMutateSystem"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["observe", "restart"] },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "wouldMutateSystem": { "type": "boolean" }
+      }
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowed"],
+      "properties": {
+        "allowed": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/parameter" },
+          "maxItems": 8
+        }
+      }
+    },
+    "preflight": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checks", "failurePolicy"],
+      "properties": {
+        "checks": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "failurePolicy": { "const": "stop" }
+      }
+    },
+    "confirmation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "bindingFields"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "bindingFields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "operationId",
+              "host",
+              "target",
+              "action",
+              "expectedInterruption",
+              "expiresAt"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "ttlSeconds": { "type": "integer", "minimum": 60, "maximum": 900 }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checks", "successPolicy"],
+      "properties": {
+        "checks": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "successPolicy": { "const": "all" }
+      }
+    },
+    "rollback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["available", "note"],
+      "properties": {
+        "available": { "type": "boolean" },
+        "note": { "type": "string", "minLength": 1, "maxLength": 240 }
+      }
+    },
+    "operationLog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "fields"],
+      "properties": {
+        "required": { "const": true },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "timestamp",
+              "actor",
+              "operationId",
+              "operation",
+              "host",
+              "target",
+              "mode",
+              "result",
+              "evidence"
+            ]
+          },
+          "minItems": 9,
+          "maxItems": 9,
+          "uniqueItems": true
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "host": { "properties": { "id": { "const": "kaosgdd" } } } } },
+      "then": { "properties": { "host": { "properties": { "role": { "const": "H3" } } } } },
+      "else": { "properties": { "host": { "properties": { "role": { "const": "H4" } } } } }
+    },
+    {
+      "if": { "properties": { "operation": { "const": "service.restart" } } },
+      "then": {
+        "properties": {
+          "action": {
+            "properties": {
+              "kind": { "const": "restart" },
+              "wouldMutateSystem": { "const": true }
+            }
+          },
+          "confirmation": {
+            "required": ["ttlSeconds"],
+            "properties": {
+              "required": { "const": true },
+              "bindingFields": {
+                "minItems": 6,
+                "contains": { "const": "operationId" }
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "action": {
+            "properties": {
+              "kind": { "const": "observe" },
+              "wouldMutateSystem": { "const": false }
+            }
+          },
+          "confirmation": {
+            "properties": {
+              "required": { "const": false },
+              "bindingFields": { "maxItems": 0 }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "operation": { "const": "system.status" } } },
+      "then": { "properties": { "target": { "properties": { "kind": { "const": "host" }, "id": { "const": "kaosgdd" } } } } }
+    },
+    {
+      "if": { "properties": { "operation": { "const": "system.git_status" } } },
+      "then": { "properties": { "target": { "properties": { "kind": { "const": "repository" }, "id": { "const": "kaosgdd-ai" } } } } }
+    },
+    {
+      "if": { "properties": { "operation": { "const": "system.disk_status" } } },
+      "then": { "properties": { "target": { "properties": { "kind": { "const": "filesystem" }, "id": { "const": "managed-filesystems" } } } } }
+    },
+    {
+      "if": { "properties": { "operation": { "enum": ["system.logs_tail", "service.restart"] } } },
+      "then": { "properties": { "target": { "properties": { "kind": { "const": "service" }, "id": { "const": "kaos-governor-worker" } } } } }
+    }
+  ],
+  "$defs": {
+    "parameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "required", "description"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][A-Za-z0-9]{0,31}$" },
+        "type": { "type": "string", "enum": ["integer", "string"] },
+        "required": { "type": "boolean" },
+        "description": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "minimum": { "type": "integer" },
+        "maximum": { "type": "integer" },
+        "enum": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "default": { "type": ["integer", "string"] }
+      }
+    }
+  }
+}

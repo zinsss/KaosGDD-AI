@@ -1,6 +1,6 @@
 # KaosSystemOperator Access Plan
 
-Status: planned; read-only `system.status` exists through KaosBrain.
+Status: Phase 2 runbook planning implemented; execution remains disabled.
 
 Last updated: 2026-09-01
 
@@ -51,6 +51,11 @@ or execute arbitrary generated commands on production systems.
 
 Current production state: Stage 1 partial. `system.status` is deployed through
 KaosBrain and KaosDiscoord. Stage 2-5 execution is not enabled.
+
+Current repository state: the initial Stage 2 schema and five dry-run-only
+catalog entries are under [`runbooks/`](../../runbooks/README.md). They are
+planning artifacts only and contain no executor implementation or production
+write authority.
 
 ## Host Scope
 
@@ -247,3 +252,25 @@ At the end of a material session:
 5. Add one allowlisted non-critical restart with exact confirmation.
 6. Add H3/H4 deploy/reboot only after backup verification is automated.
 7. Treat PACS/office operations as a separate project.
+
+## Phase 2 Runbook Planning Baseline
+
+The initial version 1 contract is
+[`runbooks/schema/runbook.schema.json`](../../runbooks/schema/runbook.schema.json).
+It requires every catalog entry to identify the host, target, exact action,
+bounded parameters, preflight, confirmation policy, verification, rollback
+note, and durable operation-log fields.
+
+The schema fixes all current entries to `dry-run-only` with
+`productionWritesEnabled: false`. The initial catalog covers:
+
+- `system.status`;
+- `system.git_status`;
+- `system.disk_status`;
+- `system.logs_tail`, with a maximum 200-line bound; and
+- `service.restart` planning for the allowlisted H3 Governor worker.
+
+The restart entry records the future confirmation binding and verification
+requirements but cannot perform a restart. No host executor, command mapping,
+API route, deployment configuration, credential, or production integration is
+included in this phase.

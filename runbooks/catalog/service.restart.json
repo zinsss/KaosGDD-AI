@@ -1,0 +1,29 @@
+{
+  "contractVersion": "1.0",
+  "runbookVersion": 1,
+  "operation": "service.restart",
+  "description": "Plan, but do not execute, an allowlisted H3 Governor worker restart.",
+  "safety": { "executionMode": "dry-run-only", "productionWritesEnabled": false },
+  "host": { "id": "kaosgdd", "role": "H3" },
+  "target": { "kind": "service", "id": "kaos-governor-worker" },
+  "action": { "kind": "restart", "summary": "Restart the allowlisted Governor worker service", "wouldMutateSystem": true },
+  "parameters": { "allowed": [] },
+  "preflight": {
+    "checks": ["Execution remains disabled for this runbook version", "Actor and target would be authorized by Governor policy", "Current service health and dependencies would be captured", "Expected interruption would be presented before confirmation"],
+    "failurePolicy": "stop"
+  },
+  "confirmation": {
+    "required": true,
+    "bindingFields": ["operationId", "host", "target", "action", "expectedInterruption", "expiresAt"],
+    "ttlSeconds": 300
+  },
+  "verification": {
+    "checks": ["Dry-run result states that no restart occurred", "Future execution would require service active and health ready checks", "Future execution would record a durable operation receipt"],
+    "successPolicy": "all"
+  },
+  "rollback": { "available": false, "note": "Restart-only action has no data rollback; future failure handling must stop and escalate with the prior state recorded." },
+  "operationLog": {
+    "required": true,
+    "fields": ["timestamp", "actor", "operationId", "operation", "host", "target", "mode", "result", "evidence"]
+  }
+}

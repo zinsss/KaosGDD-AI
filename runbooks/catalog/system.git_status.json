@@ -1,0 +1,25 @@
+{
+  "contractVersion": "1.0",
+  "runbookVersion": 1,
+  "operation": "system.git_status",
+  "description": "Plan a read-only status observation for the KaosGDD-AI checkout on H3.",
+  "safety": { "executionMode": "dry-run-only", "productionWritesEnabled": false },
+  "host": { "id": "kaosgdd", "role": "H3" },
+  "target": { "kind": "repository", "id": "kaosgdd-ai" },
+  "action": { "kind": "observe", "summary": "Observe branch, revision, and worktree status", "wouldMutateSystem": false },
+  "parameters": { "allowed": [] },
+  "preflight": {
+    "checks": ["Actor is authorized for H3 repository observations", "Target resolves to the allowlisted KaosGDD-AI checkout"],
+    "failurePolicy": "stop"
+  },
+  "confirmation": { "required": false, "bindingFields": [] },
+  "verification": {
+    "checks": ["Result includes branch and revision identifiers", "Result reports clean or changed state without modifying the checkout"],
+    "successPolicy": "all"
+  },
+  "rollback": { "available": false, "note": "Read-only repository observation has no state to roll back." },
+  "operationLog": {
+    "required": true,
+    "fields": ["timestamp", "actor", "operationId", "operation", "host", "target", "mode", "result", "evidence"]
+  }
+}

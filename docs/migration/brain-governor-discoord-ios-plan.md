@@ -1446,9 +1446,10 @@ Exit criteria:
 
 ## Phase 8 — Governed Brain System Operations
 
-Status: production observation. Read-only `system.status` is deployed on H3/H4;
-Brain Guard continues to reject shell, Docker, database, restart, deployment,
-and arbitrary admin intents.
+Status: production observation for read-only `system.status`; Phase 2
+repository-only runbook planning is locally implemented. Brain Guard continues
+to reject shell, Docker, database, restart, deployment, and arbitrary admin
+intents. No runbook executor is enabled.
 
 Objective:
 
@@ -1469,6 +1470,25 @@ Planned implementation:
 5. Add pinned Kaos application deployment/rollback only after backup and
    recovery tests pass.
 6. Keep PACS/database/OS upgrades in a separately hardened maintenance track.
+
+Phase 2 planning baseline (2026-09-01):
+
+- added a version 1 JSON Schema and catalog under `runbooks/`;
+- fixed every current catalog entry to `dry-run-only` and
+  `productionWritesEnabled: false`;
+- described `system.status`, `system.git_status`, `system.disk_status`, and a
+  maximum 200-line `system.logs_tail` as read-only observations;
+- described `service.restart` only as a non-executable plan with exact,
+  expiring confirmation requirements for the allowlisted H3 Governor worker;
+- added no commands, executor, API wiring, host access, secrets, deployment,
+  or production mutation.
+
+Risk: low for the committed planning artifacts. A future executor remains a
+separate medium-to-high-risk phase and must not infer executable behavior from
+free-form model output.
+
+Rollback: revert the repository-only schema, catalog, and documentation
+commit. No runtime or production state requires reconciliation.
 
 Security and rollback requirements are defined in [Brain as Kaos Gateway and
 System Operator](../architecture/brain-system-operations.md) and
@@ -1497,6 +1517,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | 0 | Completed repository, live-service, documentation, boundary, and test audit | Current architecture and gap analysis reviewed | None |
 | 2026-08-30 | 1 | Added `GovernorOperations`, store protocol, tool delegation, boundary tests, and stable Brain date injection | 193 Governor + 345 Discord + 317 Brain tests passed | None; not deployed |
 | 2026-08-30 | Plan | Added this canonical tracker and aligned architecture terminology | Documentation review and `git diff --check` | None |
+| 2026-09-01 | 8 | Added the Phase 2 runbook planning baseline with a version 1 schema and five dry-run-only catalog entries | JSON syntax/schema validation and `git diff --check` pass | None; no executor, deployment, host access, or production write enabled |
 | 2026-08-30 | 2 | Started PostgreSQL operation persistence and pending-payload inventory | Implementation in progress | None |
 | 2026-08-30 | 2 | Added migration 005, PostgreSQL store, durable versioned payloads, restart recovery, expiry/interruption cleanup, production store wiring, and CI PostgreSQL coverage | 200 Governor unit/contract + 9 PostgreSQL integration + 349 Discord + 317 Brain tests; H3 preflight and Compose render passed | None; not deployed, production remains on migration 004 |
 | 2026-08-30 | 1-2 | Promoted commit `11b18be`, migration 005, and the PostgreSQL-backed Discord operation store after pre/post recovery exercises | Both custom-format backups restored into isolated PostgreSQL 16; live proposal/approval/completion/audit/payload cleanup passed; API, Discord, and PostgreSQL healthy with zero restarts | Production observation started; compatibility and memory-store rollback path retained |

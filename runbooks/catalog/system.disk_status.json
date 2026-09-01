@@ -1,0 +1,25 @@
+{
+  "contractVersion": "1.0",
+  "runbookVersion": 1,
+  "operation": "system.disk_status",
+  "description": "Plan a read-only capacity observation for allowlisted H3 filesystems.",
+  "safety": { "executionMode": "dry-run-only", "productionWritesEnabled": false },
+  "host": { "id": "kaosgdd", "role": "H3" },
+  "target": { "kind": "filesystem", "id": "managed-filesystems" },
+  "action": { "kind": "observe", "summary": "Observe filesystem capacity and utilization", "wouldMutateSystem": false },
+  "parameters": { "allowed": [] },
+  "preflight": {
+    "checks": ["Actor is authorized for H3 disk observations", "Only allowlisted filesystem metrics are selected"],
+    "failurePolicy": "stop"
+  },
+  "confirmation": { "required": false, "bindingFields": [] },
+  "verification": {
+    "checks": ["Result identifies every reported filesystem and observation time", "Result reports capacity without cleanup, deletion, or repair"],
+    "successPolicy": "all"
+  },
+  "rollback": { "available": false, "note": "Read-only capacity observation has no state to roll back." },
+  "operationLog": {
+    "required": true,
+    "fields": ["timestamp", "actor", "operationId", "operation", "host", "target", "mode", "result", "evidence"]
+  }
+}
