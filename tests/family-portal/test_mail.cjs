@@ -69,11 +69,9 @@ test("filters scoped mail rows by board tab", () => {
     ],
   });
 
-  assert.equal(normalizeMode("bad"), "all");
+  assert.equal(normalizeMode("bad"), "unread");
   assert.deepEqual(counts(page.items), { all: 2, yeongdeok: 1, tax: 1, attachments: 1, unread: 1 });
-  assert.equal(filterItems(page.items, "all").length, 2);
   assert.equal(filterItems(page.items, "yeongdeok")[0].subject, "보건소");
   assert.equal(filterItems(page.items, "tax")[0].subject, "세무사");
-  assert.equal(filterItems(page.items, "attachments")[0].mailbox, "영덕군보건소");
   assert.equal(filterItems(page.items, "unread")[0].mailbox, "세무사");
 });

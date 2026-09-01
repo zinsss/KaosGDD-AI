@@ -312,7 +312,7 @@ const state = {
     checked: false,
     loading: false,
     error: "",
-    mode: "all",
+    mode: "unread",
     items: [],
     unreadItems: [],
     unreadActions: {},
@@ -2214,6 +2214,7 @@ async function setMailMode(modeValue) {
   state.mail.detailError = "";
   render();
   if (mode === "unread") await loadUnreadMail();
+  else await loadMail();
 }
 
 async function selectMailRecord(key) {
@@ -5217,8 +5218,7 @@ function renderFax() {
   const modeButtons = faxApi.modes
     .map((itemMode) => {
       const active = itemMode === mode;
-      const count = fax.counts[itemMode] || 0;
-      return `<button class="archiveAction ${active ? "isActive" : ""}" type="button" data-fax-mode="${escapeHtml(itemMode)}" aria-pressed="${active}">${escapeHtml(itemMode.toUpperCase())} ${escapeHtml(count)}</button>`;
+      return `<button class="archiveAction ${active ? "isActive" : ""}" type="button" data-fax-mode="${escapeHtml(itemMode)}" aria-pressed="${active}">${escapeHtml(itemMode.toUpperCase())}</button>`;
     })
     .join("");
   const rows = items
@@ -8330,7 +8330,10 @@ function render() {
   if (route === "documents" && state.documents.mode !== "inbox") loadDocuments();
   if (route === "documents" && state.documents.mode === "inbox") loadDocumentInbox();
   if (route === "fax") loadFax();
-  if (route === "mail") loadMail();
+  if (route === "mail") {
+    if (state.mail.mode === "unread") loadUnreadMail();
+    else loadMail();
+  }
   if (route === "ledger") loadLedger();
   if (route === "add-memo") {
     window.setTimeout(() => document.querySelector("[data-memo-content]")?.focus(), 0);

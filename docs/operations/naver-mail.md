@@ -55,17 +55,17 @@ The `governor-api` container receives the same Naver host/user/folder/password
 configuration as the lifecycle worker, but its `/data/mail` mount is read-only.
 
 The response is a compact archive-board payload with the requested folders,
-mailbox count, and recent message headers. The personal PWA currently requests
+mailbox count, and recent message headers. The Mail PWA tabs are `UNREAD`,
+`영덕군보건소`, and `세무사`, with no counts in the tab labels. Folder tabs fetch
 only `영덕군보건소` and `세무사`; `INBOX` remains configured for lifecycle polling
-and notifications but is not fetched for the PWA Mail board. The PWA tabs
-(`ALL`, `영덕군보건소`, `세무사`, `ATT`) filter this already-scoped payload locally.
-The `UNREAD` tab is the exception: it performs a separate on-demand read-only
-scan across all incoming/user folders, including `INBOX`, through the organizer
-service. Selecting an unread row fetches the body with `BODY.PEEK[]` through the
-same organizer scope, returns the normalized text body and attachment metadata
-only, and does not mark the source message read. Opening an attachment streams
-that one attachment inline from Naver for viewing/downloading inside Mail; it
-does not create a Documents Inbox item or Paperless document.
+and notifications but is not fetched for those folder boards. The `UNREAD` tab
+performs a separate on-demand read-only scan across all incoming/user folders,
+including `INBOX`, through the organizer service. Selecting an unread row
+fetches the body with `BODY.PEEK[]` through the same organizer scope, returns the
+normalized text body and attachment metadata only, and does not mark the source
+message read. Opening an attachment streams that one attachment inline from
+Naver for viewing/downloading inside Mail; it does not create a Documents Inbox
+item or Paperless document.
 
 Unread batch actions are exposed only from the `UNREAD` tab. Each visible
 message defaults to `READ`; the user can switch a row to `DEL`, and only one

@@ -3,13 +3,11 @@
   if (typeof module === "object" && module.exports) module.exports = api;
   if (root) root.KAOS_PORTAL_MAIL = api;
 })(typeof globalThis === "object" ? globalThis : this, function createPortalMail() {
-  const modes = Object.freeze(["all", "unread", "yeongdeok", "tax", "attachments"]);
+  const modes = Object.freeze(["unread", "yeongdeok", "tax"]);
   const modeLabels = Object.freeze({
-    all: "ALL",
+    unread: "UNREAD",
     yeongdeok: "영덕군보건소",
     tax: "세무사",
-    attachments: "ATT",
-    unread: "UNREAD",
   });
 
   function clean(value, maximum = 240) {
@@ -57,14 +55,13 @@
 
   function normalizeMode(value) {
     const mode = clean(value, 40).toLowerCase();
-    return modes.includes(mode) ? mode : "all";
+    return modes.includes(mode) ? mode : "unread";
   }
 
   function filterItems(items, modeValue) {
     const mode = normalizeMode(modeValue);
     const source = Array.isArray(items) ? items : [];
     if (mode === "unread") return Object.freeze(source.filter((item) => item.unread));
-    if (mode === "attachments") return Object.freeze(source.filter((item) => item.attachmentCount > 0));
     if (mode === "yeongdeok") return Object.freeze(source.filter((item) => item.mailbox === "영덕군보건소"));
     if (mode === "tax") return Object.freeze(source.filter((item) => item.mailbox === "세무사"));
     return Object.freeze(source.slice());
