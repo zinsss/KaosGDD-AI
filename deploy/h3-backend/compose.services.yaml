@@ -87,7 +87,7 @@ services:
       - backend
 
   family-memos-web:
-    image: kaosgdd-memos-web:0.1.9-card-feed
+    image: kaosgdd-memos-web:0.1.10-background-match
     build:
       context: ../../apps/memos-web-image
     container_name: family-memos-web
@@ -109,7 +109,7 @@ services:
       - backend
 
   personal-memos-web:
-    image: kaosgdd-memos-web:0.1.9-card-feed
+    image: kaosgdd-memos-web:0.1.10-background-match
     build:
       context: ../../apps/memos-web-image
     container_name: personal-memos-web

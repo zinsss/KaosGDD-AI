@@ -11,6 +11,24 @@ select,
   border-radius: 0 !important;
 }
 
+:root[data-theme="nord"] {
+  --bg: #252b36 !important;
+  --panel: #2d3441 !important;
+  --surface: #28303c !important;
+  --line: rgba(136, 192, 208, 0.24) !important;
+  --text: #eceff4 !important;
+  --muted: #b8c0cf !important;
+  --accent: #88c0d0 !important;
+  --accent-soft: rgba(136, 192, 208, 0.16) !important;
+  --shadow: rgba(9, 12, 18, 0.38) !important;
+}
+
+body,
+.memoApp,
+.memoApp.isEmbedded {
+  background: var(--bg) !important;
+}
+
 .searchBox input,
 .searchBox .iconButton,
 .memoActions button {
