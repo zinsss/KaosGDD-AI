@@ -345,6 +345,13 @@ def paperless_document_url(service: PaperlessDocumentService, document_id: int) 
     return f"{base}/documents/{document_id}/details" if base else ""
 
 
+def paperless_inbox_item_payload(record, service: PaperlessDocumentService) -> dict[str, object]:
+    item = record.as_dict()
+    document_id = int(item.get("documentId") or 0)
+    item["url"] = paperless_document_url(service, document_id) if document_id else ""
+    return item
+
+
 def paperless_page_payload(
     query_string: str,
     service: PaperlessDocumentService | None = None,
@@ -386,13 +393,56 @@ def paperless_document_payload(
     return {"ok": True, "document": payload}
 
 
-def paperless_inbox_payload(store: DocumentIntakeStore | None = None) -> dict[str, object]:
-    records = (store or document_intake_store()).list_records()
+def reconcile_paperless_inbox(
+    *,
+    service: PaperlessDocumentService | None = None,
+    store: DocumentIntakeStore | None = None,
+) -> list[object]:
+    active_service = service or paperless_service()
+    active_store = store or document_intake_store()
+    records = active_store.list_records()
+    changed: list[object] = []
+    for record in records:
+        if record.status not in {"ocr_pending", "review"} or not record.task_id:
+            continue
+        try:
+            task = active_service.task(record.task_id)
+        except DocumentIntakeError as exc:
+            if exc.code == "paperless_task_not_found":
+                continue
+            raise
+        status_key = task.status.casefold()
+        if task.success:
+            document_id = task.related_document_ids[0] if task.related_document_ids else 0
+            changed.append(
+                active_store.update_status(
+                    record.record_id,
+                    status="archived" if document_id else "review",
+                    document_id=document_id,
+                )
+            )
+        elif status_key in {"failure", "revoked"}:
+            changed.append(active_store.update_status(record.record_id, status="failed", error=task.status))
+    return changed
+
+
+def paperless_inbox_payload(
+    query_string: str = "",
+    service: PaperlessDocumentService | None = None,
+    store: DocumentIntakeStore | None = None,
+) -> dict[str, object]:
+    active_service = service or paperless_service()
+    active_store = store or document_intake_store()
+    params = urllib.parse.parse_qs(query_string, keep_blank_values=True)
+    refresh = (params.get("refresh") or [""])[0].strip().lower() in {"1", "true", "yes"}
+    changed = reconcile_paperless_inbox(service=active_service, store=active_store) if refresh else []
+    records = active_store.list_records()
     pending = sum(1 for record in records if record.status == "ocr_pending")
     review = sum(1 for record in records if record.status == "review")
     return {
         "ok": True,
-        "items": [record.as_dict() for record in records],
+        "items": [paperless_inbox_item_payload(record, active_service) for record in records],
+        "reconciled": len(changed),
         "counts": {
             "all": len(records),
             "pending": pending,
@@ -1342,7 +1392,7 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/paperless/inbox":
             try:
                 require_main_access(self.headers)
-                json_response(self, 200, paperless_inbox_payload())
+                json_response(self, 200, paperless_inbox_payload(parsed.query))
             except (ValueError, DocumentIntakeError, memos_relay.MemosRelayError) as exc:
                 code = (
                     exc.code

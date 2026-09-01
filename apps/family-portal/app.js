@@ -1966,7 +1966,9 @@ async function loadDocumentInbox(options = {}) {
   state.documents.inboxLoading = true;
   if (getRoute() === "documents") render();
   try {
-    const response = await fetch("/api/paperless/inbox", {
+    const params = new URLSearchParams();
+    if (options.reconcile) params.set("refresh", "1");
+    const response = await fetch(`/api/paperless/inbox${params.toString() ? `?${params.toString()}` : ""}`, {
       headers: { Accept: "application/json" },
       cache: "no-store",
     });
@@ -2323,7 +2325,7 @@ async function refreshDocuments() {
   state.documents.detailError = "";
   if (state.documents.mode === "inbox") {
     state.documents.inboxChecked = false;
-    await loadDocumentInbox({ force: true });
+    await loadDocumentInbox({ force: true, reconcile: true });
   } else {
     state.documents.checked = false;
     await loadDocuments({ force: true });
@@ -5712,6 +5714,9 @@ function renderDocuments() {
     .map((item) => {
       const date = archiveDateParts(item.submittedAt);
       const statusClass = item.status === "failed" ? "isError" : item.status === "archived" ? "isOk" : "";
+      const sourceLink = item.url
+        ? `<a class="archiveSourceLink" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" aria-label="Open ${escapeHtml(item.title)} in Paperless" title="Open in Paperless">SRC</a>`
+        : `<span class="archiveSourceLink isDisabled">${escapeHtml(item.taskId ? "OCR" : "--")}</span>`;
       return `
         <li class="archiveRecord">
           <div class="archiveRecordButton archiveRecordStatic">
@@ -5720,7 +5725,7 @@ function renderDocuments() {
             <strong class="archiveRecordTitle">${escapeHtml(item.title || "Document")}</strong>
             <span class="archiveRecordStatus ${statusClass}">${escapeHtml(item.statusLabel)}</span>
           </div>
-          <span class="archiveSourceLink isDisabled">${escapeHtml(item.taskId ? "OCR" : "--")}</span>
+          ${sourceLink}
         </li>
       `;
     })

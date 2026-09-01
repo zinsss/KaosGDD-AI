@@ -69,9 +69,13 @@
       sha256: String(item.sha256 || ""),
       sizeBytes: Math.max(0, Number(item.sizeBytes) || 0),
       taskId: String(item.taskId || ""),
+      documentId: positiveInteger(item.documentId, 0),
+      url: String(item.url || ""),
       source: String(item.source || "pwa"),
       status,
       statusLabel: labels[status] || status.toUpperCase(),
+      updatedAt: String(item.updatedAt || ""),
+      error: String(item.error || ""),
     });
   }
 

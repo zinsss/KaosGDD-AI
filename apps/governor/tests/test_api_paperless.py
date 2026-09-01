@@ -15,6 +15,7 @@ from kaos_governor.documents import (
     PaperlessResult,
     PaperlessSearchPage,
     PaperlessSearchResult,
+    PaperlessTask,
 )
 
 
@@ -26,6 +27,7 @@ class FakePaperless:
             public_url="https://paperless.kaosgdd.net",
         )
         self.calls: list[tuple[object, ...]] = []
+        self.tasks: dict[str, PaperlessTask] = {}
 
     def list_page(self, *, limit: int, page: int) -> PaperlessSearchPage:
         self.calls.append(("list", limit, page))
@@ -52,6 +54,10 @@ class FakePaperless:
     ) -> PaperlessResult:
         self.calls.append(("submit", filename, title, source, len(content)))
         return PaperlessResult(True, "paperless-task-1", filename, "sha-from-paperless", len(content))
+
+    def task(self, task_id: object) -> PaperlessTask:
+        self.calls.append(("task", task_id))
+        return self.tasks.get(str(task_id)) or PaperlessTask(str(task_id), "PENDING", ())
 
 
 class PaperlessApiTests(unittest.TestCase):
@@ -134,7 +140,7 @@ class PaperlessApiTests(unittest.TestCase):
             store = DocumentIntakeStore(Path(tmp) / "intake.json")
             service = FakePaperless()
             payload = api.paperless_upload_payload(Handler(), service=service, store=store)  # type: ignore[arg-type]
-            inbox = api.paperless_inbox_payload(store)
+            inbox = api.paperless_inbox_payload(store=store)
 
         self.assertFalse(payload["duplicate"])
         self.assertEqual(payload["item"]["title"], "Clinic upload")  # type: ignore[index]
@@ -166,6 +172,30 @@ class PaperlessApiTests(unittest.TestCase):
         self.assertTrue(payload["duplicate"])
         self.assertEqual(payload["item"]["title"], "Existing")  # type: ignore[index]
         self.assertEqual(service.calls, [])
+
+    def test_inbox_refresh_reconciles_paperless_task_status(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = DocumentIntakeStore(Path(tmp) / "intake.json")
+            content = b"%PDF-1.7\nbody\n%%EOF"
+            pending = store.add_submitted(title="Pending", filename="pending.pdf", content=content, task_id="pending-task")
+            archived = store.add_submitted(title="Done", filename="done.pdf", content=b"%PDF-1.7\n2\n%%EOF", task_id="done-task")
+            failed = store.add_submitted(title="Bad", filename="bad.pdf", content=b"%PDF-1.7\n3\n%%EOF", task_id="failed-task")
+            service = FakePaperless()
+            service.tasks = {
+                pending.task_id: PaperlessTask(pending.task_id, "PENDING", ()),
+                archived.task_id: PaperlessTask(archived.task_id, "SUCCESS", (88,)),
+                failed.task_id: PaperlessTask(failed.task_id, "FAILURE", ()),
+            }
+
+            payload = api.paperless_inbox_payload("refresh=1", service=service, store=store)  # type: ignore[arg-type]
+
+        items = {item["id"]: item for item in payload["items"]}  # type: ignore[index]
+        self.assertEqual(payload["reconciled"], 2)
+        self.assertEqual(items[archived.record_id]["status"], "archived")
+        self.assertEqual(items[archived.record_id]["documentId"], 88)
+        self.assertEqual(items[archived.record_id]["url"], "https://paperless.kaosgdd.net/documents/88/details")
+        self.assertEqual(items[failed.record_id]["status"], "failed")
+        self.assertEqual(items[pending.record_id]["status"], "ocr_pending")
 
 
 if __name__ == "__main__":

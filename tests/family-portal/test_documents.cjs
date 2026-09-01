@@ -46,10 +46,14 @@ test("normalizes document intake inbox records", () => {
         sizeBytes: 123,
         taskId: "paperless-task",
         status: "ocr_pending",
+        documentId: 42,
+        url: "https://paperless.kaosgdd.net/documents/42/details",
       },
     ],
   });
 
   assert.equal(inbox.items[0].id, "doc-1");
   assert.equal(inbox.items[0].statusLabel, "OCR PENDING");
+  assert.equal(inbox.items[0].documentId, 42);
+  assert.equal(inbox.items[0].url, "https://paperless.kaosgdd.net/documents/42/details");
 });

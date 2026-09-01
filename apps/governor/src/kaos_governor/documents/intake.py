@@ -23,6 +23,9 @@ class DocumentInboxRecord:
     task_id: str
     source: str = "pwa"
     status: str = "ocr_pending"
+    document_id: int = 0
+    updated_at: str = ""
+    error: str = ""
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -35,6 +38,9 @@ class DocumentInboxRecord:
             "taskId": self.task_id,
             "source": self.source,
             "status": self.status,
+            "documentId": self.document_id,
+            "updatedAt": self.updated_at,
+            "error": self.error,
         }
 
 
@@ -79,6 +85,43 @@ class DocumentIntakeStore:
         records.append(record)
         self._write(records)
         return record
+
+    def update_status(
+        self,
+        record_id: str,
+        *,
+        status: str,
+        document_id: int = 0,
+        error: str = "",
+    ) -> DocumentInboxRecord:
+        normalized_id = str(record_id or "").strip()
+        records = self._read()
+        updated: DocumentInboxRecord | None = None
+        now = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        next_records: list[DocumentInboxRecord] = []
+        for record in records:
+            if record.record_id != normalized_id:
+                next_records.append(record)
+                continue
+            updated = DocumentInboxRecord(
+                record_id=record.record_id,
+                submitted_at=record.submitted_at,
+                title=record.title,
+                filename=record.filename,
+                sha256=record.sha256,
+                size_bytes=record.size_bytes,
+                task_id=record.task_id,
+                source=record.source,
+                status=clean_status(status),
+                document_id=max(0, int(document_id or 0)),
+                updated_at=now,
+                error=clean_error(error),
+            )
+            next_records.append(updated)
+        if updated is None:
+            raise KeyError(normalized_id)
+        self._write(next_records)
+        return updated
 
     def _read(self) -> list[DocumentInboxRecord]:
         try:
@@ -130,6 +173,9 @@ def record_from_json(value: object) -> DocumentInboxRecord | None:
         task_id=task_id,
         source=clean_source(str(value.get("source") or "pwa")),
         status=clean_status(str(value.get("status") or "ocr_pending")),
+        document_id=clean_document_id(value.get("documentId") or value.get("document_id") or 0),
+        updated_at=str(value.get("updatedAt") or value.get("updated_at") or ""),
+        error=clean_error(str(value.get("error") or "")),
     )
 
 
@@ -155,3 +201,15 @@ def clean_source(value: str) -> str:
 def clean_status(value: str) -> str:
     status = str(value or "").strip().lower()
     return status if status in {"ocr_pending", "review", "archived", "failed"} else "ocr_pending"
+
+
+def clean_document_id(value: object) -> int:
+    try:
+        document_id = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, document_id)
+
+
+def clean_error(value: str) -> str:
+    return " ".join(str(value or "").split())[:120]
