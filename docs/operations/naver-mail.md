@@ -43,6 +43,7 @@ GET /api/mail/messages/{uid}/attachments/{index}?mailbox={display-mailbox}
 GET /api/mail/unread?limit=50
 GET /api/mail/unread/messages/{uid}?mailbox={display-mailbox}
 GET /api/mail/unread/messages/{uid}/attachments/{index}?mailbox={display-mailbox}
+POST /api/mail/unread/actions
 ```
 
 This route requires the main Cloudflare Access profile. It is intentionally
@@ -64,10 +65,15 @@ service. Selecting an unread row fetches the body with `BODY.PEEK[]` through the
 same organizer scope, returns the normalized text body and attachment metadata
 only, and does not mark the source message read. Opening an attachment streams
 that one attachment inline from Naver for viewing/downloading inside Mail; it
-does not create a Documents Inbox item or Paperless document. Batch
-mark-read/delete actions are intentionally not exposed in the PWA yet; those
-mutations should be added later as explicit Governor operations with a
-confirmation policy.
+does not create a Documents Inbox item or Paperless document.
+
+Unread batch actions are exposed only from the `UNREAD` tab. Each visible
+message defaults to `READ`; the user can switch a row to `DEL`, and only one
+action can be selected per row. `APPLY` posts mailbox, UID, UIDVALIDITY, and the
+selected action to Governor. Governor re-discovers the mailbox, selects it
+read-write, verifies UIDVALIDITY before mutation, then either sets `\Seen` or
+moves the UID to the configured Naver Trash folder. The PWA asks for explicit
+browser confirmation when any selected row will be deleted.
 
 ## Daily unread organizer
 

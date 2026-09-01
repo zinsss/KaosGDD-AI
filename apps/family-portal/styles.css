@@ -6240,6 +6240,10 @@ h3 {
   background: var(--archive-surface);
 }
 
+.app[data-profile="main"] .archiveRecord.hasUnreadActions {
+  grid-template-columns: minmax(0, 1fr) 74px;
+}
+
 .app[data-profile="main"] .archiveRecord.isSelected {
   background: rgba(235, 203, 139, 0.08);
 }
@@ -6333,6 +6337,57 @@ h3 {
   padding: 0;
   border-width: 0 0 0 1px;
   background: rgba(37, 43, 54, 0.82);
+}
+
+.app[data-profile="main"] .archiveUnreadActions {
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  min-width: 74px;
+  margin: 0;
+  padding: 6px 7px;
+  border: 0;
+  border-left: 1px solid var(--archive-line);
+  background: rgba(37, 43, 54, 0.82);
+}
+
+.app[data-profile="main"] .archiveUnreadActions label {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  min-height: 20px;
+  color: var(--archive-muted);
+  font-size: 0.58rem;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+}
+
+.app[data-profile="main"] .archiveUnreadActions label.isSelected {
+  color: var(--archive-amber);
+}
+
+.app[data-profile="main"] .archiveUnreadActions input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--archive-cyan);
+}
+
+.app[data-profile="main"] .archiveUnreadApplyBar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(96px, 0.34fr);
+  gap: 10px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.app[data-profile="main"] .archiveUnreadApplyBar p {
+  margin: 0;
+  color: var(--archive-muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.05em;
 }
 
 .app[data-profile="main"] .archivePager {

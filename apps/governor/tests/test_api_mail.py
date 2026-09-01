@@ -89,11 +89,18 @@ class FakeUnreadOrganizer:
             attachments=(Attachment("unread.pdf", "application/pdf", b"%PDF-1.4"),),
         )
 
+    def apply_unread_actions(self, actions: list[dict[str, object]]) -> dict[str, object]:
+        self.calls.append(("apply", actions))
+        return {"ok": True, "total": len(actions), "applied": {"read": 1, "delete": 1}}
+
 
 class CaptureHandler(api.Handler):
-    def __init__(self, path: str, headers: dict[str, str]) -> None:
+    def __init__(self, path: str, headers: dict[str, str], body: bytes = b"") -> None:
         self.path = path
-        self.headers = headers
+        self.headers = dict(headers)
+        if body:
+            self.headers.setdefault("Content-Length", str(len(body)))
+        self.rfile = BytesIO(body)
         self.wfile = BytesIO()
         self.status = 0
         self.response_headers: dict[str, str] = {}
@@ -217,6 +224,23 @@ class MailApiTests(unittest.TestCase):
         self.assertEqual(filename, "unread.pdf")
         self.assertEqual(content_type, "application/pdf")
 
+    def test_unread_actions_payload_applies_read_and_delete_batch(self) -> None:
+        organizer = FakeUnreadOrganizer()
+        actions = [
+            {"mailbox": "INBOX", "uid": 49980, "uidValidity": "80", "action": "read"},
+            {"mailbox": "세무사", "uid": 7, "uidValidity": "81", "action": "delete"},
+        ]
+
+        payload = api.mail_unread_actions_payload({"items": actions}, organizer)  # type: ignore[arg-type]
+
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["total"], 2)
+        self.assertEqual(organizer.calls, [("apply", actions)])
+
+    def test_unread_actions_payload_rejects_missing_items_list(self) -> None:
+        with self.assertRaisesRegex(Exception, "mail_batch_invalid"):
+            api.mail_unread_actions_payload({}, FakeUnreadOrganizer())  # type: ignore[arg-type]
+
     def test_list_handler_rejects_non_personal_cloudflare_identity(self) -> None:
         handler = CaptureHandler("/api/mail/messages", {"Host": "family.kaosgdd.net"})
         browse = Mock(return_value={"ok": True, "messages": []})
@@ -325,6 +349,36 @@ class MailApiTests(unittest.TestCase):
         self.assertEqual(handler.response_headers["Content-Type"], "application/pdf")
         self.assertEqual(handler.wfile.getvalue(), b"%PDF-1.4")
         attachment.assert_called_once_with("49980", "1", "mailbox=INBOX")
+
+    def test_unread_actions_handler_applies_batch_after_personal_access(self) -> None:
+        body = json.dumps(
+            {
+                "items": [
+                    {"mailbox": "INBOX", "uid": 49980, "uidValidity": "80", "action": "read"},
+                    {"mailbox": "세무사", "uid": 7, "uidValidity": "81", "action": "delete"},
+                ]
+            }
+        ).encode()
+        handler = CaptureHandler(
+            "/api/mail/unread/actions",
+            {
+                "Host": "kaosgdd.net",
+                "Cf-Access-Jwt-Assertion": "verified-by-test",
+                "Content-Type": "application/json",
+            },
+            body,
+        )
+
+        with (
+            patch.object(api.memos_relay, "verify_cloudflare_access", return_value=("personal", "zin@example.com")),
+            patch.object(api, "mail_unread_actions_payload", return_value={"ok": True, "total": 2}) as apply_actions,
+        ):
+            handler.do_POST()
+
+        self.assertEqual(handler.status, 200)
+        self.assertEqual(json.loads(handler.wfile.getvalue())["total"], 2)
+        apply_actions.assert_called_once()
+        self.assertEqual(apply_actions.call_args.args[0]["items"][1]["action"], "delete")
 
 
 if __name__ == "__main__":

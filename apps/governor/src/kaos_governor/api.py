@@ -467,7 +467,18 @@ def mail_status_for_error(exc: Exception) -> int:
     code = str(exc)
     if code in {"main_profile_required", "mail_message_not_found", "mail_attachment_not_found"}:
         return 404
-    if code in {"mail_limit_invalid", "mail_uid_invalid", "mail_mailbox_invalid", "mail_attachment_invalid"}:
+    if code in {
+        "mail_limit_invalid",
+        "mail_uid_invalid",
+        "mail_mailbox_invalid",
+        "mail_attachment_invalid",
+        "mail_action_invalid",
+        "mail_batch_empty",
+        "mail_batch_invalid",
+        "mail_batch_too_large",
+        "mail_batch_conflict",
+        "mailbox_generation_changed",
+    }:
         return 400
     return 503
 
@@ -673,6 +684,17 @@ def mail_unread_attachment_payload(
     if not attachment.content:
         raise MailOrganizerError("mail_attachment_not_found")
     return attachment.content, attachment.filename, attachment.content_type
+
+
+def mail_unread_actions_payload(
+    payload: dict[str, object],
+    organizer: NaverMailOrganizer | None = None,
+) -> dict[str, object]:
+    items = payload.get("items")
+    if not isinstance(items, list):
+        raise MailOrganizerError("mail_batch_invalid")
+    result = (organizer or naver_mail_organizer()).apply_unread_actions(items)
+    return {"ok": True, **result}
 
 
 def mail_message_uid(path: str) -> str:
@@ -1424,6 +1446,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == "/api/mail/unread/actions":
+            try:
+                require_main_access(self.headers)
+                json_response(self, 200, mail_unread_actions_payload(json_request(self)))
+            except (ValueError, NaverMailError, MailOrganizerError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, memos_relay.MemosRelayError) else str(exc)
+                json_response(self, mail_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Unread mail batch failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "mail_batch_unavailable"})
+            return
         if parsed.path == "/api/paperless/documents/upload":
             try:
                 require_main_access(self.headers)

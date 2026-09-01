@@ -465,6 +465,61 @@ class NaverMailOrganizer:
                 raise MailOrganizerError("imap_message_missing")
             return parse_message(raw, mailbox.display_name, uid, self.naver_config.preview_characters)
 
+    def apply_unread_actions(self, actions: list[dict[str, object]]) -> dict[str, object]:
+        if not actions:
+            raise MailOrganizerError("mail_batch_empty")
+        if len(actions) > 50:
+            raise MailOrganizerError("mail_batch_too_large")
+
+        grouped: dict[tuple[str, str, str, str], list[int]] = {}
+        seen: set[tuple[str, str, int]] = set()
+        with self._lock:
+            with self._client() as client:
+                mailboxes = {item.display_name: item for item in self._mailboxes(client)}
+                for raw_action in actions:
+                    if not isinstance(raw_action, dict):
+                        raise MailOrganizerError("mail_batch_invalid")
+                    mailbox_name = str(raw_action.get("mailbox") or "").strip()
+                    uidvalidity = str(raw_action.get("uidValidity") or "").strip()
+                    action = str(raw_action.get("action") or "").strip().lower()
+                    try:
+                        uid = int(raw_action.get("uid") or 0)
+                    except (TypeError, ValueError) as exc:
+                        raise MailOrganizerError("mail_uid_invalid") from exc
+                    if not mailbox_name:
+                        raise MailOrganizerError("mail_mailbox_invalid")
+                    if not uidvalidity:
+                        raise MailOrganizerError("mailbox_generation_changed")
+                    if uid < 1:
+                        raise MailOrganizerError("mail_uid_invalid")
+                    if action not in {"read", "delete"}:
+                        raise MailOrganizerError("mail_action_invalid")
+                    item_key = (mailbox_name, uidvalidity, uid)
+                    if item_key in seen:
+                        raise MailOrganizerError("mail_batch_conflict")
+                    seen.add(item_key)
+                    mailbox = mailboxes.get(mailbox_name)
+                    if mailbox is None:
+                        raise MailOrganizerError("mail_message_not_found")
+                    grouped.setdefault((mailbox.raw_name, mailbox.display_name, uidvalidity, action), []).append(uid)
+
+                applied = {"read": 0, "delete": 0}
+                for (raw_name, display_name, expected_uidvalidity, action), uids in grouped.items():
+                    mailbox = Mailbox(raw_name, display_name)
+                    uidvalidity = self._select(client, mailbox, readonly=False)
+                    if uidvalidity != expected_uidvalidity:
+                        raise MailOrganizerError("mailbox_generation_changed")
+                    sequence = ",".join(str(uid) for uid in sorted(uids))
+                    if action == "read":
+                        status, _data = client.uid("store", sequence, "+FLAGS.SILENT", "(\\Seen)")
+                    else:
+                        status, _data = client.uid("MOVE", sequence, quoted_mailbox(self.config.trash_folder))
+                    if status != "OK":
+                        raise MailOrganizerError(f"imap_{action}_failed")
+                    applied[action] += len(uids)
+
+        return {"ok": True, "total": sum(applied.values()), "applied": applied}
+
     def mark_read(self, digest_id: str, item_id: str) -> dict[str, object]:
         return self._mutate_and_remove(digest_id, [item_id], "read")
 

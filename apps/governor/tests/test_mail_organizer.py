@@ -42,6 +42,7 @@ class FakeOrganizerServer:
         }
         self.moved: list[tuple[list[int], str]] = []
         self.fetch_specs: list[str] = []
+        self.store_specs: list[tuple[str, str, str]] = []
         self.readonly_values: list[bool] = []
 
     @staticmethod
@@ -93,6 +94,7 @@ class FakeOrganizerIMAP:
             return "OK", [(b"message", box["messages"][int(args[0])])]
         if command == "store":
             values = [int(value) for value in str(args[0]).split(",")]
+            self.server.store_specs.append((str(args[0]), str(args[1]), str(args[2])))
             box["seen"].update(values)
             return "OK", [b"stored"]
         if command == "MOVE":
@@ -200,6 +202,39 @@ class MailOrganizerTests(unittest.TestCase):
                 service.fetch_message(mailbox_name="Deleted Messages", uid=1)
             with self.assertRaisesRegex(Exception, "mail_message_not_found"):
                 service.fetch_message(mailbox_name="Missing", uid=1)
+
+    def test_apply_unread_actions_marks_read_or_moves_to_trash_by_source_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            server = FakeOrganizerServer()
+            service = organizer(Path(tmp), server)
+            result = service.apply_unread_actions(
+                [
+                    {"mailbox": "INBOX", "uid": 7, "uidValidity": "80", "action": "read"},
+                    {"mailbox": "청구·결제", "uid": 1, "uidValidity": "84", "action": "delete"},
+                ]
+            )
+
+        custom = encode_modified_utf7("청구·결제")
+        self.assertEqual(result["applied"], {"read": 1, "delete": 1})
+        self.assertEqual(server.mailboxes["INBOX"]["seen"], {7})
+        self.assertEqual(server.mailboxes[custom]["seen"], set())
+        self.assertEqual(server.store_specs, [("7", "+FLAGS.SILENT", "(\\Seen)")])
+        self.assertEqual(server.moved, [([1], '"Deleted Messages"')])
+        self.assertIn(False, server.readonly_values)
+
+    def test_apply_unread_actions_rejects_stale_uidvalidity_and_duplicate_actions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            server = FakeOrganizerServer()
+            service = organizer(Path(tmp), server)
+            with self.assertRaisesRegex(Exception, "mailbox_generation_changed"):
+                service.apply_unread_actions([{"mailbox": "INBOX", "uid": 7, "uidValidity": "stale", "action": "read"}])
+            with self.assertRaisesRegex(Exception, "mail_batch_conflict"):
+                service.apply_unread_actions(
+                    [
+                        {"mailbox": "INBOX", "uid": 7, "uidValidity": "80", "action": "read"},
+                        {"mailbox": "INBOX", "uid": 7, "uidValidity": "80", "action": "delete"},
+                    ]
+                )
 
     def test_import_progress_is_checkpointed_without_storing_content(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -315,8 +315,10 @@ const state = {
     mode: "all",
     items: [],
     unreadItems: [],
+    unreadActions: {},
     unreadChecked: false,
     unreadLoading: false,
+    unreadApplying: false,
     unreadError: "",
     folders: [],
     mailboxCount: 0,
@@ -2130,16 +2132,20 @@ async function loadUnreadMail(options = {}) {
       ...state.mail,
       unreadChecked: true,
       unreadLoading: false,
+      unreadApplying: false,
       unreadError: "",
       unreadItems: page.items,
+      unreadActions: {},
     };
   } catch (error) {
     state.mail = {
       ...state.mail,
       unreadChecked: true,
       unreadLoading: false,
+      unreadApplying: false,
       unreadError: error.message || "Unread mail is unavailable",
       unreadItems: [],
+      unreadActions: {},
       selectedKey: "",
       selected: null,
       detailLoading: false,
@@ -2147,6 +2153,55 @@ async function loadUnreadMail(options = {}) {
     };
   }
   if (getRoute() === "mail") render();
+}
+
+function unreadMailAction(item) {
+  return state.mail.unreadActions[item?.id] === "delete" ? "delete" : "read";
+}
+
+function setUnreadMailAction(key, action) {
+  const id = String(key || "");
+  if (!id || !state.mail.unreadItems.some((item) => item.id === id)) return;
+  const normalized = action === "delete" ? "delete" : "read";
+  state.mail.unreadActions = { ...state.mail.unreadActions, [id]: normalized };
+  render();
+}
+
+async function applyUnreadMailActions() {
+  if (state.mail.unreadApplying || state.mail.unreadLoading || !state.mail.unreadItems.length) return;
+  const items = state.mail.unreadItems.map((item) => ({
+    mailbox: item.mailbox,
+    uid: item.uid,
+    uidValidity: item.uidValidity,
+    action: unreadMailAction(item),
+  }));
+  const deleteCount = items.filter((item) => item.action === "delete").length;
+  if (deleteCount && !window.confirm(`Delete ${deleteCount} unread mail message(s)? This moves them to Naver Trash.`)) return;
+  state.mail.unreadApplying = true;
+  state.mail.unreadError = "";
+  render();
+  try {
+    const response = await fetch("/api/mail/unread/actions", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ items }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    state.mail.unreadApplying = false;
+    state.mail.selectedKey = "";
+    state.mail.selected = null;
+    state.mail.detailLoading = false;
+    state.mail.detailError = "";
+    await loadUnreadMail({ force: true });
+  } catch (error) {
+    state.mail.unreadApplying = false;
+    state.mail.unreadError = error.message || "Unread mail action failed";
+    render();
+  }
 }
 
 async function setMailMode(modeValue) {
@@ -5256,44 +5311,62 @@ function renderMail() {
   const mail = state.mail;
   const mailApi = window.KAOS_PORTAL_MAIL;
   const mode = mailApi.normalizeMode(mail.mode);
-  const regularCounts = mailApi.counts(mail.items);
-  const counts = { ...regularCounts, unread: mail.unreadChecked ? mail.unreadItems.length : "?" };
   const items = mode === "unread" ? mail.unreadItems : mailApi.filterItems(mail.items, mode);
-  const activeLoading = mode === "unread" ? mail.unreadLoading : mail.loading;
+  const activeLoading = mode === "unread" ? mail.unreadLoading || mail.unreadApplying : mail.loading;
   const activeChecked = mode === "unread" ? mail.unreadChecked : mail.checked;
   const activeError = mode === "unread" ? mail.unreadError : mail.error;
   const selectedListItem = items.find((item) => item.id === mail.selectedKey) || null;
   const selected = mail.selected || selectedListItem;
   const hasDetail = mail.detailLoading || mail.detailError || Boolean(selected);
+  const unreadReadCount = mode === "unread" ? items.filter((item) => unreadMailAction(item) === "read").length : 0;
+  const unreadDeleteCount = mode === "unread" ? items.filter((item) => unreadMailAction(item) === "delete").length : 0;
   const modeButtons = mailApi.modes
     .map((itemMode) => {
       const active = itemMode === mode;
-      const count = counts[itemMode] || 0;
       const label = mailApi.modeLabels[itemMode] || itemMode.toUpperCase();
-      return `<button class="archiveAction ${active ? "isActive" : ""}" type="button" data-mail-mode="${escapeHtml(itemMode)}" aria-pressed="${active}">${escapeHtml(label)} ${escapeHtml(count)}</button>`;
+      return `<button class="archiveAction ${active ? "isActive" : ""}" type="button" data-mail-mode="${escapeHtml(itemMode)}" aria-pressed="${active}">${escapeHtml(label)}</button>`;
     })
     .join("");
   const modeLabel = mailApi.modeLabels[mode] || mode.toUpperCase();
   const rows = items
     .map((item) => {
       const date = archiveDateParts(item.receivedAt);
+      const selectedAction = unreadMailAction(item);
+      const unreadActions = mode === "unread"
+        ? `
+          <fieldset class="archiveUnreadActions" aria-label="Unread mail action for ${escapeHtml(item.subject)}">
+            <label class="${selectedAction === "read" ? "isSelected" : ""}">
+              <input type="checkbox" data-mail-unread-action="read" data-mail-unread-key="${escapeHtml(item.id)}" ${selectedAction === "read" ? "checked" : ""} />
+              <span>READ</span>
+            </label>
+            <label class="${selectedAction === "delete" ? "isSelected" : ""}">
+              <input type="checkbox" data-mail-unread-action="delete" data-mail-unread-key="${escapeHtml(item.id)}" ${selectedAction === "delete" ? "checked" : ""} />
+              <span>DEL</span>
+            </label>
+          </fieldset>
+        `
+        : `<span class="archiveSourceLink isDisabled">${escapeHtml(item.attachmentCount ? `ATT ${item.attachmentCount}` : "MAIL")}</span>`;
       return `
-        <li class="archiveRecord ${selectedListItem?.id === item.id ? "isSelected" : ""}">
+        <li class="archiveRecord ${mode === "unread" ? "hasUnreadActions" : ""} ${selectedListItem?.id === item.id ? "isSelected" : ""}">
           <button class="archiveRecordButton" type="button" data-mail-open="${escapeHtml(item.id)}" aria-current="${selectedListItem?.id === item.id ? "true" : "false"}">
             <span class="archiveRecordId">#${escapeHtml(item.uid)}</span>
             <time class="archiveRecordDate" datetime="${escapeHtml(date.raw)}">${escapeHtml(date.label)}</time>
             <strong class="archiveRecordTitle">${escapeHtml(item.subject)}</strong>
           </button>
-          <span class="archiveSourceLink isDisabled">${escapeHtml(item.attachmentCount ? `ATT ${item.attachmentCount}` : "MAIL")}</span>
+          ${unreadActions}
         </li>
       `;
     })
     .join("");
-  const summary = activeChecked && !activeError
-    ? `${items.length} MESSAGES // ${modeLabel} BOARD`
-    : activeLoading
-      ? "LOADING MAIL BOARD"
-      : "MAIL BOARD STANDBY";
+  const summary = mail.unreadApplying
+    ? "APPLYING UNREAD MAIL ACTIONS"
+    : activeChecked && !activeError
+      ? mode === "unread"
+        ? `${items.length} UNREAD // ${unreadReadCount} READ // ${unreadDeleteCount} DEL`
+        : `${items.length} MESSAGES // ${modeLabel} BOARD`
+      : activeLoading
+        ? "LOADING MAIL BOARD"
+        : "MAIL BOARD STANDBY";
   const attachmentRows = selected?.attachments?.length
     ? selected.attachments
       .map(
@@ -5387,7 +5460,14 @@ function renderMail() {
                 : activeChecked && !rows
                   ? `<p class="archiveStatusMessage">No messages on this board.</p>`
                   : rows
-                    ? `<ol class="archiveRecordList">${rows}</ol>`
+                    ? `<ol class="archiveRecordList">${rows}</ol>${
+                        mode === "unread"
+                          ? `<div class="archiveUnreadApplyBar">
+                              <p>${escapeHtml(unreadReadCount)} READ // ${escapeHtml(unreadDeleteCount)} DEL</p>
+                              <button class="archiveAction isActive" type="button" data-mail-unread-apply ${mail.unreadApplying || !items.length ? "disabled" : ""}>${mail.unreadApplying ? "APPLYING" : "APPLY"}</button>
+                            </div>`
+                          : ""
+                      }`
                     : ""
           }
         </section>
@@ -8515,6 +8595,17 @@ document.addEventListener("click", async (event) => {
   const mailMode = event.target.closest("[data-mail-mode]");
   if (mailMode) {
     await setMailMode(mailMode.dataset.mailMode || "all");
+    return;
+  }
+
+  const unreadMailActionInput = event.target.closest("[data-mail-unread-action]");
+  if (unreadMailActionInput) {
+    setUnreadMailAction(unreadMailActionInput.dataset.mailUnreadKey || "", unreadMailActionInput.dataset.mailUnreadAction || "read");
+    return;
+  }
+
+  if (event.target.closest("[data-mail-unread-apply]")) {
+    await applyUnreadMailActions();
     return;
   }
 
