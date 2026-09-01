@@ -248,7 +248,9 @@ At the end of a material session:
 ## Initial Implementation Plan
 
 1. Keep current `system.status` in production observation.
-2. Add personal PWA Settings/Admin read-only status view.
+2. Add personal PWA Settings/Admin read-only status view. Keep the PWA as a
+   system observation surface only; do not add restart, deploy, reboot, shell,
+   package-update, or other system write controls to PWA.
 3. Define repo runbook directory and JSON schema for operator operations.
 4. Add dry-run-only host executor prototype for H4.
 5. Add one allowlisted non-critical restart with exact confirmation.

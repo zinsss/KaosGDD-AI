@@ -1463,7 +1463,9 @@ Planned implementation:
    and behind Governor-owned APIs. Initial status slice uses the existing
    KaosDiscoord health provider.
 2. Add read-only `system.status` to Brain Guard and the personal admin PWA.
-   Brain support is deployed; personal admin PWA support remains pending.
+   Brain support is deployed; personal admin PWA support remains pending. The
+   PWA system view is an observation surface only and must not expose system
+   write controls.
 3. Define versioned runbook contracts and dry-run-only restricted host
    executors.
 4. Add one allowlisted non-critical restart with exact confirmation, audit,
