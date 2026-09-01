@@ -54,7 +54,7 @@ class NaverMailConfig:
             raise ValueError("MAIL_NAVER_OWNER must be discord or worker")
         roots = tuple(
             value.strip()
-            for value in source.get("MAIL_NAVER_FOLDERS", "세무사,영덕군보건소").split(",")
+            for value in source.get("MAIL_NAVER_FOLDERS", "INBOX,세무사,영덕군보건소").split(",")
             if value.strip()
         )
         return cls(

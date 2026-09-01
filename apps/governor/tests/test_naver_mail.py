@@ -19,6 +19,7 @@ class FakeMailboxServer:
         child = encode_modified_utf7("각종공문/영덕군보건소")
         tax = encode_modified_utf7("세무사")
         self.mailboxes = {
+            "INBOX": {"uidvalidity": "9", "messages": {}},
             root: {"uidvalidity": "10", "messages": {1: self.message("Existing")}},
             child: {"uidvalidity": "11", "messages": {}},
             tax: {"uidvalidity": "12", "messages": {}},
@@ -79,6 +80,10 @@ class NaverMailConfigTests(unittest.TestCase):
         self.assertEqual(config.owner, "worker")
         with self.assertRaisesRegex(ValueError, "MAIL_NAVER_OWNER"):
             NaverMailConfig.from_env({"MAIL_NAVER_OWNER": "both"})
+
+    def test_default_lifecycle_roots_include_inbox(self) -> None:
+        config = NaverMailConfig.from_env({})
+        self.assertEqual(config.folder_roots, ("INBOX", "세무사", "영덕군보건소"))
 
 
 class FakeIMAP:
