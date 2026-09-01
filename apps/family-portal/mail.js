@@ -3,6 +3,14 @@
   if (typeof module === "object" && module.exports) module.exports = api;
   if (root) root.KAOS_PORTAL_MAIL = api;
 })(typeof globalThis === "object" ? globalThis : this, function createPortalMail() {
+  const modes = Object.freeze(["all", "yeongdeok", "tax", "attachments"]);
+  const modeLabels = Object.freeze({
+    all: "ALL",
+    yeongdeok: "영덕군보건소",
+    tax: "세무사",
+    attachments: "ATT",
+  });
+
   function clean(value, maximum = 240) {
     return String(value || "").trim().slice(0, maximum);
   }
@@ -44,6 +52,30 @@
     return normalizeMessage(source.message || source);
   }
 
+  function normalizeMode(value) {
+    const mode = clean(value, 40).toLowerCase();
+    return modes.includes(mode) ? mode : "all";
+  }
+
+  function filterItems(items, modeValue) {
+    const mode = normalizeMode(modeValue);
+    const source = Array.isArray(items) ? items : [];
+    if (mode === "attachments") return Object.freeze(source.filter((item) => item.attachmentCount > 0));
+    if (mode === "yeongdeok") return Object.freeze(source.filter((item) => item.mailbox === "영덕군보건소"));
+    if (mode === "tax") return Object.freeze(source.filter((item) => item.mailbox === "세무사"));
+    return Object.freeze(source.slice());
+  }
+
+  function counts(items) {
+    const source = Array.isArray(items) ? items : [];
+    return Object.freeze({
+      all: source.length,
+      yeongdeok: source.filter((item) => item.mailbox === "영덕군보건소").length,
+      tax: source.filter((item) => item.mailbox === "세무사").length,
+      attachments: source.filter((item) => item.attachmentCount > 0).length,
+    });
+  }
+
   function normalizePage(payload) {
     const source = payload && typeof payload === "object" ? payload : {};
     const items = Object.freeze(
@@ -59,5 +91,15 @@
     });
   }
 
-  return Object.freeze({ normalizeAttachment, normalizeDetail, normalizeMessage, normalizePage });
+  return Object.freeze({
+    counts,
+    filterItems,
+    modeLabels,
+    modes,
+    normalizeAttachment,
+    normalizeDetail,
+    normalizeMessage,
+    normalizeMode,
+    normalizePage,
+  });
 });

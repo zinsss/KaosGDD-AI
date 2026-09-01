@@ -312,6 +312,7 @@ const state = {
     checked: false,
     loading: false,
     error: "",
+    mode: "all",
     items: [],
     folders: [],
     mailboxCount: 0,
@@ -2094,6 +2095,17 @@ function refreshMail() {
   state.mail.detailLoading = false;
   state.mail.detailError = "";
   return loadMail({ force: true });
+}
+
+function setMailMode(modeValue) {
+  const mode = window.KAOS_PORTAL_MAIL.normalizeMode(modeValue);
+  if (state.mail.mode === mode) return;
+  state.mail.mode = mode;
+  state.mail.selectedKey = "";
+  state.mail.selected = null;
+  state.mail.detailLoading = false;
+  state.mail.detailError = "";
+  render();
 }
 
 async function selectMailRecord(key) {
@@ -5186,10 +5198,23 @@ function renderFax() {
 
 function renderMail() {
   const mail = state.mail;
-  const selectedListItem = mail.items.find((item) => item.id === mail.selectedKey) || null;
+  const mailApi = window.KAOS_PORTAL_MAIL;
+  const mode = mailApi.normalizeMode(mail.mode);
+  const counts = mailApi.counts(mail.items);
+  const items = mailApi.filterItems(mail.items, mode);
+  const selectedListItem = items.find((item) => item.id === mail.selectedKey) || null;
   const selected = mail.selected || selectedListItem;
   const hasDetail = mail.detailLoading || mail.detailError || Boolean(selected);
-  const rows = mail.items
+  const modeButtons = mailApi.modes
+    .map((itemMode) => {
+      const active = itemMode === mode;
+      const count = counts[itemMode] || 0;
+      const label = mailApi.modeLabels[itemMode] || itemMode.toUpperCase();
+      return `<button class="archiveAction ${active ? "isActive" : ""}" type="button" data-mail-mode="${escapeHtml(itemMode)}" aria-pressed="${active}">${escapeHtml(label)} ${escapeHtml(count)}</button>`;
+    })
+    .join("");
+  const modeLabel = mailApi.modeLabels[mode] || mode.toUpperCase();
+  const rows = items
     .map((item) => {
       const date = archiveDateParts(item.receivedAt);
       return `
@@ -5205,7 +5230,7 @@ function renderMail() {
     })
     .join("");
   const summary = mail.checked && !mail.error
-    ? `${mail.items.length} MESSAGES // ${mail.mailboxCount || mail.folders.length} MAILBOXES`
+    ? `${items.length} MESSAGES // ${modeLabel} BOARD`
     : mail.loading
       ? "LOADING MAIL BOARD"
       : "MAIL BOARD STANDBY";
@@ -5282,7 +5307,7 @@ function renderMail() {
   return `
     <section class="archiveTerminal" data-archive-kind="mail" aria-label="Mail board">
       <div class="archiveCommand" aria-label="Mail board actions">
-        <div class="archiveStatusMessage">${escapeHtml(mail.folders.length ? mail.folders.join(" // ") : PERSONAL_MAIL_FOLDERS.join(" // "))}</div>
+        <div class="archiveCommandActions">${modeButtons}</div>
         <button class="archiveAction archiveRefreshAction" type="button" data-mail-refresh aria-label="Refresh mail board" title="Refresh mail board" ${mail.loading ? "disabled" : ""}>↻</button>
       </div>
       <div class="archiveWorkspace ${hasDetail ? "hasDetail" : ""}">
@@ -5300,7 +5325,7 @@ function renderMail() {
               : mail.loading && !mail.checked
                 ? `<p class="archiveStatusMessage">Reading Naver Mail headers...</p>`
                 : mail.checked && !rows
-                  ? `<p class="archiveStatusMessage">No messages in configured mailboxes.</p>`
+                  ? `<p class="archiveStatusMessage">No messages on this board.</p>`
                   : rows
                     ? `<ol class="archiveRecordList">${rows}</ol>`
                     : ""
@@ -8424,6 +8449,12 @@ document.addEventListener("click", async (event) => {
 
   if (event.target.closest("[data-mail-refresh]")) {
     await refreshMail();
+    return;
+  }
+
+  const mailMode = event.target.closest("[data-mail-mode]");
+  if (mailMode) {
+    setMailMode(mailMode.dataset.mailMode || "all");
     return;
   }
 

@@ -53,10 +53,12 @@ configuration as the lifecycle worker, but its `/data/mail` mount is read-only.
 The response is a compact archive-board payload with the requested folders,
 mailbox count, and recent message headers. The personal PWA currently requests
 only `영덕군보건소` and `세무사`; `INBOX` remains configured for lifecycle polling
-and notifications but is not fetched for the PWA Mail board. Selecting a row
-fetches the normalized text body and attachment metadata only. Opening an
-attachment streams that one attachment inline from Naver for viewing/downloading
-inside Mail; it does not create a Documents Inbox item or Paperless document.
+and notifications but is not fetched for the PWA Mail board. The PWA tabs
+(`ALL`, `영덕군보건소`, `세무사`, `ATT`) filter this already-scoped payload locally;
+switching tabs does not trigger an additional IMAP fetch. Selecting a row fetches
+the normalized text body and attachment metadata only. Opening an attachment
+streams that one attachment inline from Naver for viewing/downloading inside
+Mail; it does not create a Documents Inbox item or Paperless document.
 
 ## Daily unread organizer
 
