@@ -473,13 +473,29 @@ def _mail_query_int(params: dict[str, list[str]], name: str, default: int) -> in
     return value
 
 
+def _mail_query_folders(params: dict[str, list[str]]) -> tuple[str, ...] | None:
+    raw_values = params.get("folder") or params.get("folders") or []
+    folders: list[str] = []
+    for raw in raw_values:
+        for part in str(raw or "").split(","):
+            folder = part.strip()
+            if not folder:
+                continue
+            if len(folder) > 160:
+                raise NaverMailError("mail_mailbox_invalid")
+            if folder not in folders:
+                folders.append(folder)
+    return tuple(folders) or None
+
+
 def mail_messages_payload(
     query_string: str,
     poller: NaverMailPoller | None = None,
 ) -> dict[str, object]:
     params = urllib.parse.parse_qs(query_string, keep_blank_values=True)
     limit = _mail_query_int(params, "limit", 50)
-    payload = (poller or naver_mail_poller()).list_messages(limit=limit)
+    folders = _mail_query_folders(params)
+    payload = (poller or naver_mail_poller()).list_messages(limit=limit, folders=folders)
     return {
         "ok": True,
         "limit": limit,

@@ -47,6 +47,7 @@ const DEFAULT_EVENT_START_TIME = "09:00";
 const DEFAULT_EVENT_END_TIME = "10:00";
 const MEMOS_URL = "https://memos.kaosgdd.net";
 const DESKTOP_MEDIA_QUERY = "(min-width: 1180px)";
+const PERSONAL_MAIL_FOLDERS = Object.freeze(["영덕군보건소", "세무사"]);
 const LEDGER_VIEWS = new Set(["all", "expense", "income"]);
 const LEDGER_RANGES = new Set(["all", "year", "month", "week", "custom"]);
 const LEDGER_EXPENSE_CATEGORIES = new Set(["계좌 지출", "현금 지출", "상품권 사용"]);
@@ -2050,6 +2051,7 @@ async function loadMail(options = {}) {
   if (getRoute() === "mail") render();
   try {
     const params = new URLSearchParams({ limit: String(state.mail.limit || 50) });
+    PERSONAL_MAIL_FOLDERS.forEach((folder) => params.append("folder", folder));
     const response = await fetch(`/api/mail/messages?${params.toString()}`, {
       headers: { Accept: "application/json" },
       cache: "no-store",
@@ -5280,7 +5282,7 @@ function renderMail() {
   return `
     <section class="archiveTerminal" data-archive-kind="mail" aria-label="Mail board">
       <div class="archiveCommand" aria-label="Mail board actions">
-        <div class="archiveStatusMessage">${escapeHtml(mail.folders.length ? mail.folders.join(" // ") : "INBOX // 세무사 // 영덕군보건소")}</div>
+        <div class="archiveStatusMessage">${escapeHtml(mail.folders.length ? mail.folders.join(" // ") : PERSONAL_MAIL_FOLDERS.join(" // "))}</div>
         <button class="archiveAction archiveRefreshAction" type="button" data-mail-refresh aria-label="Refresh mail board" title="Refresh mail board" ${mail.loading ? "disabled" : ""}>↻</button>
       </div>
       <div class="archiveWorkspace ${hasDetail ? "hasDetail" : ""}">

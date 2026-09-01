@@ -37,7 +37,7 @@ Discord clients without changing the source attachment.
 The personal PWA reads recent Naver headers through Governor:
 
 ```text
-GET /api/mail/messages?limit=50
+GET /api/mail/messages?limit=50&folder=영덕군보건소&folder=세무사
 GET /api/mail/messages/{uid}?mailbox={display-mailbox}
 GET /api/mail/messages/{uid}/attachments/{index}?mailbox={display-mailbox}
 ```
@@ -50,11 +50,13 @@ import attachments into Documents, or alter checkpoint state.
 The `governor-api` container receives the same Naver host/user/folder/password
 configuration as the lifecycle worker, but its `/data/mail` mount is read-only.
 
-The response is a compact archive-board payload with configured folders,
-mailbox count, and recent message headers. Selecting a row fetches the normalized
-text body and attachment metadata only. Opening an attachment streams that one
-attachment inline from Naver for viewing/downloading inside Mail; it does not
-create a Documents Inbox item or Paperless document.
+The response is a compact archive-board payload with the requested folders,
+mailbox count, and recent message headers. The personal PWA currently requests
+only `영덕군보건소` and `세무사`; `INBOX` remains configured for lifecycle polling
+and notifications but is not fetched for the PWA Mail board. Selecting a row
+fetches the normalized text body and attachment metadata only. Opening an
+attachment streams that one attachment inline from Naver for viewing/downloading
+inside Mail; it does not create a Documents Inbox item or Paperless document.
 
 ## Daily unread organizer
 

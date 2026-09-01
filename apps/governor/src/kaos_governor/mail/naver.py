@@ -438,9 +438,19 @@ class NaverMailPoller:
             self._save_runtime(state)
             return 0
 
-    def list_messages(self, *, limit: int = 50) -> dict[str, object]:
+    def _list_roots(self, folders: tuple[str, ...] | None) -> tuple[str, ...]:
+        requested = tuple(dict.fromkeys(str(folder or "").strip() for folder in (folders or ()) if str(folder or "").strip()))
+        if not requested:
+            return self.config.folder_roots
+        allowed = set(self.config.folder_roots)
+        if any(folder not in allowed for folder in requested):
+            raise NaverMailError("mail_mailbox_invalid")
+        return requested
+
+    def list_messages(self, *, limit: int = 50, folders: tuple[str, ...] | None = None) -> dict[str, object]:
         if not self.config.configured:
             raise NaverMailError("naver_not_configured")
+        roots = self._list_roots(folders)
         client = self.imap_factory(self.config.host, self.config.port, timeout=self.config.timeout_seconds)
         messages: list[MailMessage] = []
         mailbox_count = 0
@@ -448,7 +458,7 @@ class NaverMailPoller:
             status, _data = client.login(self.config.username, self.config.password)
             if status != "OK":
                 raise NaverMailError("imap_login_failed")
-            mailboxes = discover_mailboxes(client, self.config.folder_roots)
+            mailboxes = discover_mailboxes(client, roots)
             mailbox_count = len(mailboxes)
             for mailbox in mailboxes:
                 status, _data = client.select(quoted_mailbox(mailbox.raw_name), readonly=True)
@@ -461,7 +471,7 @@ class NaverMailPoller:
             messages.sort(key=lambda item: item.received_at, reverse=True)
             return {
                 "mailboxCount": mailbox_count,
-                "folders": list(self.config.folder_roots),
+                "folders": list(roots),
                 "messages": [
                     {
                         "kind": "mail",

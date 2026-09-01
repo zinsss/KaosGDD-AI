@@ -26,6 +26,7 @@ class FakeMailboxServer:
             tax: {"uidvalidity": "12", "messages": {}},
         }
         self.fetch_specs: list[str] = []
+        self.selected_mailboxes: list[str] = []
     @staticmethod
     def message(
         subject: str,
@@ -102,6 +103,7 @@ class FakeIMAP:
     def select(self, mailbox, readonly=False):
         self.readonly_values.append(readonly)
         self.selected = unquote_imap(mailbox)
+        self.server.selected_mailboxes.append(self.selected)
         return "OK", [str(len(self.server.mailboxes[self.selected]["messages"])).encode()]
 
     def response(self, code):
@@ -255,6 +257,50 @@ class NaverMailTests(unittest.TestCase):
             server.fetch_specs,
             ["(BODY.PEEK[HEADER])", "(BODY.PEEK[HEADER])", "(BODY.PEEK[HEADER])"],
         )
+
+    def test_list_messages_can_scope_to_requested_configured_roots(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            server = FakeMailboxServer()
+            child = encode_modified_utf7("각종공문/영덕군보건소")
+            tax = encode_modified_utf7("세무사")
+            server.mailboxes["INBOX"]["messages"][6] = server.message("인박스")
+            server.mailboxes[child]["messages"][5] = server.message("영덕군 안내", date="Wed, 12 Aug 2026 00:00:00 +0000")
+            server.mailboxes[tax]["messages"][4] = server.message("세무사 안내", date="Tue, 11 Aug 2026 00:00:00 +0000")
+            config_with_inbox = NaverMailConfig(
+                enabled=True,
+                host="imap.naver.com",
+                port=993,
+                username="user",
+                password="password",
+                folder_roots=("INBOX", "세무사", "영덕군보건소"),
+                state_path=Path(tmp) / "state.json",
+                poll_seconds=60,
+                timeout_seconds=20,
+                max_attachment_bytes=20 * 1024 * 1024,
+                preview_characters=2200,
+                mark_existing_on_first_run=True,
+            )
+            poller = NaverMailPoller(config_with_inbox, server.factory)
+
+            payload = poller.list_messages(limit=10, folders=("영덕군보건소", "세무사"))
+
+        self.assertEqual(payload["mailboxCount"], 2)
+        self.assertEqual(payload["folders"], ["영덕군보건소", "세무사"])
+        self.assertEqual(
+            [item["subject"] for item in payload["messages"]],
+            ["영덕군 안내", "세무사 안내"],
+        )
+        self.assertNotIn("INBOX", server.selected_mailboxes)
+
+    def test_list_messages_rejects_unconfigured_requested_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            server = FakeMailboxServer()
+            poller = NaverMailPoller(target_config(Path(tmp) / "state.json"), server.factory)
+
+            with self.assertRaisesRegex(NaverMailError, "mail_mailbox_invalid"):
+                poller.list_messages(limit=10, folders=("INBOX",))
+
+        self.assertEqual(server.selected_mailboxes, [])
 
     def test_get_message_fetches_body_read_only_by_display_mailbox(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

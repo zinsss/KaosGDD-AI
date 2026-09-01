@@ -13,8 +13,8 @@ class FakeMailPoller:
     def __init__(self) -> None:
         self.calls: list[object] = []
 
-    def list_messages(self, *, limit: int = 50) -> dict[str, object]:
-        self.calls.append(limit)
+    def list_messages(self, *, limit: int = 50, folders: tuple[str, ...] | None = None) -> dict[str, object]:
+        self.calls.append((limit, folders))
         return {
             "mailboxCount": 2,
             "folders": ["INBOX", "세무사"],
@@ -70,11 +70,19 @@ class MailApiTests(unittest.TestCase):
 
         payload = api.mail_messages_payload("limit=25", poller)  # type: ignore[arg-type]
 
-        self.assertEqual(poller.calls, [25])
+        self.assertEqual(poller.calls, [(25, None)])
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["limit"], 25)
         self.assertEqual(payload["mailboxCount"], 2)
         self.assertEqual(payload["messages"][0]["subject"], "공지")  # type: ignore[index]
+
+    def test_messages_payload_passes_requested_folder_scope(self) -> None:
+        poller = FakeMailPoller()
+
+        payload = api.mail_messages_payload("limit=25&folder=영덕군보건소&folder=세무사", poller)  # type: ignore[arg-type]
+
+        self.assertEqual(poller.calls, [(25, ("영덕군보건소", "세무사"))])
+        self.assertTrue(payload["ok"])
 
     def test_limit_is_strictly_bounded(self) -> None:
         for query in ("limit=0", "limit=101", "limit=nope"):
