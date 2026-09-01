@@ -4246,6 +4246,9 @@ h3 {
 }
 
 .app[data-profile="main"] {
+  --main-tab-active-border: rgba(180, 142, 173, 0.62);
+  --main-tab-active-bg: rgba(180, 142, 173, 0.14);
+  --main-tab-active-text: var(--nord15);
   background: var(--bg);
 }
 
@@ -4453,11 +4456,21 @@ h3 {
 .app[data-profile="main"] .archiveSourceLink,
 .app[data-profile="main"] .archiveSearchBox,
 .app[data-profile="main"] .archiveCommandLine input,
+.app[data-profile="main"] .embedSwitcher,
 .app[data-profile="main"] .composer input,
 .app[data-profile="main"] .composer select,
 .app[data-profile="main"] .composer textarea {
   min-height: 44px;
   border-radius: 0;
+}
+
+.app[data-profile="main"] .collectionRail button.isActive,
+.app[data-profile="main"] .collectionRail a.isActive,
+.app[data-profile="main"] .segmentedTabs button.isActive,
+.app[data-profile="main"] .embedSwitcher button.isActive {
+  border-color: var(--main-tab-active-border);
+  background: var(--main-tab-active-bg);
+  color: var(--main-tab-active-text);
 }
 
 .app[data-profile="main"] .openButton,
@@ -5909,9 +5922,9 @@ h3 {
 }
 
 .app[data-profile="main"] .archiveModeTabs button.isActive {
-  border-color: var(--archive-line-strong);
-  background: rgba(235, 203, 139, 0.1);
-  color: var(--archive-amber);
+  border-color: var(--main-tab-active-border);
+  background: var(--main-tab-active-bg);
+  color: var(--main-tab-active-text);
 }
 
 .app[data-profile="main"] .archiveMasthead,
@@ -6125,9 +6138,9 @@ h3 {
 }
 
 .app[data-profile="main"] .archiveAction.isActive {
-  border-color: var(--archive-amber);
-  color: var(--archive-amber);
-  background: rgba(235, 203, 139, 0.1);
+  border-color: var(--main-tab-active-border);
+  background: var(--main-tab-active-bg);
+  color: var(--main-tab-active-text);
 }
 
 .app[data-profile="main"] .archiveCommandLine input:focus-visible,
