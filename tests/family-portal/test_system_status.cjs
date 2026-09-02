@@ -33,10 +33,23 @@ test("nginx proxies only the read-only system api namespace to governor api", ()
 test("main settings renders a compact KaosGDD settings terminal", () => {
   assert.match(appSource, /function renderMainSettings\(\)/);
   assert.match(appSource, /class="archiveTerminal settingsTerminal"/);
-  assert.match(appSource, /SETTINGS/);
-  assert.match(appSource, /KAOSGDD \/\/ GOVERNED/);
+  assert.match(appSource, /CONTROL ROOM/);
+  assert.match(appSource, /KAOSGDD \/\/ READ ONLY/);
   assert.match(appSource, /renderGovernorSettingsStatus\(\{ showRecurringDetails: false \}\)/);
   assert.match(appSource, /if \(portalProfile\(\) === "main"\) return renderMainSettings\(\);/);
   assert.match(styles, /\.app\[data-profile="main"\] \.settingsTerminal \{/);
   assert.match(styles, /\.app\[data-profile="main"\] \.settingsListCompact \{/);
+});
+
+test("main settings avoids legacy editor stacks and keeps system writes out of PWA", () => {
+  const mainSettingsStart = appSource.indexOf("function renderMainSettings()");
+  const settingsStart = appSource.indexOf("function renderSettings()", mainSettingsStart);
+  const mainSettingsSource = appSource.slice(mainSettingsStart, settingsStart);
+  assert.match(appSource, /function renderMainSettingsMap\(\)/);
+  assert.match(appSource, /function renderMainSettingsLinks\(\)/);
+  assert.match(appSource, /System writes", "KaosSystemOperator \/ Codex, not PWA"/);
+  assert.doesNotMatch(mainSettingsSource, /renderMailOrganizerSettings\(\)/);
+  assert.doesNotMatch(mainSettingsSource, /renderCustomEventSettings\(\)/);
+  assert.match(appSource, /if \(route === "settings"\) \{[\s\S]*loadSystemStatus\(\);[\s\S]*loadGovernorSettingsStatus\(\);[\s\S]*if \(portalProfile\(\) !== "main"\) \{[\s\S]*loadWeatherSettings\(\);[\s\S]*loadRecurringTasks\(\);[\s\S]*\}/);
+  assert.match(styles, /\.app\[data-profile="main"\] \.settingsLinkGrid \{/);
 });

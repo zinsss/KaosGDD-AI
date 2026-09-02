@@ -3384,6 +3384,21 @@ h3 {
   color: var(--text);
 }
 
+.app[data-profile="main"] .settingsControlMap,
+.app[data-profile="main"] .settingsControlLinks {
+  margin-top: 0;
+}
+
+.app[data-profile="main"] .settingsLinkGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.app[data-profile="main"] .settingsControlLinks .archiveAction {
+  justify-content: flex-start;
+}
+
 .systemServiceList,
 .systemRuntimeList {
   display: grid;

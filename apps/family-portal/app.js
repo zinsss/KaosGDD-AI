@@ -8248,44 +8248,88 @@ function renderFamilyFontSettingsRow() {
   `;
 }
 
+function mainSettingsWeatherLabel() {
+  return state.governorSettings.data?.weather?.locationLabel || weatherLocationLabel();
+}
+
+function renderMainSettingsMap() {
+  return `
+    <section class="settingsStatusPanel settingsControlMap">
+      <div class="settingsStatusHeader">
+        <strong>Domain Map</strong>
+        <small>TRANSPORTS DO NOT OWN DATA</small>
+      </div>
+      <dl class="settingsList settingsListCompact">
+        ${renderSettingsRows([
+          ["Agenda / Calendar", "Radicale VEVENT + Governor generated-event policy"],
+          ["Tasks / Supplies", "Radicale VTODO through KaosGovernor"],
+          ["Memos", "Memos store through Governor relay"],
+          ["Documents", "Paperless archive + Documents Inbox audit"],
+          ["Fax", "HylaFAX archive + Governor notification/workflow"],
+          ["Mail", "Naver IMAP view/actions through Governor"],
+          ["Notifications", "Pushover + iOS-native task notices"],
+          ["Brain", "Discord #brain as AI/system gateway"],
+        ])}
+      </dl>
+    </section>
+  `;
+}
+
+function renderMainSettingsLinks() {
+  const links = [
+    ["Paperless", "https://paperless.kaosgdd.net"],
+    ["Memos", "https://memos.kaosgdd.net"],
+    ["Files", "https://files.kaosgdd.net"],
+    ["Radicale", "https://calendar.kaosgdd.net"],
+    ["PDF", "https://pdf.kaosgdd.net"],
+    ["Vault", "https://vault.kaosgdd.net"],
+  ];
+  return `
+    <section class="settingsStatusPanel settingsControlLinks">
+      <div class="settingsStatusHeader">
+        <strong>Admin Links</strong>
+        <small>OPEN EXTERNAL CONSOLES</small>
+      </div>
+      <div class="settingsLinkGrid">
+        ${links.map(([label, href]) => `
+          <a class="archiveAction" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
 function renderMainSettings() {
   return `
     <section class="archiveTerminal settingsTerminal" aria-label="KaosGDD settings">
       <section class="archiveIndex settingsOverviewPanel">
         <header class="archiveIndexHeader">
-          <h3>SETTINGS</h3>
-          <p class="archiveStatusMessage">KAOSGDD // GOVERNED</p>
+          <h3>CONTROL ROOM</h3>
+          <p class="archiveStatusMessage">KAOSGDD // READ ONLY</p>
         </header>
         <dl class="settingsList settingsListCompact">
           ${renderSettingsRows([
             ["Portal", "KaosGDD"],
-            ["Source of truth", "Radicale + Memos + Paperless + HylaFAX"],
-            ["Notifications", "Pushover + native iOS where scoped"],
+            ["Default weather", mainSettingsWeatherLabel()],
+            ["Source of truth", "Radicale + Memos + Paperless + HylaFAX + Naver"],
+            ["Mobile", "PWA + iOS Shortcuts"],
             ["Discord", "#brain only"],
+            ["System writes", "KaosSystemOperator / Codex, not PWA"],
+            ["Font", "Sarasa Gothic Mono"],
           ])}
-          ${renderWeatherSettingsRow()}
-          <div>
-            <dt>Font</dt>
-            <dd>Sarasa Gothic Mono</dd>
-          </div>
         </dl>
       </section>
       ${renderSystemStatusPanel()}
       ${renderGovernorSettingsStatus({ showRecurringDetails: false })}
-      <section class="settingsSectionStack" aria-label="Automation and templates">
-        ${renderMailOrganizerSettings()}
-        ${renderCustomEventSettings()}
-        ${renderEventPresetSettings()}
-        ${renderRecurringTaskSettings()}
-        ${renderHolidaySettings()}
-      </section>
+      ${renderMainSettingsMap()}
+      ${renderMainSettingsLinks()}
     </section>
   `;
 }
 
 function renderSettings() {
-  ensureEventPresets();
   if (portalProfile() === "main") return renderMainSettings();
+  ensureEventPresets();
   const config = profileConfig();
   const items = [
     [uiText("settings.portal", "Portal"), uiText("settings.familyPortal", "Family")],
@@ -8938,11 +8982,13 @@ function render() {
   if (route === "settings") {
     loadSystemStatus();
     loadGovernorSettingsStatus();
-    loadWeatherSettings();
-    loadHolidays();
-    loadCustomEvents();
-    loadMailOrganizerSettings();
-    loadRecurringTasks();
+    if (portalProfile() !== "main") {
+      loadWeatherSettings();
+      loadHolidays();
+      loadCustomEvents();
+      loadMailOrganizerSettings();
+      loadRecurringTasks();
+    }
   }
   if (weatherDeepLinkDate) {
     openedWeatherDeepLink = weatherDeepLinkDate;
