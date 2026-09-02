@@ -325,3 +325,9 @@ The mock lifecycle adapter completes the repository-only planning prototype.
 Before any real read-only host adapter is designed, this boundary requires a
 security review covering process isolation, catalog provenance authority,
 credential absence, data redaction, audit ownership, and deployment topology.
+
+The initial review is recorded in
+[Runbook Planning Boundary Security Review](runbook-planner-security-review.md).
+It approves local implementation of one fixed-path stored-report parser only.
+The parser is not wired or deployed, and the review does not approve host
+collection, API exposure, confirmation acceptance, or execution.

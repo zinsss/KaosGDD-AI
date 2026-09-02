@@ -39,6 +39,13 @@ Last updated: 2026-09-02
 - Both update apply plans require a valid SHA-256 frozen-plan digest and ten
   exact confirmation bindings, then stop at `confirmation-required`. Docker
   Engine, kernel, security-policy, database, and PACS updates remain excluded.
+- The planning-boundary security review approves one local fixed-path parser
+  for `/data/discord-system/maintenance.json`. It caps input at 256 KiB,
+  selects only a unique fresh `kaosgdd` record, normalizes typed counts, and
+  fails closed without echoing arbitrary report content.
+- The stored-report adapter is not wired to Governor, Brain, PWA, Compose, or
+  production. It does not run the collector, refresh packages, pull images,
+  access Docker, or write state.
 
 ## Current Production Baseline
 
@@ -55,8 +62,9 @@ Last updated: 2026-09-02
 1. Add read-only system status to the personal KaosGDD PWA Settings/Admin page.
 2. Review the version 1 runbook contract, fixed target allowlists, and local
    dry-run planner before adding any host adapter.
-3. Perform a security review of the planning boundary before designing any
-   real read-only host adapter. Keep production execution disabled.
+3. Define and locally test a Governor-owned, main-profile-only API around the
+   stored-report adapter, including response redaction and size limits. Do not
+   deploy it without a separately normalized deployment confirmation.
 4. Do not enable restart or update application until Governor authorization,
    normalized expiring confirmation, backup evidence, audit, verification,
    rollback/failure handling, and hardened host isolation are implemented and

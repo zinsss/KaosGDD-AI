@@ -61,6 +61,14 @@ or writes an audit file. Read operations end as `simulated-complete`;
 `service.restart` and both update-apply operations stop at
 `confirmation-required` with no action taken.
 
+`StoredMaintenanceReportAdapter` is the first real read boundary, but it is not
+wired to an API or deployment. It reads only the fixed existing path
+`/data/discord-system/maintenance.json`, caps the file at 256 KiB, selects the
+unique `kaosgdd` record, requires a timezone-aware report no older than 48
+hours, and returns normalized counts. It rejects missing, malformed, failed,
+duplicate, future-dated, stale, mismatched-host, or invalid-count data. It
+never invokes the host collector or echoes arbitrary report text.
+
 ## Contract
 
 Each runbook records:
@@ -164,6 +172,10 @@ assert receipt["executed"] is False
 This receipt is deterministic mock data. It must never be represented as a
 real preflight, observation, verification, confirmation, or operation-log
 record.
+
+The stored-report adapter boundary and remaining production prerequisites are
+reviewed in
+[`docs/operator/runbook-planner-security-review.md`](../docs/operator/runbook-planner-security-review.md).
 
 ## Future Execution Gate
 
