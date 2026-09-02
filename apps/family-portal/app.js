@@ -3881,6 +3881,13 @@ function renderTopNav(route) {
             <option value="${escapeHtml(item.route)}" ${item.route === selectedRoute ? "selected" : ""}>${escapeHtml(item.label)}</option>
           `).join("")}
         </select>
+        <nav class="desktopMainMenuList" aria-label="Desktop main menu">
+          ${profileConfig().nav.map((item) => `
+            <a href="#/${item.route}" data-desktop-main-menu="${escapeHtml(item.route)}" class="${item.route === selectedRoute ? "isActive" : ""}" ${item.route === selectedRoute ? 'aria-current="page"' : ""}>
+              ${escapeHtml(item.label)}
+            </a>
+          `).join("")}
+        </nav>
         ${
           topAction
             ? `

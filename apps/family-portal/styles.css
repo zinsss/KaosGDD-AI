@@ -447,6 +447,10 @@ html.isAgendaSuppliesEmbed body {
   min-width: 0;
 }
 
+.desktopMainMenuList {
+  display: none;
+}
+
 .topAddWrap {
   position: relative;
   grid-column: 3;
@@ -5437,12 +5441,58 @@ h3 {
   }
 
   .app[data-profile="main"] .mainMenuPicker {
+    display: block;
     justify-self: stretch;
     width: 100%;
   }
 
   .app[data-profile="main"] .mainMenuPicker select {
-    min-height: 44px;
+    display: none;
+  }
+
+  .app[data-profile="main"] .appTop {
+    border-radius: 0;
+    overflow: visible;
+  }
+
+  .app[data-profile="main"] .appIdentity {
+    padding-right: 58px;
+  }
+
+  .app[data-profile="main"] .topNav {
+    margin-top: 30px;
+  }
+
+  .app[data-profile="main"] .topAddWrap {
+    position: absolute;
+    top: 22px;
+    right: 16px;
+    grid-column: auto;
+    grid-row: auto;
+    justify-self: auto;
+  }
+
+  .app[data-profile="main"] .desktopMainMenuList {
+    display: grid;
+    gap: 4px;
+  }
+
+  .app[data-profile="main"] .desktopMainMenuList a {
+    display: flex;
+    align-items: center;
+    min-height: 38px;
+    padding: 0 0;
+    border: 1px solid transparent;
+    border-radius: 0;
+    color: var(--dim);
+    font: 760 0.98rem/1 "Sarasa Gothic Mono", ui-monospace, monospace;
+    letter-spacing: 0;
+    white-space: nowrap;
+  }
+
+  .app[data-profile="main"] .desktopMainMenuList a:hover,
+  .app[data-profile="main"] .desktopMainMenuList a.isActive {
+    color: var(--nord13);
   }
 
   .topNav a,

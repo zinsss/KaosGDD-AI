@@ -42,14 +42,30 @@ test("unknown personal routes safely select Agenda", () => {
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
+  const styleIndex = index.indexOf('href="/styles.css?v=272"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=3"');
   const documentsIndex = index.indexOf('src="/documents.js?v=5"');
   const faxIndex = index.indexOf('src="/fax.js?v=1"');
   const mailIndex = index.indexOf('src="/mail.js?v=6"');
-  const applicationIndex = index.indexOf('src="/app.js?v=262"');
+  const applicationIndex = index.indexOf('src="/app.js?v=263"');
+  assert.ok(styleIndex >= 0);
   assert.ok(navigationIndex >= 0);
   assert.ok(documentsIndex > navigationIndex);
   assert.ok(faxIndex > documentsIndex);
   assert.ok(mailIndex > faxIndex);
   assert.ok(applicationIndex > mailIndex);
+});
+
+test("main desktop navigation renders an open list while preserving the mobile picker", () => {
+  const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
+  const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
+
+  assert.match(appSource, /<select data-main-menu aria-label="Main menu">/);
+  assert.match(appSource, /class="desktopMainMenuList"/);
+  assert.match(appSource, /data-desktop-main-menu/);
+  assert.match(styles, /\.desktopMainMenuList \{\n  display: none;/);
+  assert.match(styles, /@media \(min-width: 1180px\)/);
+  assert.match(styles, /\.app\[data-profile="main"\] \.mainMenuPicker select \{\n    display: none;/);
+  assert.match(styles, /\.app\[data-profile="main"\] \.desktopMainMenuList \{\n    display: grid;/);
+  assert.match(styles, /\.app\[data-profile="main"\] \.appTop \{\n    border-radius: 0;/);
 });
