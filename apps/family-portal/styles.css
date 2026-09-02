@@ -461,9 +461,9 @@ html.isAgendaSuppliesEmbed body {
 .topAddButton {
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
-  min-height: 44px;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
   border: 1px solid rgba(136, 192, 208, 0.72);
   border-radius: 999px;
   background: rgba(136, 192, 208, 0.22);
@@ -5456,11 +5456,11 @@ h3 {
   }
 
   .app[data-profile="main"] .appIdentity {
-    padding-right: 58px;
+    padding-right: 50px;
   }
 
   .app[data-profile="main"] .topNav {
-    margin-top: 34px;
+    margin-top: 28px;
   }
 
   .app[data-profile="main"] .topAddWrap {
