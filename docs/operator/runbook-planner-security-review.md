@@ -2,8 +2,8 @@
 
 Review date: 2026-09-02
 
-Status: planning and stored-report read boundary approved for local
-implementation; production wiring and all execution remain unapproved.
+Status: planning and Governor API read boundary implemented locally;
+production mount/deployment and all execution remain unapproved.
 
 ## Scope
 
@@ -85,3 +85,17 @@ state that limitation rather than infer image availability.
    package-manager authority, or unrelated host filesystem mount.
 6. Complete local integration tests, then request a separately normalized
    deployment confirmation with verification and rollback notes.
+
+## Local API Implementation
+
+The reviewed parser now lives in the Governor package and backs protected
+`GET /api/system/updates`. The handler requires the existing personal
+Cloudflare Access verification and main host profile, returns only normalized
+bounded fields, and maps parser failures to stable error codes. Tests cover
+identity rejection, normalization, response size, redaction, freshness, target
+uniqueness, host match, counts, and prohibited imports.
+
+The endpoint is source code only. No Compose mount, proxy route, Brain intent,
+PWA control, service recreation, or production deployment is included. The
+runtime therefore cannot read the host report until the separately reviewed
+read-only mount and deployment are approved.

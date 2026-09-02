@@ -1565,6 +1565,18 @@ Stored maintenance read boundary (2026-09-02):
 - remains unwired and undeployed, and performs no collection, package refresh,
   registry/image interaction, command, Docker access, or write.
 
+Local Governor API slice (2026-09-02):
+
+- promoted the strict stored-report parser into the Governor package and added
+  protected `GET /api/system/updates`;
+- requires existing personal Cloudflare Access verification and the main host
+  profile, returns only bounded normalized fields, and exposes stable errors;
+- added eight Governor tests for authentication, profile scope, freshness,
+  size, target/host validation, typed counts, redaction, response bounds, and
+  prohibited execution/network imports;
+- added no Compose mount, proxy, Brain/PWA route, host collection, service
+  recreation, or deployment, so the endpoint is not live.
+
 Risk: low for the committed planning artifacts. A future executor remains a
 separate medium-to-high-risk phase and must not infer executable behavior from
 free-form model output.
@@ -1605,6 +1617,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-09-02 | 8 | Added non-networked mock lifecycle simulation | 19 planner/mock tests cover all catalog operations, restart stop, audit shape, envelope/provenance/payload rejection, and prohibited imports | None; deterministic fake evidence only, with no host observation, persistence, confirmation acceptance, or execution |
 | 2026-09-02 | 8 | Added routine-package and pinned container-image check/plan/apply contracts | 21 planner/mock tests cover all eleven entries, required SHA-256 plan references, bounds, and confirmation stops; schema/manifest checks pass | None; contracts and fake lifecycle only, with no host, registry, package-manager, Docker, or execution integration |
 | 2026-09-02 | 8 | Reviewed the planning boundary and added a strict fixed-path H3 maintenance-report parser | 28 tests cover freshness, size, target uniqueness, host match, typed counts, failure states, and prohibited imports | None; local parser only, with no API wiring, host collection, package/image action, deployment, or execution |
+| 2026-09-02 | 8 | Promoted the stored maintenance reader into a protected local Governor API | Eight Governor tests added; standalone parser smoke, Python compilation, 21 planner tests, and `git diff --check` pass; full Governor execution awaits canonical dependency environment | None; no mount, proxy, Brain/PWA route, host collection, service recreation, or deployment |
 | 2026-09-01 | 8 | Completed production observation for the read-only Brain system status slice | User confirmed the deployed Discord `#brain` `system status` response; H3 smoke and H4 doctor were healthy after deployment | `system.status` slice complete; Phase 8 continues with PWA/admin status and runbook review; no write executor enabled |
 | 2026-08-30 | 2 | Started PostgreSQL operation persistence and pending-payload inventory | Implementation in progress | None |
 | 2026-08-30 | 2 | Added migration 005, PostgreSQL store, durable versioned payloads, restart recovery, expiry/interruption cleanup, production store wiring, and CI PostgreSQL coverage | 200 Governor unit/contract + 9 PostgreSQL integration + 349 Discord + 317 Brain tests; H3 preflight and Compose render passed | None; not deployed, production remains on migration 004 |

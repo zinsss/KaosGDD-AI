@@ -43,9 +43,12 @@ Last updated: 2026-09-02
   for `/data/discord-system/maintenance.json`. It caps input at 256 KiB,
   selects only a unique fresh `kaosgdd` record, normalizes typed counts, and
   fails closed without echoing arbitrary report content.
-- The stored-report adapter is not wired to Governor, Brain, PWA, Compose, or
-  production. It does not run the collector, refresh packages, pull images,
-  access Docker, or write state.
+- The stored-report parser now lives in Governor and backs locally implemented
+  protected `GET /api/system/updates`. It requires personal Cloudflare Access
+  and the main profile, and returns only normalized bounded fields.
+- No Compose mount, proxy, Brain/PWA route, or production deployment was added.
+  The endpoint cannot read the report in production and does not run the
+  collector, refresh packages, pull images, access Docker, or write state.
 
 ## Current Production Baseline
 
@@ -62,9 +65,9 @@ Last updated: 2026-09-02
 1. Add read-only system status to the personal KaosGDD PWA Settings/Admin page.
 2. Review the version 1 runbook contract, fixed target allowlists, and local
    dry-run planner before adding any host adapter.
-3. Define and locally test a Governor-owned, main-profile-only API around the
-   stored-report adapter, including response redaction and size limits. Do not
-   deploy it without a separately normalized deployment confirmation.
+3. Run the new Governor API tests in canonical CI, then review an exact
+   read-only Compose mount and API deployment proposal. Do not deploy without
+   separately normalized confirmation.
 4. Do not enable restart or update application until Governor authorization,
    normalized expiring confirmation, backup evidence, audit, verification,
    rollback/failure handling, and hardened host isolation are implemented and

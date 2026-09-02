@@ -30,6 +30,7 @@ from kaos_governor.mail import MailOrganizerConfig, MailOrganizerError, NaverMai
 from kaos_governor.mail.naver import KST, NaverMailConfig, NaverMailError, NaverMailPoller
 from kaos_governor.memos import relay as memos_relay
 from kaos_governor.tasks import PostgresRecurringTaskStore, RecurringTaskDefinition, RecurringTaskError, RecurringTaskService, validate_payload
+from kaos_governor.system_updates import SystemUpdatesError, read_system_updates
 
 
 PORT = int(os.environ.get("GOVERNOR_API_PORT", "8096"))
@@ -209,6 +210,18 @@ def system_status_payload(profile: str, urlopen=urllib.request.urlopen) -> dict[
         "status": dict(payload["status"]),
         "brainChannelUrl": discord_brain_channel_url(),
         "readOnly": True,
+    }
+
+
+def system_updates_payload(profile: str) -> dict[str, object]:
+    if profile != "main":
+        raise SystemUpdatesError("main_profile_required")
+    return {
+        "ok": True,
+        "profile": "main",
+        "updatedAt": _utc_now_iso(),
+        "readOnly": True,
+        "status": read_system_updates(),
     }
 
 
@@ -1855,6 +1868,27 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 print(f"System status read failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "system_status_unavailable"})
+            return
+        if parsed.path == "/api/system/updates":
+            try:
+                require_main_access(self.headers)
+                json_response(
+                    self,
+                    200,
+                    system_updates_payload(profile_from_headers(self.headers)),
+                )
+            except (ValueError, SystemUpdatesError, memos_relay.MemosRelayError) as exc:
+                if isinstance(exc, memos_relay.MemosRelayError):
+                    json_response(self, exc.status, {"ok": False, "error": exc.code})
+                else:
+                    code = str(exc)
+                    status = 404 if code == "main_profile_required" else 503
+                    json_response(self, status, {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"System updates read failed: {type(exc).__name__}", flush=True)
+                json_response(
+                    self, 503, {"ok": False, "error": "system_updates_unavailable"}
+                )
             return
         json_response(self, 404, {"error": "not_found"})
 

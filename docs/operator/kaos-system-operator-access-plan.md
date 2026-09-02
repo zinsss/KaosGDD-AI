@@ -329,5 +329,7 @@ credential absence, data redaction, audit ownership, and deployment topology.
 The initial review is recorded in
 [Runbook Planning Boundary Security Review](runbook-planner-security-review.md).
 It approves local implementation of one fixed-path stored-report parser only.
-The parser is not wired or deployed, and the review does not approve host
-collection, API exposure, confirmation acceptance, or execution.
+The parser has been promoted into a locally implemented, personal/main-only
+Governor API endpoint. It is not mounted, proxied, or deployed, and the review
+does not approve host collection, production API exposure, confirmation
+acceptance, or execution.

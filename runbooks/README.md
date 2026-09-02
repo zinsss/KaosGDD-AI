@@ -61,8 +61,8 @@ or writes an audit file. Read operations end as `simulated-complete`;
 `service.restart` and both update-apply operations stop at
 `confirmation-required` with no action taken.
 
-`StoredMaintenanceReportAdapter` is the first real read boundary, but it is not
-wired to an API or deployment. It reads only the fixed existing path
+The Governor-owned stored maintenance reader is the first real read boundary,
+but it is not wired to a deployment. It reads only the fixed existing path
 `/data/discord-system/maintenance.json`, caps the file at 256 KiB, selects the
 unique `kaosgdd` record, requires a timezone-aware report no older than 48
 hours, and returns normalized counts. It rejects missing, malformed, failed,
