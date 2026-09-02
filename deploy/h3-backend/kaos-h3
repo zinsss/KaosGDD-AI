@@ -653,6 +653,9 @@ edge_preflight() {
   if grep -Eq 'reverse_proxy[[:space:]]+[^[:space:]]*8008|KAOSSUPPLIES|supplies\.kaosgdd\.net.*reverse_proxy' "${root}/config/Caddyfile"; then
     die "edge config must not proxy retired supplies web routes"
   fi
+  if grep -Eq 'path[[:space:]].*/api/supplies' "${root}/config/Caddyfile"; then
+    die "edge config must not intercept governed /api/supplies routes"
+  fi
   if ! grep -Eq 'reverse_proxy[[:space:]]+personal-memos-web:80' "${root}/config/Caddyfile"; then
     die "edge config must route personal Memos to the local Kaos client"
   fi
