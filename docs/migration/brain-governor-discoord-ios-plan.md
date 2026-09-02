@@ -80,11 +80,12 @@ H4, office-service, and stateful-service cutovers.
   navigation-only `#brain` link and no restart, deploy, shell, Docker,
   database, or arbitrary admin execution controls. The live PWA view was
   confirmed by the user on 2026-09-01.
-- Phase 6 Paperless upload ownership repair is in progress on 2026-09-02:
-  H3 already defines `PAPERLESS_DEFAULT_OWNER_ID=3` for Paperless user
-  `yhshfm`, and the upload adapter already supports that field. The missing
-  compose wiring is being corrected so future PWA uploads are visible to
-  `yhshfm` instead of remaining owned by the API-token user.
+- Phase 6 Paperless upload ownership repair deployed on 2026-09-02:
+  H3 already defined `PAPERLESS_DEFAULT_OWNER_ID=3` for Paperless user
+  `yhshfm`, and the upload adapter already supported that field. Commit
+  `3bda420` wires the setting into `governor-api`, H3 was recreated with
+  `owner=3` visible in the live container, and the already-uploaded hidden
+  Paperless document was reassigned from the API-token user to `yhshfm`.
 - Database schema in production: additive migration `005`.
 - Working rule: finish and verify one boundary before moving another domain.
 
