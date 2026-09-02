@@ -6235,14 +6235,16 @@ h3 {
 
 .app[data-profile="main"] .archiveAction,
 .app[data-profile="main"] .archiveSourceLink {
-  display: inline-grid;
-  place-items: center;
-  min-height: 44px;
-  border: 1px solid var(--archive-line);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.28em;
+  min-height: 32px;
+  border: 0;
   border-radius: 0;
-  background: rgba(67, 76, 94, 0.34);
+  background: transparent;
   color: var(--archive-cyan);
-  padding: 0 10px;
+  padding: 0 3px;
   font: 850 0.76rem/1 "Sarasa Gothic Mono", ui-monospace, monospace;
   letter-spacing: 0;
   text-decoration: none;
@@ -6250,20 +6252,45 @@ h3 {
   cursor: pointer;
 }
 
+.app[data-profile="main"] .archiveAction::before,
+.app[data-profile="main"] .archiveSourceLink::before {
+  content: "[";
+  color: currentColor;
+}
+
+.app[data-profile="main"] .archiveAction::after,
+.app[data-profile="main"] .archiveSourceLink::after {
+  content: "]";
+  color: currentColor;
+}
+
+.app[data-profile="main"] .archiveCommandActions .archiveAction {
+  min-height: 44px;
+  border: 1px solid var(--archive-line);
+  background: rgba(67, 76, 94, 0.34);
+  color: var(--archive-muted);
+  padding: 0 10px;
+}
+
+.app[data-profile="main"] .archiveCommandActions .archiveAction::before,
+.app[data-profile="main"] .archiveCommandActions .archiveAction::after {
+  content: none;
+}
+
 .app[data-profile="main"] .archiveRefreshAction {
   flex: 0 0 auto;
-  width: 44px;
+  width: auto;
+  min-width: 32px;
   padding: 0;
   font-size: 1.05rem;
 }
 
 .app[data-profile="main"] .archiveTopAction {
-  width: 44px;
-  height: 44px;
-  min-height: 44px;
+  width: auto;
+  height: auto;
+  min-width: 32px;
+  min-height: 32px;
   padding: 0;
-  border-color: rgba(136, 192, 208, 0.68);
-  background: rgba(136, 192, 208, 0.22);
   font-size: 1.05rem;
 }
 
@@ -6271,7 +6298,12 @@ h3 {
 .app[data-profile="main"] .archiveSourceLink:hover,
 .app[data-profile="main"] .archiveRecordButton:hover .archiveRecordTitle {
   color: var(--archive-amber);
+  font-weight: 950;
+}
+
+.app[data-profile="main"] .archiveCommandActions .archiveAction:hover {
   border-color: var(--archive-line-strong);
+  color: var(--archive-amber);
 }
 
 .app[data-profile="main"] .archiveInlineLink {
@@ -6294,6 +6326,13 @@ h3 {
   border-color: var(--main-tab-active-border);
   background: var(--main-tab-active-bg);
   color: var(--main-tab-active-text);
+}
+
+.app[data-profile="main"] .archiveActions .archiveAction.isActive,
+.app[data-profile="main"] .archiveUnreadApplyBar .archiveAction.isActive {
+  border-color: transparent;
+  background: transparent;
+  color: var(--archive-amber);
 }
 
 .app[data-profile="main"] .archiveCommandLine input:focus-visible,
@@ -6468,9 +6507,9 @@ h3 {
 .app[data-profile="main"] .archiveSourceLink {
   min-width: 48px;
   min-height: 100%;
-  padding: 0;
-  border-width: 0 0 0 1px;
-  background: rgba(37, 43, 54, 0.82);
+  padding: 0 3px;
+  border: 0;
+  background: transparent;
 }
 
 .app[data-profile="main"] .archiveUnreadActions {

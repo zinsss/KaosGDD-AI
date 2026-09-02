@@ -38,3 +38,11 @@ test("documents upload and metadata editor use aligned label columns", () => {
   assert.match(styles, /\.app\[data-profile="main"\] \.archiveCommandLine \{\n  display: grid;\n  grid-template-columns: 5\.25ch minmax\(0, 1fr\);/);
   assert.match(styles, /\.app\[data-profile="main"\] \.archiveMetadataReview \{\n  display: grid;\n  gap: 8px;/);
 });
+
+test("archive command actions render as bracketed text while mode tabs stay boxed", () => {
+  assert.match(styles, /\.app\[data-profile="main"\] \.archiveAction::before,[\s\S]*content: "\[";/);
+  assert.match(styles, /\.app\[data-profile="main"\] \.archiveAction::after,[\s\S]*content: "\]";/);
+  assert.match(styles, /\.app\[data-profile="main"\] \.archiveAction,[\s\S]*border: 0;[\s\S]*background: transparent;/);
+  assert.match(styles, /\.app\[data-profile="main"\] \.archiveCommandActions \.archiveAction \{[\s\S]*border: 1px solid var\(--archive-line\);[\s\S]*background: rgba\(67, 76, 94, 0\.34\);/);
+  assert.match(styles, /\.app\[data-profile="main"\] \.archiveCommandActions \.archiveAction::before,[\s\S]*content: none;/);
+});
