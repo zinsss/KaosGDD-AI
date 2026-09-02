@@ -27,6 +27,9 @@ Last updated: 2026-09-02
 - Planner output always records `dry-run-only`, production writes disabled,
   and `executed: false`. The planner contains no subprocess, network, host
   adapter, command mapping, or execution interface.
+- An unsigned committed manifest pins the schema and complete catalog set by
+  SHA-256. The planner rejects changed, missing, additional, and stale files;
+  manifest and selected-catalog digests are bound into each operation ID.
 
 ## Current Production Baseline
 
@@ -43,8 +46,8 @@ Last updated: 2026-09-02
 1. Add read-only system status to the personal KaosGDD PWA Settings/Admin page.
 2. Review the version 1 runbook contract, fixed target allowlists, and local
    dry-run planner before adding any host adapter.
-3. Decide whether the next isolated slice should add signed catalog provenance
-   or a non-networked mock adapter; keep production execution disabled.
+3. Add a non-networked mock adapter for end-to-end dry-run lifecycle tests;
+   keep production execution disabled.
 4. Do not enable `service.restart` until Governor authorization, normalized
    expiring confirmation, audit, verification, and failure handling are
    implemented and separately approved.

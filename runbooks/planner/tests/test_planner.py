@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import json
+import shutil
 import tempfile
 import unittest
 from copy import deepcopy
@@ -25,6 +26,7 @@ class RunbookPlannerTests(unittest.TestCase):
                 self.assertFalse(plan["productionWritesEnabled"])
                 self.assertFalse(plan["executed"])
                 self.assertTrue(plan["operationId"].startswith("dryrun_"))
+                self.assertTrue(plan["manifestDigest"].startswith("sha256:"))
                 self.assertNotIn("command", json.dumps(plan).lower())
 
     def test_operation_id_is_stable_for_the_same_normalized_request(self) -> None:
@@ -59,22 +61,64 @@ class RunbookPlannerTests(unittest.TestCase):
     def test_modified_catalog_enabling_writes_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
-            (root / "runbooks" / "schema").mkdir(parents=True)
-            (root / "runbooks" / "catalog").mkdir(parents=True)
-            schema_source = REPOSITORY_ROOT / "runbooks" / "schema" / "runbook.schema.json"
-            schema = json.loads(schema_source.read_text(encoding="utf-8"))
-            (root / "runbooks" / "schema" / "runbook.schema.json").write_text(
-                json.dumps(schema), encoding="utf-8"
-            )
-            source = REPOSITORY_ROOT / "runbooks" / "catalog" / "service.restart.json"
-            unsafe = deepcopy(json.loads(source.read_text(encoding="utf-8")))
+            self._copy_runbook_data(root)
+            destination = root / "runbooks" / "catalog" / "service.restart.json"
+            unsafe = deepcopy(json.loads(destination.read_text(encoding="utf-8")))
             unsafe["safety"]["productionWritesEnabled"] = True
-            (root / "runbooks" / "catalog" / "service.restart.json").write_text(
-                json.dumps(unsafe), encoding="utf-8"
+            destination.write_text(json.dumps(unsafe), encoding="utf-8")
+            with self.assertRaisesRegex(PlanError, "provenance check failed"):
+                RunbookPlanner(root)
+
+    def test_added_or_missing_catalog_file_is_rejected(self) -> None:
+        for change in ("added", "missing"):
+            with (
+                self.subTest(change=change),
+                tempfile.TemporaryDirectory() as temporary_directory,
+            ):
+                root = Path(temporary_directory)
+                self._copy_runbook_data(root)
+                catalog = root / "runbooks" / "catalog"
+                if change == "added":
+                    (catalog / "unlisted.json").write_text("{}\n", encoding="utf-8")
+                else:
+                    (catalog / "system.status.json").unlink()
+                with self.assertRaisesRegex(PlanError, "exactly match"):
+                    RunbookPlanner(root)
+
+    def test_stale_manifest_digest_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            self._copy_runbook_data(root)
+            manifest_path = root / "runbooks" / "catalog-manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["catalog"]["system.status.json"] = "0" * 64
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            with self.assertRaisesRegex(PlanError, "provenance check failed"):
+                RunbookPlanner(root)
+
+    def test_manifest_digest_is_bound_into_operation_id(self) -> None:
+        original = self.planner.plan("system.status")
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            self._copy_runbook_data(root)
+            manifest_path = root / "runbooks" / "catalog-manifest.json"
+            manifest_path.write_text(
+                manifest_path.read_text(encoding="utf-8") + "\n", encoding="utf-8"
             )
-            unsafe_planner = RunbookPlanner(root)
-            with self.assertRaisesRegex(PlanError, "catalog validation failed"):
-                unsafe_planner.plan("service.restart")
+            changed = RunbookPlanner(root).plan("system.status")
+        self.assertNotEqual(original["manifestDigest"], changed["manifestDigest"])
+        self.assertNotEqual(original["operationId"], changed["operationId"])
+
+    def test_modified_schema_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            self._copy_runbook_data(root)
+            schema_path = root / "runbooks" / "schema" / "runbook.schema.json"
+            schema_path.write_text(
+                schema_path.read_text(encoding="utf-8") + "\n", encoding="utf-8"
+            )
+            with self.assertRaisesRegex(PlanError, "provenance check failed"):
+                RunbookPlanner(root)
 
     def test_planner_has_no_execution_or_network_imports(self) -> None:
         forbidden_imports = {
@@ -101,6 +145,22 @@ class RunbookPlannerTests(unittest.TestCase):
                 elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
                     self.assertNotIn(node.func.id, {"eval", "exec", "compile"})
             self.assertFalse(imported & forbidden_imports, path)
+
+    @staticmethod
+    def _copy_runbook_data(root: Path) -> None:
+        destination = root / "runbooks"
+        (destination / "schema").mkdir(parents=True)
+        shutil.copy2(
+            REPOSITORY_ROOT / "runbooks" / "catalog-manifest.json", destination
+        )
+        shutil.copytree(
+            REPOSITORY_ROOT / "runbooks" / "catalog", destination / "catalog"
+        )
+        shutil.copytree(
+            REPOSITORY_ROOT / "runbooks" / "schema",
+            destination / "schema",
+            dirs_exist_ok=True,
+        )
 
 
 if __name__ == "__main__":

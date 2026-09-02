@@ -1,0 +1,15 @@
+{
+  "manifestVersion": "1.0",
+  "algorithm": "sha256",
+  "schema": {
+    "path": "schema/runbook.schema.json",
+    "digest": "56b3f768bd07c1af794a75d60946e5c6b205c4494ced3861406cd03e0beb20e5"
+  },
+  "catalog": {
+    "service.restart.json": "3762632cc5d5cd486862495281a9c687a41bbee50f55ba6b3c0a7d9e737ba388",
+    "system.disk_status.json": "15c6e704d570cf6d555e5b72bbdad5d3e2803e497bc703342319eedfd5279a51",
+    "system.git_status.json": "ad532a0eb8a9b57ba8ca390533c60d84596aaf209a443003af1f0bddaf660fdf",
+    "system.logs_tail.json": "fc77a7d00645ee5bc8f07c7c8f3ec74aacc4031079122984785f724bdf991585",
+    "system.status.json": "971c52a77685f3dd738df643b09a8fb9d5227db94267a74cc48e305d56118473"
+  }
+}

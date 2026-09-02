@@ -18,6 +18,7 @@ production secret.
 ```text
 runbooks/
   README.md
+  catalog-manifest.json
   schema/
     runbook.schema.json
   catalog/
@@ -36,6 +37,12 @@ runbooks/
 reviewable runbook definitions, one stable operation per file. Future trusted
 implementations belong in a separately reviewed executor change and must not
 be inferred from these definitions.
+
+`catalog-manifest.json` records the exact SHA-256 digest of the schema and
+every allowlisted catalog file. The planner requires the on-disk catalog set
+to match the manifest exactly and rejects changed, missing, or additional
+files. This is an unsigned repository-integrity baseline: Git review and
+branch controls provide provenance. No signing key or secret is used.
 
 `planner/` is a repository-local, dry-run-only catalog validator and plan
 renderer. It has no host adapter, subprocess use, network client, command
@@ -103,8 +110,17 @@ PYTHONPATH=runbooks/planner/src \
 The CLI selects from a fixed operation-to-catalog mapping. It does not accept
 a catalog path. Output always records `mode: dry-run-only`,
 `productionWritesEnabled: false`, and `executed: false`, plus a deterministic
-plan ID and catalog digest. Output is a plan receipt, not evidence that a host
+plan ID, manifest digest, and selected catalog digest. Both digests are bound
+into the plan ID. Output is a plan receipt, not evidence that a host
 observation or action occurred.
+
+Any reviewed change to the schema or catalog must update
+`catalog-manifest.json` in the same commit. Reviewers should independently
+compare its values with:
+
+```text
+sha256sum runbooks/schema/runbook.schema.json runbooks/catalog/*.json
+```
 
 ## Future Execution Gate
 

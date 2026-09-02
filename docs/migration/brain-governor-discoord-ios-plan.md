@@ -1502,6 +1502,17 @@ Dry-run planner slice (2026-09-02):
 - contains no subprocess, network client, host adapter, command mapping, API
   wiring, or production deployment path.
 
+Catalog provenance slice (2026-09-02):
+
+- added an unsigned, committed SHA-256 manifest for the schema and exact
+  allowlisted catalog file set;
+- made planner construction fail closed for changed content, missing or added
+  files, invalid manifest structure, and stale digests;
+- bound the manifest and selected-catalog digests into every normalized plan
+  and its deterministic operation ID;
+- retained Git review as the provenance authority and introduced no signing
+  keys, secrets, network access, host adapter, or execution path.
+
 Risk: low for the committed planning artifacts. A future executor remains a
 separate medium-to-high-risk phase and must not infer executable behavior from
 free-form model output.
@@ -1538,6 +1549,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | Plan | Added this canonical tracker and aligned architecture terminology | Documentation review and `git diff --check` | None |
 | 2026-09-01 | 8 | Added the Phase 2 runbook planning baseline with a version 1 schema and five dry-run-only catalog entries | JSON syntax/schema validation and `git diff --check` pass | None; no executor, deployment, host access, or production write enabled |
 | 2026-09-02 | 8 | Added a repository-local dry-run catalog validator and normalized plan renderer | 8 planner tests, rejected-input CLI check, Python compilation, and `git diff --check` pass | None; no host adapter, network call, command mapping, or execution enabled |
+| 2026-09-02 | 8 | Pinned the runbook schema and exact catalog set with an unsigned SHA-256 manifest | 12 planner tests cover tampering, stale digest, digest-bound identity, and added/missing files; digest comparison, compilation, and `git diff --check` pass | None; no key, secret, host adapter, network call, or execution enabled |
 | 2026-09-01 | 8 | Completed production observation for the read-only Brain system status slice | User confirmed the deployed Discord `#brain` `system status` response; H3 smoke and H4 doctor were healthy after deployment | `system.status` slice complete; Phase 8 continues with PWA/admin status and runbook review; no write executor enabled |
 | 2026-08-30 | 2 | Started PostgreSQL operation persistence and pending-payload inventory | Implementation in progress | None |
 | 2026-08-30 | 2 | Added migration 005, PostgreSQL store, durable versioned payloads, restart recovery, expiry/interruption cleanup, production store wiring, and CI PostgreSQL coverage | 200 Governor unit/contract + 9 PostgreSQL integration + 349 Discord + 317 Brain tests; H3 preflight and Compose render passed | None; not deployed, production remains on migration 004 |

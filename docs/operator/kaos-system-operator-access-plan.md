@@ -66,6 +66,10 @@ normalized plan JSON. It accepts only the fixed operation allowlist and
 schema-declared parameters. It has no host adapter, subprocess call, network
 client, command mapping, API wiring, or production integration.
 
+The committed catalog manifest pins the exact schema and catalog file set by
+SHA-256. Changed, missing, additional, or stale entries fail closed. This is an
+unsigned Git-reviewed integrity baseline; it introduces no signing secret.
+
 ## Host Scope
 
 ### H4 `kaosbrain`
@@ -294,5 +298,6 @@ included in this phase.
 The local planner under `runbooks/planner/` loads only fixed catalog filenames,
 validates each selected entry against the version 1 schema, normalizes declared
 parameters and defaults, and emits a deterministic dry-run operation ID plus
-catalog digest. Every output explicitly records that production writes are
-disabled and execution did not occur.
+manifest and catalog digests. Those digests are bound into the operation ID.
+Every output explicitly records that production writes are disabled and
+execution did not occur.

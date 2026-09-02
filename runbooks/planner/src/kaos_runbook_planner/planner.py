@@ -29,11 +29,22 @@ class RunbookPlanner:
 
     def __init__(self, repository_root: Path) -> None:
         self._repository_root = repository_root.resolve()
+        self._runbooks_root = self._repository_root / "runbooks"
         self._catalog_root = self._repository_root / "runbooks" / "catalog"
-        schema_path = self._repository_root / "runbooks" / "schema" / "runbook.schema.json"
-        schema = self._load_json(schema_path)
+        manifest_path = self._runbooks_root / "catalog-manifest.json"
+        manifest_bytes, manifest = self._load_json_bytes(manifest_path)
+        self._validate_manifest(manifest)
+        self._manifest_digest = f"sha256:{hashlib.sha256(manifest_bytes).hexdigest()}"
+
+        schema_path = self._runbooks_root / manifest["schema"]["path"]
+        schema_bytes, schema = self._load_json_bytes(schema_path)
+        self._verify_digest(
+            schema_bytes, manifest["schema"]["digest"], "runbook schema"
+        )
         Draft202012Validator.check_schema(schema)
         self._validator = Draft202012Validator(schema)
+        self._verify_catalog(manifest["catalog"])
+        self._catalog_digests = deepcopy(manifest["catalog"])
 
     def plan(self, operation: str, parameters: Mapping[str, Any] | None = None) -> dict[str, Any]:
         """Return a deterministic dry-run plan for one allowlisted operation."""
@@ -48,13 +59,14 @@ class RunbookPlanner:
         identity = {
             "contractVersion": runbook["contractVersion"],
             "runbookVersion": runbook["runbookVersion"],
+            "manifestDigest": self._manifest_digest,
+            "catalogDigest": f"sha256:{self._catalog_digests[filename]}",
             "operation": runbook["operation"],
             "host": runbook["host"],
             "target": runbook["target"],
             "parameters": normalized_parameters,
         }
         identity_json = self._canonical_json(identity)
-        runbook_json = self._canonical_json(runbook)
 
         return {
             "planVersion": "1.0",
@@ -63,7 +75,8 @@ class RunbookPlanner:
             "mode": "dry-run-only",
             "productionWritesEnabled": False,
             "executed": False,
-            "catalogDigest": f"sha256:{hashlib.sha256(runbook_json).hexdigest()}",
+            "manifestDigest": self._manifest_digest,
+            "catalogDigest": f"sha256:{self._catalog_digests[filename]}",
             "operation": runbook["operation"],
             "runbookVersion": runbook["runbookVersion"],
             "host": deepcopy(runbook["host"]),
@@ -83,6 +96,62 @@ class RunbookPlanner:
             "rollback": deepcopy(runbook["rollback"]),
             "operationLog": deepcopy(runbook["operationLog"]),
         }
+
+    def _validate_manifest(self, manifest: Any) -> None:
+        if not isinstance(manifest, dict) or set(manifest) != {
+            "manifestVersion",
+            "algorithm",
+            "schema",
+            "catalog",
+        }:
+            raise PlanError("catalog manifest has an invalid top-level contract")
+        if manifest["manifestVersion"] != "1.0" or manifest["algorithm"] != "sha256":
+            raise PlanError("catalog manifest version or algorithm is unsupported")
+        schema_entry = manifest["schema"]
+        if (
+            not isinstance(schema_entry, dict)
+            or set(schema_entry) != {"path", "digest"}
+            or schema_entry["path"] != "schema/runbook.schema.json"
+        ):
+            raise PlanError("catalog manifest schema entry is invalid")
+        self._validate_digest(schema_entry["digest"], "schema")
+        if not isinstance(manifest["catalog"], dict):
+            raise PlanError("catalog manifest entries must be an object")
+        expected_files = set(CATALOG_FILES.values())
+        if set(manifest["catalog"]) != expected_files:
+            raise PlanError("catalog manifest does not match the operation allowlist")
+        for filename, digest in manifest["catalog"].items():
+            if Path(filename).name != filename:
+                raise PlanError("catalog manifest filenames must be plain filenames")
+            self._validate_digest(digest, filename)
+
+    def _verify_catalog(self, expected_digests: Mapping[str, str]) -> None:
+        actual_files = {
+            path.name for path in self._catalog_root.glob("*.json") if path.is_file()
+        }
+        if actual_files != set(expected_digests):
+            raise PlanError("catalog files do not exactly match the committed manifest")
+        for filename, expected_digest in expected_digests.items():
+            try:
+                content = (self._catalog_root / filename).read_bytes()
+            except OSError as exc:
+                raise PlanError(f"unable to load repository runbook data: {filename}") from exc
+            self._verify_digest(content, expected_digest, filename)
+
+    @staticmethod
+    def _validate_digest(digest: Any, label: str) -> None:
+        if (
+            not isinstance(digest, str)
+            or len(digest) != 64
+            or any(character not in "0123456789abcdef" for character in digest)
+        ):
+            raise PlanError(f"catalog manifest digest is invalid for {label}")
+
+    @staticmethod
+    def _verify_digest(content: bytes, expected_digest: str, label: str) -> None:
+        actual_digest = hashlib.sha256(content).hexdigest()
+        if actual_digest != expected_digest:
+            raise PlanError(f"repository provenance check failed for {label}")
 
     def _validate_runbook(self, runbook: Any, *, expected_operation: str) -> None:
         errors = sorted(self._validator.iter_errors(runbook), key=lambda error: list(error.path))
@@ -157,7 +226,12 @@ class RunbookPlanner:
 
     @staticmethod
     def _load_json(path: Path) -> Any:
+        return RunbookPlanner._load_json_bytes(path)[1]
+
+    @staticmethod
+    def _load_json_bytes(path: Path) -> tuple[bytes, Any]:
         try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
+            content = path.read_bytes()
+            return content, json.loads(content)
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise PlanError(f"unable to load repository runbook data: {path.name}") from exc
