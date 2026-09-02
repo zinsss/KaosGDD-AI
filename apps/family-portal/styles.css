@@ -6455,16 +6455,23 @@ h3 {
 
 .app[data-profile="main"] .archiveRecordId {
   grid-area: id;
+  min-width: 0;
   color: var(--archive-cyan);
   font-size: 0.72rem;
   font-weight: 850;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app[data-profile="main"] .archiveRecordDate {
   grid-area: date;
   justify-self: end;
+  min-width: 0;
   color: var(--archive-muted);
   font-size: 0.72rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -6666,7 +6673,7 @@ h3 {
 
   .app[data-profile="main"] .archiveColumnHeader {
     display: grid;
-    grid-template-columns: 8ch 13ch minmax(0, 1fr) 48px;
+    grid-template-columns: 12ch 18ch minmax(0, 1fr) 48px;
     gap: 10px;
     padding: 0 58px 7px 10px;
     color: var(--archive-cyan);
@@ -6675,12 +6682,12 @@ h3 {
   }
 
   .app[data-profile="main"] [data-archive-kind="memos"] .archiveColumnHeader {
-    grid-template-columns: 8ch 13ch minmax(0, 1fr);
+    grid-template-columns: 12ch 18ch minmax(0, 1fr);
     padding-right: 10px;
   }
 
   .app[data-profile="main"] .archiveRecordButton {
-    grid-template-columns: 8ch 13ch minmax(0, 1fr);
+    grid-template-columns: 12ch 18ch minmax(0, 1fr);
     grid-template-areas: "id date title";
     min-height: 58px;
     align-items: center;
