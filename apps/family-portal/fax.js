@@ -43,6 +43,7 @@
       hylafaxJobId: clean(source.hylafaxJobId, 40),
       documentAvailable,
       documentUrl,
+      attentionAcknowledged: Boolean(source.attentionAcknowledged),
     });
   }
 
@@ -61,7 +62,13 @@
     const items = Object.freeze(
       (Array.isArray(source.items) ? source.items : []).map(normalizeItem).filter(Boolean),
     );
-    return Object.freeze({ items, counts: counts(items) });
+    const sourceAttention = source.attention && typeof source.attention === "object" ? source.attention : {};
+    const attention = Object.freeze({
+      failed: Number.isFinite(Number(sourceAttention.failed))
+        ? Math.max(0, Number(sourceAttention.failed))
+        : items.filter((item) => item.status === "failed" && !item.attentionAcknowledged).length,
+    });
+    return Object.freeze({ items, counts: counts(items), attention });
   }
 
   function normalizeMode(value) {

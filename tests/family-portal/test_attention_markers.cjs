@@ -11,7 +11,7 @@ test("main shell derives quiet attention markers from existing read-only state",
   assert.match(appSource, /function mainAttentionMarkers\(\) \{/);
   assert.match(appSource, /state\.mail\.unreadItems\.length > 0/);
   assert.match(appSource, /state\.documents\.inboxItems\.some\(\(item\) => item\.status === "failed"\)/);
-  assert.match(appSource, /Number\(state\.fax\.counts\?\.failed \|\| 0\) > 0/);
+  assert.match(appSource, /Number\(state\.fax\.attention\?\.failed \|\| 0\) > 0/);
   assert.match(appSource, /function systemStatusIsCritical\(\) \{/);
 });
 

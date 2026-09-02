@@ -380,6 +380,9 @@ class FaxService:
         value["jobs"] = value.get("jobs") if isinstance(value.get("jobs"), dict) else {}
         value["incoming"] = value.get("incoming") if isinstance(value.get("incoming"), dict) else {}
         value["delivered"] = value.get("delivered") if isinstance(value.get("delivered"), dict) else {}
+        value["acknowledgedFailures"] = (
+            value.get("acknowledgedFailures") if isinstance(value.get("acknowledgedFailures"), dict) else {}
+        )
         value["prompts"] = value.get("prompts") if isinstance(value.get("prompts"), dict) else {}
         value["runtime"] = value.get("runtime") if isinstance(value.get("runtime"), dict) else {}
         return value
@@ -685,6 +688,30 @@ class FaxService:
             state["delivered"][action.key] = {"at": _timestamp(), "status": "delivered"}
             self._save(state)
 
+    def acknowledge_failed_job(self, job_id: str) -> dict[str, object]:
+        normalized_id = str(job_id or "").strip()
+        if not normalized_id:
+            raise FaxError("fax_job_id_required")
+        with self._state_lock():
+            state = self._load()
+            job = state["jobs"].get(normalized_id)
+            if not isinstance(job, dict):
+                raise FaxError("fax_job_not_found")
+            if str(job.get("status") or "").strip().lower() != "failed":
+                raise FaxError("fax_job_not_failed")
+            state["acknowledgedFailures"][normalized_id] = {
+                "at": _timestamp(),
+                "status": "acknowledged",
+                "error": str(job.get("error") or "").strip(),
+                "completedAt": str(job.get("completedAt") or ""),
+            }
+            self._save(state)
+            return {
+                "jobId": normalized_id,
+                "status": "failed",
+                "attentionAcknowledged": True,
+            }
+
     def store_incoming_document(self, action: FaxAction, pdf: bytes) -> dict[str, object]:
         if not action.key.startswith("incoming:archive:"):
             raise FaxError("fax_incoming_action_required")
@@ -779,6 +806,8 @@ class FaxService:
 
     def recent_items(self, *, limit: int | None = 50) -> list[dict[str, object]]:
         state = self._load()
+        acknowledged_failures = state.get("acknowledgedFailures")
+        acknowledged_failures = acknowledged_failures if isinstance(acknowledged_failures, dict) else {}
         rows: list[dict[str, object]] = []
         for incoming_id, incoming in state["incoming"].items():
             if not isinstance(incoming, dict):
@@ -822,6 +851,14 @@ class FaxService:
             destination = str(job.get("destination") or "unknown").strip() or "unknown"
             created_at = str(job.get("createdAt") or "")
             completed_at = str(job.get("completedAt") or "")
+            error = str(job.get("error") or "").strip()
+            acknowledged = acknowledged_failures.get(str(job_id))
+            attention_acknowledged = (
+                status == "failed"
+                and isinstance(acknowledged, dict)
+                and str(acknowledged.get("error") or "").strip() == error
+                and str(acknowledged.get("completedAt") or "") == completed_at
+            )
             rows.append(
                 {
                     "kind": "fax",
@@ -836,8 +873,9 @@ class FaxService:
                     "destination": destination,
                     "createdAt": created_at,
                     "completedAt": completed_at,
-                    "error": str(job.get("error") or "").strip(),
+                    "error": error,
                     "hylafaxJobId": str(job.get("hylafaxJobId") or "").strip(),
+                    "attentionAcknowledged": attention_acknowledged,
                 }
             )
         rows.sort(

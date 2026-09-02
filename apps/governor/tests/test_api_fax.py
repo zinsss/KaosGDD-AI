@@ -84,6 +84,7 @@ class FaxApiTests(unittest.TestCase):
         self.assertEqual(payload["mode"], "all")
         self.assertEqual(payload["resultCount"], 4)
         self.assertEqual(payload["counts"], {"all": 4, "received": 1, "sent": 1, "failed": 1})
+        self.assertEqual(payload["attention"], {"failed": 1})
         self.assertEqual(len(payload["items"]), 2)  # type: ignore[arg-type]
         self.assertEqual(
             payload["items"][0]["documentUrl"],  # type: ignore[index]
@@ -109,6 +110,21 @@ class FaxApiTests(unittest.TestCase):
 
         self.assertEqual(api.fax_status_for_error(FaxError("fax_mode_invalid")), 400)
         self.assertEqual(api.fax_status_for_error(FaxError("fax_document_not_found")), 404)
+
+    def test_acknowledge_failed_job_payload_uses_safe_job_id(self) -> None:
+        service = FakeFax()
+        service.acknowledge_failed_job = Mock(
+            return_value={"jobId": "failed-1", "status": "failed", "attentionAcknowledged": True}
+        )
+
+        payload = api.fax_acknowledge_payload("failed-1", service)  # type: ignore[arg-type]
+
+        self.assertEqual(payload["ok"], True)
+        self.assertEqual(payload["attentionAcknowledged"], True)
+        service.acknowledge_failed_job.assert_called_once_with("failed-1")
+        self.assertEqual(api.fax_acknowledge_job_id("/api/fax/items/failed-1/ack"), "failed-1")
+        self.assertEqual(api.fax_acknowledge_job_id("/api/fax/items/../ack"), "")
+        self.assertEqual(api.fax_acknowledge_job_id("/api/fax/items/bad%2Fid/ack"), "")
 
     def test_document_route_requires_exact_32_hex_id(self) -> None:
         upper_id = "ABCDEF0123456789ABCDEF0123456789"

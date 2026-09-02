@@ -709,9 +709,9 @@ def fax_status_for_error(exc: Exception) -> int:
     if isinstance(exc, memos_relay.MemosRelayError):
         return exc.status
     code = str(exc)
-    if code in {"main_profile_required", "fax_document_not_found"}:
+    if code in {"main_profile_required", "fax_document_not_found", "fax_job_not_found"}:
         return 404
-    if code in {"fax_mode_invalid", "fax_limit_invalid"}:
+    if code in {"fax_mode_invalid", "fax_limit_invalid", "fax_job_id_required", "fax_job_not_failed"}:
         return 400
     return 503
 
@@ -752,6 +752,13 @@ def fax_items_payload(
         candidate: sum(1 for item in all_items if _fax_item_matches(item, candidate))
         for candidate in ("all", "received", "sent", "failed")
     }
+    attention = {
+        "failed": sum(
+            1
+            for item in all_items
+            if _fax_item_matches(item, "failed") and not bool(item.get("attentionAcknowledged"))
+        )
+    }
     matching = [item for item in all_items if _fax_item_matches(item, mode)]
     items: list[dict[str, object]] = []
     for source in matching[:limit]:
@@ -768,6 +775,7 @@ def fax_items_payload(
         "mode": mode,
         "items": items,
         "counts": counts,
+        "attention": attention,
         "resultCount": len(matching),
         "limit": limit,
     }
@@ -776,6 +784,26 @@ def fax_items_payload(
 def fax_document_id(path: str) -> str:
     match = re.fullmatch(r"/api/fax/items/([0-9a-fA-F]{32})/document", path)
     return match.group(1).lower() if match else ""
+
+
+def fax_acknowledge_job_id(path: str) -> str:
+    match = re.fullmatch(r"/api/fax/items/([^/]+)/ack", path)
+    if not match:
+        return ""
+    value = urllib.parse.unquote(match.group(1)).strip()
+    if value in {".", ".."}:
+        return ""
+    return value if re.fullmatch(r"[A-Za-z0-9_.:-]{1,80}", value) else ""
+
+
+def fax_acknowledge_payload(
+    job_id: str,
+    service: FaxService | None = None,
+) -> dict[str, object]:
+    if not job_id:
+        raise FaxError("fax_job_id_required")
+    result = (service or fax_service()).acknowledge_failed_job(job_id)
+    return {"ok": True, **result}
 
 
 def fax_document_payload(
@@ -1832,6 +1860,18 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
+        fax_ack_id = fax_acknowledge_job_id(parsed.path)
+        if fax_ack_id:
+            try:
+                require_main_access(self.headers)
+                json_response(self, 200, fax_acknowledge_payload(fax_ack_id))
+            except (ValueError, FaxError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, memos_relay.MemosRelayError) else str(exc)
+                json_response(self, fax_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Fax acknowledge failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "fax_acknowledge_failed"})
+            return
         if parsed.path == "/api/supplies":
             try:
                 require_main_access(self.headers)

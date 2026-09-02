@@ -247,6 +247,67 @@ class FaxTests(unittest.TestCase):
         self.assertEqual(rows[0]["destination"], "022848302")
         self.assertNotIn("pdf", {key.lower() for key in rows[0]})
 
+    def test_failed_outgoing_job_can_be_acknowledged_for_ui_attention(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = self.config(root)
+            config.state_path.write_text(
+                json.dumps(
+                    {
+                        "jobs": {
+                            "failed-1": {
+                                "status": "failed",
+                                "destination": "05050750028",
+                                "filename": "IMG_1074.pdf",
+                                "error": "submission_failed",
+                                "completedAt": "2026-09-02T10:00:00Z",
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            service = FaxService(config)
+
+            before = service.recent_items(limit=None)
+            result = service.acknowledge_failed_job("failed-1")
+            after = service.recent_items(limit=None)
+            state = json.loads(config.state_path.read_text(encoding="utf-8"))
+
+        self.assertFalse(before[0]["attentionAcknowledged"])
+        self.assertEqual(result["attentionAcknowledged"], True)
+        self.assertTrue(after[0]["attentionAcknowledged"])
+        self.assertEqual(state["acknowledgedFailures"]["failed-1"]["error"], "submission_failed")
+
+    def test_failed_job_ack_does_not_hide_changed_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = self.config(root)
+            config.state_path.write_text(
+                json.dumps(
+                    {
+                        "jobs": {
+                            "failed-1": {
+                                "status": "failed",
+                                "destination": "05050750028",
+                                "filename": "IMG_1074.pdf",
+                                "error": "first_error",
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            service = FaxService(config)
+            service.acknowledge_failed_job("failed-1")
+            state = json.loads(config.state_path.read_text(encoding="utf-8"))
+            state["jobs"]["failed-1"]["error"] = "second_error"
+            config.state_path.write_text(json.dumps(state), encoding="utf-8")
+
+            row = FaxService(config).recent_items(limit=None)[0]
+
+        self.assertFalse(row["attentionAcknowledged"])
+
     def test_connector_failed_job_can_recover_after_office_repair(self) -> None:
         class Connector:
             def __init__(self):

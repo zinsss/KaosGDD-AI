@@ -327,6 +327,7 @@ const state = {
     mode: "all",
     items: [],
     counts: { all: 0, received: 0, sent: 0, failed: 0 },
+    attention: { failed: 0 },
     selectedKey: "",
   },
   mail: {
@@ -2038,6 +2039,7 @@ async function loadFax(options = {}) {
       error: "",
       items: archive.items,
       counts: archive.counts,
+      attention: archive.attention,
     };
   } catch (error) {
     state.fax = {
@@ -2047,6 +2049,7 @@ async function loadFax(options = {}) {
       error: error.message || "Fax archive is unavailable",
       items: [],
       counts: { all: 0, received: 0, sent: 0, failed: 0 },
+      attention: { failed: 0 },
       selectedKey: "",
     };
   }
@@ -2081,6 +2084,27 @@ function closeFaxRecord() {
   state.fax.selectedKey = "";
   render();
   document.querySelector(`[data-fax-open="${cssIdentifier(selectedKey)}"]`)?.focus();
+}
+
+async function acknowledgeFaxFailure(jobId) {
+  const cleanJobId = String(jobId || "").trim();
+  if (!cleanJobId) throw new Error("fax_job_id_required");
+  const response = await fetch(`/api/fax/items/${encodeURIComponent(cleanJobId)}/ack`, {
+    method: "POST",
+    headers: { Accept: "application/json" },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+  state.fax.items = state.fax.items.map((item) =>
+    item.direction === "outgoing" && item.id === cleanJobId && item.status === "failed"
+      ? Object.freeze({ ...item, attentionAcknowledged: true })
+      : item,
+  );
+  state.fax.attention = {
+    failed: state.fax.items.filter((item) => item.status === "failed" && !item.attentionAcknowledged).length,
+  };
+  refreshMainAttentionShell();
+  render();
 }
 
 async function loadMail(options = {}) {
@@ -3881,7 +3905,7 @@ function mainAttentionMarkers() {
   if (state.documents.inboxItems.some((item) => item.status === "failed")) add("documents", "critical");
   else if (state.documents.inboxItems.length > 0) add("documents", "attention");
 
-  if (state.fax.error || Number(state.fax.counts?.failed || 0) > 0) add("fax", "critical");
+  if (state.fax.error || Number(state.fax.attention?.failed || 0) > 0) add("fax", "critical");
 
   if (systemStatusIsCritical()) add("settings", "critical");
 
@@ -5632,6 +5656,13 @@ function renderFax() {
           ${selected.error ? archiveMeta("Error", selected.error) : ""}
         </dl>
         <div class="archiveActions">
+          ${
+            selected.direction === "outgoing" && selected.status === "failed"
+              ? selected.attentionAcknowledged
+                ? `<span class="archiveAction isDisabled">ACKNOWLEDGED</span>`
+                : `<button class="archiveAction isActive" type="button" data-fax-ack="${escapeHtml(selected.id)}">ACK</button>`
+              : ""
+          }
           ${
             selected.documentAvailable && selected.documentUrl
               ? `<a class="archiveAction" href="${escapeHtml(selected.documentUrl)}" target="_blank" rel="noopener noreferrer">OPEN PDF</a>`
@@ -9378,6 +9409,16 @@ document.addEventListener("click", async (event) => {
 
   if (event.target.closest("[data-fax-close]")) {
     closeFaxRecord();
+    return;
+  }
+
+  const faxAck = event.target.closest("[data-fax-ack]");
+  if (faxAck) {
+    try {
+      await acknowledgeFaxFailure(faxAck.dataset.faxAck || "");
+    } catch (error) {
+      window.alert(`Could not acknowledge fax: ${error.message || "unknown error"}`);
+    }
     return;
   }
 

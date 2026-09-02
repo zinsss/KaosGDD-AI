@@ -5,6 +5,7 @@ const test = require("node:test");
 
 const { counts, filterItems, normalizeArchive, normalizeItem, normalizeMode } = require("../../apps/family-portal/fax.js");
 const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
+const composeServices = fs.readFileSync(path.join(__dirname, "../../deploy/h3-backend/compose.services.yaml"), "utf8");
 
 const incomingId = "0123456789abcdef0123456789abcdef";
 const outgoingId = "sent-1";
@@ -37,10 +38,12 @@ test("derives board counts and filters from normalized records", () => {
       { id: incomingId, direction: "incoming", status: "archived", documentAvailable: true },
       { jobId: outgoingId, direction: "outgoing", status: "sent" },
       { jobId: "failed-1", direction: "outgoing", status: "failed" },
+      { jobId: "failed-2", direction: "outgoing", status: "failed", attentionAcknowledged: true },
     ],
   });
 
-  assert.deepEqual(counts(archive.items), { all: 3, received: 1, sent: 1, failed: 1 });
+  assert.deepEqual(counts(archive.items), { all: 4, received: 1, sent: 1, failed: 2 });
+  assert.deepEqual(archive.attention, { failed: 1 });
   assert.equal(filterItems(archive.items, "received")[0].direction, "incoming");
   assert.equal(filterItems(archive.items, "failed")[0].status, "failed");
 });
@@ -52,4 +55,18 @@ test("unknown board modes safely select all", () => {
 test("fax archive board uses the common no date title header", () => {
   assert.match(appSource, /id="faxIndexTitle">RECORD BOARD[\s\S]*<span>NO\.<\/span><span>DATE<\/span><span>TITLE<\/span>/);
   assert.doesNotMatch(appSource, /<span>ID<\/span><span>DATE<\/span><span>REMOTE<\/span><span>TITLE<\/span>/);
+});
+
+test("failed fax detail exposes ACK and attention markers use unacknowledged failures", () => {
+  assert.match(appSource, /data-fax-ack=/);
+  assert.match(appSource, /ACKNOWLEDGED/);
+  assert.match(appSource, /acknowledgeFaxFailure\(faxAck\.dataset\.faxAck \|\| ""\)/);
+  assert.match(appSource, /Number\(state\.fax\.attention\?\.failed \|\| 0\) > 0/);
+});
+
+test("governor-api can write fax attention ACK state", () => {
+  assert.match(
+    composeServices,
+    /\$\{GOVERNOR_STATE_ROOT:-\/srv\/kaosgdd\/kaosgovernor\}\/fax:\/data\/fax(?!:ro)/,
+  );
 });
