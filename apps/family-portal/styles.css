@@ -5676,6 +5676,11 @@ h3 {
     padding-bottom: 40px;
   }
 
+  .app[data-profile="main"][data-route="memos"] .view {
+    padding-top: 0;
+    padding-bottom: 40px;
+  }
+
   .app[data-route="ledger"] .view {
     overflow: hidden;
   }
@@ -6658,6 +6663,20 @@ h3 {
   display: grid;
   gap: 10px;
   color: var(--archive-error);
+}
+
+.app[data-profile="main"] .archiveIndex > .archiveStatusMessage,
+.app[data-profile="main"] .archiveIndex > .archiveError {
+  min-height: 58px;
+  margin-top: 1px;
+  padding: 12px;
+  border: 1px solid var(--archive-line);
+  background: var(--archive-surface);
+}
+
+.app[data-profile="main"] .archiveIndex > .archiveStatusMessage {
+  display: grid;
+  align-items: center;
 }
 
 .app[data-profile="main"] .archiveError p {

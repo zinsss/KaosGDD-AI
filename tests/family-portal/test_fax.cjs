@@ -1,7 +1,10 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const test = require("node:test");
 
 const { counts, filterItems, normalizeArchive, normalizeItem, normalizeMode } = require("../../apps/family-portal/fax.js");
+const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
 
 const incomingId = "0123456789abcdef0123456789abcdef";
 const outgoingId = "sent-1";
@@ -44,4 +47,9 @@ test("derives board counts and filters from normalized records", () => {
 
 test("unknown board modes safely select all", () => {
   assert.equal(normalizeMode("not-a-mode"), "all");
+});
+
+test("fax archive board uses the common no date title header", () => {
+  assert.match(appSource, /id="faxIndexTitle">RECORD BOARD[\s\S]*<span>NO\.<\/span><span>DATE<\/span><span>TITLE<\/span>/);
+  assert.doesNotMatch(appSource, /<span>ID<\/span><span>DATE<\/span><span>REMOTE<\/span><span>TITLE<\/span>/);
 });

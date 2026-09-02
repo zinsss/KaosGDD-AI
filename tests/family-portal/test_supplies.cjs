@@ -16,6 +16,7 @@ test("top add opens the native supply composer route", () => {
 test("main supplies route renders as an archive board instead of an inline composer", () => {
   assert.match(appSource, /data-archive-kind="supplies"/);
   assert.match(appSource, /id="suppliesIndexTitle">RECORD BOARD/);
+  assert.match(appSource, /id="suppliesIndexTitle">RECORD BOARD[\s\S]*<span>NO\.<\/span><span>DATE<\/span><span>TITLE<\/span>/);
   assert.match(appSource, /data-supplies-mode="active"/);
   assert.match(appSource, /data-supplies-mode="done"/);
   assert.match(appSource, /data-supplies-retry/);

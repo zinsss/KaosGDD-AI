@@ -5546,7 +5546,7 @@ function renderFax() {
             <p class="archiveStatusMessage" role="status" aria-live="polite">${escapeHtml(summary)}</p>
           </header>
           <div class="archiveColumnHeader" aria-hidden="true">
-            <span>ID</span><span>DATE</span><span>REMOTE</span><span>TITLE</span>
+            <span>NO.</span><span>DATE</span><span>TITLE</span>
           </div>
           ${
             fax.error
@@ -5820,6 +5820,9 @@ function renderSupplies(options = {}) {
             <h3 id="suppliesIndexTitle">RECORD BOARD</h3>
             <p class="archiveStatusMessage" role="status" aria-live="polite">${escapeHtml(summary)}</p>
           </header>
+          <div class="archiveColumnHeader" aria-hidden="true">
+            <span>NO.</span><span>DATE</span><span>TITLE</span>
+          </div>
           ${
             state.supplies.error
               ? `<div class="archiveError" role="alert"><p>${escapeHtml(state.supplies.error)}</p><button class="archiveAction" type="button" data-supplies-retry>RETRY</button></div>`
