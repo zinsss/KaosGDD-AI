@@ -86,11 +86,12 @@ H4, office-service, and stateful-service cutovers.
   `3bda420` wires the setting into `governor-api`, H3 was recreated with
   `owner=3` visible in the live container, and the already-uploaded hidden
   Paperless document was reassigned from the API-token user to `yhshfm`.
-- Phase 6 Fax attention ACK is in progress on 2026-09-02: the PWA Fax marker
-  is changing from historical failed-count behavior to unacknowledged-failure
-  behavior. Failed records stay in the archive, but a failed fax detail can
-  record an ACK marker so the main menu red dot stops until a changed/new
-  failure appears.
+- Phase 6 Fax attention ACK deployed on 2026-09-02 in commit `f386471`: the
+  PWA Fax marker changed from historical failed-count behavior to
+  unacknowledged-failure behavior. Failed records stay in the archive, but a
+  failed fax detail can record an ACK marker so the main menu red dot stops
+  until a changed/new failure appears. H3 served `fax.js?v=2` and `app.js?v=272`
+  after `governor-api` was recreated with writable fax state.
 - Database schema in production: additive migration `005`.
 - Working rule: finish and verify one boundary before moving another domain.
 
