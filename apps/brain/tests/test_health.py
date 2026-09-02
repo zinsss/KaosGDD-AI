@@ -29,6 +29,7 @@ class BrainHealthTests(unittest.TestCase):
         self.assertEqual(payload["deepModel"], "qwen3:8b")
         self.assertEqual(payload["imagingProvider"], "ollama")
         self.assertEqual(payload["imagingModel"], "gemma3:4b")
+        self.assertEqual(payload["kaosBrainOpenAI"], {"mode": "disabled"})
         self.assertEqual(payload["kaosAI"], {"mode": "disabled"})
         self.assertEqual(payload["governorTools"], {"enabled": True})
         self.assertNotIn("token", str(payload).lower())
@@ -66,8 +67,9 @@ class BrainHealthTests(unittest.TestCase):
             }
         )
 
-        self.assertEqual(snapshot(diagnostic, bot).payload()["kaosAI"], {"mode": "diagnostic"})
-        self.assertEqual(snapshot(dry_run, bot).payload()["kaosAI"], {"mode": "dry-run"})
+        self.assertEqual(snapshot(diagnostic, bot).payload()["kaosBrainOpenAI"], {"mode": "diagnostic"})
+        self.assertEqual(snapshot(dry_run, bot).payload()["kaosBrainOpenAI"], {"mode": "dry-run"})
+        self.assertEqual(snapshot(chat, bot).payload()["kaosBrainOpenAI"], {"mode": "chat"})
         self.assertEqual(snapshot(chat, bot).payload()["kaosAI"], {"mode": "chat"})
 
 

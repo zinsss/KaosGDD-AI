@@ -1130,7 +1130,7 @@ def _enabled_text(value: object) -> str:
 def _service_label(key: str) -> str:
     return {
         "kaosbrain": "KaosBrain",
-        "kaosai-second-look": "KaosAI Second-Look",
+        "kaosai-second-look": "KaosBrain-OpenAI Second-Look",
         "kaosgovernor": "KaosGovernor",
         "kaospacs": "KaosPACS",
         "kaosinj": "KaosInj",

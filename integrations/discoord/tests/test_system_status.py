@@ -108,7 +108,7 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
             labels,
             [
                 "KaosBrain",
-                "KaosAI Second-Look",
+                "KaosBrain-OpenAI Second-Look",
                 "KaosGovernor",
                 "KaosPACS",
                 "KaosInj",
@@ -450,7 +450,7 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
             json.dumps({"imagingProvider": "kaosai", "imagingModel": "openai/gpt-5.6-sol"}).encode("utf-8"),
         )
 
-        self.assertIn("provider=kaosai", detail)
+        self.assertIn("provider=kaosbrain-openai", detail)
         self.assertIn("model=openai/gpt-5.6-sol", detail)
 
     def test_second_look_status_detail_summarizes_last_result(self) -> None:
@@ -531,14 +531,14 @@ class DiscordServiceStatusTests(unittest.IsolatedAsyncioTestCase):
                     "discordReady": True,
                     "chatModel": "gemma3:4b",
                     "deepModel": "qwen3:8b",
-                    "kaosAI": {"mode": "dry-run"},
+                    "kaosBrainOpenAI": {"mode": "dry-run"},
                 }
             ).encode("utf-8"),
         )
 
         self.assertIn("HTTP 200", detail)
         self.assertIn("ready=True", detail)
-        self.assertIn("KaosAI dry-run", detail)
+        self.assertIn("KaosBrain-OpenAI dry-run", detail)
         self.assertIn("gemma3:4b", detail)
         self.assertIn("qwen3:8b", detail)
 

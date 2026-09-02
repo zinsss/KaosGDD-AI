@@ -11,12 +11,12 @@ from .brain_guard import INTENT_PARAMETER_KEYS, MUTATION_INTENTS, READONLY_INTEN
 
 
 class KaosAIError(RuntimeError):
-    """Raised when KaosAI cannot return a usable plan."""
+    """Raised when the legacy KaosAI/KaosBrain-OpenAI provider cannot return a usable plan."""
 
 
 class KaosAIPlanner(Protocol):
     async def plan(self, user_text: str, *, context: Mapping[str, Any]) -> dict[str, Any] | None:
-        """Return a KaosAI plan or None when planning is unavailable."""
+        """Return a KaosBrain-OpenAI plan or None when planning is unavailable."""
 
     async def suggest_document_tags(self, context: Mapping[str, Any]) -> tuple[str, ...]:
         """Return existing Paperless tag names suggested for a document."""
@@ -117,7 +117,7 @@ def _format_parameter_lines() -> str:
     return "\n".join(lines)
 
 
-KAOSAI_PLAN_SYSTEM_PROMPT = f"""You are KaosAI, the planner for KaosGDD.
+KAOSAI_PLAN_SYSTEM_PROMPT = f"""You are KaosBrain-OpenAI, the OpenAI-backed planner for KaosGDD.
 Return exactly one JSON object and no markdown.
 You may understand language and draft plans, but you cannot call tools.
 KaosBrain will validate your plan before KaosGovernor can write anything.
@@ -152,7 +152,7 @@ Rules:
 - If the request is ambiguous, return {{"intent":"clarify","scope":"personal","parameters":{{"question":"..."}}}}."""
 
 
-KAOSAI_DOCUMENT_TAG_SYSTEM_PROMPT = """You are KaosAI helping KaosBrain choose Paperless tags.
+KAOSAI_DOCUMENT_TAG_SYSTEM_PROMPT = """You are KaosBrain-OpenAI helping KaosBrain choose Paperless tags.
 Return exactly one JSON object and no markdown.
 Allowed schema:
 {"tags":["tag name"]}
@@ -165,7 +165,7 @@ Rules:
 - Return {"tags":[]} when no tag clearly fits."""
 
 
-KAOSAI_SECOND_LOOK_SYSTEM_PROMPT = """You are KaosAI providing a temporary medical image second-look checklist.
+KAOSAI_SECOND_LOOK_SYSTEM_PROMPT = """You are KaosBrain-OpenAI providing a temporary medical image second-look checklist.
 Return exactly one JSON object and no markdown.
 Do not diagnose, do not claim certainty, and do not provide a final report.
 Use Korean unless the user question is clearly in another language.

@@ -59,7 +59,7 @@ KaosGDD-AI/
 ### This repository owns
 
 - deterministic Governor code
-- KaosAI/OpenClaw planner integration behind KaosBrain Guard
+- KaosBrain-OpenAI/OpenClaw planner integration behind KaosBrain Guard
 - Family AI gateway code
 - the shared personal/family KaosGDD PWA source currently deployed from
   `apps/family-portal`
@@ -101,8 +101,8 @@ No upstream source should be copied here merely to make deployment convenient. C
 
 - Commit `.env.example` files only.
 - Production secrets remain outside Git and are mounted through host-managed secret files.
-- KaosAI/OpenClaw configuration committed here must contain placeholders,
-  scoped planner policies, and no provider credentials.
+- KaosBrain-OpenAI/OpenClaw configuration committed here must contain
+  placeholders, scoped planner policies, and no provider credentials.
 - Model weights are managed as deployment artifacts, never Git objects.
 - Compose files must pin production image versions or digests.
 - Production data paths are documented but never created or populated by repository bootstrap scripts.

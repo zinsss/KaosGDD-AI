@@ -1,12 +1,14 @@
-# KaosBrain, KaosGovernor, and KaosDiscoord
+# KaosBrain, KaosBrain-OpenAI, KaosGovernor, and KaosDiscoord
 
 KaosGDD separates language intelligence, deterministic authority, domain
 execution, and transport concerns.
 
 Runtime paths are defined in
 [Runtime Layout](./runtime-layout.md). In short, project-owned services live
-under `/srv/kaosgdd/{kaosai,kaosbrain,kaosgovernor}`, while ready-made backends
-such as Radicale, Memos, and Vaultwarden keep their own service names.
+under `/srv/kaosgdd/{kaosbrain,kaosgovernor}`, while ready-made backends such
+as Radicale, Memos, and Vaultwarden keep their own service names. Current
+OpenClaw/OpenAI host paths may still use the legacy `kaosai` name until a
+separate host-path migration is performed.
 
 The canonical phase and progress tracker is the
 [Brain / Governor / Discoord / iOS migration plan](../migration/brain-governor-discoord-ios-plan.md).
@@ -15,7 +17,11 @@ The canonical phase and progress tracker is the
 
 ```text
 KaosBrain
-  understands language, reasons over context, and drafts guarded structured actions
+  top AI manager/orchestrator; understands language, reasons over context, and
+  drafts guarded structured actions
+
+KaosBrain-OpenAI
+  OpenClaw/ChatGPT Pro provider implementation, formerly called KaosAI
 
 KaosGovernor
   validates actions and owns confirmations, audit, operation state, and execution routing
@@ -27,8 +33,9 @@ KaosGDD domain services
   execute operations and preserve each service's source of truth
 ```
 
-KaosAI is the optional model/planner implementation inside the Brain role. It
-is not a source of truth. Brain may read context and propose actions, but it
+KaosBrain-OpenAI is the optional OpenAI-backed model/planner implementation
+used by KaosBrain. It is not a source of truth. Brain may read context and
+propose actions, but it
 does not directly mutate Radicale, Memos, Paperless, HylaFAX, or Governor data.
 Governor is the deterministic authority and does not depend on Brain or
 Discord.
@@ -61,8 +68,8 @@ Discord / task done
 
 ## Plan Contract
 
-Brain actions are small JSON objects. The current KaosAI planner uses this same
-contract:
+Brain actions are small JSON objects. The current KaosBrain-OpenAI planner uses
+this same contract:
 
 ```json
 {

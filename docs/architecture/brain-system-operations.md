@@ -10,8 +10,8 @@ capabilities are not yet enabled.
 KaosBrain has two long-term user-facing roles:
 
 1. a natural-language gateway into KaosGDD domains; and
-2. a conversational system-operations console for H4 KaosBrain/KaosAI, H3+
-   KaosGDD, and separately isolated KaosPACS/office services.
+2. a conversational system-operations console for H4 KaosBrain/KaosBrain-OpenAI,
+   H3+ KaosGDD, and separately isolated KaosPACS/office services.
 
 Brain is not the privileged runner. It interprets, explains, diagnoses, and
 proposes typed operations. KaosGovernor owns policy, confirmation, audit, and
@@ -83,8 +83,8 @@ actor, target versions, and expiry. A model-interpreted `yes` is insufficient.
 
 ## Host Isolation
 
-- H4 exposes only runbooks for KaosBrain, KaosAI/OpenClaw, local model runtime,
-  and their health checks.
+- H4 exposes only runbooks for KaosBrain, KaosBrain-OpenAI/OpenClaw, local
+  model runtime, and their health checks.
 - H3+ owns KaosGDD application deployments, Governor workers, migrations,
   backups, and service-edge checks.
 - KaosPACS and office-critical services retain a separate local executor and

@@ -129,7 +129,7 @@ class MaintenanceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reminders[0].reminder_on, date(2026, 8, 28))
         self.assertEqual(reminders[0].expires_on, date(2026, 8, 29))
         text = render_openclaw_renewal_reminder(reminders[0])
-        self.assertIn("KaosAI ChatGPT renewal", text)
+        self.assertIn("KaosBrain-OpenAI ChatGPT renewal", text)
         self.assertIn("expires on: `2026-08-29`", text)
 
     def test_fresh_actionable_report_requires_maintenance_but_stale_report_does_not(self) -> None:

@@ -1261,8 +1261,8 @@ Phase 6 slice 1 production deployment (2026-08-30):
 - the deployed helper matches the repository source byte-for-byte; the portal
   container is running with zero restarts
 - the post-sync service preflight passes and the H4 doctor reports repository,
-  Brain, KaosAI, Ollama, Governor, imaging, and system-controller dependencies
-  ready
+  Brain, KaosBrain-OpenAI, Ollama, Governor, imaging, and system-controller
+  dependencies ready
 - no Governor, worker, Radicale, mail, fax, Paperless, PACS, or Brain runtime
   was restarted or migrated
 
@@ -1743,6 +1743,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-09-02 | 6 | Normalized the main PWA Utils surface | Commit `7875cf2`; Utils now renders as the shared Archive Terminal record board instead of the old service-card grid, desktop embedded-service toolbars use bracket command actions (`[ RELOAD ]`, `[ OPEN ]`), and main-profile form action rows use compact bracketed text buttons while boxed tabs and the circular shell `+` remain exceptions; versioned `styles.css?v=284` and `app.js?v=269`; JavaScript syntax check, 44 frontend tests, `git diff --check`, H3 static sync, and served asset/UI smoke pass | H3 static portal promoted; UI-only cleanup with no API, service, Governor, Paperless, mail, fax, Radicale, or data behavior change; H4 synced to tracker commit `7c0ae4d` and KaosBrain doctor passes |
 | 2026-09-02 | 6 | Added quiet main PWA attention markers | Commit `851053d`; the main PWA now refreshes existing protected read-only Mail unread, Documents Inbox, Fax archive, and System Status sources once on load, turns the `KaosGDD` shell label amber for unresolved attention or red for critical/down/failure states, and appends a simple `•` to affected mobile dropdown and desktop menu items; versioned `styles.css?v=285` and `app.js?v=270`; JavaScript syntax check, 48 frontend tests, `git diff --check`, H3 static sync, and served asset/UI smoke pass | H3 static portal promoted; client-side marker only with no new API, no polling loop, no notification engine, and no mail/document/fax/system mutation; H4 synced to tracker commit `77a0fbf` and KaosBrain doctor passes |
 | 2026-09-02 | 6 | Fixed stale Documents Inbox rows after metadata apply | Commit `127e88c`; after final metadata apply from Documents Inbox, the PWA now removes the applied intake row from local `inboxItems`, clears the selected Inbox item, forces the next Inbox view to re-read backend state, refreshes the shell attention marker, and then returns to Archive with the updated Paperless document selected; versioned `app.js?v=271`; JavaScript syntax check, 48 frontend tests, `git diff --check`, H3 static sync, and served JS smoke pass | H3 static portal promoted; frontend stale-state fix only. Backend confirmation-gated Paperless metadata apply and intake `status=applied` behavior were already covered and unchanged; H4 synced to tracker commit `608d421` and KaosBrain doctor passes |
+| 2026-09-03 | 7 | Renamed the old KaosAI concept to KaosBrain-OpenAI | This commit makes KaosBrain the documented top AI manager/orchestrator and renames user-facing OpenClaw/OpenAI planner/status/reauth labels to `KaosBrain-OpenAI`; Brain health now emits `kaosBrainOpenAI.mode` while retaining legacy `kaosAI.mode`, and `KAOSBRAIN_IMAGING_PROVIDER=kaosbrain-openai` is accepted as an alias for the existing provider path | Compatibility rename only. Legacy `KAOSAI_*` environment names, internal Python symbols, error codes, and live host paths remain in place until a separate mechanical migration; full Brain Docker tests and full Discoord/Governor Docker test target pass |
 
 ## How to Update This Tracker
 

@@ -1,7 +1,7 @@
 # H4 Ultra + H3+ Production Plan
 
 > Implementation status (2026-08-28): the H3 application plane, H4 KaosBrain,
-> guarded KaosAI chat, and the office Fax Connector/Bridge are active. This
+> guarded KaosBrain-OpenAI chat, and the office Fax Connector/Bridge are active. This
 > document remains the architecture and rollback contract; phase instructions
 > that describe those components as future work are retained for rebuilds.
 
@@ -9,8 +9,8 @@
 
 Build the next Kaos platform around two new permanent roles:
 
-- **H4 Ultra, 32 GB**: KaosBrain, optional KaosAI/OpenClaw planner runtime,
-  and local model inference.
+- **H4 Ultra, 32 GB**: KaosBrain, optional KaosBrain-OpenAI/OpenClaw planner
+  runtime, and local model inference.
 - **H3+, 32 GB**: KaosGovernor, authoritative personal/family backends,
   Personal and Family KaosGDD PWAs, and the public/private application edge.
 
@@ -42,9 +42,9 @@ flowchart TD
 
     subgraph H4["H4 Ultra 32 GB: AI plane"]
         BrainBot --> BrainGuard["KaosBrain Guard"]
-        BrainGuard --> KaosAI["KaosAI planner slot"]
+        BrainGuard --> BrainOpenAI["KaosBrain-OpenAI provider"]
         FamilyGateway --> FamilySession["Family-scoped AI session"]
-        KaosAI --> Model["Hosted or local LLM"]
+        BrainOpenAI --> Model["Hosted or local LLM"]
         FamilySession --> Model
     end
 
@@ -100,7 +100,7 @@ are optional future workers and are not required for normal operation.
 H4 runs only AI-facing components:
 
 - KaosBrain as the private `#brain` Discord adapter and deterministic guard.
-- Optional KaosAI/OpenClaw planner runtime behind KaosBrain Guard.
+- Optional KaosBrain-OpenAI/OpenClaw planner runtime behind KaosBrain Guard.
 - One local model server, initially serving a 7-9B quantized instruct model.
 - A separately scoped family AI session/gateway.
 - Disposable model caches, conversation working context, and evaluation data.
@@ -112,8 +112,8 @@ H4 does not receive:
 - unrestricted SSH, shell, sudo, or filesystem tools.
 - direct access to service databases or production storage.
 
-KaosBrain sees only narrow Governor tools. KaosAI/OpenClaw must not receive
-Governor credentials directly. H4 can be rebuilt without restoring
+KaosBrain sees only narrow Governor tools. KaosBrain-OpenAI/OpenClaw must not
+receive Governor credentials directly. H4 can be rebuilt without restoring
 authoritative Kaos application data.
 
 #### Initial model policy
@@ -131,7 +131,7 @@ authoritative Kaos application data.
 | Component | Working allowance |
 | --- | ---: |
 | OS, Docker, monitoring | 2-3 GB |
-| KaosAI/OpenClaw and gateways | 1-2 GB |
+| KaosBrain-OpenAI/OpenClaw and gateways | 1-2 GB |
 | 7-9B quantized model | 6-9 GB |
 | KV cache/context | 4-8 GB |
 | Temporary conversion/embedding work | 2-4 GB |
@@ -714,7 +714,7 @@ Actions:
 
 Exit gate:
 
-- no shell/SSH/Docker/database tools visible to KaosBrain or KaosAI/OpenClaw
+- no shell/SSH/Docker/database tools visible to KaosBrain or KaosBrain-OpenAI/OpenClaw
 - actor scopes and confirmations cannot be bypassed
 - H4 rebuild test demonstrates no authoritative data loss
 

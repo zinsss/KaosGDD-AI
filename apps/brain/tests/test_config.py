@@ -273,6 +273,20 @@ class SettingsTests(unittest.TestCase):
         )
         self.assertEqual(kaosai.imaging_provider, "kaosai")
 
+        renamed_provider = Settings.from_env(
+            {
+                **BASE_ENV,
+                "KAOSBRAIN_IMAGING_ENABLED": "true",
+                "KAOSBRAIN_IMAGING_PROVIDER": "kaosbrain-openai",
+                "KAOSBRAIN_IMAGING_API_TOKEN": "not-a-real-secret",
+                "KAOSAI_ENABLED": "true",
+                "KAOSAI_PROVIDER": "openclaw",
+                "KAOSAI_BASE_URL": "http://127.0.0.1:18789",
+                "KAOSAI_API_TOKEN": "gateway-token",
+            }
+        )
+        self.assertEqual(renamed_provider.imaging_provider, "kaosai")
+
     def test_imaging_model_can_be_configured_independently(self) -> None:
         settings = Settings.from_env({**BASE_ENV, "KAOSBRAIN_IMAGING_MODEL": "llava:7b"})
 

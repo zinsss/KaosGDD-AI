@@ -56,11 +56,12 @@ Nextcloud is not part of the target backend. Radicale remains the CalDAV
 authority, Memos remains the memo authority, and SFTPGo remains the planned
 purpose-built file transfer service where needed.
 
-KaosGDD is the umbrella project. Under it, KaosBrain owns language
-interpretation and guarded structured action proposals, KaosGovernor owns
-deterministic orchestration, and KaosDiscoord is the replaceable Discord
-transport. KaosAI remains the optional model/planner implementation used by
-Brain. Ready-made backend services keep their native
+KaosGDD is the umbrella project. Under it, KaosBrain is the top AI
+manager/orchestrator for language interpretation, provider routing, and guarded
+structured action proposals; KaosGovernor owns deterministic orchestration; and
+KaosDiscoord is the replaceable Discord transport. KaosBrain-OpenAI is the
+optional OpenClaw/ChatGPT Pro provider implementation formerly called KaosAI.
+Ready-made backend services keep their native
 operational identities, such as Radicale, Memos, Vaultwarden, SFTPGo, Caddy,
 and cloudflared, rather than being renamed to `kaosgdd-*`.
 

@@ -112,7 +112,7 @@ class BrainImagingServer:
                     return web.json_response(
                         {
                             "error": "kaosai_second_look_unavailable",
-                            "message": "KaosAI 인증 갱신이 필요하거나 이미지 보조 검토 제공자가 응답하지 않습니다.",
+                            "message": "KaosBrain-OpenAI 인증 갱신이 필요하거나 이미지 보조 검토 제공자가 응답하지 않습니다.",
                             "detail": str(exc),
                         },
                         status=502,

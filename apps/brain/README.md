@@ -4,28 +4,30 @@ KaosBrain is the lightweight personal language interface and guard for
 KaosGDD.
 
 The current production service talks to Discord directly, calls Ollama directly
-for conversational fallback, and leaves authoritative state changes to
-KaosGovernor. The next architecture introduces KaosAI as a planner slot:
+for conversational fallback, can call the OpenAI-backed planner/provider, and
+leaves authoritative state changes to KaosGovernor.
 
 ```text
-KaosAI      = OpenClaw/ChatGPT Pro planner
-KaosBrain   = adapter and deterministic guard
+KaosBrain        = top AI manager/orchestrator for KaosGDD
+KaosBrain-OpenAI = OpenClaw/ChatGPT Pro provider, formerly called KaosAI
 KaosGovernor = authoritative tools, confirmations, and audit
 ```
 
-See [KaosAI, KaosBrain, and KaosGovernor](../../docs/architecture/kaosai-brain-governor.md).
+See [KaosBrain, KaosBrain-OpenAI, and KaosGovernor](../../docs/architecture/kaosai-brain-governor.md).
 Runtime paths follow [Runtime Layout](../../docs/architecture/runtime-layout.md):
-KaosBrain belongs under `/srv/kaosgdd/kaosbrain`; KaosAI/OpenClaw belongs under
-`/srv/kaosgdd/kaosai`.
+KaosBrain belongs under `/srv/kaosgdd/kaosbrain`. Current OpenClaw/OpenAI host
+paths and environment variables may still use the legacy `kaosai` name until a
+separate host-path migration is performed.
 
 ## Authority Boundary
 
 - KaosBrain may answer conversationally.
-- KaosBrain may classify intent, adapt KaosAI plans, and draft text.
+- KaosBrain may classify intent, adapt KaosBrain-OpenAI plans, and draft text.
 - KaosBrain must not directly own calendars, tasks, memos, documents, mail, fax,
   infrastructure, or databases.
 - Durable reads and writes should go through narrow KaosGovernor APIs.
-- KaosAI must not receive Governor credentials or call Governor tools directly.
+- KaosBrain-OpenAI must not receive Governor credentials or call Governor tools
+  directly.
 
 For received fax documents, KaosGovernor remains the owner. A text-only
 Governor notice can trigger an active-control refresh when
@@ -40,7 +42,7 @@ route only after the user selects that fax, then uploads it into `#brain`.
 - Direct Ollama `/api/chat` calls.
 - Fast chat model and automatic deep model routing.
 - `deep:`, `think:`, `깊게:`, and `생각:` prefixes route to the deep model.
-- KaosAI plan contract and deterministic Brain Guard skeleton.
+- KaosBrain-OpenAI plan contract and deterministic Brain Guard skeleton.
 - Read-only KaosGovernor tool calls for today, active tasks, Memos search, and
   Paperless document search.
 - Confirmed KaosGovernor task due-date updates from narrow natural-language
@@ -84,9 +86,10 @@ GOVERNOR_API_TOKEN_FILE=/run/secrets/governor_api_token
 
 Bind the health endpoint only to loopback or the KaosBrain Tailscale IP. It is
 for KaosGovernor system status probes, not public access.
-The health payload reports `kaosAI.mode` as `disabled`, `diagnostic`,
+The health payload reports `kaosBrainOpenAI.mode` as `disabled`, `diagnostic`,
 `dry-run`, or `chat` so Governor can show the active Brain routing mode without
-seeing KaosAI credentials.
+seeing provider credentials. The legacy `kaosAI.mode` key remains present for
+older clients during the rename window.
 
 Supported write grammar in this slice:
 
@@ -98,18 +101,18 @@ Supported write grammar in this slice:
 
 The default due time is `10:00`.
 
-KaosAI is a guarded planner dependency only when explicitly enabled. The
+KaosBrain-OpenAI is a guarded planner dependency only when explicitly enabled. The
 OpenClaw planner client uses the local OpenClaw WebSocket gateway and expects
 strict JSON plans only; KaosBrain Guard adapts and validates those plans before
 Governor sees them. `KAOSAI_CHAT_ENABLED=false` keeps normal Brain chat on the
 local deterministic path while still allowing explicit `ai:` diagnostics.
 `KAOSAI_DRY_RUN_ENABLED=true` routes normal Brain chat through the guarded
-KaosAI diagnostic preview only; it does not create confirmations or call
+KaosBrain-OpenAI diagnostic preview only; it does not create confirmations or call
 Governor tools.
 When `KAOSAI_ENABLED=true`, set `KAOSAI_API_TOKEN_FILE` to a mounted gateway
 token file or provide `KAOSAI_API_TOKEN` through a host-managed secret source.
 
-KaosAI diagnostics are available in the configured Brain channel and never
+KaosBrain-OpenAI diagnostics are available in the configured Brain channel and never
 execute or propose writes:
 
 ```text

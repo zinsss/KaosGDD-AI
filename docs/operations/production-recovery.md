@@ -78,7 +78,7 @@ Current production mode:
 - KaosBrain Discord adapter and deterministic Guard enabled
 - local Ollama chat and deep fallback models available
 - Governor tools enabled over Tailscale
-- KaosAI/OpenClaw enabled in guarded chat mode
+- KaosBrain-OpenAI/OpenClaw enabled in guarded chat mode
 - OpenClaw model `openai/gpt-5.6-sol`
 - imaging second-look forwarding enabled
 - loopback-only OpenClaw reauthentication agent enabled

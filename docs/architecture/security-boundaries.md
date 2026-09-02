@@ -31,9 +31,9 @@ Denied:
 - direct Radicale, Memos, Paperless, or HylaFAX credentials
 - production filesystem mounts
 
-Discord guild, channel, and user access must be allowlisted. If KaosAI/OpenClaw
-is enabled, it remains behind KaosBrain Guard and must not receive Governor
-credentials or direct backend credentials.
+Discord guild, channel, and user access must be allowlisted. If
+KaosBrain-OpenAI/OpenClaw is enabled, it remains behind KaosBrain Guard and
+must not receive Governor credentials or direct backend credentials.
 
 ## Family AI session on H4
 

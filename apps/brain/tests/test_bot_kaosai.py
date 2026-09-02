@@ -216,7 +216,7 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(brain.reauth.start_calls, 1)
         reply = message.reply.await_args.args[0]
-        self.assertIn("## KaosAI login renewal", reply)
+        self.assertIn("## KaosBrain-OpenAI login renewal", reply)
         self.assertIn("https://auth.openai.com/oauth/authorize", reply)
 
     async def test_rrr_command_reposts_active_control_message(self) -> None:
@@ -252,7 +252,7 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
 
         message.delete.assert_awaited_once()
         self.assertEqual(brain.reauth.callback_calls, [callback])
-        self.assertEqual(message.channel.send.await_args.args[0], "KaosAI login renewed.")
+        self.assertEqual(message.channel.send.await_args.args[0], "KaosBrain-OpenAI login renewed.")
         self.assertIn("allowed_mentions", message.channel.send.await_args.kwargs)
 
     async def test_kaosai_clarify_plan_returns_question_without_governor(self) -> None:
@@ -310,7 +310,7 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
             message=fake_message(),
         )
 
-        self.assertIn("## KaosAI plan", reply)
+        self.assertIn("## KaosBrain-OpenAI plan", reply)
         self.assertIn("intent: task.create", reply)
         self.assertIn("kind: governor_proposal", reply)
         self.assertIn("confirmation: required", reply)
@@ -338,7 +338,7 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
 
         message.reply.assert_awaited_once()
         reply = message.reply.await_args.args[0]
-        self.assertIn("## KaosAI plan", reply)
+        self.assertIn("## KaosBrain-OpenAI plan", reply)
         self.assertIn("intent: task.create", reply)
         self.assertIn("- execution: skipped", reply)
         self.assertEqual(tools.task_create_calls, [])
@@ -366,7 +366,7 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
             "hello",
             message=fake_message(),
         )
-        self.assertEqual(reply, "## KaosAI diagnostic\n- planner: failed `nope`")
+        self.assertEqual(reply, "## KaosBrain-OpenAI diagnostic\n- planner: failed `nope`")
 
         guard_rejected = self.brain({"intent": "shell.run", "scope": "personal", "parameters": {"command": "id"}})
         reply = await BrainBot._render_kaosai_diagnostic(  # type: ignore[arg-type]
@@ -374,7 +374,7 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
             "run id",
             message=fake_message(),
         )
-        self.assertIn("## KaosAI rejected", reply)
+        self.assertIn("## KaosBrain-OpenAI rejected", reply)
         self.assertIn("reason: `intent_not_allowed`", reply)
         self.assertIn("intent: shell.run", reply)
         self.assertIn("- execution: skipped", reply)

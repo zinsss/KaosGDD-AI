@@ -8,10 +8,8 @@ namespace.
 
 ```text
 /srv/kaosgdd/
-  kaosai/
-    OpenClaw and hosted/local AI gateway runtime config
   kaosbrain/
-    KaosBrain Discord adapter, guard, and local worker env
+    KaosBrain AI orchestrator, Discord-facing runtime, guard, and local worker env
   kaosgovernor/
     KaosGovernor API, workers, scheduler, durable operation state
   secrets/
@@ -21,20 +19,22 @@ namespace.
 ## Names
 
 - KaosGDD: the whole system and project.
-- KaosAI: the smart planner layer, currently OpenClaw plus hosted or local
-  model access.
-- KaosBrain: the guarded adapter and messenger layer. It owns Discord context,
-  validates KaosAI plans, and calls Governor tools.
+- KaosBrain: the top AI manager/orchestrator for KaosGDD. It owns language
+  interpretation, provider routing, guarded structured action proposals, and
+  narrow Governor tool calls.
+- KaosBrain-OpenAI: the OpenClaw/ChatGPT Pro provider implementation formerly
+  called KaosAI. It is a Brain dependency, not a source of truth.
 - KaosGovernor: the deterministic authority for rules, confirmations,
   idempotency, audit, jobs, and service tool APIs.
 
-OpenClaw is an implementation detail of KaosAI. It should not be named
-KaosBrain in paths, service names, or user-facing architecture docs.
+Current live OpenClaw/OpenAI paths and environment variables may still use the
+legacy `kaosai` name. Do not move live env files, secrets, systemd units, or
+service data during a naming cleanup; migrate host paths separately.
 
 ## Ready-Made Backends
 
 Ready-made services stay independently named. Do not bury them under
-KaosBrain, KaosAI, or KaosGovernor:
+KaosBrain or KaosGovernor:
 
 ```text
 /srv/kaos/data/radicale

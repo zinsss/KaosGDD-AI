@@ -13,8 +13,8 @@ implemented in production:
 
 - H3 networking, Governor, PostgreSQL, Radicale, Memos, family services, and
   the service edge are active.
-- H4 KaosBrain is active with narrow Governor tools and guarded KaosAI/OpenClaw
-  chat.
+- H4 KaosBrain is active with narrow Governor tools and guarded
+  KaosBrain-OpenAI/OpenClaw chat.
 - Discord direct operational surfaces are active during transition, but the
   accepted target retains only the H4 `#brain` topic. The personal KaosGDD PWA,
   scoped Shortcuts, native iOS synchronization/notifications, service PWAs,
@@ -195,12 +195,12 @@ Failure must affect only AI chat, not Family KaosGDD or native services.
 
 ### Phase 7: KaosBrain on H4
 
-- Deploy KaosBrain, the local model, and optional KaosAI/OpenClaw planner
-  runtime.
+- Deploy KaosBrain, the local model, and optional KaosBrain-OpenAI/OpenClaw
+  planner runtime.
 - Use a new Discord bot during migration.
 - Give KaosBrain only narrow KaosGovernor tool API access.
 - Deny shell, SSH, Docker, database, filesystem, and elevated tools to both
-  KaosBrain and KaosAI/OpenClaw.
+  KaosBrain and KaosBrain-OpenAI/OpenClaw.
 - Start with Memos read/search, then use the same domain order as Governor.
 - Benchmark 7-9B and 14B candidates using real Korean Kaos commands.
 
@@ -284,7 +284,7 @@ The migration is complete only when:
 - all authoritative data has a tested backup and restore procedure
 - Governor owns deterministic orchestration
 - KaosBrain has only scoped Governor tools
-- KaosAI/OpenClaw has no direct Governor or backend credentials
+- KaosBrain-OpenAI/OpenClaw has no direct Governor or backend credentials
 - Family AI has only family-scoped Governor tools
 - office critical services operate during home/H4 outages
 - Discord, Governor, native-app, or manual replacements are verified before KaosTelegram retirement

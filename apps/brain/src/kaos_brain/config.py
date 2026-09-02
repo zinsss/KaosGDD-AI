@@ -177,8 +177,10 @@ class Settings:
             )
         imaging_enabled = _boolean(source, "KAOSBRAIN_IMAGING_ENABLED")
         imaging_provider = source.get("KAOSBRAIN_IMAGING_PROVIDER", "ollama").strip().lower() or "ollama"
+        if imaging_provider == "kaosbrain-openai":
+            imaging_provider = "kaosai"
         if imaging_provider not in {"ollama", "kaosai"}:
-            raise ConfigurationError("KAOSBRAIN_IMAGING_PROVIDER must be ollama or kaosai")
+            raise ConfigurationError("KAOSBRAIN_IMAGING_PROVIDER must be ollama or kaosbrain-openai")
         imaging_api_token = _secret(source, "KAOSBRAIN_IMAGING_API_TOKEN") if imaging_enabled else ""
         if imaging_enabled and not imaging_api_token:
             raise ConfigurationError(
@@ -205,7 +207,9 @@ class Settings:
         if kaosai_chat_enabled and kaosai_dry_run_enabled:
             raise ConfigurationError("KAOSAI_CHAT_ENABLED and KAOSAI_DRY_RUN_ENABLED cannot both be true")
         if imaging_enabled and imaging_provider == "kaosai" and not kaosai_enabled:
-            raise ConfigurationError("KAOSAI_ENABLED=true is required when KAOSBRAIN_IMAGING_PROVIDER=kaosai")
+            raise ConfigurationError(
+                "KAOSAI_ENABLED=true is required when KAOSBRAIN_IMAGING_PROVIDER=kaosbrain-openai"
+            )
         kaosai_reauth_enabled = _boolean(source, "KAOSAI_REAUTH_ENABLED")
         kaosai_reauth_base_url = source.get("KAOSAI_REAUTH_BASE_URL", "").strip()
         kaosai_reauth_api_token = _secret(source, "KAOSAI_REAUTH_TOKEN") if kaosai_reauth_enabled else ""

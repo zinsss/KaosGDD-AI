@@ -239,7 +239,7 @@ class GovernorBotTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(first, 1)
         self.assertEqual(second, 0)
         self.assertEqual(len(channel.sent), 1)
-        self.assertIn("KaosAI ChatGPT renewal", channel.sent[0])
+        self.assertIn("KaosBrain-OpenAI ChatGPT renewal", channel.sent[0])
         bot.text_notifications.notify.assert_called_once()
         mirrored = bot.text_notifications.notify.call_args.args[0]
         self.assertEqual(mirrored.category, "maintenance")

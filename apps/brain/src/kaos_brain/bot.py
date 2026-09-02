@@ -228,14 +228,14 @@ async def _start_reauth_message(reauth: OpenClawReauthClient) -> str:
     try:
         payload = await reauth.start()
     except ReauthError as exc:
-        return f"KaosAI login renewal failed to start: `{exc}`"
+        return f"KaosBrain-OpenAI login renewal failed to start: `{exc}`"
     oauth_url = str(payload.get("oauthUrl") or "").strip()
     status = str(payload.get("status") or "").strip() or "unknown"
     if not oauth_url:
-        return f"KaosAI login renewal started, but no login URL is available yet. Status: `{status}`"
+        return f"KaosBrain-OpenAI login renewal started, but no login URL is available yet. Status: `{status}`"
     return "\n".join(
         [
-            "## KaosAI login renewal",
+            "## KaosBrain-OpenAI login renewal",
             "Open this URL, sign in, then paste the callback URL here.",
             oauth_url,
         ]
@@ -245,7 +245,7 @@ async def _start_reauth_message(reauth: OpenClawReauthClient) -> str:
 def _render_kaosai_clarify_preview(plan: dict[str, Any]) -> str:
     parameters = plan.get("parameters")
     question = _preview_value(parameters.get("question")) if isinstance(parameters, dict) else ""
-    lines = ["## KaosAI plan", "intent: clarify", "confirmation: not required"]
+    lines = ["## KaosBrain-OpenAI plan", "intent: clarify", "confirmation: not required"]
     if question:
         lines.append(f"- question: {question}")
     lines.append("- execution: skipped")
@@ -255,7 +255,7 @@ def _render_kaosai_clarify_preview(plan: dict[str, Any]) -> str:
 def _render_kaosai_rejected_preview(plan: dict[str, Any], reason: str) -> str:
     intent = _preview_value(plan.get("intent")) or "unknown"
     scope = _preview_value(plan.get("scope"))
-    lines = ["## KaosAI rejected", f"reason: `{reason}`", f"intent: {intent}"]
+    lines = ["## KaosBrain-OpenAI rejected", f"reason: `{reason}`", f"intent: {intent}"]
     if scope:
         lines.append(f"scope: {scope}")
     lines.append("- execution: skipped")
@@ -278,7 +278,7 @@ def parse_document_tag_suggestion(text: str) -> str:
 def _render_kaosai_guard_preview(guarded: BrainGuardResult) -> str:
     confirmation = "required" if guarded.confirmation_required else "not required"
     lines = [
-        "## KaosAI plan",
+        "## KaosBrain-OpenAI plan",
         f"intent: {guarded.intent}",
         f"kind: {guarded.kind.value}",
         f"confirmation: {confirmation}",
@@ -675,7 +675,10 @@ class BrainBot(BrainProposalMixin, BrainActiveControlMixin, discord.Client):
         except KaosAIError as exc:
             LOGGER.warning("KaosAI planner failed: %s", exc)
             if self.reauth is not None and _looks_like_auth_failure(str(exc)):
-                return ("## KaosAI login expired\nRenew ChatGPT login.", KaosAIReauthView(self.reauth, int(message.author.id)))
+                return (
+                    "## KaosBrain-OpenAI login expired\nRenew ChatGPT login.",
+                    KaosAIReauthView(self.reauth, int(message.author.id)),
+                )
             return None
         if plan is None:
             return None
@@ -732,7 +735,7 @@ class BrainBot(BrainProposalMixin, BrainActiveControlMixin, discord.Client):
     async def _start_kaosai_reauth(self, message: discord.Message) -> None:
         if self.reauth is None:
             await message.reply(
-                "KaosAI reauth agent is not enabled.",
+                "KaosBrain-OpenAI reauth agent is not enabled.",
                 mention_author=False,
                 allowed_mentions=NO_MENTIONS,
             )
@@ -752,13 +755,13 @@ class BrainBot(BrainProposalMixin, BrainActiveControlMixin, discord.Client):
             try:
                 payload = await self.reauth.submit_callback(callback)
             except ReauthError as exc:
-                reply = f"KaosAI login renewal failed: `{exc}`"
+                reply = f"KaosBrain-OpenAI login renewal failed: `{exc}`"
             else:
                 status = str(payload.get("status") or "")
                 if status == "succeeded":
-                    reply = "KaosAI login renewed."
+                    reply = "KaosBrain-OpenAI login renewed."
                 else:
-                    reply = f"KaosAI login renewal status: `{status or 'unknown'}`"
+                    reply = f"KaosBrain-OpenAI login renewal status: `{status or 'unknown'}`"
         await message.channel.send(reply[: self.settings.max_reply_chars], allowed_mentions=NO_MENTIONS)
 
     async def _render_kaosai_diagnostic(self, user_text: str, *, message: discord.Message) -> str:
@@ -772,9 +775,9 @@ class BrainBot(BrainProposalMixin, BrainActiveControlMixin, discord.Client):
                 },
             )
         except KaosAIError as exc:
-            return f"## KaosAI diagnostic\n- planner: failed `{exc}`"
+            return f"## KaosBrain-OpenAI diagnostic\n- planner: failed `{exc}`"
         if plan is None:
-            return "## KaosAI diagnostic\n- planner: unavailable"
+            return "## KaosBrain-OpenAI diagnostic\n- planner: unavailable"
         if str(plan.get("intent") or "").strip() == "clarify":
             return _render_kaosai_clarify_preview(plan)
         try:

@@ -1160,7 +1160,8 @@ class BrainToolServer:
                     "No DICOM, Orthanc, PACS, or AIO report data was modified.",
                     "This placeholder is not a diagnostic interpretation.",
                 ],
-                "recommendation": question or "Connect the approved KaosAI imaging model before using second-look output.",
+                "recommendation": question
+                or "Connect the approved KaosBrain-OpenAI imaging model before using second-look output.",
                 "disclaimer": "AI 보조 검토입니다. 최종 판단은 진료자가 합니다.",
                 "model": "not-connected",
             },

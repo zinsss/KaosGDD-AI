@@ -118,7 +118,7 @@ class BrainImagingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 502)
         payload = await response.json()
         self.assertEqual(payload["error"], "kaosai_second_look_unavailable")
-        self.assertIn("KaosAI 인증 갱신", payload["message"])
+        self.assertIn("KaosBrain-OpenAI 인증 갱신", payload["message"])
         self.assertIn("kaosai_gateway_agent_failed", payload["detail"])
         self.assertEqual(self.ollama.requests, [])
 

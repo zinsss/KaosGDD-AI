@@ -14,7 +14,7 @@ from .tool_intent import ToolKind, ToolRequest
 
 
 class BrainGuardError(ValueError):
-    """Raised when a KaosAI plan cannot safely become a Governor request."""
+    """Raised when a Brain provider plan cannot safely become a Governor request."""
 
 
 class BrainGuardResultKind(StrEnum):

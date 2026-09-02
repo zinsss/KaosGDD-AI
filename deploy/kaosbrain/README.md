@@ -4,8 +4,9 @@ KaosBrain runs on the H4 Ultra as the personal language interface for KaosGDD.
 It talks directly to Discord and local Ollama. Authoritative state changes
 remain behind KaosGovernor APIs.
 
-OpenClaw/KaosAI planning is optional and disabled by default. Enable it only
-after the local gateway and auth token are verified.
+KaosBrain-OpenAI planning is optional and disabled by default. It is the
+OpenClaw/ChatGPT Pro provider formerly called KaosAI. Enable it only after the
+local gateway and auth token are verified.
 
 The normal production shape is:
 
@@ -13,7 +14,8 @@ The normal production shape is:
 - Local Ollama handles normal chat and deterministic intent help.
 - KaosGovernor tool access is enabled after the H3 Governor tool API is
   reachable over Tailscale.
-- KaosAI/OpenClaw remains disabled unless deliberately testing planner mode.
+- KaosBrain-OpenAI/OpenClaw remains disabled unless deliberately testing
+  planner mode.
 
 ## Host prerequisites
 
@@ -84,12 +86,13 @@ GOVERNOR_API_TOKEN_FILE=/run/secrets/governor_api_token
 ```
 
 Leave `KAOSAI_API_TOKEN_FILE` unset or pointed at a missing placeholder while
-`KAOSAI_ENABLED=false`; the deploy preflight only requires it when KaosAI is
-enabled.
+`KAOSAI_ENABLED=false`; the deploy preflight only requires it when
+KaosBrain-OpenAI is enabled. The `KAOSAI_*` names are legacy environment names
+kept for compatibility.
 
 Use `KAOSAI_DRY_RUN_ENABLED=true` only with `KAOSAI_ENABLED=true`. In dry-run
-mode, ordinary Brain chat renders the guarded KaosAI plan preview and skips all
-Governor calls, confirmations, and writes.
+mode, ordinary Brain chat renders the guarded KaosBrain-OpenAI plan preview and
+skips all Governor calls, confirmations, and writes.
 
 For KaosPACS-AIO second-look, AIO calls Governor on H3 and Governor forwards to
 KaosBrain:
@@ -98,18 +101,19 @@ KaosBrain:
 IMAGING_SECOND_LOOK_URL=http://<kaosbrain-tailscale-ip>:8097/imaging/second-look
 IMAGING_SECOND_LOOK_TOKEN_FILE=/run/secrets/governor_api_token
 KAOSBRAIN_IMAGING_ENABLED=true
-KAOSBRAIN_IMAGING_PROVIDER=kaosai
+KAOSBRAIN_IMAGING_PROVIDER=kaosbrain-openai
 ```
 
-The payload contains rendered previews only. KaosBrain/KaosAI returns a
+The payload contains rendered previews only. KaosBrain/KaosBrain-OpenAI returns a
 temporary second-look checklist, not a diagnosis or clinical report.
 
-Use the deploy helper to switch KaosAI modes without hand-editing the env file:
+Use the deploy helper to switch KaosBrain-OpenAI modes without hand-editing the
+env file:
 
 ```bash
-./deploy/kaosbrain/kaosbrain kaosai-mode disabled
-./deploy/kaosbrain/kaosbrain kaosai-mode diagnostic
-./deploy/kaosbrain/kaosbrain kaosai-mode dry-run
+./deploy/kaosbrain/kaosbrain brain-openai-mode disabled
+./deploy/kaosbrain/kaosbrain brain-openai-mode diagnostic
+./deploy/kaosbrain/kaosbrain brain-openai-mode dry-run
 ```
 
 The helper validates with `preflight` and restores the previous env file if the

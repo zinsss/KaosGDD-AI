@@ -196,16 +196,16 @@ preflight() {
   fi
   if [[ "${KAOSBRAIN_IMAGING_ENABLED:-false}" == "true" ]]; then
     case "${KAOSBRAIN_IMAGING_PROVIDER:-ollama}" in
-      ollama|kaosai) ;;
-      *) die "KAOSBRAIN_IMAGING_PROVIDER must be ollama or kaosai" ;;
+      ollama|kaosai|kaosbrain-openai) ;;
+      *) die "KAOSBRAIN_IMAGING_PROVIDER must be ollama or kaosbrain-openai" ;;
     esac
     if [[ -z "${KAOSBRAIN_IMAGING_API_TOKEN:-}" ]]; then
       local imaging_token_path
       imaging_token_path=$(host_secret_path "${KAOSBRAIN_IMAGING_API_TOKEN_FILE:-/run/secrets/governor_api_token}")
       [[ -s "${imaging_token_path}" ]] || die "missing or empty KaosBrain imaging token file: ${imaging_token_path}"
     fi
-    if [[ "${KAOSBRAIN_IMAGING_PROVIDER:-ollama}" == "kaosai" && "${KAOSAI_ENABLED:-false}" != "true" ]]; then
-      die "KAOSAI_ENABLED=true is required when KAOSBRAIN_IMAGING_PROVIDER=kaosai"
+    if [[ "${KAOSBRAIN_IMAGING_PROVIDER:-ollama}" =~ ^(kaosai|kaosbrain-openai)$ && "${KAOSAI_ENABLED:-false}" != "true" ]]; then
+      die "KAOSAI_ENABLED=true is required when KAOSBRAIN_IMAGING_PROVIDER=kaosbrain-openai"
     fi
   fi
   if [[ "${KAOSAI_ENABLED:-false}" == "true" ]]; then
@@ -217,7 +217,7 @@ preflight() {
     if [[ -z "${KAOSAI_API_TOKEN:-}" && -n "${KAOSAI_API_TOKEN_FILE:-}" ]]; then
       local kaosai_token_path
       kaosai_token_path=$(host_secret_path "${KAOSAI_API_TOKEN_FILE}")
-      [[ -s "${kaosai_token_path}" ]] || die "missing or empty KaosAI token file: ${kaosai_token_path}"
+      [[ -s "${kaosai_token_path}" ]] || die "missing or empty KaosBrain-OpenAI token file: ${kaosai_token_path}"
     fi
   fi
   if [[ "${KAOSAI_DRY_RUN_ENABLED:-false}" == "true" && "${KAOSAI_ENABLED:-false}" != "true" ]]; then
@@ -229,7 +229,7 @@ preflight() {
     if [[ -z "${KAOSAI_REAUTH_TOKEN:-}" ]]; then
       local reauth_token_path
       reauth_token_path=$(host_secret_path "${KAOSAI_REAUTH_TOKEN_FILE:-/run/secrets/kaosai_reauth_agent_token}")
-      [[ -s "${reauth_token_path}" ]] || die "missing or empty KaosAI reauth token file: ${reauth_token_path}"
+      [[ -s "${reauth_token_path}" ]] || die "missing or empty KaosBrain-OpenAI reauth token file: ${reauth_token_path}"
     fi
   fi
   curl --fail --silent --show-error "${OLLAMA_BASE_URL:-http://127.0.0.1:11434}/api/tags" >/dev/null \
@@ -334,7 +334,7 @@ doctor() {
       kaosai_mode="diagnostic"
     fi
   fi
-  check_line "KaosAI mode" "ok" "${kaosai_mode}"
+  check_line "KaosBrain-OpenAI mode" "ok" "${kaosai_mode}"
 
   local ollama_tags
   if ollama_tags=$(curl --fail --silent --show-error "${OLLAMA_BASE_URL:-http://127.0.0.1:11434}/api/tags"); then
@@ -381,8 +381,8 @@ PY
   fi
 
   if [[ "${KAOSBRAIN_IMAGING_ENABLED:-false}" == "true" ]]; then
-    if [[ "${KAOSBRAIN_IMAGING_PROVIDER:-ollama}" == "kaosai" ]]; then
-      check_line "KaosBrain imaging" "ok" "enabled, provider=kaosai, model=${KAOSAI_MODEL:-default}"
+    if [[ "${KAOSBRAIN_IMAGING_PROVIDER:-ollama}" =~ ^(kaosai|kaosbrain-openai)$ ]]; then
+      check_line "KaosBrain imaging" "ok" "enabled, provider=kaosbrain-openai, model=${KAOSAI_MODEL:-default}"
     else
       check_line "KaosBrain imaging" "ok" "enabled, provider=ollama, model=${KAOSBRAIN_IMAGING_MODEL:-unset}"
     fi
@@ -464,8 +464,8 @@ kaosai_mode() {
   local mode=${1:-}
   case "${mode}" in
     disabled|diagnostic|dry-run|chat) ;;
-    "") die "usage: ${0} kaosai-mode <disabled|diagnostic|dry-run|chat>" ;;
-    *) die "unknown KaosAI mode: ${mode}" ;;
+    "") die "usage: ${0} brain-openai-mode <disabled|diagnostic|dry-run|chat>" ;;
+    *) die "unknown KaosBrain-OpenAI mode: ${mode}" ;;
   esac
 
   [[ -f "${ENV_FILE}" ]] || die "missing env file: ${ENV_FILE}; run ${0} setup"
@@ -510,10 +510,10 @@ kaosai_mode() {
   if ! preflight; then
     cp -p "${backup}" "${ENV_FILE}"
     rm -f "${backup}"
-    die "KaosAI mode change failed preflight; restored ${ENV_FILE}"
+    die "KaosBrain-OpenAI mode change failed preflight; restored ${ENV_FILE}"
   fi
   rm -f "${backup}"
-  info "KaosAI mode set to ${mode}. Run ${0} up to restart Brain with this mode."
+  info "KaosBrain-OpenAI mode set to ${mode}. Run ${0} up to restart Brain with this mode."
 }
 
 openclaw_reauth() {
@@ -602,8 +602,10 @@ Commands:
   deploy     git pull --ff-only origin main, then up
   doctor     Check Brain service, Ollama, Governor tools, and system controller
   status     Show systemd and container status
+  brain-openai-mode <disabled|diagnostic|dry-run|chat>
+             Update KaosBrain-OpenAI mode in the Brain env and leave restart explicit
   kaosai-mode <disabled|diagnostic|dry-run|chat>
-             Update KaosAI mode in the Brain env, validate, and leave restart explicit
+             Legacy alias for brain-openai-mode
   openclaw-reauth
              Renew the OpenClaw OpenAI/ChatGPT login and restart the OpenClaw gateway
   openclaw-reauth-agent-setup
@@ -625,6 +627,7 @@ case "${1:-}" in
   deploy) deploy ;;
   doctor) doctor ;;
   status) status ;;
+  brain-openai-mode) shift; kaosai_mode "$@" ;;
   kaosai-mode) shift; kaosai_mode "$@" ;;
   openclaw-reauth) openclaw_reauth ;;
   openclaw-reauth-agent-setup) openclaw_reauth_agent_setup ;;

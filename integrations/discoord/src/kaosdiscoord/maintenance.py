@@ -418,7 +418,7 @@ def parse_openclaw_timestamp_date(value: str) -> date | None:
 def render_openclaw_renewal_reminder(reminder: OpenClawRenewalReminder) -> str:
     return "\n".join(
         [
-            "## KaosAI ChatGPT renewal",
+            "## KaosBrain-OpenAI ChatGPT renewal",
             f"- target: {escape_text(reminder.target)}",
             f"- model: {escape_text(reminder.model)}",
             f"- renew on: `{reminder.reminder_on.isoformat()}`",

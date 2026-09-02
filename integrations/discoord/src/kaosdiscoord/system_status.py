@@ -83,7 +83,11 @@ class DiscordServiceStatusState:
 
 SERVICES: tuple[ServiceStatusItem, ...] = (
     ServiceStatusItem("kaosbrain", "KaosBrain", "Brain of KaosGDD on Odroid H4 Ultra"),
-    ServiceStatusItem("kaosai-second-look", "KaosAI Second-Look", "Temporary AIO image second-look provider path"),
+    ServiceStatusItem(
+        "kaosai-second-look",
+        "KaosBrain-OpenAI Second-Look",
+        "Temporary AIO image second-look provider path",
+    ),
     ServiceStatusItem("kaosgovernor", "KaosGovernor", "Rules and controller of KaosGDD"),
     ServiceStatusItem("kaospacs", "KaosPACS", "Clinic PACS and DICOM infrastructure"),
     ServiceStatusItem("kaosinj", "KaosInj", "Clinic injection workflow support"),
@@ -650,11 +654,11 @@ def brain_health_detail(status: int, body: bytes) -> str:
     parts = [detail]
     if "discordReady" in payload:
         parts.append(f"ready={bool(payload.get('discordReady'))}")
-    kaosai = payload.get("kaosAI")
+    kaosai = payload.get("kaosBrainOpenAI") or payload.get("kaosAI")
     if isinstance(kaosai, dict):
         mode = str(kaosai.get("mode") or "").strip()
         if mode:
-            parts.append(f"KaosAI {mode}")
+            parts.append(f"KaosBrain-OpenAI {mode}")
     chat_model = str(payload.get("chatModel") or "").strip()
     deep_model = str(payload.get("deepModel") or "").strip()
     if chat_model or deep_model:
@@ -764,6 +768,8 @@ def second_look_health_detail(status: int, body: bytes) -> str:
     imaging_provider = str(payload.get("imagingProvider") or "").strip()
     imaging_model = str(payload.get("imagingModel") or "").strip()
     if imaging_provider:
+        if imaging_provider == "kaosai":
+            imaging_provider = "kaosbrain-openai"
         parts.append(f"provider={imaging_provider}")
     if imaging_model:
         parts.append(f"model={imaging_model}")

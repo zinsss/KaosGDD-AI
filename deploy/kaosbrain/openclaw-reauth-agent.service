@@ -1,5 +1,5 @@
 [Unit]
-Description=KaosAI OpenClaw reauth agent
+Description=KaosBrain-OpenAI OpenClaw reauth agent
 After=network-online.target openclaw-gateway.service
 Wants=network-online.target
 

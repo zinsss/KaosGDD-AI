@@ -28,6 +28,7 @@ class BrainHealthSnapshot:
             "deepModel": self.deep_model,
             "imagingProvider": self.imaging_provider,
             "imagingModel": self.imaging_model,
+            "kaosBrainOpenAI": {"mode": self.kaosai_mode},
             "kaosAI": {"mode": self.kaosai_mode},
             "governorTools": {"enabled": self.governor_tools_enabled},
         }
