@@ -306,6 +306,7 @@ const state = {
     detailLoading: false,
     detailError: "",
     metadataReview: {
+      recordId: "",
       documentId: "",
       title: "",
       tags: "",
@@ -2339,7 +2340,7 @@ function selectDocumentInboxRecord(id) {
   const previousInboxId = state.documents.selectedInboxId;
   state.documents.selectedInboxId = selected.id;
   if (previousInboxId !== selected.id) {
-    resetDocumentMetadataReview(selected.documentId, selected.title);
+    resetDocumentMetadataReview(selected.id, selected.documentId, selected.title);
   }
   render();
   document.querySelector("[data-document-inbox-detail]")?.focus();
@@ -2380,8 +2381,9 @@ function parseDocumentTagInput(value) {
     .slice(0, 25);
 }
 
-function resetDocumentMetadataReview(documentId = "", title = "") {
+function resetDocumentMetadataReview(recordId = "", documentId = "", title = "") {
   state.documents.metadataReview = {
+    recordId: String(recordId || ""),
     documentId: String(documentId || ""),
     title: String(title || ""),
     tags: "",
@@ -2396,12 +2398,14 @@ function resetDocumentMetadataReview(documentId = "", title = "") {
 async function proposeDocumentMetadata(form) {
   const documentId = String(form?.dataset.documentMetadataReview || "");
   if (!documentId) return;
+  const recordId = String(form?.dataset.documentMetadataRecord || "");
   const formData = new FormData(form);
   const title = String(formData.get("title") || "").trim();
   const tagsText = String(formData.get("tags") || "");
   const tags = parseDocumentTagInput(tagsText);
   state.documents.metadataReview = {
     ...state.documents.metadataReview,
+    recordId,
     documentId,
     title,
     tags: tagsText,
@@ -2444,6 +2448,7 @@ async function applyDocumentMetadata() {
   const review = state.documents.metadataReview;
   const proposal = review.proposal || {};
   const documentId = String(proposal.id || review.documentId || "");
+  const recordId = String(review.recordId || "");
   if (!documentId) return;
   const title = String(proposal.title || review.title || "").trim();
   const tags = Array.isArray(proposal.tags) ? proposal.tags.map((tag) => String(tag || "").trim()).filter(Boolean) : [];
@@ -2458,20 +2463,15 @@ async function applyDocumentMetadata() {
         Accept: "application/json",
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ title, tags, confirmed: true }),
+      body: JSON.stringify({ recordId, title, tags, confirmed: true }),
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
-    state.documents.metadataReview = {
-      ...state.documents.metadataReview,
-      applying: false,
-      error: "",
-      applied: true,
-      proposal: null,
-      title,
-      tags: tags.join(" "),
-    };
-    state.documents.selected = payload.document ? window.KAOS_PORTAL_DOCUMENTS.normalizeDocument(payload.document) : state.documents.selected;
+    const normalizedDocument = payload.document ? window.KAOS_PORTAL_DOCUMENTS.normalizeDocument(payload.document) : state.documents.selected;
+    state.documents.mode = "archive";
+    state.documents.selectedInboxId = "";
+    resetDocumentMetadataReview();
+    state.documents.selected = normalizedDocument;
     state.documents.checked = false;
     await loadDocuments({ force: true });
   } catch (error) {
@@ -5976,7 +5976,7 @@ function renderDocuments() {
       const proposalTags = Array.isArray(proposal?.tags) ? proposal.tags : [];
       const metadataReview = selectedInbox.documentId
         ? `
-          <form class="archiveMetadataReview" data-document-metadata-review="${escapeHtml(selectedInbox.documentId)}">
+          <form class="archiveMetadataReview" data-document-metadata-review="${escapeHtml(selectedInbox.documentId)}" data-document-metadata-record="${escapeHtml(selectedInbox.id)}">
             <div class="archiveCommandLine">
               <span>TITLE</span>
               <input name="title" type="text" value="${escapeHtml(review.documentId === String(selectedInbox.documentId) ? review.title : selectedInbox.title)}" autocomplete="off" />

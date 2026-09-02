@@ -250,6 +250,53 @@ class PaperlessApiTests(unittest.TestCase):
         self.assertEqual(payload["document"]["title"], "Updated title")  # type: ignore[index]
         self.assertEqual(service.update_calls, [("7", "Updated title", ("clinic",))])
 
+    def test_metadata_apply_marks_matching_inbox_record_applied(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = DocumentIntakeStore(Path(tmp) / "intake.json")
+            record = store.add_submitted(
+                title="Fax report",
+                filename="fax.pdf",
+                content=b"%PDF-1.7\nbody\n%%EOF",
+                task_id="done-task",
+            )
+            store.update_status(record.record_id, status="archived", document_id=7)
+            service = FakePaperless()
+
+            payload = api.paperless_metadata_apply_payload(
+                "7",
+                {"recordId": record.record_id, "title": "Updated title", "tags": ["clinic"], "confirmed": True},
+                service,
+                store,
+            )  # type: ignore[arg-type]
+            inbox = api.paperless_inbox_payload(store=store)
+            records = store.list_records()
+
+        self.assertTrue(payload["applied"])
+        self.assertEqual(records[0].status, "applied")
+        self.assertEqual(inbox["items"], [])
+
+    def test_metadata_apply_rejects_mismatched_inbox_record_before_write(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = DocumentIntakeStore(Path(tmp) / "intake.json")
+            record = store.add_submitted(
+                title="Fax report",
+                filename="fax.pdf",
+                content=b"%PDF-1.7\nbody\n%%EOF",
+                task_id="done-task",
+            )
+            store.update_status(record.record_id, status="archived", document_id=8)
+            service = FakePaperless()
+
+            with self.assertRaisesRegex(DocumentIntakeError, "paperless_record_mismatch"):
+                api.paperless_metadata_apply_payload(
+                    "7",
+                    {"recordId": record.record_id, "title": "Updated title", "tags": ["clinic"], "confirmed": True},
+                    service,
+                    store,
+                )  # type: ignore[arg-type]
+
+        self.assertEqual(service.update_calls, [])
+
 
 if __name__ == "__main__":
     unittest.main()

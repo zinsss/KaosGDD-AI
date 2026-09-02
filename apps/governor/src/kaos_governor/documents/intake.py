@@ -52,12 +52,19 @@ class DocumentIntakeStore:
         records = sorted(self._read(), key=lambda item: item.submitted_at, reverse=True)
         return records[: max(1, min(int(limit), 250))]
 
+    def get_record(self, record_id: str) -> DocumentInboxRecord:
+        normalized_id = str(record_id or "").strip()
+        for record in self._read():
+            if record.record_id == normalized_id:
+                return record
+        raise KeyError(normalized_id)
+
     def find_active_by_sha(self, sha256: str) -> DocumentInboxRecord | None:
         needle = str(sha256 or "").strip().lower()
         if not needle:
             return None
         for record in self._read():
-            if record.sha256 == needle and record.status != "failed" and record.task_id:
+            if record.sha256 == needle and record.status not in {"failed", "applied"} and record.task_id:
                 return record
         return None
 
@@ -200,7 +207,7 @@ def clean_source(value: str) -> str:
 
 def clean_status(value: str) -> str:
     status = str(value or "").strip().lower()
-    return status if status in {"ocr_pending", "review", "archived", "failed"} else "ocr_pending"
+    return status if status in {"ocr_pending", "review", "archived", "applied", "failed"} else "ocr_pending"
 
 
 def clean_document_id(value: object) -> int:

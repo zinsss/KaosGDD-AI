@@ -22,5 +22,8 @@ test("documents metadata review previews before confirmed apply", () => {
   assert.match(appSource, /CONFIRM BEFORE APPLYING/);
   assert.match(appSource, /window\.confirm\(`Apply Paperless metadata/);
   assert.match(appSource, /metadata\/apply/);
-  assert.match(appSource, /JSON\.stringify\(\{ title, tags, confirmed: true \}\)/);
+  assert.match(appSource, /data-document-metadata-record/);
+  assert.match(appSource, /JSON\.stringify\(\{ recordId, title, tags, confirmed: true \}\)/);
+  assert.match(appSource, /state\.documents\.mode = "archive";/);
+  assert.match(appSource, /state\.documents\.selectedInboxId = "";/);
 });

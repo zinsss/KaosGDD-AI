@@ -331,6 +331,8 @@ def paperless_status_for_error(exc: Exception) -> int:
         "paperless_metadata_required",
         "paperless_confirmation_required",
         "paperless_title_required",
+        "paperless_record_not_found",
+        "paperless_record_mismatch",
     }:
         return 400
     return 503
@@ -437,15 +439,27 @@ def paperless_metadata_apply_payload(
     document_id: str,
     payload: dict[str, object],
     service: PaperlessDocumentService | None = None,
+    store: DocumentIntakeStore | None = None,
 ) -> dict[str, object]:
     if payload.get("confirmed") is not True:
         raise DocumentIntakeError("paperless_confirmation_required")
     active_service = service or paperless_service()
+    active_store = store or document_intake_store()
+    record_id = str(payload.get("recordId") or "").strip()
     title = " ".join(str(payload.get("title") or "").split())
     tags = paperless_metadata_tags(payload)
     if not title:
         raise DocumentIntakeError("paperless_title_required")
+    if record_id:
+        try:
+            record = active_store.get_record(record_id)
+        except KeyError as exc:
+            raise DocumentIntakeError("paperless_record_not_found") from exc
+        if record.document_id and str(record.document_id) != str(document_id):
+            raise DocumentIntakeError("paperless_record_mismatch")
     document = active_service.update_metadata(document_id, title=title, tags=tags)
+    if record_id:
+        active_store.update_status(record_id, status="applied", document_id=document.document_id)
     result = document.as_dict()
     result["url"] = paperless_document_url(active_service, document.document_id)
     return {"ok": True, "applied": True, "document": result}
@@ -458,7 +472,7 @@ def reconcile_paperless_inbox(
 ) -> list[object]:
     active_service = service or paperless_service()
     active_store = store or document_intake_store()
-    records = active_store.list_records()
+    records = [record for record in active_store.list_records() if record.status != "applied"]
     changed: list[object] = []
     for record in records:
         if record.status not in {"ocr_pending", "review"} or not record.task_id:
@@ -494,7 +508,7 @@ def paperless_inbox_payload(
     params = urllib.parse.parse_qs(query_string, keep_blank_values=True)
     refresh = (params.get("refresh") or [""])[0].strip().lower() in {"1", "true", "yes"}
     changed = reconcile_paperless_inbox(service=active_service, store=active_store) if refresh else []
-    records = active_store.list_records()
+    records = [record for record in active_store.list_records() if record.status != "applied"]
     pending = sum(1 for record in records if record.status == "ocr_pending")
     review = sum(1 for record in records if record.status == "review")
     return {
