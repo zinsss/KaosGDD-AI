@@ -18,6 +18,8 @@ work.
 Required session bootstrap:
 
 ```text
+git status --short --branch
+git pull --ff-only (only when the worktree is clean and the branch can fast-forward)
 docs/operator/kaos-system-operator-access-plan.md
 docs/operator/session-handoff.md
 docs/operator/operation-log.md
@@ -232,10 +234,14 @@ Operator sessions share context through files:
 
 At the start of a new KaosSystemOperator Codex session:
 
-1. read the required bootstrap docs;
-2. inspect `git status --short --branch`;
-3. inspect current production health if the task touches runtime;
-4. state the intended operation class before write actions.
+1. inspect `git status --short --branch` before changing the checkout;
+2. when the worktree is clean, update from `origin/main` using fast-forward-only
+   synchronization;
+3. stop for reconciliation rather than pulling when the worktree is dirty or
+   the local branch has diverged;
+4. read the required bootstrap docs from the synchronized checkout;
+5. inspect current production health if the task touches runtime;
+6. state the intended operation class before write actions.
 
 At the end of a material session:
 

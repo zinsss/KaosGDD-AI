@@ -45,6 +45,10 @@ Last updated: 2026-09-01
 
 ## Active Constraints
 
+- Multiple Codex sessions may work in this repository. At session start,
+  inspect Git state and fast-forward from `origin/main` before relying on the
+  checkout. Pull only with a clean, non-diverged worktree; otherwise stop and
+  reconcile without overwriting another session's changes.
 - Do not give Brain/OpenClaw raw shell, SSH, sudo, Docker socket, or secrets.
 - Do not execute generated scripts on production without a separate approved
   runbook operation.
