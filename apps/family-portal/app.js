@@ -7806,8 +7806,9 @@ function renderAddMemo() {
   `;
 }
 
-function renderGovernorSettingsStatus() {
+function renderGovernorSettingsStatus(options = {}) {
   const status = state.governorSettings;
+  const showRecurringDetails = options.showRecurringDetails !== false;
   if (!status.checked || (status.loading && !status.checked)) {
     return `<div class="settingsPolicyNote"><strong>KaosGovernor</strong><span>${escapeHtml(uiText("settings.statusLoading", "Loading Governor settings..."))}</span></div>`;
   }
@@ -7848,7 +7849,7 @@ function renderGovernorSettingsStatus() {
           <strong>${escapeHtml(`활성 ${Number(recurring.enabledCount || 0)} · 예약 ${Number(recurring.onScheduleCount || 0)}`)}</strong>
         </div>
       </div>
-      ${renderRecurringStatusDetails(recurring)}
+      ${showRecurringDetails ? renderRecurringStatusDetails(recurring) : ""}
     </section>
   `;
 }
@@ -8123,24 +8124,108 @@ function renderSystemStatusPanel() {
   `;
 }
 
+function renderSettingsRows(items) {
+  return items
+    .map(
+      ([label, value]) => `
+        <div>
+          <dt>${escapeHtml(label)}</dt>
+          <dd>${escapeHtml(value)}</dd>
+        </div>
+      `,
+    )
+    .join("");
+}
+
+function renderWeatherSettingsRow() {
+  return `
+    <div>
+      <dt>${uiText("settings.defaultWeather", "Default weather")}</dt>
+      <dd>
+        <select data-weather-location-setting aria-label="${uiText("settings.defaultWeather", "Default weather")}">
+          ${WEATHER_LOCATION_OPTIONS.map(
+            (location) => `
+              <option value="${location.id}" ${state.weatherLocation === location.id ? "selected" : ""} ${state.weatherSettings.saving ? "disabled" : ""}>
+                ${uiText(location.translationKey, location.label)}
+              </option>
+            `,
+          ).join("")}
+        </select>
+        ${
+          state.weatherSettings.saving
+            ? `<small>${uiText("settings.saving", "Saving...")}</small>`
+            : state.weatherSettings.error
+              ? `<small>${escapeHtml(state.weatherSettings.error)}</small>`
+              : state.weatherSettings.checked
+                ? `<small>${uiText("settings.governorBacked", "Governor-backed")}</small>`
+                : ""
+        }
+      </dd>
+    </div>
+  `;
+}
+
+function renderFamilyFontSettingsRow() {
+  return `
+    <div>
+      <dt>${uiText("settings.font", "Font")}</dt>
+      <dd>
+        <select data-family-font-setting aria-label="${uiText("settings.font", "Font")}">
+          <option value="nanum" ${familyFontPreference() === "nanum" ? "selected" : ""}>${uiText("settings.fontNanum", "NanumBarunPen")}</option>
+          <option value="pretendard" ${familyFontPreference() === "pretendard" ? "selected" : ""}>${uiText("settings.fontPretendard", "Pretendard")}</option>
+          <option value="nixgon" ${familyFontPreference() === "nixgon" ? "selected" : ""}>${uiText("settings.fontNixgon", "Nixgon")}</option>
+          <option value="skybori" ${familyFontPreference() === "skybori" ? "selected" : ""}>${uiText("settings.fontSkybori", "SKYBORI")}</option>
+        </select>
+      </dd>
+    </div>
+  `;
+}
+
+function renderMainSettings() {
+  return `
+    <section class="archiveTerminal settingsTerminal" aria-label="KaosGDD settings">
+      <section class="archiveIndex settingsOverviewPanel">
+        <header class="archiveIndexHeader">
+          <h3>SETTINGS</h3>
+          <p class="archiveStatusMessage">KAOSGDD // GOVERNED</p>
+        </header>
+        <dl class="settingsList settingsListCompact">
+          ${renderSettingsRows([
+            ["Portal", "KaosGDD"],
+            ["Source of truth", "Radicale + Memos + Paperless + HylaFAX"],
+            ["Notifications", "Pushover + native iOS where scoped"],
+            ["Discord", "#brain only"],
+          ])}
+          ${renderWeatherSettingsRow()}
+          <div>
+            <dt>Font</dt>
+            <dd>Sarasa Gothic Mono</dd>
+          </div>
+        </dl>
+      </section>
+      ${renderSystemStatusPanel()}
+      ${renderGovernorSettingsStatus({ showRecurringDetails: false })}
+      <section class="settingsSectionStack" aria-label="Automation and templates">
+        ${renderMailOrganizerSettings()}
+        ${renderCustomEventSettings()}
+        ${renderEventPresetSettings()}
+        ${renderRecurringTaskSettings()}
+        ${renderHolidaySettings()}
+      </section>
+    </section>
+  `;
+}
+
 function renderSettings() {
   ensureEventPresets();
+  if (portalProfile() === "main") return renderMainSettings();
   const config = profileConfig();
-  const items =
-    portalProfile() === "family"
-      ? [
-          [uiText("settings.portal", "Portal"), uiText("settings.familyPortal", "Family")],
-          [uiText("settings.calendar", "Calendar"), uiText("settings.familyCalendarValue", "Family shared")],
-          [uiText("settings.tasks", "Tasks"), uiText("settings.familyTasksValue", "Family shared")],
-          [uiText("settings.theme", "Theme"), uiText("settings.familyThemeValue", "Pastel family")],
-        ]
-      : [
-          ["Portal", "KaosGDD"],
-          ["Calendar", "ZiN + Family shared"],
-          ["Tasks", "ZiN + Family shared"],
-          ["Generated events", "Market day + Claim day"],
-          ["Event presets", "Governor-owned templates"],
-        ];
+  const items = [
+    [uiText("settings.portal", "Portal"), uiText("settings.familyPortal", "Family")],
+    [uiText("settings.calendar", "Calendar"), uiText("settings.familyCalendarValue", "Family shared")],
+    [uiText("settings.tasks", "Tasks"), uiText("settings.familyTasksValue", "Family shared")],
+    [uiText("settings.theme", "Theme"), uiText("settings.familyThemeValue", "Pastel family")],
+  ];
   return `
     <section class="panel">
       <div class="panelHeader">
@@ -8151,67 +8236,13 @@ function renderSettings() {
       </div>
       <div class="panelBody">
         <dl class="settingsList">
-          ${items
-            .map(
-              ([label, value]) => `
-                <div>
-                  <dt>${escapeHtml(label)}</dt>
-                  <dd>${escapeHtml(value)}</dd>
-                </div>
-              `,
-            )
-            .join("")}
-          <div>
-            <dt>${uiText("settings.defaultWeather", "Default weather")}</dt>
-            <dd>
-              <select data-weather-location-setting aria-label="${uiText("settings.defaultWeather", "Default weather")}">
-                ${WEATHER_LOCATION_OPTIONS.map(
-                  (location) => `
-                    <option value="${location.id}" ${state.weatherLocation === location.id ? "selected" : ""} ${state.weatherSettings.saving ? "disabled" : ""}>
-                      ${uiText(location.translationKey, location.label)}
-                    </option>
-                  `,
-                ).join("")}
-              </select>
-              ${
-                state.weatherSettings.saving
-                  ? `<small>${uiText("settings.saving", "Saving...")}</small>`
-                  : state.weatherSettings.error
-                    ? `<small>${escapeHtml(state.weatherSettings.error)}</small>`
-                    : state.weatherSettings.checked
-                      ? `<small>${uiText("settings.governorBacked", "Governor-backed")}</small>`
-                      : ""
-              }
-            </dd>
-          </div>
-          ${
-            portalProfile() === "family"
-              ? `
-                <div>
-                  <dt>${uiText("settings.font", "Font")}</dt>
-                  <dd>
-                    <select data-family-font-setting aria-label="${uiText("settings.font", "Font")}">
-                      <option value="nanum" ${familyFontPreference() === "nanum" ? "selected" : ""}>${uiText("settings.fontNanum", "NanumBarunPen")}</option>
-                      <option value="pretendard" ${familyFontPreference() === "pretendard" ? "selected" : ""}>${uiText("settings.fontPretendard", "Pretendard")}</option>
-                      <option value="nixgon" ${familyFontPreference() === "nixgon" ? "selected" : ""}>${uiText("settings.fontNixgon", "Nixgon")}</option>
-                      <option value="skybori" ${familyFontPreference() === "skybori" ? "selected" : ""}>${uiText("settings.fontSkybori", "SKYBORI")}</option>
-                    </select>
-                  </dd>
-                </div>
-              `
-              : `
-                <div>
-                  <dt>Font</dt>
-                  <dd>Sarasa Gothic Mono</dd>
-                </div>
-              `
-          }
+          ${renderSettingsRows(items)}
+          ${renderWeatherSettingsRow()}
+          ${renderFamilyFontSettingsRow()}
         </dl>
-        ${portalProfile() === "main" ? renderSystemStatusPanel() : ""}
         ${renderGovernorSettingsStatus()}
         ${renderHolidaySettings()}
-        ${portalProfile() === "main" ? renderMailOrganizerSettings() : ""}
-        ${portalProfile() === "main" ? renderCustomEventSettings() : renderGeneratedCalendarPolicyStatus()}
+        ${renderGeneratedCalendarPolicyStatus()}
         ${renderEventPresetSettings()}
         ${renderRecurringTaskSettings()}
       </div>

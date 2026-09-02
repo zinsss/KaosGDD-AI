@@ -3333,6 +3333,57 @@ h3 {
   justify-content: flex-start;
 }
 
+.app[data-profile="main"][data-route="settings"] .view {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.app[data-profile="main"] .settingsTerminal {
+  gap: 10px;
+}
+
+.app[data-profile="main"] .settingsTerminal .settingsStatusPanel {
+  margin-top: 0;
+}
+
+.app[data-profile="main"] .settingsSectionStack {
+  display: grid;
+  gap: 8px;
+}
+
+.app[data-profile="main"] .settingsTerminal .settingsDisclosure {
+  margin-top: 0;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.app[data-profile="main"] .settingsTerminal .settingsDisclosure summary {
+  min-height: 40px;
+  padding: 0 12px;
+}
+
+.app[data-profile="main"] .settingsTerminal .settingsDisclosureBody {
+  padding: 0 12px 12px;
+}
+
+.app[data-profile="main"] .settingsListCompact {
+  gap: 1px;
+  border: 1px solid var(--line);
+  background: var(--line);
+}
+
+.app[data-profile="main"] .settingsListCompact div {
+  min-height: 34px;
+  padding: 8px 10px;
+  border-bottom: 0;
+  background: var(--surface);
+}
+
+.app[data-profile="main"] .settingsListCompact dd {
+  color: var(--text);
+}
+
 .systemServiceList,
 .systemRuntimeList {
   display: grid;
