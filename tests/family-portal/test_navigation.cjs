@@ -56,6 +56,16 @@ test("the navigation contract loads before the portal application", () => {
   assert.ok(applicationIndex > mailIndex);
 });
 
+test("kaosgdd.net defaults to KaosGDD branding before family host override", () => {
+  const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
+
+  assert.match(index, /<meta name="apple-mobile-web-app-title" id="appleAppTitle" content="KaosGDD" \/>/);
+  assert.match(index, /<title>KaosGDD<\/title>/);
+  assert.match(index, /document\.title = "Kaos Family";/);
+  assert.match(index, /<p class="kicker">KaosGDD<\/p>/);
+  assert.match(index, /<h1 id="routeTitle">Agenda<\/h1>/);
+});
+
 test("main desktop navigation renders an open list while preserving the mobile picker", () => {
   const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
   const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
