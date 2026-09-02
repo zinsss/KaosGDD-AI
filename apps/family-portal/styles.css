@@ -5844,7 +5844,8 @@ h3 {
     gap: 16px;
     min-height: 64px;
     padding: 10px 14px;
-    border-bottom: 1px solid var(--line);
+    border: 1px solid var(--line);
+    border-bottom: 0;
     background: var(--panel);
   }
 
@@ -6354,6 +6355,57 @@ h3 {
   content: none;
 }
 
+.app[data-profile="main"] .formActions .openButton,
+.app[data-profile="main"] .formActions .primaryButton,
+.app[data-profile="main"] .formActions .dangerButton,
+.app[data-profile="main"] .eventReadOnly .dangerButton,
+.app[data-profile="main"] .settingsActionRow .openButton {
+  min-width: 0;
+  min-height: 32px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0 3px;
+  color: var(--archive-cyan);
+  font: 850 0.76rem/1 "Sarasa Gothic Mono", ui-monospace, monospace;
+  text-transform: uppercase;
+  box-shadow: none;
+}
+
+.app[data-profile="main"] .formActions .primaryButton {
+  color: var(--archive-ok);
+}
+
+.app[data-profile="main"] .formActions .dangerButton,
+.app[data-profile="main"] .eventReadOnly .dangerButton {
+  color: var(--archive-error);
+}
+
+.app[data-profile="main"] .formActions .openButton::before,
+.app[data-profile="main"] .formActions .primaryButton::before,
+.app[data-profile="main"] .formActions .dangerButton::before,
+.app[data-profile="main"] .eventReadOnly .dangerButton::before,
+.app[data-profile="main"] .settingsActionRow .openButton::before {
+  content: "[";
+}
+
+.app[data-profile="main"] .formActions .openButton::after,
+.app[data-profile="main"] .formActions .primaryButton::after,
+.app[data-profile="main"] .formActions .dangerButton::after,
+.app[data-profile="main"] .eventReadOnly .dangerButton::after,
+.app[data-profile="main"] .settingsActionRow .openButton::after {
+  content: "]";
+}
+
+.app[data-profile="main"] .formActions .openButton:hover,
+.app[data-profile="main"] .formActions .primaryButton:hover,
+.app[data-profile="main"] .formActions .dangerButton:hover,
+.app[data-profile="main"] .eventReadOnly .dangerButton:hover,
+.app[data-profile="main"] .settingsActionRow .openButton:hover {
+  color: var(--archive-amber);
+  font-weight: 950;
+}
+
 .app[data-profile="main"] .archiveRefreshAction {
   flex: 0 0 auto;
   width: auto;
@@ -6778,6 +6830,10 @@ h3 {
   .app[data-profile="main"] [data-archive-kind="memos"] .archiveColumnHeader {
     grid-template-columns: 12ch 18ch minmax(0, 1fr);
     padding-right: 10px;
+  }
+
+  .app[data-profile="main"] [data-archive-kind="services"] .archiveColumnHeader {
+    grid-template-columns: 12ch 18ch minmax(0, 1fr) 48px;
   }
 
   .app[data-profile="main"] .archiveRecordButton {

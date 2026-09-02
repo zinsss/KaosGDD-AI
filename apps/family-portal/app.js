@@ -5412,38 +5412,38 @@ function renderTaskEditorForm(task = null, draft = {}) {
 }
 
 function renderServices() {
+  const services = mockAdapter.getServices();
+  const rows = services
+    .map((service, index) => `
+      <li class="archiveRecord">
+        <a class="archiveRecordButton" href="${escapeHtml(serviceHref(service))}">
+          <span class="archiveRecordId">#${String(index + 1).padStart(2, "0")}</span>
+          <span class="archiveRecordDate">${escapeHtml(service.type || "Service")}</span>
+          <strong class="archiveRecordTitle">${escapeHtml(service.name)}</strong>
+        </a>
+        ${
+          service.href
+            ? `<a class="archiveSourceLink" href="${escapeHtml(serviceHref(service))}" aria-label="Open ${escapeHtml(service.name)}">OPEN</a>`
+            : `<span class="archiveSourceLink isDisabled" aria-label="No direct service link">HOLD</span>`
+        }
+      </li>
+    `)
+    .join("");
   return `
-    <section class="panel">
-      <div class="panelHeader">
-        <div>
-          <p class="label">Services</p>
-          <h2>Kaos platform</h2>
-        </div>
-      </div>
-      <div class="panelBody">
-        <div class="servicesGrid">
-          ${mockAdapter
-            .getServices()
-            .map(
-              (service) => `
-                <div class="serviceRow">
-                  <div>
-                    <strong>${escapeHtml(service.name)}</strong>
-                    <span class="serviceMeta">${escapeHtml(service.meta)}</span>
-                  </div>
-                  <div class="serviceActions">
-                    <span class="serviceType">${escapeHtml(service.type)}</span>
-                    ${
-                      service.href
-                        ? `<a class="openButton" href="${escapeHtml(serviceHref(service))}">Open</a>`
-                        : `<span class="openButton" aria-label="No direct service link">Hold</span>`
-                    }
-                  </div>
-                </div>
-              `,
-            )
-            .join("")}
-        </div>
+    <section class="archiveTerminal" data-archive-kind="services" aria-label="Utils board">
+      <div class="archiveWorkspace">
+        <section class="archiveIndex" aria-labelledby="servicesIndexTitle">
+          <header class="archiveIndexHeader">
+            <h3 id="servicesIndexTitle">RECORD BOARD</h3>
+            <p class="archiveStatusMessage">${services.length} SERVICES // UTILS BOARD</p>
+          </header>
+          <div class="archiveColumnHeader" aria-hidden="true">
+            <span>NO.</span><span>TYPE</span><span>TITLE</span>
+          </div>
+          <ol class="archiveRecordList">
+            ${rows}
+          </ol>
+        </section>
       </div>
     </section>
   `;
@@ -5737,29 +5737,29 @@ function renderMail() {
 function renderDesktopService() {
   const service = serviceById(hashParam("service"));
   if (!service?.href || service.href.startsWith("#/")) return renderServices();
-  const openAction = `<a class="openButton" href="${escapeHtml(service.href)}" target="_blank" rel="noopener">Open</a>`;
+  const openAction = `<a class="archiveAction" href="${escapeHtml(service.href)}" target="_blank" rel="noopener">OPEN</a>`;
   if (!isDesktopLayout() || portalProfile() !== "main" || service.embed === false) {
     return `
-      <section class="panel desktopServiceFallback">
-        <div class="panelHeader">
-          <div>
-            <p class="label">${escapeHtml(service.type)}</p>
-            <h2>${escapeHtml(service.name)}</h2>
-          </div>
+      <section class="archiveTerminal desktopServiceFallback" aria-label="${escapeHtml(service.name)}">
+        <div class="archiveIndex">
+          <header class="archiveIndexHeader">
+            <h3>${escapeHtml(service.name)}</h3>
+            <p class="archiveStatusMessage">${escapeHtml(service.type)} // EXTERNAL</p>
+          </header>
           ${openAction}
         </div>
       </section>
     `;
   }
   return `
-    <section class="panel desktopServiceWorkspace">
+    <section class="archiveTerminal desktopServiceWorkspace" aria-label="${escapeHtml(service.name)}">
       <div class="desktopServiceToolbar">
         <div>
           <p class="label">${escapeHtml(service.type)}</p>
           <h2>${escapeHtml(service.name)}</h2>
         </div>
         <div class="desktopServiceActions">
-          <button class="openButton" type="button" data-reload-service-frame>Reload</button>
+          <button class="archiveAction" type="button" data-reload-service-frame>RELOAD</button>
           ${openAction}
         </div>
       </div>
