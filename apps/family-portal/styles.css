@@ -5671,6 +5671,11 @@ h3 {
     -webkit-overflow-scrolling: touch;
   }
 
+  .app[data-profile="main"] .view {
+    padding-top: 0;
+    padding-bottom: 40px;
+  }
+
   .app[data-route="ledger"] .view {
     overflow: hidden;
   }
