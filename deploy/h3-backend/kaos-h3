@@ -552,6 +552,9 @@ services_preflight() {
   if ! grep -q 'location \^~ /api/system/' "${root}/config/family-portal/nginx.conf"; then
     die "family portal must route the read-only System API explicitly"
   fi
+  if ! grep -q 'location = /api/settings/status' "${root}/config/family-portal/nginx.conf"; then
+    die "family portal must route the read-only Settings status API explicitly"
+  fi
   "${SERVICES_COMPOSE[@]}" config --quiet
   info "Migrated service preflight passed."
 }
@@ -600,6 +603,9 @@ family_portal_source_preflight() {
   fi
   if ! grep -q 'location \^~ /api/system/' "${nginx_source}"; then
     die "family portal source must route the read-only System API explicitly"
+  fi
+  if ! grep -q 'location = /api/settings/status' "${nginx_source}"; then
+    die "family portal source must route the read-only Settings status API explicitly"
   fi
 }
 
