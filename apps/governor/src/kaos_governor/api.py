@@ -212,6 +212,147 @@ def system_status_payload(profile: str, urlopen=urllib.request.urlopen) -> dict[
     }
 
 
+def supply_status_for_error(exc: Exception) -> int:
+    if isinstance(exc, memos_relay.MemosRelayError):
+        return exc.status
+    code = str(exc)
+    if code in {"main_profile_required", "supply_not_found"}:
+        return 404
+    if code in {"supply_title_required", "supply_mode_invalid", "supply_uid_required"}:
+        return 400
+    return 503
+
+
+def _supply_title(value: object) -> str:
+    title = " ".join(str(value or "").split())
+    if not title:
+        raise ValueError("supply_title_required")
+    return title[:300]
+
+
+def _supply_mode(query_string: str) -> str:
+    params = urllib.parse.parse_qs(query_string, keep_blank_values=True)
+    mode = (params.get("mode") or ["active"])[0].strip().lower()
+    if mode not in {"active", "done"}:
+        raise ValueError("supply_mode_invalid")
+    return mode
+
+
+def _supply_item(task: dict[str, object]) -> dict[str, object]:
+    status = str(task.get("status") or "NEEDS-ACTION").strip().upper()
+    completed = str(task.get("completed") or "")
+    last_modified = str(task.get("lastModified") or "")
+    created = str(task.get("created") or "")
+    return {
+        "id": str(task.get("uid") or ""),
+        "uid": str(task.get("uid") or ""),
+        "collectionId": str(task.get("collection") or ""),
+        "title": str(task.get("summary") or "Untitled supply"),
+        "memo": str(task.get("description") or ""),
+        "status": status,
+        "done": status == "COMPLETED",
+        "created": created,
+        "lastModified": last_modified,
+        "completed": completed,
+        "updatedAt": completed or last_modified or created,
+    }
+
+
+def _supply_items(client: CalendarAdapterClient | None = None) -> list[dict[str, object]]:
+    active_client = client or CalendarAdapterClient()
+    items = [_supply_item(task) for task in active_client.list_tasks("supplies")]
+    return [item for item in items if item["id"]]
+
+
+def supplies_payload(query_string: str, client: CalendarAdapterClient | None = None) -> dict[str, object]:
+    mode = _supply_mode(query_string)
+    items = [item for item in _supply_items(client) if bool(item["done"]) == (mode == "done")]
+    items.sort(key=lambda item: str(item.get("updatedAt") or ""), reverse=True)
+    return {"ok": True, "mode": mode, "items": items}
+
+
+def supply_presets_payload(client: CalendarAdapterClient | None = None) -> dict[str, object]:
+    seen: set[str] = set()
+    presets: list[dict[str, object]] = []
+    for item in sorted(_supply_items(client), key=lambda row: str(row.get("updatedAt") or ""), reverse=True):
+        title = str(item.get("title") or "").strip()
+        key = title.casefold()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        presets.append({"name": title})
+        if len(presets) >= 12:
+            break
+    return {"ok": True, "items": presets}
+
+
+def create_supply_payload(payload: dict[str, object], client: CalendarAdapterClient | None = None) -> dict[str, object]:
+    active_client = client or CalendarAdapterClient()
+    title = _supply_title(payload.get("title") or payload.get("name"))
+    collection_id = active_client.vtodo_collection_id("supplies", str(payload.get("collectionId") or ""))
+    result = active_client.create_task(
+        "supplies",
+        {
+            "collectionId": collection_id,
+            "title": title,
+            "memo": str(payload.get("memo") or "").strip(),
+            "dueDate": "",
+            "dueTime": "",
+            "priority": "",
+            "status": "NEEDS-ACTION",
+        },
+    )
+    return {"ok": True, "item": {"id": str(result.get("uid") or ""), "uid": str(result.get("uid") or ""), "collectionId": str(result.get("collection") or collection_id), "title": title}}
+
+
+def _find_supply(uid: str, client: CalendarAdapterClient | None = None) -> dict[str, object]:
+    normalized = str(uid or "").strip()
+    if not normalized:
+        raise ValueError("supply_uid_required")
+    for item in _supply_items(client):
+        if item["id"] == normalized:
+            return item
+    raise ValueError("supply_not_found")
+
+
+def set_supply_state_payload(uid: str, mode: str, client: CalendarAdapterClient | None = None) -> dict[str, object]:
+    if mode not in {"active", "done"}:
+        raise ValueError("supply_mode_invalid")
+    active_client = client or CalendarAdapterClient()
+    item = _find_supply(uid, active_client)
+    result = active_client.update_task(
+        "supplies",
+        {
+            "uid": item["uid"],
+            "collectionId": item["collectionId"],
+            "title": item["title"],
+            "memo": item["memo"],
+            "dueDate": "",
+            "dueTime": "",
+            "priority": "",
+            "status": "COMPLETED" if mode == "done" else "NEEDS-ACTION",
+        },
+    )
+    return {"ok": True, "item": {**item, "status": "COMPLETED" if mode == "done" else "NEEDS-ACTION", "done": mode == "done"}, "result": result}
+
+
+def delete_supply_payload(uid: str, client: CalendarAdapterClient | None = None) -> dict[str, object]:
+    active_client = client or CalendarAdapterClient()
+    item = _find_supply(uid, active_client)
+    result = active_client.delete_task("supplies", {"uid": item["uid"], "collectionId": item["collectionId"]})
+    return {"ok": True, "deleted": True, "id": item["id"], "result": result}
+
+
+def supply_state_path(path: str) -> tuple[str, str]:
+    match = re.fullmatch(r"/api/supplies/([^/]+)/(active|done)", path)
+    return (urllib.parse.unquote(match.group(1)), match.group(2)) if match else ("", "")
+
+
+def supply_delete_uid(path: str) -> str:
+    match = re.fullmatch(r"/api/supplies/([^/]+)", path)
+    return urllib.parse.unquote(match.group(1)) if match else ""
+
+
 def request_body(handler: BaseHTTPRequestHandler) -> bytes:
     try:
         length = int(handler.headers.get("Content-Length") or "0")
@@ -973,13 +1114,14 @@ class CalendarAdapterClient:
 
     def request_json(self, profile: str, method: str, path: str, payload: dict[str, object] | None = None) -> dict[str, object]:
         body = None if payload is None else json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        host = "family.kaosgdd.net" if profile == "family" else "supplies.kaosgdd.net" if profile == "supplies" else "kaosgdd.net"
         request = urllib.request.Request(
             f"{self.base_url}{path}",
             data=body,
             method=method,
             headers={
                 "Accept": "application/json",
-                "Host": "family.kaosgdd.net" if profile == "family" else "kaosgdd.net",
+                "Host": host,
                 **({"Content-Type": "application/json"} if body is not None else {}),
             },
         )
@@ -995,6 +1137,12 @@ class CalendarAdapterClient:
 
     def create_task(self, profile: str, payload: dict[str, object]) -> dict[str, object]:
         return self.request_json(profile, "POST", "/api/calendar/tasks", payload)
+
+    def update_task(self, profile: str, payload: dict[str, object]) -> dict[str, object]:
+        return self.request_json(profile, "PUT", "/api/calendar/tasks", payload)
+
+    def delete_task(self, profile: str, payload: dict[str, object]) -> dict[str, object]:
+        return self.request_json(profile, "DELETE", "/api/calendar/tasks", payload)
 
     def mirror_custom_event_settings(self, payload: dict[str, object]) -> dict[str, object]:
         return self.request_json("main", "PUT", "/api/custom-events", payload)
@@ -1503,6 +1651,28 @@ class Handler(BaseHTTPRequestHandler):
                 print(f"Fax archive browse failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "fax_archive_unavailable"})
             return
+        if parsed.path == "/api/supplies":
+            try:
+                require_main_access(self.headers)
+                json_response(self, 200, supplies_payload(parsed.query))
+            except (ValueError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, memos_relay.MemosRelayError) else str(exc)
+                json_response(self, supply_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Supplies browse failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "supplies_unavailable"})
+            return
+        if parsed.path == "/api/supplies/presets":
+            try:
+                require_main_access(self.headers)
+                json_response(self, 200, supply_presets_payload())
+            except (ValueError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, memos_relay.MemosRelayError) else str(exc)
+                json_response(self, supply_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Supplies presets failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "supplies_unavailable"})
+            return
         if parsed.path == "/api/mail/messages":
             try:
                 require_main_access(self.headers)
@@ -1662,6 +1832,41 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == "/api/supplies":
+            try:
+                require_main_access(self.headers)
+                json_response(self, 201, create_supply_payload(json_request(self)))
+            except (ValueError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, memos_relay.MemosRelayError) else str(exc)
+                json_response(self, supply_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Supply create failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "supply_create_failed"})
+            return
+        if parsed.path == "/api/supplies/presets/use":
+            try:
+                require_main_access(self.headers)
+                payload = json_request(self)
+                json_response(self, 201, create_supply_payload({"title": payload.get("name") or payload.get("title")}))
+            except (ValueError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, memos_relay.MemosRelayError) else str(exc)
+                json_response(self, supply_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Supply preset create failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "supply_create_failed"})
+            return
+        supply_uid, supply_mode = supply_state_path(parsed.path)
+        if supply_uid:
+            try:
+                require_main_access(self.headers)
+                json_response(self, 200, set_supply_state_payload(supply_uid, supply_mode))
+            except (ValueError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, memos_relay.MemosRelayError) else str(exc)
+                json_response(self, supply_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Supply state update failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "supply_update_failed"})
+            return
         if parsed.path == "/api/mail/unread/actions":
             try:
                 require_main_access(self.headers)
@@ -1857,6 +2062,18 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_DELETE(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
+        supply_uid = supply_delete_uid(parsed.path)
+        if supply_uid:
+            try:
+                require_main_access(self.headers)
+                json_response(self, 200, delete_supply_payload(supply_uid))
+            except (ValueError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, memos_relay.MemosRelayError) else str(exc)
+                json_response(self, supply_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Supply delete failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "supply_delete_failed"})
+            return
         if parsed.path.startswith("/api/memos/"):
             try:
                 proxy_memos(self, "DELETE")

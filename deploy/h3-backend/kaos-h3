@@ -532,10 +532,13 @@ services_preflight() {
     die "family portal must preserve request host for calendar adapter profile routing"
   fi
   if grep -Eq 'proxy_pass[[:space:]]+http://[^;]*/?api/supplies|proxy_pass[[:space:]]+http://kaosgovernor-legacy-api' "${root}/config/family-portal/nginx.conf"; then
-    die "family portal must not proxy supplies API routes"
+    die "family portal must not proxy retired supplies or legacy API routes"
   fi
   if ! grep -q 'location \^~ /api/supplies' "${root}/config/family-portal/nginx.conf"; then
-    die "family portal must explicitly close /api/supplies"
+    die "family portal must route the governed Supplies API explicitly"
+  fi
+  if ! grep -A8 'location \^~ /api/supplies' "${root}/config/family-portal/nginx.conf" | grep -q 'proxy_pass http://governor-api:8096;'; then
+    die "family portal must route /api/supplies to governor-api"
   fi
   if ! grep -q 'location \^~ /embed/agenda-supplies' "${root}/config/family-portal/nginx.conf"; then
     die "family portal must explicitly close retired /embed/agenda-supplies"
@@ -575,10 +578,13 @@ family_portal_source_preflight() {
     die "family portal source must preserve request host for calendar adapter profile routing"
   fi
   if grep -Eq 'proxy_pass[[:space:]]+http://[^;]*/?api/supplies|proxy_pass[[:space:]]+http://kaosgovernor-legacy-api' "${nginx_source}"; then
-    die "family portal source must not proxy supplies API routes"
+    die "family portal source must not proxy retired supplies or legacy API routes"
   fi
   if ! grep -q 'location \^~ /api/supplies' "${nginx_source}"; then
-    die "family portal source must explicitly close /api/supplies"
+    die "family portal source must route the governed Supplies API explicitly"
+  fi
+  if ! grep -A8 'location \^~ /api/supplies' "${nginx_source}" | grep -q 'proxy_pass http://governor-api:8096;'; then
+    die "family portal source must route /api/supplies to governor-api"
   fi
   if ! grep -q 'location \^~ /embed/agenda-supplies' "${nginx_source}"; then
     die "family portal source must explicitly close retired /embed/agenda-supplies"

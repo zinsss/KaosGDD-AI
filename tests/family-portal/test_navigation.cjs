@@ -27,6 +27,7 @@ test("personal menu has the accepted labels and order", () => {
 test("personal subroutes select their owning main menu", () => {
   assert.equal(selectedPersonalRoute("add-event"), "calendar");
   assert.equal(selectedPersonalRoute("edit-task"), "tasks");
+  assert.equal(selectedPersonalRoute("add-supply"), "supplies");
   assert.equal(selectedPersonalRoute("add-memo"), "memos");
   assert.equal(selectedPersonalRoute("add-document"), "documents");
   assert.equal(selectedPersonalRoute("service"), "services");
@@ -43,11 +44,11 @@ test("unknown personal routes safely select Agenda", () => {
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
   const styleIndex = index.indexOf('href="/styles.css?v=279"');
-  const navigationIndex = index.indexOf('src="/navigation.js?v=3"');
+  const navigationIndex = index.indexOf('src="/navigation.js?v=4"');
   const documentsIndex = index.indexOf('src="/documents.js?v=5"');
   const faxIndex = index.indexOf('src="/fax.js?v=1"');
   const mailIndex = index.indexOf('src="/mail.js?v=6"');
-  const applicationIndex = index.indexOf('src="/app.js?v=264"');
+  const applicationIndex = index.indexOf('src="/app.js?v=265"');
   assert.ok(styleIndex >= 0);
   assert.ok(navigationIndex >= 0);
   assert.ok(documentsIndex > navigationIndex);

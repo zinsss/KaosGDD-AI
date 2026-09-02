@@ -12,6 +12,7 @@ const routes = {
   "edit-event": "Edit Event",
   "add-task": "Add Task",
   "edit-task": "Edit Task",
+  "add-supply": "Add Supply",
   "add-memo": "Add Memo",
   "add-document": "Add Document",
   services: "Utils",
@@ -32,6 +33,7 @@ const familyRoutes = {
   "edit-event": uiText("route.editEvent", "Edit Event"),
   "add-task": uiText("route.addTask", "Add Task"),
   "edit-task": uiText("route.editTask", "Edit Task"),
+  "add-supply": "Add Supply",
   "add-memo": uiText("route.addMemo", "Add Memo"),
   services: uiText("route.services", "Utils"),
   service: uiText("route.services", "Utils"),
@@ -3816,6 +3818,7 @@ function profileConfig() {
 function activeNavRoute(route) {
   if (route === "add" || route === "add-event" || route === "edit-event" || route === "caregiver") return "calendar";
   if (route === "add-task" || route === "edit-task") return "tasks";
+  if (route === "add-supply") return "supplies";
   if (route === "add-memo") return "memos";
   if (route === "add-document") return "documents";
   if (route === "service") return "services";
@@ -3938,12 +3941,6 @@ function clearTopAddLongPress() {
   topAddLongPressTimer = null;
 }
 
-function focusSupplyInputSoon() {
-  window.setTimeout(() => {
-    document.querySelector('[data-create-supply] input[name="title"]')?.focus();
-  }, 0);
-}
-
 async function runTopAddAction(action) {
   closeTopAddMenu();
   if (action === "event") {
@@ -3955,20 +3952,7 @@ async function runTopAddAction(action) {
     return;
   }
   if (action === "supply") {
-    if (getRoute() !== "supplies") {
-      window.location.hash = "#/supplies";
-      focusSupplyInputSoon();
-      return;
-    }
-    const form = document.querySelector("[data-create-supply]");
-    const input = form?.querySelector('input[name="title"]');
-    if (!form || !input) return;
-    if (input.value.trim()) {
-      form.requestSubmit?.();
-      if (!form.requestSubmit) form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-    } else {
-      input.focus();
-    }
+    window.location.hash = "#/add-supply";
     return;
   }
   if (action === "memo") {
@@ -5792,6 +5776,60 @@ function renderSupplies(options = {}) {
   const active = state.supplies.mode === "active";
   const loadingText = !state.supplies.checked ? "Loading supplies..." : "";
   const emptyText = active ? "No supplies queued." : "No done supplies.";
+  if (!compact) {
+    const rows = state.supplies.items
+      .map((item) => {
+        const date = archiveDateParts(item.updatedAt || item.created || item.completed || item.lastModified || "");
+        return `
+          <li class="archiveRecord">
+            <button class="archiveRecordButton" type="button" data-supply-${active ? "done" : "active"}="${escapeHtml(item.id)}" aria-label="${active ? "Mark done" : "Move back to active"}">
+              <span class="archiveRecordId">#${escapeHtml(String(item.id || "").slice(0, 8) || "--")}</span>
+              <time class="archiveRecordDate" datetime="${escapeHtml(date.raw)}">${escapeHtml(date.label)}</time>
+              <strong class="archiveRecordTitle">${escapeHtml(item.title || "Untitled supply")}</strong>
+            </button>
+            <button class="archiveSourceLink" type="button" data-supply-delete="${escapeHtml(item.id)}" aria-label="Delete ${escapeHtml(item.title || "supply")}">DEL</button>
+          </li>
+        `;
+      })
+      .join("");
+    const summary = state.supplies.checked && !state.supplies.error
+      ? `${state.supplies.items.length} ITEMS // ${active ? "ACTIVE" : "DONE"} BOARD`
+      : state.supplies.loading
+        ? "LOADING SUPPLY BOARD"
+        : "SUPPLY BOARD STANDBY";
+    return `
+      <section class="archiveTerminal" data-archive-kind="supplies" aria-label="Supplies board">
+        <div class="segmentedTabs archiveModeTabs" role="tablist" aria-label="Supply mode">
+          <button type="button" role="tab" class="${active ? "isActive" : ""}" data-supplies-mode="active" aria-selected="${active}">Active</button>
+          <button type="button" role="tab" class="${!active ? "isActive" : ""}" data-supplies-mode="done" aria-selected="${!active}">Done</button>
+        </div>
+        ${
+          active && state.supplies.presets.length
+            ? `<div class="supplyPresets" aria-label="Recent supplies">
+                ${state.supplies.presets
+                  .map((preset) => `<button type="button" data-supply-preset="${escapeHtml(preset.name)}">${escapeHtml(preset.name)}</button>`)
+                  .join("")}
+              </div>`
+            : ""
+        }
+        <section class="archiveIndex" aria-labelledby="suppliesIndexTitle" aria-busy="${state.supplies.loading}">
+          <header class="archiveIndexHeader">
+            <h3 id="suppliesIndexTitle">RECORD BOARD</h3>
+            <p class="archiveStatusMessage" role="status" aria-live="polite">${escapeHtml(summary)}</p>
+          </header>
+          ${
+            state.supplies.error
+              ? `<div class="archiveError" role="alert"><p>${escapeHtml(state.supplies.error)}</p><button class="archiveAction" type="button" data-supplies-retry>RETRY</button></div>`
+              : loadingText
+                ? `<p class="archiveStatusMessage">${loadingText}</p>`
+                : state.supplies.items.length
+                  ? `<ol class="archiveRecordList">${rows}</ol>`
+                  : `<p class="archiveStatusMessage">${emptyText}</p>`
+          }
+        </section>
+      </section>
+    `;
+  }
   return `
     <section class="panel ${compact ? "embedSuppliesPanel" : ""}">
       <form class="composer supplyComposer" data-create-supply>
@@ -5828,6 +5866,32 @@ function renderSupplies(options = {}) {
         }
       </div>
     </section>
+  `;
+}
+
+function renderAddSupply() {
+  return `
+    <form class="archiveTerminal archiveUploadPanel supplyAddPanel" data-create-supply aria-label="Add supply">
+      <section class="archiveIndex">
+        <header class="archiveIndexHeader">
+          <div>
+            <h3>ADD SUPPLY</h3>
+            <p class="archiveStatusMessage">Supplies are stored as Radicale VTODO items in the supplies profile.</p>
+          </div>
+          <a class="archiveAction" href="#/supplies">BACK</a>
+        </header>
+        <div class="archiveFormRows">
+          <label class="archiveFormRow">
+            <span>ITEM</span>
+            <input name="title" type="text" autocomplete="off" placeholder="gauze" required />
+          </label>
+        </div>
+        <div class="archiveUploadActions">
+          <button class="archiveAction isPrimary" type="submit">ADD</button>
+          <a class="archiveAction" href="#/supplies">CANCEL</a>
+        </div>
+      </section>
+    </form>
   `;
 }
 
@@ -8825,6 +8889,7 @@ function render() {
   else if (route === "services") view.innerHTML = renderServices();
   else if (route === "service") view.innerHTML = renderDesktopService();
   else if (route === "supplies") view.innerHTML = renderSupplies();
+  else if (route === "add-supply") view.innerHTML = renderAddSupply();
   else if (route === "documents") view.innerHTML = renderDocuments();
   else if (route === "add-document") view.innerHTML = renderAddDocument();
   else if (route === "fax") view.innerHTML = renderFax();
@@ -8842,6 +8907,9 @@ function render() {
   }
   if (route === "caregiver" || (route === "calendar" && portalProfile() === "family")) loadCaregiverMonth();
   if (route === "supplies") loadSupplies();
+  if (route === "add-supply") {
+    window.setTimeout(() => document.querySelector('[data-create-supply] input[name="title"]')?.focus(), 0);
+  }
   if (route === "memos" && portalProfile() === "main") loadMemos();
   if (route === "documents" && state.documents.mode !== "inbox") loadDocuments();
   if (route === "documents" && state.documents.mode === "inbox") loadDocumentInbox();
@@ -9137,6 +9205,11 @@ document.addEventListener("click", async (event) => {
 
   if (event.target.closest("[data-fax-close]")) {
     closeFaxRecord();
+    return;
+  }
+
+  if (event.target.closest("[data-supplies-retry]")) {
+    await loadSupplies({ force: true });
     return;
   }
 
@@ -10019,6 +10092,7 @@ document.addEventListener("submit", async (event) => {
     try {
       await createSupply(String(formData.get("title") || "").trim());
       supplyForm.reset();
+      if (getRoute() === "add-supply") window.location.hash = "#/supplies";
     } catch (error) {
       window.alert(`Could not add supply: ${error.message || "unknown error"}`);
     }

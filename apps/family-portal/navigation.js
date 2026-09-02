@@ -22,6 +22,7 @@
     "edit-event": "calendar",
     "add-task": "tasks",
     "edit-task": "tasks",
+    "add-supply": "supplies",
     "add-memo": "memos",
     "add-document": "documents",
     service: "services",
