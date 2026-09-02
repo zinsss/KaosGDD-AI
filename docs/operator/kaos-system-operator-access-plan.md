@@ -57,7 +57,7 @@ Current production state: Stage 1 partial. `system.status` is deployed through
 KaosBrain and KaosDiscoord and was confirmed working from Discord `#brain` on
 2026-09-01. Stage 2-5 execution is not enabled.
 
-Current repository state: the initial Stage 2 schema and five dry-run-only
+Current repository state: the Stage 2 schema and eleven dry-run-only
 catalog entries are under [`runbooks/`](../../runbooks/README.md). They are
 planning artifacts only and contain no executor implementation or production
 write authority.
@@ -75,6 +75,12 @@ The non-networked mock adapter accepts only a plan it can exactly re-derive
 from the pinned catalog. It simulates preflight, read-only verification, and an
 in-memory audit receipt using deterministic fake evidence. Confirmation-gated
 restart planning stops without action. It is not a host executor.
+
+Six update contracts split routine system packages and H3 container images
+into check, frozen-plan, and apply stages. Both apply stages require a SHA-256
+frozen-plan reference and ten exact confirmation bindings. Docker Engine,
+kernel, security-policy, database, and PACS updates remain outside this routine
+track.
 
 ## Host Scope
 
@@ -295,6 +301,13 @@ The schema fixes all current entries to `dry-run-only` with
 - `system.disk_status`;
 - `system.logs_tail`, with a maximum 200-line bound; and
 - `service.restart` planning for the allowlisted H3 Governor worker.
+
+The update-planning extension also covers:
+
+- `system.check_updates`, `system.plan_updates`, and
+  `system.apply_updates` for an H3 routine-package planning boundary; and
+- `containers.check_updates`, `containers.plan_update`, and
+  `containers.apply_update` for pinned H3 Kaos backend image planning.
 
 The restart entry records the future confirmation binding and verification
 requirements but cannot perform a restart. No host executor, command mapping,

@@ -1,0 +1,33 @@
+{
+  "contractVersion": "1.0",
+  "runbookVersion": 1,
+  "operation": "system.apply_updates",
+  "description": "Plan, but do not execute, application of a frozen H3 routine-package update set.",
+  "safety": { "executionMode": "dry-run-only", "productionWritesEnabled": false },
+  "host": { "id": "kaosgdd", "role": "H3" },
+  "target": { "kind": "package-manager", "id": "h3-routine-packages" },
+  "action": { "kind": "apply", "summary": "Apply only the exact frozen routine-package update set", "wouldMutateSystem": true },
+  "parameters": {
+    "allowed": [
+      { "name": "updatePlanDigest", "type": "string", "required": true, "description": "SHA-256 digest of the separately reviewed frozen update plan.", "minLength": 71, "maxLength": 71, "pattern": "^sha256:[0-9a-f]{64}$" }
+    ]
+  },
+  "preflight": {
+    "checks": ["Execution remains disabled for this runbook version", "Frozen plan digest resolves to the exact reviewed package set", "Backup freshness and restore evidence would be verified", "Disk capacity, service health, expected interruption, and reboot requirement would be recorded", "Kernel, security-policy, Docker Engine, database, and PACS changes are rejected"],
+    "failurePolicy": "stop"
+  },
+  "confirmation": {
+    "required": true,
+    "bindingFields": ["operationId", "host", "target", "action", "planDigest", "backupStatus", "rollbackTarget", "rebootRequirement", "expectedInterruption", "expiresAt"],
+    "ttlSeconds": 300
+  },
+  "verification": {
+    "checks": ["Dry-run result states that no package changed", "Future execution would compare installed versions with the frozen plan", "Future execution would verify allowlisted services and reboot state", "Future execution would record a durable receipt"],
+    "successPolicy": "all"
+  },
+  "rollback": { "available": false, "note": "Routine package rollback is not assumed; the frozen plan must document recovery per package before future execution." },
+  "operationLog": {
+    "required": true,
+    "fields": ["timestamp", "actor", "operationId", "operation", "host", "target", "mode", "result", "evidence"]
+  }
+}

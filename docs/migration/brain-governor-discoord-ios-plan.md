@@ -1528,6 +1528,19 @@ Mock lifecycle slice (2026-09-02):
 The repository-only planning prototype now pauses for security review before
 any real read-only host adapter or deployment topology is introduced.
 
+Update planning extension (2026-09-02):
+
+- added planning-only check/freeze/apply contracts for H3 routine packages and
+  pinned H3 Kaos backend container images;
+- requires each apply request to reference a frozen SHA-256 update-plan digest
+  and bind confirmation to operation, host, target, action, plan, backup,
+  rollback, reboot, interruption, and expiry;
+- makes the mock lifecycle stop both apply operations at
+  `confirmation-required` without accepting approval or changing state;
+- excludes Docker Engine, kernel, security-policy, database, and PACS updates
+  from the routine track and adds no host, package-manager, registry, Compose,
+  Docker socket, network, or execution integration.
+
 Risk: low for the committed planning artifacts. A future executor remains a
 separate medium-to-high-risk phase and must not infer executable behavior from
 free-form model output.
@@ -1566,6 +1579,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-09-02 | 8 | Added a repository-local dry-run catalog validator and normalized plan renderer | 8 planner tests, rejected-input CLI check, Python compilation, and `git diff --check` pass | None; no host adapter, network call, command mapping, or execution enabled |
 | 2026-09-02 | 8 | Pinned the runbook schema and exact catalog set with an unsigned SHA-256 manifest | 12 planner tests cover tampering, stale digest, digest-bound identity, and added/missing files; digest comparison, compilation, and `git diff --check` pass | None; no key, secret, host adapter, network call, or execution enabled |
 | 2026-09-02 | 8 | Added non-networked mock lifecycle simulation | 19 planner/mock tests cover all catalog operations, restart stop, audit shape, envelope/provenance/payload rejection, and prohibited imports | None; deterministic fake evidence only, with no host observation, persistence, confirmation acceptance, or execution |
+| 2026-09-02 | 8 | Added routine-package and pinned container-image check/plan/apply contracts | 21 planner/mock tests cover all eleven entries, required SHA-256 plan references, bounds, and confirmation stops; schema/manifest checks pass | None; contracts and fake lifecycle only, with no host, registry, package-manager, Docker, or execution integration |
 | 2026-09-01 | 8 | Completed production observation for the read-only Brain system status slice | User confirmed the deployed Discord `#brain` `system status` response; H3 smoke and H4 doctor were healthy after deployment | `system.status` slice complete; Phase 8 continues with PWA/admin status and runbook review; no write executor enabled |
 | 2026-08-30 | 2 | Started PostgreSQL operation persistence and pending-payload inventory | Implementation in progress | None |
 | 2026-08-30 | 2 | Added migration 005, PostgreSQL store, durable versioned payloads, restart recovery, expiry/interruption cleanup, production store wiring, and CI PostgreSQL coverage | 200 Governor unit/contract + 9 PostgreSQL integration + 349 Discord + 317 Brain tests; H3 preflight and Compose render passed | None; not deployed, production remains on migration 004 |

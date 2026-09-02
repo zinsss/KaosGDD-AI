@@ -16,9 +16,10 @@ Last updated: 2026-09-02
   and arbitrary admin intents.
 - Phase 2 runbook planning is committed in the repository under `runbooks/`.
   The JSON Schema forces dry-run-only mode and disables production writes.
-- Five version 1 catalog entries cover `system.status`, `system.git_status`,
+- Eleven version 1 catalog entries cover `system.status`, `system.git_status`,
   `system.disk_status`, bounded `system.logs_tail`, and a dry-run-only
-  `service.restart` plan for `kaos-governor-worker` on H3.
+  `service.restart` plan, plus check/plan/apply stages for H3 routine packages
+  and pinned H3 Kaos backend container images.
 - No executor, trusted command mapping, API wiring, host access, confirmation
   endpoint, or production deployment was added.
 - A repository-local dry-run planner now validates fixed catalog entries,
@@ -35,6 +36,9 @@ Last updated: 2026-09-02
   receipts. It never observes a host or persists an operation record.
 - Read operations end only as `simulated-complete`. The restart plan stops at
   `confirmation-required`; no confirmation is accepted and no action occurs.
+- Both update apply plans require a valid SHA-256 frozen-plan digest and ten
+  exact confirmation bindings, then stop at `confirmation-required`. Docker
+  Engine, kernel, security-policy, database, and PACS updates remain excluded.
 
 ## Current Production Baseline
 
@@ -53,9 +57,10 @@ Last updated: 2026-09-02
    dry-run planner before adding any host adapter.
 3. Perform a security review of the planning boundary before designing any
    real read-only host adapter. Keep production execution disabled.
-4. Do not enable `service.restart` until Governor authorization, normalized
-   expiring confirmation, audit, verification, and failure handling are
-   implemented and separately approved.
+4. Do not enable restart or update application until Governor authorization,
+   normalized expiring confirmation, backup evidence, audit, verification,
+   rollback/failure handling, and hardened host isolation are implemented and
+   separately approved.
 
 ## Active Constraints
 

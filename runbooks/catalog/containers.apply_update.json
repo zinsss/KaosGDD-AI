@@ -1,0 +1,33 @@
+{
+  "contractVersion": "1.0",
+  "runbookVersion": 1,
+  "operation": "containers.apply_update",
+  "description": "Plan, but do not execute, deployment of a frozen H3 container image set.",
+  "safety": { "executionMode": "dry-run-only", "productionWritesEnabled": false },
+  "host": { "id": "kaosgdd", "role": "H3" },
+  "target": { "kind": "container-stack", "id": "h3-kaos-backend" },
+  "action": { "kind": "apply", "summary": "Deploy only exact allowlisted services at frozen image digests", "wouldMutateSystem": true },
+  "parameters": {
+    "allowed": [
+      { "name": "updatePlanDigest", "type": "string", "required": true, "description": "SHA-256 digest of the separately reviewed frozen container plan.", "minLength": 71, "maxLength": 71, "pattern": "^sha256:[0-9a-f]{64}$" }
+    ]
+  },
+  "preflight": {
+    "checks": ["Execution remains disabled for this runbook version", "Frozen plan digest resolves to exact allowlisted services and image digests", "Backup freshness and stateful dependency safety would be verified", "Current health, expected interruption, rollback digests, and verification order would be recorded", "Docker Engine changes and arbitrary Compose arguments are rejected"],
+    "failurePolicy": "stop"
+  },
+  "confirmation": {
+    "required": true,
+    "bindingFields": ["operationId", "host", "target", "action", "planDigest", "backupStatus", "rollbackTarget", "rebootRequirement", "expectedInterruption", "expiresAt"],
+    "ttlSeconds": 300
+  },
+  "verification": {
+    "checks": ["Dry-run result states that no image was pulled and no container changed", "Future execution would verify deployed image digests and ordered health checks", "Future failure handling would select only the frozen prior digests", "Future execution would record a durable receipt"],
+    "successPolicy": "all"
+  },
+  "rollback": { "available": true, "note": "Future execution requires retained prior image digests and a frozen service-specific rollback order." },
+  "operationLog": {
+    "required": true,
+    "fields": ["timestamp", "actor", "operationId", "operation", "host", "target", "mode", "result", "evidence"]
+  }
+}

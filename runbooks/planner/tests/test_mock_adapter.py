@@ -13,6 +13,13 @@ from kaos_runbook_planner.planner import CATALOG_FILES
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+TEST_UPDATE_PLAN_DIGEST = "sha256:" + "a" * 64
+
+
+def parameters_for(operation: str) -> dict[str, object]:
+    if operation in {"system.apply_updates", "containers.apply_update"}:
+        return {"updatePlanDigest": TEST_UPDATE_PLAN_DIGEST}
+    return {}
 
 
 class MockLifecycleAdapterTests(unittest.TestCase):
@@ -23,7 +30,7 @@ class MockLifecycleAdapterTests(unittest.TestCase):
     def test_all_catalog_operations_produce_nonexecuted_mock_receipts(self) -> None:
         for operation in CATALOG_FILES:
             with self.subTest(operation=operation):
-                plan = self.planner.plan(operation)
+                plan = self.planner.plan(operation, parameters_for(operation))
                 receipt = self.adapter.simulate(plan)
                 self.assertEqual(receipt["adapter"], "non-networked-mock")
                 self.assertTrue(receipt["simulated"])
@@ -55,6 +62,15 @@ class MockLifecycleAdapterTests(unittest.TestCase):
             receipt["auditRecord"]["result"], "no-action-confirmation-required"
         )
         self.assertFalse(receipt["executed"])
+
+    def test_update_apply_plans_stop_at_confirmation_without_action(self) -> None:
+        for operation in ("system.apply_updates", "containers.apply_update"):
+            with self.subTest(operation=operation):
+                plan = self.planner.plan(operation, parameters_for(operation))
+                receipt = self.adapter.simulate(plan)
+                self.assertEqual(receipt["status"], "confirmation-required")
+                self.assertEqual(receipt["verification"]["status"], "not-run")
+                self.assertFalse(receipt["executed"])
 
     def test_audit_record_has_every_catalog_required_field(self) -> None:
         plan = self.planner.plan("system.git_status")

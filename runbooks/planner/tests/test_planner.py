@@ -12,6 +12,13 @@ from kaos_runbook_planner.planner import CATALOG_FILES, PlanError, RunbookPlanne
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+TEST_UPDATE_PLAN_DIGEST = "sha256:" + "a" * 64
+
+
+def parameters_for(operation: str) -> dict[str, object]:
+    if operation in {"system.apply_updates", "containers.apply_update"}:
+        return {"updatePlanDigest": TEST_UPDATE_PLAN_DIGEST}
+    return {}
 
 
 class RunbookPlannerTests(unittest.TestCase):
@@ -21,7 +28,7 @@ class RunbookPlannerTests(unittest.TestCase):
     def test_every_catalog_operation_produces_an_inert_plan(self) -> None:
         for operation in CATALOG_FILES:
             with self.subTest(operation=operation):
-                plan = self.planner.plan(operation)
+                plan = self.planner.plan(operation, parameters_for(operation))
                 self.assertEqual(plan["mode"], "dry-run-only")
                 self.assertFalse(plan["productionWritesEnabled"])
                 self.assertFalse(plan["executed"])
@@ -48,6 +55,17 @@ class RunbookPlannerTests(unittest.TestCase):
         for line_count in rejected:
             with self.subTest(line_count=line_count), self.assertRaises(PlanError):
                 self.planner.plan("system.logs_tail", {"lineCount": line_count})
+
+    def test_update_apply_requires_a_sha256_plan_digest(self) -> None:
+        for operation in ("system.apply_updates", "containers.apply_update"):
+            with self.subTest(operation=operation):
+                with self.assertRaisesRegex(PlanError, "required parameter"):
+                    self.planner.plan(operation)
+                for invalid_digest in ("", "latest", "sha256:" + "g" * 64):
+                    with self.assertRaises(PlanError):
+                        self.planner.plan(
+                            operation, {"updatePlanDigest": invalid_digest}
+                        )
 
     def test_restart_remains_unexecuted_and_requires_confirmation(self) -> None:
         plan = self.planner.plan("service.restart")

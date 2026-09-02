@@ -1,0 +1,25 @@
+{
+  "contractVersion": "1.0",
+  "runbookVersion": 1,
+  "operation": "containers.check_updates",
+  "description": "Plan a read-only comparison of approved H3 container images with deployed digests.",
+  "safety": { "executionMode": "dry-run-only", "productionWritesEnabled": false },
+  "host": { "id": "kaosgdd", "role": "H3" },
+  "target": { "kind": "container-stack", "id": "h3-kaos-backend" },
+  "action": { "kind": "observe", "summary": "Compare deployed and approved container image digests", "wouldMutateSystem": false },
+  "parameters": { "allowed": [] },
+  "preflight": {
+    "checks": ["Actor is authorized for H3 container update observations", "Only the allowlisted H3 Kaos backend stack is selected", "Docker Engine packages and raw Docker socket access remain outside this operation"],
+    "failurePolicy": "stop"
+  },
+  "confirmation": { "required": false, "bindingFields": [] },
+  "verification": {
+    "checks": ["Result identifies deployed and approved immutable image digests", "Result records metadata observation time", "No image is pulled and no container is changed"],
+    "successPolicy": "all"
+  },
+  "rollback": { "available": false, "note": "Read-only image comparison has no state to roll back." },
+  "operationLog": {
+    "required": true,
+    "fields": ["timestamp", "actor", "operationId", "operation", "host", "target", "mode", "result", "evidence"]
+  }
+}

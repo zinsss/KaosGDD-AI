@@ -1,0 +1,25 @@
+{
+  "contractVersion": "1.0",
+  "runbookVersion": 1,
+  "operation": "system.check_updates",
+  "description": "Plan a read-only check of cached routine package update metadata on H3.",
+  "safety": { "executionMode": "dry-run-only", "productionWritesEnabled": false },
+  "host": { "id": "kaosgdd", "role": "H3" },
+  "target": { "kind": "package-manager", "id": "h3-routine-packages" },
+  "action": { "kind": "observe", "summary": "Inspect cached routine package update metadata", "wouldMutateSystem": false },
+  "parameters": { "allowed": [] },
+  "preflight": {
+    "checks": ["Actor is authorized for H3 read-only update observations", "Only cached metadata is used; package indexes are not refreshed", "Kernel, security-policy, Docker Engine, database, and PACS maintenance remain excluded"],
+    "failurePolicy": "stop"
+  },
+  "confirmation": { "required": false, "bindingFields": [] },
+  "verification": {
+    "checks": ["Result identifies metadata age and candidate package versions", "Result identifies any reboot indication", "No package index or installed package state is changed"],
+    "successPolicy": "all"
+  },
+  "rollback": { "available": false, "note": "Read-only cached update observation has no state to roll back." },
+  "operationLog": {
+    "required": true,
+    "fields": ["timestamp", "actor", "operationId", "operation", "host", "target", "mode", "result", "evidence"]
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "contractVersion": "1.0",
+  "runbookVersion": 1,
+  "operation": "containers.plan_update",
+  "description": "Plan a frozen H3 container deployment set without pulling or recreating services.",
+  "safety": { "executionMode": "dry-run-only", "productionWritesEnabled": false },
+  "host": { "id": "kaosgdd", "role": "H3" },
+  "target": { "kind": "container-stack", "id": "h3-kaos-backend" },
+  "action": { "kind": "plan", "summary": "Freeze exact services and immutable target image digests", "wouldMutateSystem": false },
+  "parameters": { "allowed": [] },
+  "preflight": {
+    "checks": ["Actor is authorized to plan H3 container maintenance", "Only explicitly allowlisted services can enter the plan", "Stateful dependency, backup, interruption, and rollback requirements are recorded"],
+    "failurePolicy": "stop"
+  },
+  "confirmation": { "required": false, "bindingFields": [] },
+  "verification": {
+    "checks": ["Plan enumerates exact service names and current and target image digests", "Plan defines ordered health checks and retained rollback digests", "Plan receives an immutable SHA-256 digest", "No image is pulled and no container is changed"],
+    "successPolicy": "all"
+  },
+  "rollback": { "available": false, "note": "Planning changes no system state; the frozen plan must identify retained prior image digests." },
+  "operationLog": {
+    "required": true,
+    "fields": ["timestamp", "actor", "operationId", "operation", "host", "target", "mode", "result", "evidence"]
+  }
+}

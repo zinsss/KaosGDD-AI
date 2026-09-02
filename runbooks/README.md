@@ -22,10 +22,16 @@ runbooks/
   schema/
     runbook.schema.json
   catalog/
+    containers.apply_update.json
+    containers.check_updates.json
+    containers.plan_update.json
     service.restart.json
+    system.apply_updates.json
+    system.check_updates.json
     system.disk_status.json
     system.git_status.json
     system.logs_tail.json
+    system.plan_updates.json
     system.status.json
   planner/
     pyproject.toml
@@ -52,7 +58,8 @@ The planner package also contains `MockLifecycleAdapter`, a non-networked test
 adapter. It re-derives and exactly compares a normalized plan before returning
 deterministic in-memory lifecycle and audit receipts. It never reads host data
 or writes an audit file. Read operations end as `simulated-complete`;
-`service.restart` stops at `confirmation-required` with no action taken.
+`service.restart` and both update-apply operations stop at
+`confirmation-required` with no action taken.
 
 ## Contract
 
@@ -75,15 +82,28 @@ details are outside this contract.
 
 ## Current Planning Semantics
 
-The four `system.*` entries describe read-only observations. They require no
-confirmation, but a future caller must still be authenticated and authorized
-by Governor policy. `system.logs_tail` requires a bounded line count and never
-requests an unbounded stream.
+The status, Git, disk, logs, and update-check entries describe read-only
+observations. They require no confirmation, but a future caller must still be
+authenticated and authorized by Governor policy. `system.logs_tail` requires a
+bounded line count and never requests an unbounded stream.
 
 `service.restart` describes only the plan for a future allowlisted restart. It
 requires exact, expiring confirmation bound to host, target, action, expected
 interruption, and operation ID. Its catalog entry cannot execute a restart;
 the schema explicitly disables production writes.
+
+System and container update planning is split into check, freeze-plan, and
+apply-plan contracts. Apply plans accept only a required immutable
+`sha256:<64 lowercase hexadecimal characters>` plan digest. They require an
+exact, expiring confirmation bound to the host, target, action, plan digest,
+backup status, rollback target, reboot requirement, expected interruption, and
+operation ID. The current mock adapter stops at that confirmation boundary.
+
+`system.*_updates` covers only a future allowlisted routine-package track on
+H3. Kernel, security-policy, Docker Engine, database, and PACS maintenance are
+excluded. `containers.*_update*` covers pinned application image digests for
+the H3 Kaos backend stack; it is not Docker Engine maintenance and does not
+permit arbitrary Compose arguments.
 
 ## Validation
 
@@ -156,5 +176,7 @@ Enabling execution requires a later, separately reviewed phase that provides:
 5. exact confirmation for restart, reboot, update, and deploy;
 6. an operation-log receipt and a tested rollback path where applicable.
 
-PACS, database, OS, package, firewall, security, and secrets maintenance stay
-outside this catalog and require a separate hardened maintenance flow.
+PACS, database, kernel, Docker Engine, firewall, security-policy, and secrets
+maintenance stay outside this catalog and require a separate hardened
+maintenance flow. Routine package and pinned container-image entries remain
+planning-only until that execution gate is separately completed.

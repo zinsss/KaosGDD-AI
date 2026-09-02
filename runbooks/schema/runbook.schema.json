@@ -30,7 +30,13 @@
         "system.git_status",
         "system.disk_status",
         "system.logs_tail",
-        "service.restart"
+        "service.restart",
+        "system.check_updates",
+        "system.plan_updates",
+        "system.apply_updates",
+        "containers.check_updates",
+        "containers.plan_update",
+        "containers.apply_update"
       ]
     },
     "description": { "type": "string", "minLength": 1, "maxLength": 240 },
@@ -59,7 +65,14 @@
       "properties": {
         "kind": {
           "type": "string",
-          "enum": ["host", "repository", "filesystem", "service"]
+          "enum": [
+            "host",
+            "repository",
+            "filesystem",
+            "service",
+            "package-manager",
+            "container-stack"
+          ]
         },
         "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" }
       }
@@ -69,7 +82,10 @@
       "additionalProperties": false,
       "required": ["kind", "summary", "wouldMutateSystem"],
       "properties": {
-        "kind": { "type": "string", "enum": ["observe", "restart"] },
+        "kind": {
+          "type": "string",
+          "enum": ["observe", "plan", "restart", "apply"]
+        },
         "summary": { "type": "string", "minLength": 1, "maxLength": 240 },
         "wouldMutateSystem": { "type": "boolean" }
       }
@@ -115,6 +131,10 @@
               "host",
               "target",
               "action",
+              "planDigest",
+              "backupStatus",
+              "rollbackTarget",
+              "rebootRequirement",
               "expectedInterruption",
               "expiresAt"
             ]
@@ -183,12 +203,21 @@
       "else": { "properties": { "host": { "properties": { "role": { "const": "H4" } } } } }
     },
     {
-      "if": { "properties": { "operation": { "const": "service.restart" } } },
+      "if": {
+        "properties": {
+          "operation": {
+            "enum": [
+              "service.restart",
+              "system.apply_updates",
+              "containers.apply_update"
+            ]
+          }
+        }
+      },
       "then": {
         "properties": {
           "action": {
             "properties": {
-              "kind": { "const": "restart" },
               "wouldMutateSystem": { "const": true }
             }
           },
@@ -208,7 +237,6 @@
         "properties": {
           "action": {
             "properties": {
-              "kind": { "const": "observe" },
               "wouldMutateSystem": { "const": false }
             }
           },
@@ -236,6 +264,98 @@
     {
       "if": { "properties": { "operation": { "enum": ["system.logs_tail", "service.restart"] } } },
       "then": { "properties": { "target": { "properties": { "kind": { "const": "service" }, "id": { "const": "kaos-governor-worker" } } } } }
+    },
+    {
+      "if": { "properties": { "operation": { "const": "service.restart" } } },
+      "then": { "properties": { "action": { "properties": { "kind": { "const": "restart" } } } } }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "enum": [
+              "system.check_updates",
+              "system.plan_updates",
+              "system.apply_updates"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "target": {
+            "properties": {
+              "kind": { "const": "package-manager" },
+              "id": { "const": "h3-routine-packages" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "enum": [
+              "containers.check_updates",
+              "containers.plan_update",
+              "containers.apply_update"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "target": {
+            "properties": {
+              "kind": { "const": "container-stack" },
+              "id": { "const": "h3-kaos-backend" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "enum": ["system.check_updates", "containers.check_updates"]
+          }
+        }
+      },
+      "then": { "properties": { "action": { "properties": { "kind": { "const": "observe" } } } } }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "enum": ["system.plan_updates", "containers.plan_update"]
+          }
+        }
+      },
+      "then": { "properties": { "action": { "properties": { "kind": { "const": "plan" } } } } }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "enum": ["system.apply_updates", "containers.apply_update"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "action": { "properties": { "kind": { "const": "apply" } } },
+          "confirmation": {
+            "properties": {
+              "bindingFields": {
+                "minItems": 10,
+                "contains": { "const": "planDigest" }
+              }
+            }
+          }
+        }
+      }
     }
   ],
   "$defs": {
@@ -250,6 +370,9 @@
         "description": { "type": "string", "minLength": 1, "maxLength": 160 },
         "minimum": { "type": "integer" },
         "maximum": { "type": "integer" },
+        "minLength": { "type": "integer", "minimum": 1, "maximum": 256 },
+        "maxLength": { "type": "integer", "minimum": 1, "maximum": 256 },
+        "pattern": { "type": "string", "maxLength": 160 },
         "enum": {
           "type": "array",
           "items": { "type": "string", "minLength": 1, "maxLength": 64 },

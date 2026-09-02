@@ -1,0 +1,25 @@
+{
+  "contractVersion": "1.0",
+  "runbookVersion": 1,
+  "operation": "system.plan_updates",
+  "description": "Plan a frozen H3 routine-package update set without applying it.",
+  "safety": { "executionMode": "dry-run-only", "productionWritesEnabled": false },
+  "host": { "id": "kaosgdd", "role": "H3" },
+  "target": { "kind": "package-manager", "id": "h3-routine-packages" },
+  "action": { "kind": "plan", "summary": "Freeze exact routine package names and target versions", "wouldMutateSystem": false },
+  "parameters": { "allowed": [] },
+  "preflight": {
+    "checks": ["Actor is authorized to plan H3 routine package maintenance", "Candidate metadata age is recorded", "Kernel, security-policy, Docker Engine, database, and PACS maintenance remain excluded"],
+    "failurePolicy": "stop"
+  },
+  "confirmation": { "required": false, "bindingFields": [] },
+  "verification": {
+    "checks": ["Plan enumerates exact package names, current versions, and target versions", "Plan records backup, interruption, reboot, verification, and rollback facts", "Plan receives an immutable SHA-256 digest", "No package is changed"],
+    "successPolicy": "all"
+  },
+  "rollback": { "available": false, "note": "Planning changes no system state; a future apply plan must state package-specific rollback limits." },
+  "operationLog": {
+    "required": true,
+    "fields": ["timestamp", "actor", "operationId", "operation", "host", "target", "mode", "result", "evidence"]
+  }
+}

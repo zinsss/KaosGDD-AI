@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Mapping
@@ -12,10 +13,16 @@ from jsonschema import Draft202012Validator
 
 
 CATALOG_FILES = {
+    "containers.apply_update": "containers.apply_update.json",
+    "containers.check_updates": "containers.check_updates.json",
+    "containers.plan_update": "containers.plan_update.json",
     "service.restart": "service.restart.json",
+    "system.apply_updates": "system.apply_updates.json",
+    "system.check_updates": "system.check_updates.json",
     "system.disk_status": "system.disk_status.json",
     "system.git_status": "system.git_status.json",
     "system.logs_tail": "system.logs_tail.json",
+    "system.plan_updates": "system.plan_updates.json",
     "system.status": "system.status.json",
 }
 
@@ -209,6 +216,14 @@ class RunbookPlanner:
         elif expected_type == "string":
             if not isinstance(value, str):
                 raise PlanError(f"parameter {name} must be a string")
+            if "minLength" in specification and len(value) < specification["minLength"]:
+                raise PlanError(f"parameter {name} is shorter than its minimum length")
+            if "maxLength" in specification and len(value) > specification["maxLength"]:
+                raise PlanError(f"parameter {name} exceeds its maximum length")
+            if "pattern" in specification and re.fullmatch(
+                specification["pattern"], value
+            ) is None:
+                raise PlanError(f"parameter {name} does not match its required format")
         else:
             raise PlanError(f"catalog declares unsupported parameter type: {expected_type}")
 

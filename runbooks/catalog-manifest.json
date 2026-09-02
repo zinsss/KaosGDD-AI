@@ -3,13 +3,19 @@
   "algorithm": "sha256",
   "schema": {
     "path": "schema/runbook.schema.json",
-    "digest": "56b3f768bd07c1af794a75d60946e5c6b205c4494ced3861406cd03e0beb20e5"
+    "digest": "9e7d1fe8a270ddd9fdb145babb586c3b33670b4edbc90a506b172528f1389f77"
   },
   "catalog": {
+    "containers.apply_update.json": "3272d7c2bed0a065df774ba2f0ad3af38b7774dc42e8f766160b90b67726c58f",
+    "containers.check_updates.json": "6b72666d2f018fd7b08dc1199772a7d61c90dc0617430c2ce146ccce5912db15",
+    "containers.plan_update.json": "d83f8e8fb0a05cefa5080a2ca177b4ef75978f76ccc15d76bea8bfc8355fec72",
     "service.restart.json": "3762632cc5d5cd486862495281a9c687a41bbee50f55ba6b3c0a7d9e737ba388",
+    "system.apply_updates.json": "6de604b467112807b786845668b2a7314072993b78c6a6e9a2d4ab117694fc2a",
+    "system.check_updates.json": "8694e5dec3ad9502d203203bec7c346954742df610da9fa33c0957695eb10f93",
     "system.disk_status.json": "15c6e704d570cf6d555e5b72bbdad5d3e2803e497bc703342319eedfd5279a51",
     "system.git_status.json": "ad532a0eb8a9b57ba8ca390533c60d84596aaf209a443003af1f0bddaf660fdf",
     "system.logs_tail.json": "fc77a7d00645ee5bc8f07c7c8f3ec74aacc4031079122984785f724bdf991585",
+    "system.plan_updates.json": "5c5cfe3a914ab290fd8803e471095715127d6a4001de5df753c8ef97de7ac2db",
     "system.status.json": "971c52a77685f3dd738df643b09a8fb9d5227db94267a74cc48e305d56118473"
   }
 }
