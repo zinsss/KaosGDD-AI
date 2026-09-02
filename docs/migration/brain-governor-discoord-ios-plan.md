@@ -1452,9 +1452,9 @@ Exit criteria:
 ## Phase 8 — Governed Brain System Operations
 
 Status: read-only `system.status` production observation complete; Phase 2
-repository-only runbook planning is locally implemented. Brain Guard continues
-to reject shell, Docker, database, restart, deployment, and arbitrary admin
-intents. No runbook executor is enabled.
+repository-only runbook planning and an inert local planner are implemented.
+Brain Guard continues to reject shell, Docker, database, restart, deployment,
+and arbitrary admin intents. No host adapter or runbook execution is enabled.
 
 Objective:
 
@@ -1489,6 +1489,18 @@ Phase 2 planning baseline (2026-09-01):
   expiring confirmation requirements for the allowlisted H3 Governor worker;
 - added no commands, executor, API wiring, host access, secrets, deployment,
   or production mutation.
+
+Dry-run planner slice (2026-09-02):
+
+- added a repository-local Python package that selects only from a fixed
+  operation-to-catalog mapping and validates the selected entry against the
+  version 1 schema;
+- normalizes only declared parameters and defaults, rejecting unknown
+  operations, extra fields, wrong types, and out-of-bound values;
+- emits an inert plan with a deterministic dry-run ID, catalog digest,
+  confirmation state, `productionWritesEnabled: false`, and `executed: false`;
+- contains no subprocess, network client, host adapter, command mapping, API
+  wiring, or production deployment path.
 
 Risk: low for the committed planning artifacts. A future executor remains a
 separate medium-to-high-risk phase and must not infer executable behavior from
@@ -1525,6 +1537,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-08-30 | 1 | Added `GovernorOperations`, store protocol, tool delegation, boundary tests, and stable Brain date injection | 193 Governor + 345 Discord + 317 Brain tests passed | None; not deployed |
 | 2026-08-30 | Plan | Added this canonical tracker and aligned architecture terminology | Documentation review and `git diff --check` | None |
 | 2026-09-01 | 8 | Added the Phase 2 runbook planning baseline with a version 1 schema and five dry-run-only catalog entries | JSON syntax/schema validation and `git diff --check` pass | None; no executor, deployment, host access, or production write enabled |
+| 2026-09-02 | 8 | Added a repository-local dry-run catalog validator and normalized plan renderer | 8 planner tests, rejected-input CLI check, Python compilation, and `git diff --check` pass | None; no host adapter, network call, command mapping, or execution enabled |
 | 2026-09-01 | 8 | Completed production observation for the read-only Brain system status slice | User confirmed the deployed Discord `#brain` `system status` response; H3 smoke and H4 doctor were healthy after deployment | `system.status` slice complete; Phase 8 continues with PWA/admin status and runbook review; no write executor enabled |
 | 2026-08-30 | 2 | Started PostgreSQL operation persistence and pending-payload inventory | Implementation in progress | None |
 | 2026-08-30 | 2 | Added migration 005, PostgreSQL store, durable versioned payloads, restart recovery, expiry/interruption cleanup, production store wiring, and CI PostgreSQL coverage | 200 Governor unit/contract + 9 PostgreSQL integration + 349 Discord + 317 Brain tests; H3 preflight and Compose render passed | None; not deployed, production remains on migration 004 |

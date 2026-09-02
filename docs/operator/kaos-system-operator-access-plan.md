@@ -1,7 +1,7 @@
 # KaosSystemOperator Access Plan
 
-Status: Phase 2 runbook planning implemented; read-only `system.status`
-confirmed in Discord; execution remains disabled.
+Status: Phase 2 runbook planning and local dry-run planner implemented;
+read-only `system.status` confirmed in Discord; execution remains disabled.
 
 Last updated: 2026-09-01
 
@@ -60,6 +60,11 @@ Current repository state: the initial Stage 2 schema and five dry-run-only
 catalog entries are under [`runbooks/`](../../runbooks/README.md). They are
 planning artifacts only and contain no executor implementation or production
 write authority.
+
+A repository-local planner validates those catalog entries and emits inert,
+normalized plan JSON. It accepts only the fixed operation allowlist and
+schema-declared parameters. It has no host adapter, subprocess call, network
+client, command mapping, API wiring, or production integration.
 
 ## Host Scope
 
@@ -285,3 +290,9 @@ The restart entry records the future confirmation binding and verification
 requirements but cannot perform a restart. No host executor, command mapping,
 API route, deployment configuration, credential, or production integration is
 included in this phase.
+
+The local planner under `runbooks/planner/` loads only fixed catalog filenames,
+validates each selected entry against the version 1 schema, normalizes declared
+parameters and defaults, and emits a deterministic dry-run operation ID plus
+catalog digest. Every output explicitly records that production writes are
+disabled and execution did not occur.

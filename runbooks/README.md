@@ -26,12 +26,20 @@ runbooks/
     system.git_status.json
     system.logs_tail.json
     system.status.json
+  planner/
+    pyproject.toml
+    src/kaos_runbook_planner/
+    tests/
 ```
 
 `schema/runbook.schema.json` is the version 1 JSON Schema. `catalog/` contains
 reviewable runbook definitions, one stable operation per file. Future trusted
 implementations belong in a separately reviewed executor change and must not
 be inferred from these definitions.
+
+`planner/` is a repository-local, dry-run-only catalog validator and plan
+renderer. It has no host adapter, subprocess use, network client, command
+mapping, or execution method.
 
 ## Contract
 
@@ -78,6 +86,25 @@ python3 -m jsonschema \
 
 Repeat the schema command for every file in `runbooks/catalog/`. Validation is
 read-only and does not contact a managed host.
+
+Run the planner tests and render an inert normalized plan from the repository
+checkout:
+
+```text
+PYTHONPATH=runbooks/planner/src \
+  python3 -m unittest discover -s runbooks/planner/tests -v
+PYTHONPATH=runbooks/planner/src \
+  python3 -m kaos_runbook_planner.cli system.status
+PYTHONPATH=runbooks/planner/src \
+  python3 -m kaos_runbook_planner.cli system.logs_tail \
+    --parameters-json '{"lineCount": 25}'
+```
+
+The CLI selects from a fixed operation-to-catalog mapping. It does not accept
+a catalog path. Output always records `mode: dry-run-only`,
+`productionWritesEnabled: false`, and `executed: false`, plus a deterministic
+plan ID and catalog digest. Output is a plan receipt, not evidence that a host
+observation or action occurred.
 
 ## Future Execution Gate
 

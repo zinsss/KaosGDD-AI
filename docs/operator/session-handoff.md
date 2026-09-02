@@ -1,6 +1,6 @@
 # KaosSystemOperator Session Handoff
 
-Last updated: 2026-09-01
+Last updated: 2026-09-02
 
 ## Current State
 
@@ -21,6 +21,12 @@ Last updated: 2026-09-01
   `service.restart` plan for `kaos-governor-worker` on H3.
 - No executor, trusted command mapping, API wiring, host access, confirmation
   endpoint, or production deployment was added.
+- A repository-local dry-run planner now validates fixed catalog entries,
+  rejects undeclared operations and parameters, and emits normalized inert
+  plan JSON with deterministic IDs and catalog digests.
+- Planner output always records `dry-run-only`, production writes disabled,
+  and `executed: false`. The planner contains no subprocess, network, host
+  adapter, command mapping, or execution interface.
 
 ## Current Production Baseline
 
@@ -35,10 +41,10 @@ Last updated: 2026-09-01
 ## Next Safe Actions
 
 1. Add read-only system status to the personal KaosGDD PWA Settings/Admin page.
-2. Review the version 1 runbook contract and target allowlists before adding
-   any executor code.
-3. In a separate phase, design and test a restricted dry-run executor that
-   consumes only validated catalog entries; keep production writes disabled.
+2. Review the version 1 runbook contract, fixed target allowlists, and local
+   dry-run planner before adding any host adapter.
+3. Decide whether the next isolated slice should add signed catalog provenance
+   or a non-networked mock adapter; keep production execution disabled.
 4. Do not enable `service.restart` until Governor authorization, normalized
    expiring confirmation, audit, verification, and failure handling are
    implemented and separately approved.

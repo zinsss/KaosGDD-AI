@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kaos-runbook-planner"
+version = "0.1.0"
+description = "Dry-run-only planner for repository-controlled Kaos runbooks"
+requires-python = ">=3.11"
+dependencies = ["jsonschema>=4.18,<5"]
+
+[project.scripts]
+kaos-runbook-plan = "kaos_runbook_planner.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
