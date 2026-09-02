@@ -5460,12 +5460,12 @@ h3 {
   }
 
   .app[data-profile="main"] .topNav {
-    margin-top: 30px;
+    margin-top: 34px;
   }
 
   .app[data-profile="main"] .topAddWrap {
     position: absolute;
-    top: 22px;
+    top: 16px;
     right: 16px;
     grid-column: auto;
     grid-row: auto;

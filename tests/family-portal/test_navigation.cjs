@@ -42,7 +42,7 @@ test("unknown personal routes safely select Agenda", () => {
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=275"');
+  const styleIndex = index.indexOf('href="/styles.css?v=276"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=3"');
   const documentsIndex = index.indexOf('src="/documents.js?v=5"');
   const faxIndex = index.indexOf('src="/fax.js?v=1"');
@@ -68,4 +68,6 @@ test("main desktop navigation renders an open list while preserving the mobile p
   assert.match(styles, /\.app\[data-profile="main"\] \.mainMenuPicker select \{\n    display: none;/);
   assert.match(styles, /\.app\[data-profile="main"\] \.desktopMainMenuList \{\n    display: grid;/);
   assert.match(styles, /\.app\[data-profile="main"\] \.appTop \{\n    border-radius: 0;/);
+  assert.match(styles, /\.app\[data-profile="main"\] \.topNav \{\n    margin-top: 34px;/);
+  assert.match(styles, /\.app\[data-profile="main"\] \.topAddWrap \{\n    position: absolute;\n    top: 16px;\n    right: 16px;/);
 });
