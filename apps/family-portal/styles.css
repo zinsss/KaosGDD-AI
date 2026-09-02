@@ -5442,6 +5442,7 @@ h3 {
 
   .app[data-profile="main"] .mainMenuPicker {
     display: block;
+    position: static;
     justify-self: stretch;
     width: 100%;
   }
