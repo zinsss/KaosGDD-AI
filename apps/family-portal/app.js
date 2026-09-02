@@ -305,6 +305,16 @@ const state = {
     selectedId: "",
     detailLoading: false,
     detailError: "",
+    metadataReview: {
+      documentId: "",
+      title: "",
+      tags: "",
+      loading: false,
+      applying: false,
+      error: "",
+      proposal: null,
+      applied: false,
+    },
   },
   fax: {
     checked: false,
@@ -2326,7 +2336,11 @@ function closeDocumentDetail() {
 function selectDocumentInboxRecord(id) {
   const selected = state.documents.inboxItems.find((item) => item.id === String(id || ""));
   if (!selected) return;
+  const previousInboxId = state.documents.selectedInboxId;
   state.documents.selectedInboxId = selected.id;
+  if (previousInboxId !== selected.id) {
+    resetDocumentMetadataReview(selected.documentId, selected.title);
+  }
   render();
   document.querySelector("[data-document-inbox-detail]")?.focus();
   document.getElementById("view")?.scrollTo({ top: 0, behavior: "smooth" });
@@ -2355,6 +2369,119 @@ async function openDocumentInboxPaperless(documentId) {
   state.documents.selectedInboxId = "";
   render();
   await loadDocumentDetail(documentId);
+}
+
+function parseDocumentTagInput(value) {
+  return String(value || "")
+    .split(/[,\n#]+|\s{2,}/)
+    .map((tag) => tag.trim().replace(/^#/, ""))
+    .filter(Boolean)
+    .filter((tag, index, tags) => tags.indexOf(tag) === index)
+    .slice(0, 25);
+}
+
+function resetDocumentMetadataReview(documentId = "", title = "") {
+  state.documents.metadataReview = {
+    documentId: String(documentId || ""),
+    title: String(title || ""),
+    tags: "",
+    loading: false,
+    applying: false,
+    error: "",
+    proposal: null,
+    applied: false,
+  };
+}
+
+async function proposeDocumentMetadata(form) {
+  const documentId = String(form?.dataset.documentMetadataReview || "");
+  if (!documentId) return;
+  const formData = new FormData(form);
+  const title = String(formData.get("title") || "").trim();
+  const tagsText = String(formData.get("tags") || "");
+  const tags = parseDocumentTagInput(tagsText);
+  state.documents.metadataReview = {
+    ...state.documents.metadataReview,
+    documentId,
+    title,
+    tags: tagsText,
+    loading: true,
+    applying: false,
+    error: "",
+    proposal: null,
+    applied: false,
+  };
+  render();
+  try {
+    const response = await fetch(`/api/paperless/documents/${encodeURIComponent(documentId)}/metadata/proposal`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ title, tags }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    state.documents.metadataReview = {
+      ...state.documents.metadataReview,
+      loading: false,
+      error: "",
+      proposal: payload.proposal || null,
+    };
+  } catch (error) {
+    state.documents.metadataReview = {
+      ...state.documents.metadataReview,
+      loading: false,
+      error: error.message || "Could not prepare document metadata proposal",
+      proposal: null,
+    };
+  }
+  render();
+}
+
+async function applyDocumentMetadata() {
+  const review = state.documents.metadataReview;
+  const proposal = review.proposal || {};
+  const documentId = String(proposal.id || review.documentId || "");
+  if (!documentId) return;
+  const title = String(proposal.title || review.title || "").trim();
+  const tags = Array.isArray(proposal.tags) ? proposal.tags.map((tag) => String(tag || "").trim()).filter(Boolean) : [];
+  const tagText = tags.length ? tags.map((tag) => `#${tag}`).join(" ") : "none";
+  if (!window.confirm(`Apply Paperless metadata?\n\nTitle: ${title}\nTags: ${tagText}`)) return;
+  state.documents.metadataReview = { ...review, applying: true, error: "", applied: false };
+  render();
+  try {
+    const response = await fetch(`/api/paperless/documents/${encodeURIComponent(documentId)}/metadata/apply`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ title, tags, confirmed: true }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    state.documents.metadataReview = {
+      ...state.documents.metadataReview,
+      applying: false,
+      error: "",
+      applied: true,
+      proposal: null,
+      title,
+      tags: tags.join(" "),
+    };
+    state.documents.selected = payload.document ? window.KAOS_PORTAL_DOCUMENTS.normalizeDocument(payload.document) : state.documents.selected;
+    state.documents.checked = false;
+    await loadDocuments({ force: true });
+  } catch (error) {
+    state.documents.metadataReview = {
+      ...state.documents.metadataReview,
+      applying: false,
+      error: error.message || "Could not apply document metadata",
+    };
+    render();
+  }
 }
 
 async function refreshDocuments() {
@@ -5843,7 +5970,52 @@ function renderDocuments() {
         `
         : "";
   const inboxDetail = selectedInbox
-    ? `
+    ? (() => {
+      const review = documents.metadataReview || {};
+      const proposal = review.proposal || null;
+      const proposalTags = Array.isArray(proposal?.tags) ? proposal.tags : [];
+      const metadataReview = selectedInbox.documentId
+        ? `
+          <form class="archiveMetadataReview" data-document-metadata-review="${escapeHtml(selectedInbox.documentId)}">
+            <div class="archiveCommandLine">
+              <span>TITLE</span>
+              <input name="title" type="text" value="${escapeHtml(review.documentId === String(selectedInbox.documentId) ? review.title : selectedInbox.title)}" autocomplete="off" />
+            </div>
+            <div class="archiveCommandLine">
+              <span>TAGS</span>
+              <input name="tags" type="text" value="${escapeHtml(review.documentId === String(selectedInbox.documentId) ? review.tags : "")}" placeholder="#clinic #receipt" autocomplete="off" />
+            </div>
+            <div class="archiveActions">
+              <button class="archiveAction" type="submit" ${review.loading || review.applying ? "disabled" : ""}>${review.loading ? "PREVIEWING" : "PREVIEW"}</button>
+            </div>
+          </form>
+          ${
+            review.error
+              ? `<div class="archiveError" role="alert"><p>${escapeHtml(review.error)}</p></div>`
+              : ""
+          }
+          ${
+            proposal
+              ? `
+                <section class="archiveConfirmPanel" aria-label="Confirm document metadata">
+                  <p class="archiveStatusMessage">CONFIRM BEFORE APPLYING</p>
+                  <dl class="archiveMetadata">
+                    ${archiveMeta("Title", proposal.title || "")}
+                    ${archiveMeta("Tags", proposalTags.length ? proposalTags.map((tag) => `#${tag}`).join(" ") : "none")}
+                  </dl>
+                  <div class="archiveActions">
+                    <button class="archiveAction isActive" type="button" data-document-metadata-apply ${review.applying ? "disabled" : ""}>${review.applying ? "APPLYING" : "APPLY"}</button>
+                    <button class="archiveAction" type="button" data-document-metadata-cancel>EDIT</button>
+                  </div>
+                </section>
+              `
+              : review.applied
+                ? `<p class="archiveStatusMessage isOk">METADATA APPLIED</p>`
+                : ""
+          }
+        `
+        : `<p class="archiveStatusMessage">Paperless document id is not ready yet. Press ↻ STATUS after OCR/import finishes.</p>`;
+      return `
       <section class="archiveDetail" data-document-inbox-detail tabindex="-1" aria-labelledby="documentInboxDetailTitle">
         <header class="archiveDetailHeader">
           <div>
@@ -5875,9 +6047,10 @@ function renderDocuments() {
               : ""
           }
         </div>
-        <p class="archiveStatusMessage">Inbox actions are status/detail only. Metadata, tags, delete, and retry are not exposed here yet.</p>
+        ${metadataReview}
       </section>
-    `
+    `;
+    })()
     : "";
   const modeTabs = `
     <div class="segmentedTabs archiveModeTabs" role="tablist" aria-label="Document board mode">
@@ -8831,6 +9004,17 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (event.target.closest("[data-document-metadata-apply]")) {
+    await applyDocumentMetadata();
+    return;
+  }
+
+  if (event.target.closest("[data-document-metadata-cancel]")) {
+    state.documents.metadataReview = { ...state.documents.metadataReview, proposal: null, error: "" };
+    render();
+    return;
+  }
+
   const openInboxPaperless = event.target.closest("[data-document-inbox-paperless]");
   if (openInboxPaperless) {
     await openDocumentInboxPaperless(openInboxPaperless.dataset.documentInboxPaperless || "");
@@ -9671,6 +9855,13 @@ document.addEventListener("click", async (event) => {
 });
 
 document.addEventListener("submit", async (event) => {
+  const documentMetadataForm = event.target.closest("[data-document-metadata-review]");
+  if (documentMetadataForm) {
+    event.preventDefault();
+    await proposeDocumentMetadata(documentMetadataForm);
+    return;
+  }
+
   const documentUploadForm = event.target.closest("[data-upload-document]");
   if (documentUploadForm) {
     event.preventDefault();

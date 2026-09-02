@@ -28,6 +28,7 @@ class FakePaperless:
         )
         self.calls: list[tuple[object, ...]] = []
         self.tasks: dict[str, PaperlessTask] = {}
+        self.update_calls: list[tuple[object, str, tuple[str, ...]]] = []
 
     def list_page(self, *, limit: int, page: int) -> PaperlessSearchPage:
         self.calls.append(("list", limit, page))
@@ -58,6 +59,24 @@ class FakePaperless:
     def task(self, task_id: object) -> PaperlessTask:
         self.calls.append(("task", task_id))
         return self.tasks.get(str(task_id)) or PaperlessTask(str(task_id), "PENDING", ())
+
+    def metadata_proposal(self, document_id: object, *, title: str = "", tags=()) -> dict[str, object]:
+        self.calls.append(("proposal", document_id, title, tuple(tags)))
+        document = self.get(document_id)
+        return {
+            "document": document.as_dict(),
+            "proposal": {
+                "id": document.document_id,
+                "oldTitle": document.title,
+                "title": title or document.title,
+                "tags": list(dict.fromkeys(str(tag).strip().lstrip("#") for tag in tags if str(tag).strip())),
+            },
+        }
+
+    def update_metadata(self, document_id: object, *, title: str, tags=()) -> PaperlessDocument:
+        normalized_tags = tuple(str(tag).strip().lstrip("#") for tag in tags if str(tag).strip())
+        self.update_calls.append((document_id, title, normalized_tags))
+        return PaperlessDocument(int(document_id), title, "2026-08-29", "fax.pdf", content="OCR text", tag_ids=(7, 8))
 
 
 class PaperlessApiTests(unittest.TestCase):
@@ -196,6 +215,40 @@ class PaperlessApiTests(unittest.TestCase):
         self.assertEqual(items[archived.record_id]["url"], "https://paperless.kaosgdd.net/documents/88/details")
         self.assertEqual(items[failed.record_id]["status"], "failed")
         self.assertEqual(items[pending.record_id]["status"], "ocr_pending")
+
+    def test_metadata_proposal_requires_confirmation_before_write(self) -> None:
+        service = FakePaperless()
+
+        payload = api.paperless_metadata_proposal_payload(
+            "7",
+            {"title": "Updated title", "tags": ["#clinic", "receipt", "clinic"]},
+            service,
+        )  # type: ignore[arg-type]
+
+        self.assertTrue(payload["requiresConfirmation"])
+        self.assertEqual(payload["proposal"]["title"], "Updated title")  # type: ignore[index]
+        self.assertEqual(payload["proposal"]["tags"], ["clinic", "receipt"])  # type: ignore[index]
+        self.assertEqual(service.update_calls, [])
+
+    def test_metadata_apply_requires_confirmed_flag(self) -> None:
+        service = FakePaperless()
+
+        with self.assertRaisesRegex(DocumentIntakeError, "paperless_confirmation_required"):
+            api.paperless_metadata_apply_payload(
+                "7",
+                {"title": "Updated title", "tags": ["clinic"], "confirmed": False},
+                service,
+            )  # type: ignore[arg-type]
+
+        payload = api.paperless_metadata_apply_payload(
+            "7",
+            {"title": "Updated title", "tags": ["clinic"], "confirmed": True},
+            service,
+        )  # type: ignore[arg-type]
+
+        self.assertTrue(payload["applied"])
+        self.assertEqual(payload["document"]["title"], "Updated title")  # type: ignore[index]
+        self.assertEqual(service.update_calls, [("7", "Updated title", ("clinic",))])
 
 
 if __name__ == "__main__":

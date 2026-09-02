@@ -327,6 +327,10 @@ def paperless_status_for_error(exc: Exception) -> int:
         "pdf_attachment_required",
         "pdf_size_invalid",
         "invalid_pdf_signature",
+        "paperless_tags_invalid",
+        "paperless_metadata_required",
+        "paperless_confirmation_required",
+        "paperless_title_required",
     }:
         return 400
     return 503
@@ -391,6 +395,60 @@ def paperless_document_payload(
     payload = document.as_dict()
     payload["url"] = paperless_document_url(active_service, document.document_id)
     return {"ok": True, "document": payload}
+
+
+def paperless_metadata_path(path: str) -> tuple[str, str]:
+    match = re.fullmatch(r"/api/paperless/documents/([1-9][0-9]*)/metadata/(proposal|apply)", path)
+    return (match.group(1), match.group(2)) if match else ("", "")
+
+
+def paperless_metadata_tags(payload: dict[str, object]) -> tuple[str, ...]:
+    raw_tags = payload.get("tags") or []
+    if not isinstance(raw_tags, list):
+        raise DocumentIntakeError("paperless_tags_invalid")
+    tags: list[str] = []
+    for value in raw_tags:
+        tag = " ".join(str(value or "").strip().lstrip("#").split())
+        if tag and tag not in tags:
+            tags.append(tag)
+    return tuple(tags[:25])
+
+
+def paperless_metadata_proposal_payload(
+    document_id: str,
+    payload: dict[str, object],
+    service: PaperlessDocumentService | None = None,
+) -> dict[str, object]:
+    active_service = service or paperless_service()
+    title = " ".join(str(payload.get("title") or "").split())
+    tags = paperless_metadata_tags(payload)
+    if not title and not tags:
+        raise DocumentIntakeError("paperless_metadata_required")
+    proposal = active_service.metadata_proposal(document_id, title=title, tags=tags)
+    return {
+        "ok": True,
+        "requiresConfirmation": True,
+        "document": proposal["document"],
+        "proposal": proposal["proposal"],
+    }
+
+
+def paperless_metadata_apply_payload(
+    document_id: str,
+    payload: dict[str, object],
+    service: PaperlessDocumentService | None = None,
+) -> dict[str, object]:
+    if payload.get("confirmed") is not True:
+        raise DocumentIntakeError("paperless_confirmation_required")
+    active_service = service or paperless_service()
+    title = " ".join(str(payload.get("title") or "").split())
+    tags = paperless_metadata_tags(payload)
+    if not title:
+        raise DocumentIntakeError("paperless_title_required")
+    document = active_service.update_metadata(document_id, title=title, tags=tags)
+    result = document.as_dict()
+    result["url"] = paperless_document_url(active_service, document.document_id)
+    return {"ok": True, "applied": True, "document": result}
 
 
 def reconcile_paperless_inbox(
@@ -1615,6 +1673,26 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 print(f"Paperless upload failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "paperless_upload_failed"})
+            return
+        paperless_id, paperless_metadata_action = paperless_metadata_path(parsed.path)
+        if paperless_id:
+            try:
+                require_main_access(self.headers)
+                payload = json_request(self)
+                if paperless_metadata_action == "proposal":
+                    json_response(self, 200, paperless_metadata_proposal_payload(paperless_id, payload))
+                else:
+                    json_response(self, 200, paperless_metadata_apply_payload(paperless_id, payload))
+            except (ValueError, DocumentIntakeError, memos_relay.MemosRelayError) as exc:
+                code = (
+                    exc.code
+                    if isinstance(exc, (DocumentIntakeError, memos_relay.MemosRelayError))
+                    else str(exc)
+                )
+                json_response(self, paperless_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Paperless metadata failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "paperless_metadata_failed"})
             return
         if parsed.path == "/api/memos/bootstrap":
             try:
