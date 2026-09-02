@@ -4,6 +4,7 @@ const path = require("node:path");
 const test = require("node:test");
 
 const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
+const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
 
 test("documents inbox rows open a local detail panel with status-only actions", () => {
   assert.match(appSource, /data-document-inbox-open/);
@@ -29,4 +30,11 @@ test("documents metadata review previews before confirmed apply", () => {
   assert.match(appSource, /JSON\.stringify\(\{ recordId, title, tags, confirmed: true \}\)/);
   assert.match(appSource, /state\.documents\.mode = "archive";/);
   assert.match(appSource, /state\.documents\.selectedInboxId = "";/);
+});
+
+test("documents upload and metadata editor use aligned label columns", () => {
+  assert.match(appSource, /<label class="archiveCommandLine">[\s\S]*<span>FILE<\/span>[\s\S]*<span>TITLE<\/span>/);
+  assert.match(appSource, /<div class="archiveCommandLine">[\s\S]*<span>TITLE<\/span>[\s\S]*<span>TAGS<\/span>/);
+  assert.match(styles, /\.app\[data-profile="main"\] \.archiveCommandLine \{\n  display: grid;\n  grid-template-columns: 5\.25ch minmax\(0, 1fr\);/);
+  assert.match(styles, /\.app\[data-profile="main"\] \.archiveMetadataReview \{\n  display: grid;\n  gap: 8px;/);
 });

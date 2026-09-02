@@ -6143,13 +6143,17 @@ h3 {
 
 .app[data-profile="main"] .archiveCommandLine {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: 5.25ch minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   min-width: 0;
   color: var(--archive-amber);
   font-size: 0.86rem;
   font-weight: 850;
+}
+
+.app[data-profile="main"] .archiveCommandLine > span {
+  min-width: 0;
 }
 
 .app[data-profile="main"] .archiveCommandLine input {
@@ -6397,6 +6401,12 @@ h3 {
 .app[data-profile="main"] .archiveUploadPanel .archiveIndex {
   display: grid;
   gap: 12px;
+}
+
+.app[data-profile="main"] .archiveMetadataReview {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 12px;
 }
 
 .app[data-profile="main"] .archiveUploadGrid {
