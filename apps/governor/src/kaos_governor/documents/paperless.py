@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import hashlib
 import json
 import os
@@ -113,6 +113,7 @@ class PaperlessDocument:
     correspondent: str = ""
     content: str = ""
     tag_ids: tuple[int, ...] = ()
+    tag_names: tuple[str, ...] = ()
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -123,6 +124,7 @@ class PaperlessDocument:
             "correspondent": self.correspondent,
             "content": self.content,
             "tagIds": list(self.tag_ids),
+            "tags": list(self.tag_names),
         }
 
 
@@ -208,7 +210,18 @@ class PaperlessDocumentService:
             self.last_error = "paperless_request_failed"
             raise DocumentIntakeError(self.last_error) from exc
         self.last_error = ""
-        return paperless_document(payload)
+        return self._with_tag_names(paperless_document(payload))
+
+    def _with_tag_names(self, document: PaperlessDocument) -> PaperlessDocument:
+        if not document.tag_ids:
+            return document
+        try:
+            tags = self.list_tags()
+        except DocumentIntakeError:
+            return document
+        by_id = {tag.tag_id: tag.name for tag in tags}
+        names = tuple(by_id[tag_id] for tag_id in document.tag_ids if tag_id in by_id)
+        return replace(document, tag_names=names)
 
     def update_metadata(
         self,
@@ -248,7 +261,8 @@ class PaperlessDocumentService:
             self.last_error = "paperless_request_failed"
             raise DocumentIntakeError(self.last_error) from exc
         self.last_error = ""
-        return paperless_document(decode_payload(body))
+        tag_names = tuple(dict.fromkeys(clean_tag_name(tag) for tag in tags if clean_tag_name(tag)))
+        return replace(paperless_document(decode_payload(body)), tag_names=tag_names)
 
     def metadata_proposal(
         self,

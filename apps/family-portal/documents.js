@@ -47,6 +47,7 @@
       ...item,
       content: String(source.content || ""),
       tagIds: Object.freeze(Array.isArray(source.tagIds) ? source.tagIds.map(Number).filter(Number.isInteger) : []),
+      tags: Object.freeze(Array.isArray(source.tags) ? source.tags.map((tag) => String(tag || "").trim()).filter(Boolean) : []),
     });
   }
 

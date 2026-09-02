@@ -42,7 +42,7 @@ class FakePaperless:
 
     def get(self, document_id: object) -> PaperlessDocument:
         self.calls.append(("get", document_id))
-        return PaperlessDocument(7, "Fax report", "2026-08-29", "fax.pdf", content="OCR text")
+        return PaperlessDocument(7, "Fax report", "2026-08-29", "fax.pdf", content="OCR text", tag_names=("clinic",))
 
     def submit_pdf(
         self,
@@ -76,7 +76,7 @@ class FakePaperless:
     def update_metadata(self, document_id: object, *, title: str, tags=()) -> PaperlessDocument:
         normalized_tags = tuple(str(tag).strip().lstrip("#") for tag in tags if str(tag).strip())
         self.update_calls.append((document_id, title, normalized_tags))
-        return PaperlessDocument(int(document_id), title, "2026-08-29", "fax.pdf", content="OCR text", tag_ids=(7, 8))
+        return PaperlessDocument(int(document_id), title, "2026-08-29", "fax.pdf", content="OCR text", tag_ids=(7, 8), tag_names=normalized_tags)
 
 
 class PaperlessApiTests(unittest.TestCase):
@@ -118,6 +118,7 @@ class PaperlessApiTests(unittest.TestCase):
 
         self.assertEqual(service.calls, [("get", "7")])
         self.assertEqual(payload["document"]["content"], "OCR text")  # type: ignore[index]
+        self.assertEqual(payload["document"]["tags"], ["clinic"])  # type: ignore[index]
         self.assertEqual(
             payload["document"]["url"],  # type: ignore[index]
             "https://paperless.kaosgdd.net/documents/7/details",

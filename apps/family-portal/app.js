@@ -2579,7 +2579,12 @@ function renderDocumentMetadataReview(options = {}) {
   const proposal = ownsReview ? review.proposal || null : null;
   const proposalTags = Array.isArray(proposal?.tags) ? proposal.tags : [];
   const titleValue = ownsReview ? review.title : String(options.title || "");
-  const tagsValue = ownsReview ? review.tags : String(options.tags || "");
+  const optionTags = Array.isArray(options.tags) ? options.tags : [];
+  const tagsValue = ownsReview
+    ? review.tags
+    : optionTags.length
+      ? optionTags.map((tag) => `#${tag}`).join(" ")
+      : String(options.tags || "");
   return `
     <form class="archiveMetadataReview" data-document-metadata-review="${escapeHtml(documentId)}" data-document-metadata-record="${escapeHtml(recordId)}">
       <div class="archiveCommandLine">
@@ -6010,11 +6015,12 @@ function renderDocuments() {
             <dl class="archiveMetadata">
               ${archiveMeta("Correspondent", selected.correspondent || "unknown")}
               ${archiveMeta("Created", selected.created ? formatDocumentDate(selected.created) : "")}
+              ${archiveMeta("Tags", selected.tags?.length ? selected.tags.map((tag) => `#${tag}`).join(" ") : "")}
             </dl>
             <div class="archiveActions">
               ${selected.url ? `<a class="archiveAction" href="${escapeHtml(selected.url)}" target="_blank" rel="noopener noreferrer">OPEN PAPERLESS</a>` : ""}
             </div>
-            ${renderDocumentMetadataReview({ documentId: selected.id, title: selected.title })}
+            ${renderDocumentMetadataReview({ documentId: selected.id, title: selected.title, tags: selected.tags })}
             <div class="archiveOcrRegion" role="region" aria-label="OCR text" tabindex="0">
               <p>OCR TEXT</p>
               <pre>${escapeHtml(selected.content || "No recognized text.")}</pre>

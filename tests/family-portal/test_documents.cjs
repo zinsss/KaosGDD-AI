@@ -30,10 +30,12 @@ test("normalizes Paperless document OCR without creating another state store", (
     title: "Clinic form",
     content: "Recognized text",
     tagIds: [3, "4", "bad"],
+    tags: ["clinic", "", "receipt"],
   });
 
   assert.equal(document.content, "Recognized text");
   assert.deepEqual(document.tagIds, [3, 4]);
+  assert.deepEqual(document.tags, ["clinic", "receipt"]);
 });
 
 test("normalizes document intake inbox records", () => {
