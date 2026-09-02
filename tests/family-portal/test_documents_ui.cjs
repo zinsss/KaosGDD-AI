@@ -18,6 +18,8 @@ test("document upload selects the new inbox record after returning to inbox", ()
 
 test("documents metadata review previews before confirmed apply", () => {
   assert.match(appSource, /data-document-metadata-review/);
+  assert.match(appSource, /function renderDocumentMetadataReview/);
+  assert.match(appSource, /renderDocumentMetadataReview\(\{ documentId: selected\.id, title: selected\.title \}\)/);
   assert.match(appSource, /metadata\/proposal/);
   assert.match(appSource, /CONFIRM BEFORE APPLYING/);
   assert.match(appSource, /window\.confirm\(`Apply Paperless metadata/);

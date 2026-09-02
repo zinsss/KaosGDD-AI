@@ -2292,6 +2292,7 @@ async function loadDocumentDetail(id) {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
     state.documents.selected = window.KAOS_PORTAL_DOCUMENTS.normalizeDocument(payload.document);
+    resetDocumentMetadataReview("", state.documents.selected.id, state.documents.selected.title);
   } catch (error) {
     state.documents.detailError = error.message || "Paperless document is unavailable";
   } finally {
@@ -2565,6 +2566,57 @@ function archiveMeta(label, value) {
   const text = String(value || "").trim();
   if (!text) return "";
   return `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(text)}</dd></div>`;
+}
+
+function renderDocumentMetadataReview(options = {}) {
+  const documentId = String(options.documentId || "");
+  if (!documentId) {
+    return `<p class="archiveStatusMessage">Paperless document id is not ready yet. Press ↻ STATUS after OCR/import finishes.</p>`;
+  }
+  const recordId = String(options.recordId || "");
+  const review = state.documents.metadataReview || {};
+  const ownsReview = review.documentId === documentId && String(review.recordId || "") === recordId;
+  const proposal = ownsReview ? review.proposal || null : null;
+  const proposalTags = Array.isArray(proposal?.tags) ? proposal.tags : [];
+  const titleValue = ownsReview ? review.title : String(options.title || "");
+  const tagsValue = ownsReview ? review.tags : String(options.tags || "");
+  return `
+    <form class="archiveMetadataReview" data-document-metadata-review="${escapeHtml(documentId)}" data-document-metadata-record="${escapeHtml(recordId)}">
+      <div class="archiveCommandLine">
+        <span>TITLE</span>
+        <input name="title" type="text" value="${escapeHtml(titleValue)}" autocomplete="off" />
+      </div>
+      <div class="archiveCommandLine">
+        <span>TAGS</span>
+        <input name="tags" type="text" value="${escapeHtml(tagsValue)}" placeholder="#clinic #receipt" autocomplete="off" />
+      </div>
+      <div class="archiveActions">
+        <button class="archiveAction" type="submit" ${review.loading || review.applying ? "disabled" : ""}>${review.loading ? "PREVIEWING" : "PREVIEW"}</button>
+      </div>
+    </form>
+    ${
+      ownsReview && review.error
+        ? `<div class="archiveError" role="alert"><p>${escapeHtml(review.error)}</p></div>`
+        : ""
+    }
+    ${
+      proposal
+        ? `
+          <section class="archiveConfirmPanel" aria-label="Confirm document metadata">
+            <p class="archiveStatusMessage">CONFIRM BEFORE APPLYING</p>
+            <dl class="archiveMetadata">
+              ${archiveMeta("Title", proposal.title || "")}
+              ${archiveMeta("Tags", proposalTags.length ? proposalTags.map((tag) => `#${tag}`).join(" ") : "none")}
+            </dl>
+            <div class="archiveActions">
+              <button class="archiveAction isActive" type="button" data-document-metadata-apply ${review.applying ? "disabled" : ""}>${review.applying ? "APPLYING" : "APPLY"}</button>
+              <button class="archiveAction" type="button" data-document-metadata-cancel>EDIT</button>
+            </div>
+          </section>
+        `
+        : ""
+    }
+  `;
 }
 
 function formatBytes(value) {
@@ -5962,6 +6014,7 @@ function renderDocuments() {
             <div class="archiveActions">
               ${selected.url ? `<a class="archiveAction" href="${escapeHtml(selected.url)}" target="_blank" rel="noopener noreferrer">OPEN PAPERLESS</a>` : ""}
             </div>
+            ${renderDocumentMetadataReview({ documentId: selected.id, title: selected.title })}
             <div class="archiveOcrRegion" role="region" aria-label="OCR text" tabindex="0">
               <p>OCR TEXT</p>
               <pre>${escapeHtml(selected.content || "No recognized text.")}</pre>
@@ -5971,50 +6024,11 @@ function renderDocuments() {
         : "";
   const inboxDetail = selectedInbox
     ? (() => {
-      const review = documents.metadataReview || {};
-      const proposal = review.proposal || null;
-      const proposalTags = Array.isArray(proposal?.tags) ? proposal.tags : [];
-      const metadataReview = selectedInbox.documentId
-        ? `
-          <form class="archiveMetadataReview" data-document-metadata-review="${escapeHtml(selectedInbox.documentId)}" data-document-metadata-record="${escapeHtml(selectedInbox.id)}">
-            <div class="archiveCommandLine">
-              <span>TITLE</span>
-              <input name="title" type="text" value="${escapeHtml(review.documentId === String(selectedInbox.documentId) ? review.title : selectedInbox.title)}" autocomplete="off" />
-            </div>
-            <div class="archiveCommandLine">
-              <span>TAGS</span>
-              <input name="tags" type="text" value="${escapeHtml(review.documentId === String(selectedInbox.documentId) ? review.tags : "")}" placeholder="#clinic #receipt" autocomplete="off" />
-            </div>
-            <div class="archiveActions">
-              <button class="archiveAction" type="submit" ${review.loading || review.applying ? "disabled" : ""}>${review.loading ? "PREVIEWING" : "PREVIEW"}</button>
-            </div>
-          </form>
-          ${
-            review.error
-              ? `<div class="archiveError" role="alert"><p>${escapeHtml(review.error)}</p></div>`
-              : ""
-          }
-          ${
-            proposal
-              ? `
-                <section class="archiveConfirmPanel" aria-label="Confirm document metadata">
-                  <p class="archiveStatusMessage">CONFIRM BEFORE APPLYING</p>
-                  <dl class="archiveMetadata">
-                    ${archiveMeta("Title", proposal.title || "")}
-                    ${archiveMeta("Tags", proposalTags.length ? proposalTags.map((tag) => `#${tag}`).join(" ") : "none")}
-                  </dl>
-                  <div class="archiveActions">
-                    <button class="archiveAction isActive" type="button" data-document-metadata-apply ${review.applying ? "disabled" : ""}>${review.applying ? "APPLYING" : "APPLY"}</button>
-                    <button class="archiveAction" type="button" data-document-metadata-cancel>EDIT</button>
-                  </div>
-                </section>
-              `
-              : review.applied
-                ? `<p class="archiveStatusMessage isOk">METADATA APPLIED</p>`
-                : ""
-          }
-        `
-        : `<p class="archiveStatusMessage">Paperless document id is not ready yet. Press ↻ STATUS after OCR/import finishes.</p>`;
+      const metadataReview = renderDocumentMetadataReview({
+        documentId: selectedInbox.documentId,
+        recordId: selectedInbox.id,
+        title: selectedInbox.title,
+      });
       return `
       <section class="archiveDetail" data-document-inbox-detail tabindex="-1" aria-labelledby="documentInboxDetailTitle">
         <header class="archiveDetailHeader">
