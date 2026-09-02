@@ -583,6 +583,25 @@ html.isAgendaSuppliesEmbed body {
   white-space: nowrap;
 }
 
+.app[data-profile="main"][data-attention="attention"] .appIdentity .kicker {
+  color: var(--nord13);
+}
+
+.app[data-profile="main"][data-attention="critical"] .appIdentity .kicker {
+  color: var(--nord11);
+}
+
+.mainMenuAttentionDot {
+  justify-self: end;
+  color: var(--nord13);
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.mainMenuAttentionDot.is-critical {
+  color: var(--nord11);
+}
+
 @media (max-width: 1179px) {
   .app[data-profile="main"] .appTop {
     align-items: center;
@@ -5545,8 +5564,10 @@ h3 {
   }
 
   .app[data-profile="main"] .desktopMainMenuList a {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
+    gap: 8px;
     min-height: 38px;
     padding: 0 0;
     border: 1px solid transparent;

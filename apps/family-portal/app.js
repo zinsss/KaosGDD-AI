@@ -349,6 +349,11 @@ const state = {
     detailLoading: false,
     detailError: "",
   },
+  attention: {
+    checked: false,
+    loading: false,
+    refreshedAt: "",
+  },
   holidays: {
     checked: false,
     loading: false,
@@ -1973,6 +1978,7 @@ async function loadDocuments(options = {}) {
       items: [],
     };
   }
+  refreshMainAttentionShell();
   if (getRoute() === "documents") render();
 }
 
@@ -2007,6 +2013,7 @@ async function loadDocumentInbox(options = {}) {
       inboxItems: [],
     };
   }
+  refreshMainAttentionShell();
   if (getRoute() === "documents") render();
 }
 
@@ -2043,6 +2050,7 @@ async function loadFax(options = {}) {
       selectedKey: "",
     };
   }
+  refreshMainAttentionShell();
   if (getRoute() === "fax") render();
 }
 
@@ -2116,6 +2124,7 @@ async function loadMail(options = {}) {
       detailError: "",
     };
   }
+  refreshMainAttentionShell();
   if (getRoute() === "mail") render();
 }
 
@@ -2177,6 +2186,7 @@ async function loadUnreadMail(options = {}) {
       detailError: "",
     };
   }
+  refreshMainAttentionShell();
   if (getRoute() === "mail") render();
 }
 
@@ -3788,6 +3798,7 @@ async function loadSystemStatus({ force = false } = {}) {
       error: error.message || "System status is unavailable",
     };
   }
+  refreshMainAttentionShell();
   if (getRoute() === "settings") render();
 }
 
@@ -3826,6 +3837,94 @@ function activeNavRoute(route) {
   if (route === "add-document") return "documents";
   if (route === "service") return "services";
   return route;
+}
+
+function severityRank(value) {
+  if (value === "critical") return 2;
+  if (value === "attention") return 1;
+  return 0;
+}
+
+function mergeSeverity(left, right) {
+  return severityRank(right) > severityRank(left) ? right : left;
+}
+
+function systemStatusIsCritical() {
+  const status = state.systemStatus;
+  if (status.error) return true;
+  const runtime = status.data?.status || {};
+  if (runtime.discordReady === false || runtime.startupComplete === false) return true;
+  const checks = runtime.serviceStatus?.checks && typeof runtime.serviceStatus.checks === "object"
+    ? runtime.serviceStatus.checks
+    : {};
+  return Object.values(checks).some((item) => String(item?.state || "").toLowerCase() === "down");
+}
+
+function mainAttentionMarkers() {
+  if (portalProfile() !== "main") return {};
+  const markers = {};
+  const add = (route, severity) => {
+    if (!severity) return;
+    markers[route] = mergeSeverity(markers[route] || "", severity);
+  };
+
+  if (state.mail.unreadError) add("mail", "critical");
+  else if (state.mail.unreadItems.length > 0) add("mail", "attention");
+
+  if (state.documents.inboxError) add("documents", "critical");
+  if (state.documents.inboxItems.some((item) => item.status === "failed")) add("documents", "critical");
+  else if (state.documents.inboxItems.length > 0) add("documents", "attention");
+
+  if (state.fax.error || Number(state.fax.counts?.failed || 0) > 0) add("fax", "critical");
+
+  if (systemStatusIsCritical()) add("settings", "critical");
+
+  return markers;
+}
+
+function mainAttentionSeverity() {
+  return Object.values(mainAttentionMarkers()).reduce((severity, value) => mergeSeverity(severity, value), "");
+}
+
+function mainMenuLabelWithAttention(item) {
+  const marker = mainAttentionMarkers()[item.route];
+  return `${item.label}${marker ? " •" : ""}`;
+}
+
+function renderMainMenuAttentionDot(route) {
+  const severity = mainAttentionMarkers()[route];
+  return severity ? `<span class="mainMenuAttentionDot is-${escapeHtml(severity)}" aria-hidden="true">•</span>` : "";
+}
+
+function refreshMainAttentionShell() {
+  if (portalProfile() !== "main") return;
+  const app = document.querySelector(".app");
+  if (app) {
+    const severity = mainAttentionSeverity();
+    if (severity) app.dataset.attention = severity;
+    else delete app.dataset.attention;
+  }
+  renderTopNav(getRoute());
+}
+
+async function loadMainAttention({ force = false } = {}) {
+  if (portalProfile() !== "main" || isAgendaSuppliesEmbed()) return;
+  if (state.attention.loading) return;
+  if (state.attention.checked && !force) return;
+  state.attention.loading = true;
+  refreshMainAttentionShell();
+  await Promise.allSettled([
+    loadUnreadMail({ force }),
+    loadDocumentInbox({ force }),
+    loadFax({ force }),
+    loadSystemStatus({ force }),
+  ]);
+  state.attention = {
+    checked: true,
+    loading: false,
+    refreshedAt: new Date().toISOString(),
+  };
+  refreshMainAttentionShell();
 }
 
 function topAddActionForRoute(route) {
@@ -3884,13 +3983,14 @@ function renderTopNav(route) {
         <span>Main menu</span>
         <select data-main-menu aria-label="Main menu">
           ${profileConfig().nav.map((item) => `
-            <option value="${escapeHtml(item.route)}" ${item.route === selectedRoute ? "selected" : ""}>${escapeHtml(item.label)}</option>
+            <option value="${escapeHtml(item.route)}" ${item.route === selectedRoute ? "selected" : ""}>${escapeHtml(mainMenuLabelWithAttention(item))}</option>
           `).join("")}
         </select>
         <nav class="desktopMainMenuList" aria-label="Desktop main menu">
           ${profileConfig().nav.map((item) => `
             <a href="#/${item.route}" data-desktop-main-menu="${escapeHtml(item.route)}" class="${item.route === selectedRoute ? "isActive" : ""}" ${item.route === selectedRoute ? 'aria-current="page"' : ""}>
-              ${escapeHtml(item.label)}
+              <span>${escapeHtml(item.label)}</span>
+              ${renderMainMenuAttentionDot(item.route)}
             </a>
           `).join("")}
         </nav>
@@ -4077,6 +4177,13 @@ function routeTitle(route) {
   const app = document.querySelector(".app");
   app.dataset.route = route;
   app.dataset.profile = portalProfile();
+  if (portalProfile() === "main") {
+    const severity = mainAttentionSeverity();
+    if (severity) app.dataset.attention = severity;
+    else delete app.dataset.attention;
+  } else {
+    delete app.dataset.attention;
+  }
   applyFamilyFontPreference();
   applyMainFontPreference();
   renderTopNav(route);
@@ -8993,6 +9100,7 @@ function render() {
       loadRecurringTasks();
     }
   }
+  if (portalProfile() === "main") void loadMainAttention();
   if (weatherDeepLinkDate) {
     openedWeatherDeepLink = weatherDeepLinkDate;
     void openWeatherLocationPopup(weatherDeepLinkDate);
