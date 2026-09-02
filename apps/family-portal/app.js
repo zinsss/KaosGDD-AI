@@ -2484,11 +2484,17 @@ async function applyDocumentMetadata() {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
     const normalizedDocument = payload.document ? window.KAOS_PORTAL_DOCUMENTS.normalizeDocument(payload.document) : state.documents.selected;
+    if (recordId) {
+      state.documents.inboxItems = state.documents.inboxItems.filter((item) => String(item.id) !== recordId);
+      state.documents.inboxChecked = false;
+      state.documents.inboxError = "";
+    }
     state.documents.mode = "archive";
     state.documents.selectedInboxId = "";
     resetDocumentMetadataReview();
     state.documents.selected = normalizedDocument;
     state.documents.checked = false;
+    refreshMainAttentionShell();
     await loadDocuments({ force: true });
   } catch (error) {
     state.documents.metadataReview = {

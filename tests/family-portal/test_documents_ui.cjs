@@ -28,6 +28,8 @@ test("documents metadata review previews before confirmed apply", () => {
   assert.match(appSource, /metadata\/apply/);
   assert.match(appSource, /data-document-metadata-record/);
   assert.match(appSource, /JSON\.stringify\(\{ recordId, title, tags, confirmed: true \}\)/);
+  assert.match(appSource, /state\.documents\.inboxItems = state\.documents\.inboxItems\.filter\(\(item\) => String\(item\.id\) !== recordId\);/);
+  assert.match(appSource, /state\.documents\.inboxChecked = false;/);
   assert.match(appSource, /state\.documents\.mode = "archive";/);
   assert.match(appSource, /state\.documents\.selectedInboxId = "";/);
 });
