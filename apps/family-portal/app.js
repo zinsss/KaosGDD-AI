@@ -276,6 +276,7 @@ const state = {
   supplies: {
     checked: false,
     loading: false,
+    errorRetried: false,
     mode: "active",
     error: "",
     items: [],
@@ -1693,6 +1694,7 @@ async function loadSupplies(options = {}) {
       ...state.supplies,
       checked: true,
       loading: false,
+      errorRetried: false,
       error: "",
       items: Array.isArray(itemsPayload.items) ? itemsPayload.items : [],
       presets: presetsResponse.ok && Array.isArray(presetsPayload.items) ? presetsPayload.items : [],
@@ -1702,6 +1704,7 @@ async function loadSupplies(options = {}) {
       ...state.supplies,
       checked: true,
       loading: false,
+      errorRetried: Boolean(state.supplies.errorRetried),
       error: error.message || uiText("supplies.unavailable", "비품을 불러올 수 없습니다"),
       items: [],
     };
@@ -8906,7 +8909,14 @@ function render() {
     loadRemoteWeatherForSelectedMonth();
   }
   if (route === "caregiver" || (route === "calendar" && portalProfile() === "family")) loadCaregiverMonth();
-  if (route === "supplies") loadSupplies();
+  if (route === "supplies") {
+    if (state.supplies.error && !state.supplies.errorRetried) {
+      state.supplies.errorRetried = true;
+      loadSupplies({ force: true });
+    } else {
+      loadSupplies();
+    }
+  }
   if (route === "add-supply") {
     window.setTimeout(() => document.querySelector('[data-create-supply] input[name="title"]')?.focus(), 0);
   }
@@ -9209,6 +9219,7 @@ document.addEventListener("click", async (event) => {
   }
 
   if (event.target.closest("[data-supplies-retry]")) {
+    state.supplies.errorRetried = false;
     await loadSupplies({ force: true });
     return;
   }
@@ -9256,6 +9267,7 @@ document.addEventListener("click", async (event) => {
   if (suppliesMode) {
     state.supplies.mode = suppliesMode.dataset.suppliesMode === "done" ? "done" : "active";
     state.supplies.checked = false;
+    state.supplies.errorRetried = false;
     render();
     await loadSupplies({ force: true });
     return;
