@@ -1,7 +1,8 @@
 # KaosSystemOperator Access Plan
 
-Status: Phase 2 runbook planning and local dry-run planner implemented;
-read-only `system.status` confirmed in Discord; execution remains disabled.
+Status: Phase 2 runbook planning, local dry-run planner, and non-networked mock
+lifecycle implemented; read-only `system.status` confirmed in Discord;
+execution remains disabled.
 
 Last updated: 2026-09-01
 
@@ -69,6 +70,11 @@ client, command mapping, API wiring, or production integration.
 The committed catalog manifest pins the exact schema and catalog file set by
 SHA-256. Changed, missing, additional, or stale entries fail closed. This is an
 unsigned Git-reviewed integrity baseline; it introduces no signing secret.
+
+The non-networked mock adapter accepts only a plan it can exactly re-derive
+from the pinned catalog. It simulates preflight, read-only verification, and an
+in-memory audit receipt using deterministic fake evidence. Confirmation-gated
+restart planning stops without action. It is not a host executor.
 
 ## Host Scope
 
@@ -301,3 +307,8 @@ parameters and defaults, and emits a deterministic dry-run operation ID plus
 manifest and catalog digests. Those digests are bound into the operation ID.
 Every output explicitly records that production writes are disabled and
 execution did not occur.
+
+The mock lifecycle adapter completes the repository-only planning prototype.
+Before any real read-only host adapter is designed, this boundary requires a
+security review covering process isolation, catalog provenance authority,
+credential absence, data redaction, audit ownership, and deployment topology.

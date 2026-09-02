@@ -48,6 +48,12 @@ branch controls provide provenance. No signing key or secret is used.
 renderer. It has no host adapter, subprocess use, network client, command
 mapping, or execution method.
 
+The planner package also contains `MockLifecycleAdapter`, a non-networked test
+adapter. It re-derives and exactly compares a normalized plan before returning
+deterministic in-memory lifecycle and audit receipts. It never reads host data
+or writes an audit file. Read operations end as `simulated-complete`;
+`service.restart` stops at `confirmation-required` with no action taken.
+
 ## Contract
 
 Each runbook records:
@@ -121,6 +127,23 @@ compare its values with:
 ```text
 sha256sum runbooks/schema/runbook.schema.json runbooks/catalog/*.json
 ```
+
+The mock lifecycle adapter is available only as a Python test interface:
+
+```python
+from pathlib import Path
+
+from kaos_runbook_planner import MockLifecycleAdapter, RunbookPlanner
+
+planner = RunbookPlanner(Path.cwd())
+receipt = MockLifecycleAdapter(planner).simulate(planner.plan("system.status"))
+assert receipt["simulated"] is True
+assert receipt["executed"] is False
+```
+
+This receipt is deterministic mock data. It must never be represented as a
+real preflight, observation, verification, confirmation, or operation-log
+record.
 
 ## Future Execution Gate
 

@@ -1452,9 +1452,10 @@ Exit criteria:
 ## Phase 8 — Governed Brain System Operations
 
 Status: read-only `system.status` production observation complete; Phase 2
-repository-only runbook planning and an inert local planner are implemented.
-Brain Guard continues to reject shell, Docker, database, restart, deployment,
-and arbitrary admin intents. No host adapter or runbook execution is enabled.
+repository-only runbook planning, inert planner, provenance manifest, and
+non-networked mock lifecycle are implemented. Brain Guard continues to reject
+shell, Docker, database, restart, deployment, and arbitrary admin intents. No
+host adapter or runbook execution is enabled.
 
 Objective:
 
@@ -1513,6 +1514,20 @@ Catalog provenance slice (2026-09-02):
 - retained Git review as the provenance authority and introduced no signing
   keys, secrets, network access, host adapter, or execution path.
 
+Mock lifecycle slice (2026-09-02):
+
+- added a non-networked adapter that re-derives and exactly compares trusted
+  normalized plans before simulating lifecycle states;
+- returns deterministic fake preflight, verification, evidence, and in-memory
+  audit receipts for all five catalog operations;
+- stops `service.restart` at `confirmation-required` without accepting an
+  approval or taking an action;
+- rejects execution-capable envelopes and all tested provenance or payload
+  mutations, and contains no subprocess or network integration.
+
+The repository-only planning prototype now pauses for security review before
+any real read-only host adapter or deployment topology is introduced.
+
 Risk: low for the committed planning artifacts. A future executor remains a
 separate medium-to-high-risk phase and must not infer executable behavior from
 free-form model output.
@@ -1550,6 +1565,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-09-01 | 8 | Added the Phase 2 runbook planning baseline with a version 1 schema and five dry-run-only catalog entries | JSON syntax/schema validation and `git diff --check` pass | None; no executor, deployment, host access, or production write enabled |
 | 2026-09-02 | 8 | Added a repository-local dry-run catalog validator and normalized plan renderer | 8 planner tests, rejected-input CLI check, Python compilation, and `git diff --check` pass | None; no host adapter, network call, command mapping, or execution enabled |
 | 2026-09-02 | 8 | Pinned the runbook schema and exact catalog set with an unsigned SHA-256 manifest | 12 planner tests cover tampering, stale digest, digest-bound identity, and added/missing files; digest comparison, compilation, and `git diff --check` pass | None; no key, secret, host adapter, network call, or execution enabled |
+| 2026-09-02 | 8 | Added non-networked mock lifecycle simulation | 19 planner/mock tests cover all catalog operations, restart stop, audit shape, envelope/provenance/payload rejection, and prohibited imports | None; deterministic fake evidence only, with no host observation, persistence, confirmation acceptance, or execution |
 | 2026-09-01 | 8 | Completed production observation for the read-only Brain system status slice | User confirmed the deployed Discord `#brain` `system status` response; H3 smoke and H4 doctor were healthy after deployment | `system.status` slice complete; Phase 8 continues with PWA/admin status and runbook review; no write executor enabled |
 | 2026-08-30 | 2 | Started PostgreSQL operation persistence and pending-payload inventory | Implementation in progress | None |
 | 2026-08-30 | 2 | Added migration 005, PostgreSQL store, durable versioned payloads, restart recovery, expiry/interruption cleanup, production store wiring, and CI PostgreSQL coverage | 200 Governor unit/contract + 9 PostgreSQL integration + 349 Discord + 317 Brain tests; H3 preflight and Compose render passed | None; not deployed, production remains on migration 004 |

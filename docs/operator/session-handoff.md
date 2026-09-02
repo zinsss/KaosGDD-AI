@@ -30,6 +30,11 @@ Last updated: 2026-09-02
 - An unsigned committed manifest pins the schema and complete catalog set by
   SHA-256. The planner rejects changed, missing, additional, and stale files;
   manifest and selected-catalog digests are bound into each operation ID.
+- A non-networked mock lifecycle adapter exactly re-derives plans before
+  returning deterministic fake preflight, verification, and in-memory audit
+  receipts. It never observes a host or persists an operation record.
+- Read operations end only as `simulated-complete`. The restart plan stops at
+  `confirmation-required`; no confirmation is accepted and no action occurs.
 
 ## Current Production Baseline
 
@@ -46,8 +51,8 @@ Last updated: 2026-09-02
 1. Add read-only system status to the personal KaosGDD PWA Settings/Admin page.
 2. Review the version 1 runbook contract, fixed target allowlists, and local
    dry-run planner before adding any host adapter.
-3. Add a non-networked mock adapter for end-to-end dry-run lifecycle tests;
-   keep production execution disabled.
+3. Perform a security review of the planning boundary before designing any
+   real read-only host adapter. Keep production execution disabled.
 4. Do not enable `service.restart` until Governor authorization, normalized
    expiring confirmation, audit, verification, and failure handling are
    implemented and separately approved.
