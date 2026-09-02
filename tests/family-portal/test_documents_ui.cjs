@@ -51,6 +51,7 @@ test("desktop archive rows keep no date and title in separate lanes", () => {
   assert.match(styles, /\.app\[data-profile="main"\] \.archiveRecordId \{[\s\S]*overflow: hidden;[\s\S]*text-overflow: ellipsis;[\s\S]*white-space: nowrap;/);
   assert.match(styles, /\.app\[data-profile="main"\] \.archiveRecordDate \{[\s\S]*overflow: hidden;[\s\S]*text-overflow: ellipsis;[\s\S]*white-space: nowrap;/);
   assert.match(styles, /\.app\[data-profile="main"\] \.archiveColumnHeader \{[\s\S]*grid-template-columns: 12ch 18ch minmax\(0, 1fr\) 48px;/);
+  assert.match(styles, /\.app\[data-profile="main"\] \.archiveColumnHeader span \{[\s\S]*font-size: 0\.68rem;/);
   assert.match(styles, /\.app\[data-profile="main"\] \[data-archive-kind="memos"\] \.archiveColumnHeader \{[\s\S]*grid-template-columns: 12ch 18ch minmax\(0, 1fr\);/);
   assert.match(styles, /\.app\[data-profile="main"\] \.archiveRecordButton \{[\s\S]*grid-template-columns: 12ch 18ch minmax\(0, 1fr\);/);
 });

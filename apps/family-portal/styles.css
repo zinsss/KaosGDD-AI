@@ -6729,8 +6729,11 @@ h3 {
     gap: 10px;
     padding: 0 58px 7px 10px;
     color: var(--archive-cyan);
-    font-size: 0.68rem;
     font-weight: 850;
+  }
+
+  .app[data-profile="main"] .archiveColumnHeader span {
+    font-size: 0.68rem;
   }
 
   .app[data-profile="main"] [data-archive-kind="memos"] .archiveColumnHeader {
