@@ -166,9 +166,10 @@ const state = {
   taskMode: "active",
   taskSort: "due",
   addKind: "event",
-  addEventMode: "normal",
+  addEventMode: portalProfile() === "family" ? "smart" : "normal",
   addEventDraft: null,
   addTaskDraft: null,
+  smartEventInput: "",
   memoComposer: {
     content: "",
     saving: false,
@@ -435,6 +436,7 @@ const state = {
 };
 
 let remoteCalendarRequestId = 0;
+let renderedRoute = "";
 
 const mockCalendarData = {
   collections: [],
@@ -902,6 +904,66 @@ function collectAddEventDraft() {
   if (!form) return state.addEventDraft;
   state.addEventDraft = addEventDraftFromForm(form);
   return state.addEventDraft;
+}
+
+function prepareAddEventRoute() {
+  if (portalProfile() === "family") {
+    state.addEventMode = "smart";
+  } else if (state.addEventMode === "smart") {
+    state.addEventMode = "normal";
+  }
+}
+
+function normalizeFamilySmartEventTime(hourValue, minuteValue, meridiem = "") {
+  let hour = Number(hourValue);
+  const minute = Number(minuteValue || "0");
+  const marker = String(meridiem || "").trim();
+  if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) return "";
+  if (marker === "오전" && hour === 12) hour = 0;
+  if (marker === "오후" && hour < 12) hour += 12;
+  if (!marker && hour >= 1 && hour <= 7) hour += 12;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function parseFamilySmartEventInput(value, dateValue = state.selectedDate) {
+  return String(value || "")
+    .split(/[\/\n]+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const match = part.match(/^(?:(오전|오후)\s*)?(\d{1,2})(?::(\d{1,2})|시(?:\s*(\d{1,2})분?)?)\s*(.*)$/);
+      if (!match) {
+        return {
+          title: part,
+          allDay: true,
+          startDate: dateValue,
+          startTime: "",
+          endDate: dateValue,
+          endTime: "",
+        };
+      }
+      const startTime = normalizeFamilySmartEventTime(match[2], match[3] || match[4] || "0", match[1] || "");
+      const title = String(match[5] || "").trim() || part;
+      if (!startTime) {
+        return {
+          title: part,
+          allDay: true,
+          startDate: dateValue,
+          startTime: "",
+          endDate: dateValue,
+          endTime: "",
+        };
+      }
+      const end = addLocalMinutes(dateValue, startTime, 60);
+      return {
+        title,
+        allDay: false,
+        startDate: dateValue,
+        startTime,
+        endDate: end.date,
+        endTime: end.time,
+      };
+    });
 }
 
 function addTaskDraftFromForm(form) {
@@ -4311,6 +4373,7 @@ function clearTopAddLongPress() {
 async function runTopAddAction(action) {
   closeTopAddMenu();
   if (action === "event") {
+    prepareAddEventRoute();
     window.location.hash = "#/add-event";
     return;
   }
@@ -5292,7 +5355,7 @@ function renderCalendarMonthPanel(options = {}) {
             <button class="monthNavButton" type="button" data-month-shift="1" aria-label="${uiText("calendar.nextMonth", "Next month")}">&gt;&gt;</button>
           </div>
           ${!compact && portalProfile() === "family" ? `<a class="openButton" href="#/caregiver">${uiText("caregiver.label", "Caregiver")}</a>` : ""}
-          ${!compact && portalProfile() === "family" ? `<a class="openButton" href="#/add-event">${uiText("common.add", "Add")}</a>` : ""}
+          ${!compact && portalProfile() === "family" ? `<a class="openButton" href="#/add-event" data-calendar-add-event>${uiText("common.add", "Add")}</a>` : ""}
         </div>
       </div>
       <div class="calendarGrid" aria-label="${uiText("calendar.monthGridAria", "Month grid")}">
@@ -5455,6 +5518,7 @@ function renderAdd() {
 function renderAddEvent() {
   ensureAddCollectionDefault();
   ensureEventPresets();
+  if (portalProfile() !== "family" && state.addEventMode === "smart") state.addEventMode = "normal";
   const draft = {
     ...defaultEventPreset(),
     ...(state.eventPresetDraft || {}),
@@ -5464,6 +5528,8 @@ function renderAddEvent() {
   const allDay = Boolean(draft.allDay);
   const contextBody = state.addEventMode === "preset"
     ? renderEventPresetPanel()
+    : state.addEventMode === "smart" && portalProfile() === "family"
+      ? renderFamilySmartEventPanel()
     : renderEventFormPanel(draft, shareFamily, allDay);
   if (isDesktopLayout()) {
     return renderCalendarWorkspace(`
@@ -5488,6 +5554,58 @@ function renderContextHeader(label, title, closeHref) {
         <a class="openButton" href="${escapeHtml(closeHref)}">${uiText("common.close", "Close")}</a>
       </div>
     </section>
+  `;
+}
+
+function renderFamilySmartEventPanel() {
+  const selectedDate = state.selectedDate || ymd(new Date());
+  const input = state.smartEventInput || "";
+  const proposals = parseFamilySmartEventInput(input, selectedDate);
+  return `
+    <section class="panel familySmartEventPanel">
+      <div class="panelHeader">
+        <div>
+          <p class="label">${uiText("event.smartLabel", "Smart input")}</p>
+          <h2>${escapeHtml(compactDateLabel(selectedDate))}</h2>
+        </div>
+      </div>
+      <div class="panelBody">
+        <label>
+          <span>${uiText("event.smartTextboxLabel", "Write naturally")}</span>
+          <textarea data-family-smart-event-input rows="4" autocomplete="off" placeholder="${uiText("event.smartPlaceholder", "연차/10:30 3교시 참관수업 / 2:30 스파예가")}">${escapeHtml(input)}</textarea>
+        </label>
+        <p class="formNote">${uiText("event.smartHelp", "First slice: this only previews locally. Brain parsing and confirmed saving come next.")}</p>
+        <div class="familySmartEventPreview" data-family-smart-event-preview>
+          <p class="label">${uiText("event.smartPreview", "Preview")}</p>
+          ${renderFamilySmartEventPreview(proposals)}
+        </div>
+        <div class="formActions">
+          <button class="openButton" type="button" data-add-event-mode="normal">${uiText("event.manualFallback", "Manual input")}</button>
+          <button class="primaryButton" type="button" disabled>${uiText("event.smartSavePending", "Save after Brain wiring")}</button>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderFamilySmartEventPreview(proposals) {
+  if (!proposals.length) return `<p class="taskMeta">${uiText("event.smartEmpty", "Type one or more events to preview.")}</p>`;
+  return `
+    <ul class="timeline">
+      ${proposals
+        .map(
+          (item) => `
+            <li>
+              <time class="${item.allDay ? "timelineAllDayPill" : ""}">${escapeHtml(item.allDay ? uiText("event.allDayPill", "All Day") : item.startTime)}</time>
+              <span class="timelineLink">
+                <strong>${escapeHtml(item.title)}</strong>
+                <span>${escapeHtml(item.allDay ? uiText("event.smartAllDayPreview", "All-day event") : `${item.startTime}–${item.endTime}`)}</span>
+              </span>
+            </li>
+          `,
+        )
+        .join("")}
+    </ul>
   `;
 }
 
@@ -5633,8 +5751,12 @@ function renderEditEvent() {
 }
 
 function renderAddEventTabs() {
+  const smartTab = portalProfile() === "family"
+    ? `<button class="${state.addEventMode === "smart" ? "isActive" : ""}" type="button" data-add-event-mode="smart">${uiText("event.smart", "Smart input")}</button>`
+    : "";
   return `
     <section class="segmentedTabs" aria-label="${uiText("event.addModeAria", "Add event mode")}">
+      ${smartTab}
       <button class="${state.addEventMode === "normal" ? "isActive" : ""}" type="button" data-add-event-mode="normal">${uiText("event.normal", "Normal")}</button>
       <button class="${state.addEventMode === "preset" ? "isActive" : ""}" type="button" data-add-event-mode="preset">${uiText("event.preset", "Preset")}</button>
     </section>
@@ -9394,6 +9516,8 @@ function renderCaregiver() {
 
 function render() {
   const route = getRoute();
+  const enteringRoute = renderedRoute !== route;
+  if (enteringRoute && route === "add-event") prepareAddEventRoute();
   const calendarDeepLinkDate = pendingCalendarDeepLinkDate();
   const weatherDeepLinkDate = pendingWeatherDeepLinkDate();
   if (calendarDeepLinkDate) state.selectedDate = calendarDeepLinkDate;
@@ -9495,6 +9619,7 @@ function render() {
   if (calendarDeepLinkDate) appliedCalendarDeepLink = window.location.hash;
   document.querySelector(".ledgerDetailsScroller")?.addEventListener("scroll", updateTopBarShadow, { passive: true });
   updateTopBarShadow();
+  renderedRoute = route;
 }
 
 function updateOverlayMetrics() {
@@ -9532,6 +9657,11 @@ document.addEventListener("click", async (event) => {
   }
 
   if (!event.target.closest(".topAddWrap")) closeTopAddMenu();
+
+  if (event.target.closest("[data-calendar-add-event]")) {
+    prepareAddEventRoute();
+    return;
+  }
 
   const embedView = event.target.closest("[data-embed-view]");
   if (embedView) {
@@ -10128,7 +10258,12 @@ document.addEventListener("click", async (event) => {
   const addEventMode = event.target.closest("[data-add-event-mode]");
   if (addEventMode) {
     if (state.addEventMode === "normal") collectAddEventDraft();
-    state.addEventMode = addEventMode.dataset.addEventMode === "preset" ? "preset" : "normal";
+    const requestedMode = addEventMode.dataset.addEventMode || "normal";
+    state.addEventMode = requestedMode === "preset"
+      ? "preset"
+      : requestedMode === "smart" && portalProfile() === "family"
+        ? "smart"
+        : "normal";
     if (state.addEventMode === "normal") state.eventPresetDraft = null;
     render();
     return;
@@ -11147,6 +11282,19 @@ document.addEventListener(
 );
 
 document.addEventListener("input", (event) => {
+  const smartEventInput = event.target.closest("[data-family-smart-event-input]");
+  if (smartEventInput) {
+    state.smartEventInput = smartEventInput.value;
+    const preview = document.querySelector("[data-family-smart-event-preview]");
+    if (preview) {
+      preview.innerHTML = `
+        <p class="label">${uiText("event.smartPreview", "Preview")}</p>
+        ${renderFamilySmartEventPreview(parseFamilySmartEventInput(state.smartEventInput, state.selectedDate))}
+      `;
+    }
+    return;
+  }
+
   const caregiverForm = event.target.closest("[data-caregiver-day-form]");
   if (caregiverForm) updateCaregiverDayFormTotals(caregiverForm);
 

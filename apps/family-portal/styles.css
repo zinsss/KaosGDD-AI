@@ -1224,7 +1224,7 @@ h3 {
 
 .segmentedTabs {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
   gap: 8px;
   min-width: 0;
 }
@@ -1671,6 +1671,31 @@ h3 {
 
 .memoComposer .formNote.isError {
   color: var(--nord11);
+}
+
+.familySmartEventPanel .panelBody {
+  display: grid;
+  gap: 12px;
+}
+
+.familySmartEventPreview {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.familySmartEventPreview .timeline li {
+  grid-template-columns: 76px minmax(0, 1fr);
+  min-height: 40px;
+  padding: 7px 0;
+}
+
+.familySmartEventPreview .timelineLink > span {
+  color: var(--dim);
+  font-size: 0.74rem;
 }
 
 .composer input::placeholder,
