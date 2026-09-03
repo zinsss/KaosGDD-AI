@@ -14,9 +14,12 @@ Build the next Kaos platform around two new permanent roles:
 - **H3+, 32 GB**: KaosGovernor, authoritative personal/family backends,
   Personal and Family KaosGDD PWAs, and the public/private application edge.
 
-Discord retains only the private `#brain` conversational surface. The personal
-KaosGDD PWA at `kaosgdd.net` is the primary visual console; Shortcuts provides
-Action Button, Siri, Share Sheet, quick-action, and deep-link integration.
+Discord retains only a fallback private `#brain` conversational surface during
+migration. The personal KaosGDD PWA at `kaosgdd.net` is the primary visual
+console and should evolve into the Kaos Feed command interface: a timeline of
+openable command cards, buttons, forms, receipts, and optional Ask Kaos input.
+Shortcuts provides Action Button, Siri, Share Sheet, quick-action, and
+deep-link integration.
 Native Calendar and Reminders continue syncing Radicale and may retain native
 notifications without being the preferred UI. Pushover provides minimal
 immediate text alerts. The family continues to use `family.kaosgdd.net`,
@@ -33,11 +36,11 @@ requires every service to cut over at once.
 
 ```mermaid
 flowchart TD
-    Discord["Discord: private #brain only"] --> BrainBot["KaosBrain Discord integration"]
+    Discord["Discord: fallback private #brain"] --> BrainBot["KaosBrain Discord integration"]
     IOS["iOS Calendar + Reminders"] -->|"CalDAV: events, tasks, supplies"| Radicale
     IOSActions["Shortcuts + optional Scriptable"] --> Governor
     Governor --> Push["Pushover: minimal text alerts"]
-    PersonalWeb["kaosgdd.net personal PWA"] --> Governor
+    PersonalWeb["kaosgdd.net personal PWA + Kaos Feed"] --> Governor
     FamilyWeb["family.kaosgdd.net"] --> FamilyGateway["Family chat gateway"]
 
     subgraph H4["H4 Ultra 32 GB: AI plane"]
@@ -279,9 +282,10 @@ it must not silently write the same hours into both Governor and Radicale.
 
 ## 5. Interaction Architecture
 
-### 5.1 Discord: brain-only conversation
+### 5.1 Discord: fallback brain conversation
 
-The accepted target keeps one Discord identity and topic in normal use:
+The accepted target keeps at most one Discord identity and topic during
+transition:
 
 - **KaosBrain bot on H4 in private `#brain`**
   - natural-language conversation
@@ -289,6 +293,9 @@ The accepted target keeps one Discord identity and topic in normal use:
   - structured proposals and confirmations
   - summaries, requested files, and operation receipts in that conversation
   - no deterministic polling or authoritative state
+
+The preferred daily interface is the personal PWA Kaos Feed. Discord is a
+fallback conversation/history surface, not the primary command gateway.
 
 The H3 KaosGovernor Discord identity and its direct inbox, mail/fax,
 notification, alert, task, calendar, supplies, and Memos surfaces are
@@ -343,10 +350,12 @@ personal interaction model is:
 
 - personal KaosGDD Today, calendar, tasks, supplies, fax, Memos, documents, and
   settings views
+- Kaos Feed command cards for digests, alerts, proposals, confirmations,
+  receipts, and page-aware command menus
 - iOS Calendar and Reminders as background CalDAV synchronization and optional
   native notification clients
-- Discord `#brain` only for KaosBrain conversation, proposals, confirmations,
-  requested results/files, and operation receipts
+- Discord `#brain` only as fallback for KaosBrain conversation, proposals,
+  confirmations, requested results/files, and operation receipts
 - Shortcuts for Action Button, Siri, Share Sheet, quick actions, and stable PWA
   deep links; Scriptable only for a justified widget or focused UI gap
 - Pushover for immediate minimal text notifications and Apple Watch delivery
@@ -739,22 +748,25 @@ Exit gate:
 
 Actions:
 
-1. Verify H4 `#brain` can answer, propose, confirm, and return explicitly
-   requested results/files through Governor.
-2. Verify the personal KaosGDD PWA, Paperless/Memos PWAs, iOS Share Sheet
+1. Verify the personal Kaos Feed can show structured cards, command menus,
+   confirmations, receipts, and exact links for the high-use replacement
+   surfaces.
+2. Verify H4 or Mac-hosted fallback `#brain` can answer, propose, confirm, and
+   return explicitly requested results/files through Governor.
+3. Verify the personal KaosGDD PWA, Paperless/Memos PWAs, iOS Share Sheet
    capture, Pushover, and scoped Shortcuts replace the direct operational
    Discord surfaces. Scriptable remains optional for focused UI or widgets.
-3. Verify the personal PWA handles daily calendar, task, and supplies workflows
+4. Verify the personal PWA handles daily calendar, task, and supplies workflows
    while iOS Calendar/Reminders continue Radicale synchronization and native
    scheduled notifications.
-4. Move every non-Discord worker out of the H3 Discord gateway lifecycle and
+5. Move every non-Discord worker out of the H3 Discord gateway lifecycle and
    verify it with the gateway stopped in a controlled exercise.
-5. Resolve required retention/export for inbox, mail/fax, notification, and
+6. Resolve required retention/export for inbox, mail/fax, notification, and
    alert history; then disable direct channel intake one domain at a time.
-6. Verify upstream backend UIs remain directly reachable when needed.
-7. Confirm the personal and Family KaosGDD profiles remain deployed from the
+7. Verify upstream backend UIs remain directly reachable when needed.
+8. Confirm the personal and Family KaosGDD profiles remain deployed from the
    canonical shared portal source with separate server-enforced scopes.
-8. Stop KaosTelegram after retained workflows are verified; archive its
+9. Stop KaosTelegram after retained workflows are verified; archive its
    Compose/config/state for rollback reference only.
 
 Exit gate:
@@ -807,12 +819,13 @@ The architecture is complete only when:
 
 - H4 contains no authoritative application data or broad production authority.
 - H3+ owns deterministic workflows and durable personal/family backends.
-- Discord `#brain` is the only active Kaos Discord topic.
+- Discord `#brain` is at most a fallback Kaos Discord topic.
 - the personal KaosGDD PWA, Pushover, scoped Shortcuts, native iOS clients, and
   service PWAs replace the retired direct Discord surfaces.
 - Family KaosGDD remains a complete, separately scoped family application.
-- the personal PWA is the verified primary visual interface for calendar,
-  tasks, supplies, fax, Memos, and documents.
+- the personal PWA and Kaos Feed are the verified primary visual interface for
+  calendar, tasks, supplies, fax, Memos, documents, alerts, and command
+  receipts.
 - native iOS Calendar/Reminders remain verified synchronization and scheduled
   notification clients against Radicale.
 - service-native web interfaces remain available alongside the personal PWA.

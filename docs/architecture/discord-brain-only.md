@@ -5,10 +5,13 @@ Decision date: 2026-08-30
 Status: accepted; migration not yet complete.
 
 This decision supersedes earlier plans that made several Discord channels the
-primary personal UI. Discord's final Kaos role is one private `#brain` topic
-for persistent conversation with KaosBrain. Direct task, calendar, supplies,
-Memos, document, mail/fax, notification, alert, and administration channels
-are transitional and will retire after their replacements pass production
+primary personal UI. The preferred replacement is the PWA-native
+[Kaos Feed Command Interface](kaos-feed-command-interface.md): a chat-like
+timeline of openable command cards, buttons, forms, receipts, and deep links.
+Discord's final Kaos role is a fallback private `#brain` topic for persistent
+conversation with KaosBrain during migration. Direct task, calendar, supplies,
+Memos, document, mail/fax, notification, alert, and administration channels are
+transitional and will retire after their replacements pass production
 observation.
 
 ## Target
@@ -20,7 +23,7 @@ Discord #brain -> KaosDiscoord -> KaosBrain -> KaosGovernor
                                       +-> read/answer     Radicale / Memos /
                                                          Paperless / HylaFAX
 
-Personal/Family PWAs / Shortcuts / optional Scriptable -> KaosGovernor
+Personal/Family PWAs / Kaos Feed / Shortcuts / optional Scriptable -> KaosGovernor
 Pushover <- Governor notification outbox
 Native CalDAV clients / Memos PWA / Paperless PWA -> authoritative services
 ```
@@ -28,6 +31,8 @@ Native CalDAV clients / Memos PWA / Paperless PWA -> authoritative services
 The `#brain` topic may present Brain answers, structured proposals,
 confirmations, operation receipts, and files explicitly requested in that
 conversation. It is not the archive or notification engine for other domains.
+Where possible, the PWA feed should present those same proposals and receipts
+as structured cards.
 
 ## Replacement Matrix
 
@@ -36,13 +41,13 @@ conversation. It is not the archive or notification engine for other domains.
 | Tasks and task acknowledgements | Personal KaosGDD PWA; scoped Shortcuts; native Reminders remains a sync/notification client | Radicale VTODO through Governor/native CalDAV |
 | Calendar and agenda | Personal KaosGDD PWA; scoped deep links; native Calendar remains a sync/notification client | Radicale VEVENT |
 | Supplies | Personal KaosGDD PWA and scoped Shortcut actions | Dedicated Radicale VTODO collection |
-| Memos capture/search | Personal KaosGDD PWA with authoritative Memos links; Shortcuts; `Ask Kaos` in `#brain` | Memos |
-| Document inbox/search | Personal KaosGDD PWA; Paperless PWA for advanced operations; Share Sheet Shortcut; `Ask Kaos` | Paperless |
-| Mail notification/organizer UI | Minimal Pushover alerts; on-demand `#brain` query; service-backed organizer state | Naver IMAP and Governor state |
+| Memos capture/search | Personal KaosGDD PWA/Kaos Feed with authoritative Memos links; Shortcuts; fallback `Ask Kaos` | Memos |
+| Document inbox/search | Personal KaosGDD PWA/Kaos Feed; Paperless PWA for advanced operations; Share Sheet Shortcut; fallback `Ask Kaos` | Paperless |
+| Mail notification/organizer UI | Minimal Pushover alerts; Kaos Feed card; service-backed organizer state | Naver IMAP and Governor state |
 | Fax notification/intake UI | Personal KaosGDD PWA; minimal Pushover final-state alerts; Share Sheet/Shortcut or `#brain` send flow | HylaFAX and Governor operation records |
-| Daily digest | Minimal `Good Morning.` Pushover alert; detail on demand in the retained `#brain` topic or mobile UI | Governor aggregate reads |
-| System/maintenance alerts | Minimal Pushover alerts; detail on demand in `#brain` or settings/admin UI | Governor health/audit state |
-| Service administration | Personal KaosGDD admin view and authenticated governed `#brain` operations | Governor health state and restricted host executors |
+| Daily digest | Minimal `Good Morning.` Pushover alert; detail on demand in Kaos Feed or fallback `#brain` | Governor aggregate reads |
+| System/maintenance alerts | Minimal Pushover alerts; detail on demand in Kaos Feed, Settings, or fallback `#brain` | Governor health/audit state |
+| Service administration | Personal KaosGDD control room / Kaos Feed and authenticated governed fallback `#brain` operations | Governor health state and restricted host executors |
 
 Pushover remains intentionally simple and text-only for the Apple Watch. It is
 not a static UI or source of truth. Native Calendar and Reminders notifications

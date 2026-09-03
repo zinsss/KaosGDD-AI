@@ -10,19 +10,19 @@ Implementation phases and current progress are tracked in the
 ## Overview
 
 ```text
-Discord #brain only   Shortcuts / optional Scriptable
-   |                    |                  |
-   v                    |                  |
-KaosDiscoord            |       Personal + Family KaosGDD PWAs
-   |                    |                  |
-   +---- deterministic calls -------------+
-   |                    |                  |
-   +-> KaosBrain on H4 <-+ when interpretation is needed
-          |              |                  |
-          +--------------+------------------+
-                         |
-                         v
-                KaosGovernor on H3+ backend
+Discord #brain fallback     Shortcuts / optional Scriptable
+   |                          |                  |
+   v                          |                  |
+KaosDiscoord                  |       Personal + Family KaosGDD PWAs
+   |                          |       including Kaos Feed command cards
+   +------ deterministic calls ------------------+
+   |                          |                  |
+   +-> KaosBrain on H4/Mac <--+ when interpretation is needed
+          |                    |                  |
+          +--------------------+------------------+
+                               |
+                               v
+                      KaosGovernor on H3+ backend
                     |
         +-----------+------------+
         |           |            |
@@ -35,10 +35,13 @@ iOS Calendar and Reminders
 ```
 
 KaosBrain communicates with backends only through KaosGovernor. KaosDiscoord
-is retained only for the private Discord `#brain` conversation. The personal
-and family PWAs, Shortcuts, and an optional focused Scriptable client may call
-Governor directly for deterministic operations. Family AI receives a separate
-family-scoped Governor credential.
+is retained only for fallback private Discord `#brain` conversation during
+migration. The personal and family PWAs, Shortcuts, and an optional focused
+Scriptable client may call Governor directly for deterministic operations. The
+personal PWA should evolve toward the
+[Kaos Feed Command Interface](kaos-feed-command-interface.md): a timeline of
+openable command cards, buttons, forms, receipts, and optional Ask Kaos input.
+Family AI receives a separate family-scoped Governor credential.
 
 Native clients may still use service-native interfaces:
 
@@ -67,9 +70,10 @@ and cloudflared, rather than being renamed to `kaosgdd-*`.
 
 The existing personal KaosGDD profile is retained and evolved rather than
 recreated inside Scriptable. See [Personal KaosGDD PWA and iOS
-Shortcuts](personal-pwa-shortcuts.md). Brain's future system-operator role is a
-separately governed capability described in [Brain as Kaos Gateway and System
-Operator](brain-system-operations.md).
+Shortcuts](personal-pwa-shortcuts.md) and
+[Kaos Feed Command Interface](kaos-feed-command-interface.md). Brain's future
+system-operator role is a separately governed capability described in
+[Brain as Kaos Gateway and System Operator](brain-system-operations.md).
 
 ## KaosGovernor
 

@@ -13,6 +13,12 @@ primary visual console. Evolve it as a mobile-first Home Screen web app instead
 of replacing its calendar, tasks, colors, and related views with a second
 Scriptable implementation.
 
+The next interface direction is a PWA-native command feed: a chat-like timeline
+of openable cards, menus, buttons, and confirmation forms. See
+[Kaos Feed Command Interface](kaos-feed-command-interface.md). The feed may
+include an optional Ask Kaos text box, but normal daily control should be
+buttons and structured cards rather than free-form chat.
+
 iOS Shortcuts is the system-integration layer for Action Button menus, Siri,
 Share Sheet capture, quick creation, and deep links. Scriptable remains
 optional for a widget or a focused interface that Shortcuts and the PWA cannot
@@ -27,7 +33,8 @@ are not the preferred daily interface.
 
 ```text
 KaosGDD PWA
-  stable visual UI for Today, calendar, tasks, supplies, fax, Memos, documents
+  stable visual UI for Today, calendar, tasks, supplies, fax, Memos, documents,
+  plus a future Kaos Feed of command cards and receipts
 
 iOS Shortcuts
   Action Button, Siri, Share Sheet, quick capture, deterministic actions,
@@ -41,7 +48,8 @@ iOS Calendar and Reminders
   notifications against Radicale
 
 Discord #brain / Ask Kaos
-  natural-language reasoning, cross-domain questions, proposals, and receipts
+  fallback natural-language reasoning, cross-domain questions, proposals, and
+  receipts during migration
 ```
 
 The PWA, Shortcuts, native CalDAV clients, and Brain are parallel clients. None
@@ -133,7 +141,10 @@ through Governor and ETag-safe adapters.
    at a time.
 4. Add Share Sheet capture for Paperless and fax only after upload,
    confirmation, and cleanup contracts are tested.
-5. Observe each PWA/Shortcut replacement before retiring its Discord surface.
+5. Add the first read-only Kaos Feed/card API and render existing attention
+   sources as cards.
+6. Observe each PWA/Shortcut/feed replacement before retiring its Discord
+   surface.
 
 ## Memos and Paperless UI Slice — 2026-08-31
 

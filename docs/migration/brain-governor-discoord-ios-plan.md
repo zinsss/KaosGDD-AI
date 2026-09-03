@@ -40,6 +40,11 @@ H4, office-service, and stateful-service cutovers.
   quick-action, and deep-link integration. Native Calendar/Reminders remain
   Radicale sync and notification clients rather than mandatory daily UIs; see
   [Personal KaosGDD PWA and iOS Shortcuts](../architecture/personal-pwa-shortcuts.md).
+- Interface direction: evolve the personal PWA into a
+  [Kaos Feed Command Interface](../architecture/kaos-feed-command-interface.md):
+  a chat-like timeline of openable command cards, buttons, forms, receipts, and
+  optional Ask Kaos input. Normal deterministic actions remain button/form
+  driven and do not invoke Brain.
 - Brain direction: `#brain` remains a natural-language KaosGDD gateway and may
   grow into a conversational system-operations console. Brain never becomes a
   privileged runner; Governor and restricted host executors own typed,
@@ -1745,6 +1750,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-09-02 | 6 | Fixed stale Documents Inbox rows after metadata apply | Commit `127e88c`; after final metadata apply from Documents Inbox, the PWA now removes the applied intake row from local `inboxItems`, clears the selected Inbox item, forces the next Inbox view to re-read backend state, refreshes the shell attention marker, and then returns to Archive with the updated Paperless document selected; versioned `app.js?v=271`; JavaScript syntax check, 48 frontend tests, `git diff --check`, H3 static sync, and served JS smoke pass | H3 static portal promoted; frontend stale-state fix only. Backend confirmation-gated Paperless metadata apply and intake `status=applied` behavior were already covered and unchanged; H4 synced to tracker commit `608d421` and KaosBrain doctor passes |
 | 2026-09-03 | 7 | Renamed the old KaosAI concept to KaosBrain-OpenAI | This commit makes KaosBrain the documented top AI manager/orchestrator and renames user-facing OpenClaw/OpenAI planner/status/reauth labels to `KaosBrain-OpenAI`; Brain health now emits `kaosBrainOpenAI.mode` while retaining legacy `kaosAI.mode`, and `KAOSBRAIN_IMAGING_PROVIDER=kaosbrain-openai` is accepted as an alias for the existing provider path | Compatibility rename only. Legacy `KAOSAI_*` environment names, internal Python symbols, error codes, and live host paths remain in place until a separate mechanical migration; full Brain Docker tests and full Discoord/Governor Docker test target pass |
 | 2026-09-03 | 7 | Added KaosBrain-OpenAI legacy cleanup plan | Added [KaosBrain-OpenAI Legacy Cleanup Plan](kaosbrain-openai-cleanup-plan.md), defining the future phases for Python aliases, env aliases, health-key migration, host path migration, systemd service rename, internal error-code cleanup, and final legacy alias removal | Planning/documentation only. No runtime code, env, service, host path, or deployment behavior change |
+| 2026-09-03 | 6 | Accepted Kaos Feed as the future PWA command gateway | Added [Kaos Feed Command Interface](../architecture/kaos-feed-command-interface.md), defining a PWA-native timeline of openable command cards, buttons, forms, receipts, Pushover deep links, and optional Ask Kaos input as the preferred replacement for Discord/Telegram-style operational chat | Planning/documentation only. No frontend route, API, Governor behavior, notification behavior, or Discord retirement change |
 
 ## How to Update This Tracker
 
