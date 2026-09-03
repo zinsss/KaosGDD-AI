@@ -78,6 +78,7 @@ test("family smart event assets include styling, translations, and cache busters
   assert.match(styles, /\.app\[data-profile="family"\] \.familySmartEventPanel textarea \{/);
   assert.match(styles, /width: 100%;/);
   assert.match(styles, /box-sizing: border-box;/);
+  assert.match(styles, /resize: vertical;/);
   assert.match(styles, /font-family: inherit;/);
   assert.match(styles, /border-radius: 14px;/);
   assert.match(styles, /linear-gradient\(180deg, rgba\(255, 250, 255, 0\.86\), rgba\(244, 237, 248, 0\.92\)\)/);
@@ -95,7 +96,7 @@ test("family smart event assets include styling, translations, and cache busters
   assert.match(translations, /"event\.smartHoursSuffix": "시간"/);
   assert.match(translations, /"event\.smartMinutesSuffix": "분"/);
   assert.match(styles, /grid-template-columns: 96px minmax\(0, 1fr\);/);
-  assert.match(indexSource, /href="\/styles\.css\?v=296"/);
+  assert.match(indexSource, /href="\/styles\.css\?v=297"/);
   assert.match(indexSource, /src="\/translations\.js\?v=179"/);
   assert.match(indexSource, /src="\/app\.js\?v=282"/);
 });

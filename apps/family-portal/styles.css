@@ -1682,6 +1682,7 @@ h3 {
   display: block;
   width: 100%;
   box-sizing: border-box;
+  resize: vertical;
   min-height: 112px;
   border-color: rgba(188, 126, 170, 0.28);
   border-radius: 14px;
