@@ -295,6 +295,13 @@ ingredient names, MFDS classification codes, and practical category hints, then
 use those terms to search HIRA. If HIRA candidates are found for a HIRA-preferred
 benefit query, the summary source set is narrowed back to HIRA criteria.
 
+For HIRA medicine-benefit searches, KaosBrain-OpenAI should also produce a
+source-bounded `차트 기재 추천` section. The recommendation is not an EMR write
+and must not invent patient facts. It should provide copyable Korean examples
+with clear placeholders and list the clinical facts the clinician should verify
+and document, such as diagnosis, symptom/severity, eligibility criteria met,
+dose/quantity/interval, and follow-up plan.
+
 The wider official health/public allowlist also permits fetched source links
 from national public-health, insurance, evaluation, medicine, and affiliated
 agency domains such as `nhis.or.kr`, `longtermcare.or.kr`,

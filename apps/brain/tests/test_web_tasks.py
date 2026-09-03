@@ -3,7 +3,11 @@ from __future__ import annotations
 import unittest
 from importlib.util import find_spec
 
-from kaos_brain.kaos_ai import parse_official_web_plan_response, parse_official_web_summary_response
+from kaos_brain.kaos_ai import (
+    KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT,
+    parse_official_web_plan_response,
+    parse_official_web_summary_response,
+)
 from kaos_brain.web_tasks import _extract_response_text, _extract_sources, validate_web_task_request
 
 AIOHTTP_AVAILABLE = find_spec("aiohttp") is not None
@@ -98,6 +102,11 @@ class WebTaskValidationTests(unittest.TestCase):
 
         self.assertEqual(result["title"], "요약")
         self.assertEqual(result["sources"], [{"title": "KDCA", "url": "https://www.kdca.go.kr/notice"}])
+
+    def test_official_web_summary_prompt_requests_chart_note_guidance_for_benefits(self) -> None:
+        self.assertIn("차트 기재 추천", KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
+        self.assertIn("급여기준", KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
+        self.assertIn("Do not invent patient facts", KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
 
 
 if __name__ == "__main__":
