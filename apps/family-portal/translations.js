@@ -197,6 +197,8 @@ window.KAOS_TRANSLATIONS = {
     "event.smartAllDayPreview": "종일 일정",
     "event.smartSavePending": "저장은 다음 단계",
     "event.manualFallback": "직접 입력",
+    "event.smartEarlier": "1시간 앞당기기",
+    "event.smartLater": "1시간 늦추기",
     "event.normal": "직접 입력",
     "event.noPresets": "저장된 일정 프리셋이 없습니다.",
     "event.untitledPreset": "이름 없는 프리셋",

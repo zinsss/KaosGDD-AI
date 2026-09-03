@@ -32,6 +32,8 @@ test("family smart event parser splits wife-style day text without saving", () =
   assert.match(appSource, /const title = String\(match\[9\] \|\| ""\)\.trim\(\) \|\| part;/);
   assert.match(appSource, /explicitEndMinutes === null[\s\S]*addLocalMinutes\(dateValue, startTime, 60\)/);
   assert.match(appSource, /explicitEndMinutes <= startMinutes[\s\S]*addLocalMinutes\(dateValue, explicitEndTime, 24 \* 60\)/);
+  assert.match(appSource, /function familySmartEventProposals\(dateValue = state\.selectedDate\)/);
+  assert.match(appSource, /shiftFamilySmartEventItem\(item, Number\(state\.smartEventTimeOffsets\[index\] \|\| 0\)\)/);
   assert.doesNotMatch(appSource, /data-family-smart-event-save/);
 });
 
@@ -39,17 +41,20 @@ test("family smart event UI is a preview-only contextual input", () => {
   assert.match(appSource, /function renderFamilySmartEventPanel\(\)/);
   assert.match(appSource, /data-family-smart-event-input/);
   assert.match(appSource, /data-family-smart-event-preview/);
-  assert.match(appSource, /renderFamilySmartEventPreview\(parseFamilySmartEventInput\(state\.smartEventInput, state\.selectedDate\)\)/);
+  assert.match(appSource, /renderFamilySmartEventPreview\(familySmartEventProposals\(state\.selectedDate\)\)/);
   assert.match(appSource, /<button class="primaryButton" type="button" disabled>\$\{uiText\("event\.smartSavePending"/);
   assert.match(appSource, /data-add-event-mode="smart"/);
+  assert.match(appSource, /data-family-smart-event-time-step="-60"/);
+  assert.match(appSource, /data-family-smart-event-time-step="60"/);
+  assert.match(appSource, /data-family-smart-event-index="\$\{index\}"/);
 });
 
 test("family smart event input updates preview on input without rerendering the page", () => {
   const inputListener = appSource.match(/document\.addEventListener\("input", \(event\) => \{[\s\S]*?\n\}\);/);
   assert.ok(inputListener);
   assert.match(inputListener[0], /data-family-smart-event-input/);
-  assert.match(inputListener[0], /preview\.innerHTML = `/);
-  assert.match(inputListener[0], /renderFamilySmartEventPreview\(parseFamilySmartEventInput\(state\.smartEventInput, state\.selectedDate\)\)/);
+  assert.match(inputListener[0], /state\.smartEventTimeOffsets = \{\};/);
+  assert.match(inputListener[0], /updateFamilySmartEventPreview\(\);/);
 
   const changeListener = appSource.match(/document\.addEventListener\("change", async \(event\) => \{[\s\S]*?\n\}\);/);
   assert.ok(changeListener);
@@ -59,10 +64,14 @@ test("family smart event input updates preview on input without rerendering the 
 test("family smart event assets include styling, translations, and cache busters", () => {
   assert.match(styles, /\.familySmartEventPanel \.panelBody \{/);
   assert.match(styles, /\.familySmartEventPreview \{/);
+  assert.match(styles, /\.familySmartEventControls \{/);
+  assert.match(styles, /\.familySmartEventStep \{/);
   assert.match(translations, /"event\.smart": "스마트 입력"/);
   assert.match(translations, /"event\.smartPlaceholder": "연차\/10:30 3교시 참관수업 \/ 2:30 스파예가"/);
   assert.match(translations, /"event\.smartSavePending": "저장은 다음 단계"/);
-  assert.match(indexSource, /href="\/styles\.css\?v=289"/);
-  assert.match(indexSource, /src="\/translations\.js\?v=175"/);
-  assert.match(indexSource, /src="\/app\.js\?v=277"/);
+  assert.match(translations, /"event\.smartEarlier": "1시간 앞당기기"/);
+  assert.match(translations, /"event\.smartLater": "1시간 늦추기"/);
+  assert.match(indexSource, /href="\/styles\.css\?v=290"/);
+  assert.match(indexSource, /src="\/translations\.js\?v=176"/);
+  assert.match(indexSource, /src="\/app\.js\?v=278"/);
 });

@@ -1698,6 +1698,30 @@ h3 {
   font-size: 0.74rem;
 }
 
+.familySmartEventControls {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.familySmartEventStep {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  padding: 0;
+}
+
+.familySmartEventStep:hover,
+.familySmartEventStep:focus-visible {
+  color: var(--accent-strong);
+}
+
 .composer input::placeholder,
 .composer textarea::placeholder {
   color: #7f8b9e;

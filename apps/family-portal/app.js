@@ -170,6 +170,7 @@ const state = {
   addEventDraft: null,
   addTaskDraft: null,
   smartEventInput: "",
+  smartEventTimeOffsets: {},
   memoComposer: {
     content: "",
     saving: false,
@@ -975,6 +976,33 @@ function parseFamilySmartEventInput(value, dateValue = state.selectedDate) {
         endTime: end.time,
       };
     });
+}
+
+function shiftFamilySmartEventItem(item, minutes) {
+  if (item.allDay || !minutes) return item;
+  const start = addLocalMinutes(item.startDate, item.startTime, minutes);
+  const end = addLocalMinutes(item.endDate, item.endTime, minutes);
+  return {
+    ...item,
+    startDate: start.date,
+    startTime: start.time,
+    endDate: end.date,
+    endTime: end.time,
+  };
+}
+
+function familySmartEventProposals(dateValue = state.selectedDate) {
+  return parseFamilySmartEventInput(state.smartEventInput, dateValue)
+    .map((item, index) => shiftFamilySmartEventItem(item, Number(state.smartEventTimeOffsets[index] || 0)));
+}
+
+function updateFamilySmartEventPreview() {
+  const preview = document.querySelector("[data-family-smart-event-preview]");
+  if (!preview) return;
+  preview.innerHTML = `
+    <p class="label">${uiText("event.smartPreview", "Preview")}</p>
+    ${renderFamilySmartEventPreview(familySmartEventProposals(state.selectedDate))}
+  `;
 }
 
 function addTaskDraftFromForm(form) {
@@ -5571,7 +5599,7 @@ function renderContextHeader(label, title, closeHref) {
 function renderFamilySmartEventPanel() {
   const selectedDate = state.selectedDate || ymd(new Date());
   const input = state.smartEventInput || "";
-  const proposals = parseFamilySmartEventInput(input, selectedDate);
+  const proposals = familySmartEventProposals(selectedDate);
   return `
     <section class="panel familySmartEventPanel">
       <div class="panelHeader">
@@ -5605,12 +5633,18 @@ function renderFamilySmartEventPreview(proposals) {
     <ul class="timeline">
       ${proposals
         .map(
-          (item) => `
+          (item, index) => `
             <li>
               <time class="${item.allDay ? "timelineAllDayPill" : ""}">${escapeHtml(item.allDay ? uiText("event.allDayPill", "All Day") : item.startTime)}</time>
               <span class="timelineLink">
                 <strong>${escapeHtml(item.title)}</strong>
                 <span>${escapeHtml(item.allDay ? uiText("event.smartAllDayPreview", "All-day event") : `${item.startTime}–${item.endTime}`)}</span>
+                ${item.allDay ? "" : `
+                  <span class="familySmartEventControls">
+                    <button class="familySmartEventStep" type="button" data-family-smart-event-time-step="-60" data-family-smart-event-index="${index}" aria-label="${uiText("event.smartEarlier", "Move one hour earlier")}">-1h</button>
+                    <button class="familySmartEventStep" type="button" data-family-smart-event-time-step="60" data-family-smart-event-index="${index}" aria-label="${uiText("event.smartLater", "Move one hour later")}">+1h</button>
+                  </span>
+                `}
               </span>
             </li>
           `,
@@ -9669,6 +9703,17 @@ document.addEventListener("click", async (event) => {
 
   if (!event.target.closest(".topAddWrap")) closeTopAddMenu();
 
+  const smartEventTimeStep = event.target.closest("[data-family-smart-event-time-step]");
+  if (smartEventTimeStep) {
+    const index = Number(smartEventTimeStep.dataset.familySmartEventIndex);
+    const step = Number(smartEventTimeStep.dataset.familySmartEventTimeStep);
+    if (Number.isInteger(index) && Number.isInteger(step)) {
+      state.smartEventTimeOffsets[index] = Number(state.smartEventTimeOffsets[index] || 0) + step;
+      updateFamilySmartEventPreview();
+    }
+    return;
+  }
+
   if (event.target.closest("[data-calendar-add-event]")) {
     prepareAddEventRoute();
     return;
@@ -11296,13 +11341,8 @@ document.addEventListener("input", (event) => {
   const smartEventInput = event.target.closest("[data-family-smart-event-input]");
   if (smartEventInput) {
     state.smartEventInput = smartEventInput.value;
-    const preview = document.querySelector("[data-family-smart-event-preview]");
-    if (preview) {
-      preview.innerHTML = `
-        <p class="label">${uiText("event.smartPreview", "Preview")}</p>
-        ${renderFamilySmartEventPreview(parseFamilySmartEventInput(state.smartEventInput, state.selectedDate))}
-      `;
-    }
+    state.smartEventTimeOffsets = {};
+    updateFamilySmartEventPreview();
     return;
   }
 
