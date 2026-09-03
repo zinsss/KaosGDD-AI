@@ -43,6 +43,11 @@ writes. A pre-Brain local timetable migrates automatically only while the server
 document is empty; a fresh browser's generated Basic template is not uploaded
 until the user saves it.
 
+Family preset text uses `/api/text-presets`, served by Calendar Adapter as a
+shared Family-only state document. The standalone `#/text-presets` page keeps a
+browser cache only for offline fallback and first-run migration; save/delete
+actions write the server document with revision conflict protection.
+
 Rouny rejects an end time that is not later than its start time. Same-day
 overlaps are highlighted in the editor but remain valid after explicit save
 confirmation, because parallel classes can be intentional.
