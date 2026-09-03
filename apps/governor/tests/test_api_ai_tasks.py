@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from io import BytesIO
 import json
 from pathlib import Path
 import tempfile
@@ -84,6 +85,40 @@ class GovernorAITaskTests(unittest.TestCase):
             self.assertEqual(records[0].status, "previewed")
             self.assertNotIn("text", records[0].source)
 
+    def test_preview_official_doc_memo_accepts_pdf_upload_source(self) -> None:
+        boundary = "KaosBoundary"
+        pdf = b"%PDF-1.7\nbody\n%%EOF"
+        body = (
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="prompt"\r\n\r\n'
+            "요약해서 메모로\r\n"
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="sourcePdf"; filename="notice.pdf"\r\n'
+            "Content-Type: application/pdf\r\n\r\n"
+        ).encode("utf-8") + pdf + f"\r\n--{boundary}--\r\n".encode("utf-8")
+
+        class Handler:
+            headers = {
+                "Content-Type": f"multipart/form-data; boundary={boundary}",
+                "Content-Length": str(len(body)),
+            }
+            rfile = BytesIO(body)
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            archive = AITaskArchive(Path(temporary_directory) / "ai-tasks.json")
+            with (
+                patch.object(api, "AI_TASKS_BRAIN_URL", "http://brain.internal:8099/internal/ai-tasks/official-doc-memo/preview"),
+                patch.object(api, "AI_TASKS_BRAIN_TOKEN", "secret"),
+                patch.object(api, "extract_official_memo_pdf_text", return_value="PDF extracted text") as extractor,
+            ):
+                payload = api.preview_official_doc_memo_request_payload(Handler(), archive, urlopen=fake_brain_urlopen)  # type: ignore[arg-type]
+
+            self.assertTrue(payload["ok"])
+            extractor.assert_called_once_with("notice.pdf", pdf)
+            record = archive.list_records()[0]
+            self.assertEqual(record.source["type"], "pdf")
+            self.assertEqual(record.source["filename"], "notice.pdf")
+
     def test_complete_marks_archived_task_applied(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             archive = AITaskArchive(Path(temporary_directory) / "ai-tasks.json")
@@ -103,6 +138,10 @@ class GovernorAITaskTests(unittest.TestCase):
     def test_source_is_required(self) -> None:
         with self.assertRaisesRegex(AITaskError, "ai_task_source_required"):
             api.official_memo_source_payload({"prompt": "요약"})
+
+    def test_pdf_upload_requires_pdf_signature(self) -> None:
+        with self.assertRaisesRegex(AITaskError, "ai_task_pdf_signature_invalid"):
+            api.extract_official_memo_pdf_text("notice.pdf", b"not a pdf")
 
     def test_source_hostnames_resolving_to_private_network_are_blocked(self) -> None:
         with patch.object(

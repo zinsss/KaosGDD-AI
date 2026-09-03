@@ -2240,6 +2240,8 @@ async function previewOfficialDocMemo(form) {
   const prompt = String(formData.get("prompt") || "").trim();
   const sourceUrl = String(formData.get("sourceUrl") || "").trim();
   const sourceText = String(formData.get("sourceText") || "").trim();
+  const sourcePdf = formData.get("sourcePdf");
+  const hasSourcePdf = sourcePdf instanceof File && sourcePdf.size > 0;
   state.aiTasks = {
     ...state.aiTasks,
     prompt,
@@ -2251,13 +2253,22 @@ async function previewOfficialDocMemo(form) {
   };
   render();
   try {
+    const requestOptions = hasSourcePdf
+      ? {
+          method: "POST",
+          headers: { Accept: "application/json" },
+          body: formData,
+        }
+      : {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ prompt, sourceUrl, sourceText }),
+        };
     const response = await fetch("/api/ai-tasks/official-doc-memo/preview", {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ prompt, sourceUrl, sourceText }),
+      ...requestOptions,
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
@@ -2293,6 +2304,11 @@ function aiTaskErrorMessage(code) {
     ai_task_source_unsupported_content_type: "That source type is not readable yet. Paste the text for PDFs/files.",
     ai_task_source_not_found: "The source page says it does not exist. Try a specific article page or paste the text.",
     ai_task_source_empty: "The source page did not contain readable text. Try a specific article page or paste the text.",
+    ai_task_pdf_required: "Choose a PDF file, or use URL/text instead.",
+    ai_task_pdf_size_invalid: "That PDF is too large for AI Tasks.",
+    ai_task_pdf_signature_invalid: "That file does not look like a valid PDF.",
+    ai_task_pdf_reader_missing: "Governor is missing the PDF reader.",
+    ai_task_pdf_text_empty: "Could not read text from that PDF. If it is scanned, use Paperless OCR first or paste the text.",
     ai_task_brain_not_configured: "KaosBrain AI Tasks endpoint is not configured.",
     ai_task_brain_token_missing: "KaosBrain AI Tasks token is missing.",
     ai_task_brain_request_failed: "Could not reach KaosBrain.",
@@ -8835,6 +8851,10 @@ function renderAiTasks() {
         <label class="archiveCommandLine">
           <span>URL</span>
           <input name="sourceUrl" type="url" inputmode="url" autocomplete="url" placeholder="official source URL" value="${escapeHtml(aiTasks.sourceUrl)}" />
+        </label>
+        <label class="archiveCommandLine">
+          <span>PDF</span>
+          <input name="sourcePdf" type="file" accept="application/pdf,.pdf" />
         </label>
         <label class="archiveCommandLine aiTaskSourceText">
           <span>TEXT</span>

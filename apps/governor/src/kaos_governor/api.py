@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import os
 import re
@@ -55,6 +56,7 @@ AI_TASKS_BRAIN_TOKEN_FILE = os.environ.get("AI_TASKS_BRAIN_TOKEN_FILE", "").stri
 AI_TASKS_BRAIN_TIMEOUT_SECONDS = float(os.environ.get("AI_TASKS_BRAIN_TIMEOUT_SECONDS", "60") or "60")
 OFFICIAL_MEMO_FETCH_TIMEOUT_SECONDS = float(os.environ.get("OFFICIAL_MEMO_FETCH_TIMEOUT_SECONDS", "15") or "15")
 OFFICIAL_MEMO_MAX_SOURCE_CHARS = int(os.environ.get("OFFICIAL_MEMO_MAX_SOURCE_CHARS", "20000") or "20000")
+OFFICIAL_MEMO_MAX_PDF_BYTES = int(os.environ.get("OFFICIAL_MEMO_MAX_PDF_MB", "20") or "20") * 1024 * 1024
 WEATHER_LOCATIONS = {
     "pohang": "포항",
     "daegu": "대구",
@@ -564,6 +566,7 @@ def ai_task_status_for_error(exc: Exception) -> int:
     if code in {
         "invalid_body_length",
         "invalid_json_payload",
+        "multipart_form_required",
         "ai_task_prompt_required",
         "ai_task_source_required",
         "ai_task_source_url_invalid",
@@ -571,6 +574,11 @@ def ai_task_status_for_error(exc: Exception) -> int:
         "ai_task_source_unsupported_content_type",
         "ai_task_source_not_found",
         "ai_task_source_empty",
+        "ai_task_pdf_required",
+        "ai_task_pdf_size_invalid",
+        "ai_task_pdf_signature_invalid",
+        "ai_task_pdf_reader_missing",
+        "ai_task_pdf_text_empty",
         "ai_task_confirmation_required",
         "ai_task_limit_invalid",
     }:
@@ -645,6 +653,33 @@ def preview_official_doc_memo_payload(
     return {"ok": True, "task": record.as_dict(), "memo": memo}
 
 
+def preview_official_doc_memo_request_payload(
+    handler: BaseHTTPRequestHandler,
+    archive: AITaskArchive | None = None,
+    *,
+    urlopen=urllib.request.urlopen,
+) -> dict[str, object]:
+    content_type = handler.headers.get("Content-Type") or ""
+    if "multipart/form-data" not in content_type.lower():
+        return preview_official_doc_memo_payload(json_request(handler), archive, urlopen=urlopen)
+    fields, files = multipart_form_request(handler, max_bytes=OFFICIAL_MEMO_MAX_PDF_BYTES + MAX_MULTIPART_OVERHEAD_BYTES)
+    payload: dict[str, object] = {
+        "prompt": fields.get("prompt") or "",
+        "sourceUrl": fields.get("sourceUrl") or "",
+        "sourceTitle": fields.get("sourceTitle") or "",
+    }
+    filename, content = files.get("sourcePdf") or files.get("pdf") or files.get("file") or ("", b"")
+    if filename or content:
+        text = extract_official_memo_pdf_text(filename, content)
+        payload["sourceText"] = text
+        payload["sourceType"] = "pdf"
+        payload["sourceTitle"] = payload["sourceTitle"] or filename
+        payload["sourceFilename"] = filename
+    else:
+        payload["sourceText"] = fields.get("sourceText") or ""
+    return preview_official_doc_memo_payload(payload, archive, urlopen=urlopen)
+
+
 def official_memo_source_payload(
     payload: dict[str, object],
     *,
@@ -653,16 +688,49 @@ def official_memo_source_payload(
     source_text = str(payload.get("sourceText") or "").strip()
     source_url = str(payload.get("sourceUrl") or "").strip()
     source_title = " ".join(str(payload.get("sourceTitle") or "").split())[:200]
+    source_filename = Path(str(payload.get("sourceFilename") or "")).name[:200]
     if source_text:
         return {
-            "type": "text",
-            "title": source_title or "Pasted official text",
+            "type": _clean_ai_source_type(payload.get("sourceType")) or "text",
+            "title": source_title or source_filename or "Pasted official text",
             "url": source_url,
+            "filename": source_filename,
             "text": source_text[:OFFICIAL_MEMO_MAX_SOURCE_CHARS],
         }
     if source_url:
         return fetch_official_source(source_url, title=source_title, urlopen=urlopen)
     raise AITaskError("ai_task_source_required")
+
+
+def extract_official_memo_pdf_text(filename: str, content: bytes) -> str:
+    if not filename or not content:
+        raise AITaskError("ai_task_pdf_required")
+    if not str(filename).lower().endswith(".pdf"):
+        raise AITaskError("ai_task_pdf_required")
+    if len(content) <= 0 or len(content) > OFFICIAL_MEMO_MAX_PDF_BYTES:
+        raise AITaskError("ai_task_pdf_size_invalid")
+    if not content.startswith(b"%PDF-"):
+        raise AITaskError("ai_task_pdf_signature_invalid")
+    try:
+        from pypdf import PdfReader
+    except ImportError as exc:
+        raise AITaskError("ai_task_pdf_reader_missing") from exc
+    try:
+        reader = PdfReader(io.BytesIO(content))
+        parts = []
+        for page in reader.pages[:50]:
+            parts.append(page.extract_text() or "")
+    except Exception as exc:
+        raise AITaskError("ai_task_pdf_text_empty") from exc
+    text = "\n".join(part.strip() for part in parts if part.strip())
+    if not text.strip():
+        raise AITaskError("ai_task_pdf_text_empty")
+    return text[:OFFICIAL_MEMO_MAX_SOURCE_CHARS]
+
+
+def _clean_ai_source_type(value: object) -> str:
+    source_type = "".join(ch for ch in str(value or "").strip().lower() if ch.isalnum() or ch in {"_", "-"})[:40]
+    return source_type if source_type in {"text", "pdf"} else ""
 
 
 def fetch_official_source(
@@ -2397,8 +2465,8 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/ai-tasks/official-doc-memo/preview":
             try:
                 require_main_access(self.headers)
-                json_response(self, 200, preview_official_doc_memo_payload(json_request(self)))
-            except (ValueError, AITaskError, memos_relay.MemosRelayError) as exc:
+                json_response(self, 200, preview_official_doc_memo_request_payload(self))
+            except (ValueError, AITaskError, DocumentIntakeError, memos_relay.MemosRelayError) as exc:
                 code = exc.code if isinstance(exc, (AITaskError, memos_relay.MemosRelayError)) else str(exc)
                 json_response(self, ai_task_status_for_error(exc), {"ok": False, "error": code})
             except Exception as exc:
