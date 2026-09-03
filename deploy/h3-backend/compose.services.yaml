@@ -182,6 +182,10 @@ services:
       DOCUMENT_TAG_AI_URL: "${DOCUMENT_TAG_AI_URL:-}"
       DOCUMENT_TAG_AI_TOKEN_FILE: "/run/secrets/governor_api_token"
       DOCUMENT_TAG_AI_TIMEOUT_SECONDS: "${DOCUMENT_TAG_AI_TIMEOUT_SECONDS:-20}"
+      AI_TASKS_STATE_PATH: "/data/ai-tasks/archive.json"
+      AI_TASKS_BRAIN_URL: "${AI_TASKS_BRAIN_URL:-}"
+      AI_TASKS_BRAIN_TOKEN_FILE: "/run/secrets/governor_api_token"
+      AI_TASKS_BRAIN_TIMEOUT_SECONDS: "${AI_TASKS_BRAIN_TIMEOUT_SECONDS:-60}"
       FAX_DISCORD_ENABLED: "false"
       FAX_DISCORD_MESSAGE_INTAKE: "false"
       FAX_DISCORD_STATE_PATH: "/data/fax/state.json"
@@ -214,6 +218,7 @@ services:
       - ${GOVERNOR_STATE_ROOT:-/srv/kaosgdd/kaosgovernor}/fax:/data/fax
       - ${GOVERNOR_STATE_ROOT:-/srv/kaosgdd/kaosgovernor}/mail:/data/mail:ro
       - ${GOVERNOR_STATE_ROOT:-/srv/kaosgdd/kaosgovernor}/documents:/data/documents
+      - ${GOVERNOR_STATE_ROOT:-/srv/kaosgdd/kaosgovernor}/ai-tasks:/data/ai-tasks
     entrypoint: ["kaos-governor-api"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8096/health', timeout=3)"]

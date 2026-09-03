@@ -8,6 +8,7 @@ const routes = {
   documents: "Documents",
   fax: "Fax",
   mail: "Mail",
+  "ai-tasks": "AI Tasks",
   "add-event": "Add Event",
   "edit-event": "Edit Event",
   "add-task": "Add Task",
@@ -15,6 +16,7 @@ const routes = {
   "add-supply": "Add Supply",
   "add-memo": "Add Memo",
   "add-document": "Add Document",
+  "add-ai-task": "Add AI Task",
   services: "Utils",
   service: "Service",
   rouny: "Rouny",
@@ -207,6 +209,18 @@ const state = {
     selectedName: "",
     detailLoading: false,
     detailError: "",
+  },
+  aiTasks: {
+    checked: false,
+    loading: false,
+    previewing: false,
+    applying: false,
+    error: "",
+    prompt: "",
+    sourceUrl: "",
+    sourceText: "",
+    preview: null,
+    items: [],
   },
   eventPresetDraft: null,
   addMonthExpanded: false,
@@ -2147,6 +2161,151 @@ async function createMemo(content) {
   return payload;
 }
 
+function normalizeAiTask(item) {
+  const source = item && typeof item === "object" ? item : {};
+  const memo = source.memo && typeof source.memo === "object" ? source.memo : {};
+  const sourceInfo = source.source && typeof source.source === "object" ? source.source : {};
+  return {
+    id: String(source.id || ""),
+    kind: String(source.kind || "official_doc_memo"),
+    status: String(source.status || ""),
+    prompt: String(source.prompt || ""),
+    title: String(memo.title || source.prompt || "AI Task"),
+    createdAt: String(source.createdAt || ""),
+    updatedAt: String(source.updatedAt || ""),
+    sourceTitle: String(sourceInfo.title || memo.sourceTitle || ""),
+    sourceUrl: String(sourceInfo.url || memo.sourceUrl || ""),
+    memo,
+    result: source.result && typeof source.result === "object" ? source.result : {},
+  };
+}
+
+async function loadAiTasks(options = {}) {
+  if (portalProfile() !== "main") return;
+  if (state.aiTasks.loading) return;
+  if (state.aiTasks.checked && !options.force) return;
+  state.aiTasks.loading = true;
+  if (getRoute() === "ai-tasks") render();
+  try {
+    const response = await fetch("/api/ai-tasks?limit=50", {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    state.aiTasks = {
+      ...state.aiTasks,
+      checked: true,
+      loading: false,
+      error: "",
+      items: Array.isArray(payload.items) ? payload.items.map(normalizeAiTask).filter((item) => item.id) : [],
+    };
+  } catch (error) {
+    state.aiTasks = {
+      ...state.aiTasks,
+      checked: true,
+      loading: false,
+      error: error.message || "AI Tasks archive is unavailable",
+      items: [],
+    };
+  }
+  if (getRoute() === "ai-tasks") render();
+}
+
+async function previewOfficialDocMemo(form) {
+  if (state.aiTasks.previewing) return;
+  const formData = new FormData(form);
+  const prompt = String(formData.get("prompt") || "").trim();
+  const sourceUrl = String(formData.get("sourceUrl") || "").trim();
+  const sourceText = String(formData.get("sourceText") || "").trim();
+  state.aiTasks = {
+    ...state.aiTasks,
+    prompt,
+    sourceUrl,
+    sourceText,
+    previewing: true,
+    error: "",
+    preview: null,
+  };
+  render();
+  try {
+    const response = await fetch("/api/ai-tasks/official-doc-memo/preview", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ prompt, sourceUrl, sourceText }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    state.aiTasks = {
+      ...state.aiTasks,
+      previewing: false,
+      preview: {
+        taskId: String(payload.task?.id || ""),
+        memo: payload.memo || {},
+      },
+      checked: false,
+      error: "",
+    };
+    await loadAiTasks({ force: true });
+  } catch (error) {
+    state.aiTasks = {
+      ...state.aiTasks,
+      previewing: false,
+      error: error.message || "AI Task preview failed",
+      preview: null,
+    };
+    render();
+  }
+}
+
+async function saveAiTaskMemo() {
+  if (state.aiTasks.applying) return;
+  const preview = state.aiTasks.preview;
+  const memo = preview?.memo || {};
+  const content = String(memo.content || "").trim();
+  const taskId = String(preview?.taskId || "").trim();
+  if (!content || !taskId) return;
+  if (!window.confirm(`Save this AI draft to Memos?\n\n${String(memo.title || "AI memo")}`)) return;
+  state.aiTasks.applying = true;
+  state.aiTasks.error = "";
+  render();
+  try {
+    const saved = await createMemo(content);
+    const memoName = String(saved.name || saved.memo?.name || "");
+    const response = await fetch(`/api/ai-tasks/${encodeURIComponent(taskId)}/complete`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ confirmed: true, memoName }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    state.aiTasks = {
+      ...state.aiTasks,
+      applying: false,
+      preview: null,
+      prompt: "",
+      sourceUrl: "",
+      sourceText: "",
+      checked: false,
+    };
+    state.memos.checked = false;
+    await loadAiTasks({ force: true });
+  } catch (error) {
+    state.aiTasks = {
+      ...state.aiTasks,
+      applying: false,
+      error: error.message || "Could not save AI memo",
+    };
+    render();
+  }
+}
+
 function memoNameId(name) {
   const raw = String(name || "").trim();
   return raw.startsWith("memos/") ? raw.slice("memos/".length) : raw;
@@ -4074,7 +4233,7 @@ function getRoute() {
   const route = raw.split("?", 1)[0];
   if (!routes[route]) return profileConfig().defaultRoute;
   if (portalProfile() === "family" && route === "services") return profileConfig().defaultRoute;
-  if (portalProfile() === "family" && ["supplies", "documents", "add-document", "fax", "mail"].includes(route)) return profileConfig().defaultRoute;
+  if (portalProfile() === "family" && ["supplies", "documents", "add-document", "fax", "mail", "ai-tasks", "add-ai-task"].includes(route)) return profileConfig().defaultRoute;
   if (portalProfile() === "main" && (route === "rouny" || route === "caregiver" || route === "text-presets" || route === "ledger")) return profileConfig().defaultRoute;
   return route;
 }
@@ -4609,6 +4768,7 @@ function topAddActionForRoute(route) {
   if (selectedRoute === "documents") return "document";
   if (selectedRoute === "fax") return "fax";
   if (selectedRoute === "mail") return "mail";
+  if (selectedRoute === "ai-tasks") return "ai-task";
   return "menu";
 }
 
@@ -4622,6 +4782,7 @@ function topAddMenuItems(route) {
     { action: "document", label: "Document", note: "Later" },
     { action: "fax", label: "Fax", note: "Later" },
     { action: "mail", label: "Mail", note: "Later" },
+    { action: "ai-task", label: "AI Task" },
   ];
   return items.sort((left, right) => {
     if (left.action === currentAction) return -1;
@@ -4737,6 +4898,10 @@ async function runTopAddAction(action) {
   }
   if (action === "document") {
     window.location.hash = "#/add-document";
+    return;
+  }
+  if (action === "ai-task") {
+    window.location.hash = "#/ai-tasks";
     return;
   }
   if (action === "menu") {
@@ -8586,6 +8751,103 @@ function renderLedger() {
   `;
 }
 
+function renderAiTasks() {
+  const aiTasks = state.aiTasks;
+  const rows = aiTasks.items
+    .map((item) => {
+      const date = archiveDateParts(item.createdAt);
+      return `
+        <li class="archiveRecord">
+          <div class="archiveRecordButton">
+            <span class="archiveRecordId">#${escapeHtml(item.id)}</span>
+            <time class="archiveRecordDate" datetime="${escapeHtml(date.raw)}">${escapeHtml(date.label)}</time>
+            <strong class="archiveRecordTitle">${escapeHtml(item.title)}</strong>
+            <span class="archiveRecordStatus ${archiveStatusClass(item.status)}">${escapeHtml(item.status.toUpperCase())}</span>
+          </div>
+        </li>
+      `;
+    })
+    .join("");
+  const preview = aiTasks.preview;
+  const memo = preview?.memo || {};
+  return `
+    <section class="archiveTerminal" data-archive-kind="ai-tasks" aria-label="AI Tasks">
+      <form class="archiveIndex aiTaskComposer" data-ai-task-official-memo>
+        <header class="archiveIndexHeader">
+          <div>
+            <h3>OFFICIAL DOC -&gt; MEMO</h3>
+            <p class="archiveStatusMessage">AI drafts only. Press SAVE MEMO to write into Memos.</p>
+          </div>
+          <button class="archiveAction" type="button" data-ai-tasks-refresh ${aiTasks.loading ? "disabled" : ""}>↻</button>
+        </header>
+        <label class="archiveCommandLine aiTaskPrompt">
+          <span>PROMPT</span>
+          <textarea name="prompt" rows="3" placeholder="예: 26-27절기 국가 인플루엔자 접종 계획 요약해서 메모로" required>${escapeHtml(aiTasks.prompt)}</textarea>
+        </label>
+        <label class="archiveCommandLine">
+          <span>URL</span>
+          <input name="sourceUrl" type="url" inputmode="url" autocomplete="url" placeholder="official source URL" value="${escapeHtml(aiTasks.sourceUrl)}" />
+        </label>
+        <label class="archiveCommandLine aiTaskSourceText">
+          <span>TEXT</span>
+          <textarea name="sourceText" rows="5" placeholder="or paste official source text">${escapeHtml(aiTasks.sourceText)}</textarea>
+        </label>
+        ${
+          aiTasks.error
+            ? `<div class="archiveError" role="alert"><p>${escapeHtml(aiTasks.error)}</p></div>`
+            : ""
+        }
+        <div class="archiveActions">
+          <button class="archiveAction isActive" type="submit" ${aiTasks.previewing ? "disabled" : ""}>${aiTasks.previewing ? "PREVIEWING" : "PREVIEW"}</button>
+          <button class="archiveAction" type="button" data-ai-task-clear>CLEAR</button>
+        </div>
+      </form>
+      ${
+        preview
+          ? `
+            <section class="archiveDetail aiTaskPreview" aria-label="AI memo preview">
+              <header class="archiveDetailHeader">
+                <div>
+                  <p>MEMO PREVIEW</p>
+                  <h3>${escapeHtml(memo.title || "AI memo")}</h3>
+                </div>
+                <button class="archiveAction isActive" type="button" data-ai-task-save-memo ${aiTasks.applying ? "disabled" : ""}>${aiTasks.applying ? "SAVING" : "SAVE MEMO"}</button>
+              </header>
+              <dl class="archiveMetadata">
+                ${archiveMeta("Source", memo.sourceTitle || "")}
+                ${archiveMeta("URL", memo.sourceUrl || "")}
+                ${archiveMeta("Checked", memo.checkedAt || "")}
+              </dl>
+              <div class="archiveOcrRegion" role="region" aria-label="AI memo content" tabindex="0">
+                <p>MEMO TEXT</p>
+                <pre>${escapeHtml(memo.content || "")}</pre>
+              </div>
+            </section>
+          `
+          : ""
+      }
+      <section class="archiveIndex" aria-labelledby="aiTasksArchiveTitle" aria-busy="${aiTasks.loading}">
+        <header class="archiveIndexHeader">
+          <h3 id="aiTasksArchiveTitle">AI TASK ARCHIVE</h3>
+          <p class="archiveStatusMessage" role="status" aria-live="polite">${aiTasks.checked && !aiTasks.error ? `${aiTasks.items.length} TASKS` : aiTasks.loading ? "LOADING AI TASKS" : "AI TASK BOARD STANDBY"}</p>
+        </header>
+        <div class="archiveColumnHeader" aria-hidden="true">
+          <span>NO.</span><span>DATE</span><span>TITLE</span>
+        </div>
+        ${
+          aiTasks.loading && !aiTasks.checked
+            ? `<p class="archiveStatusMessage">Reading AI task archive...</p>`
+            : aiTasks.checked && !rows
+              ? `<p class="archiveStatusMessage">No AI tasks archived yet.</p>`
+              : rows
+                ? `<ol class="archiveRecordList">${rows}</ol>`
+                : ""
+        }
+      </section>
+    </section>
+  `;
+}
+
 function renderMemos() {
   if (portalProfile() === "family") {
     return `
@@ -9926,6 +10188,7 @@ function render() {
   else if (route === "add-document") view.innerHTML = renderAddDocument();
   else if (route === "fax") view.innerHTML = renderFax();
   else if (route === "mail") view.innerHTML = renderMail();
+  else if (route === "ai-tasks") view.innerHTML = renderAiTasks();
   else if (route === "rouny") view.innerHTML = renderRouny();
   else if (route === "memos") view.innerHTML = renderMemos();
   else if (route === "add-memo") view.innerHTML = renderAddMemo();
@@ -9958,6 +10221,7 @@ function render() {
     if (state.mail.mode === "unread") loadUnreadMail();
     else loadMail();
   }
+  if (route === "ai-tasks") loadAiTasks();
   if (route === "text-presets") loadFamilyTextPresets();
   if (route === "ledger") loadLedger();
   if (route === "add-memo") {
@@ -11339,6 +11603,39 @@ document.addEventListener("submit", async (event) => {
       };
       render();
     }
+    return;
+  }
+
+  const aiTaskOfficialMemoForm = event.target.closest("[data-ai-task-official-memo]");
+  if (aiTaskOfficialMemoForm) {
+    event.preventDefault();
+    await previewOfficialDocMemo(aiTaskOfficialMemoForm);
+    return;
+  }
+
+  if (event.target.closest("[data-ai-task-save-memo]")) {
+    event.preventDefault();
+    await saveAiTaskMemo();
+    return;
+  }
+
+  if (event.target.closest("[data-ai-task-clear]")) {
+    event.preventDefault();
+    state.aiTasks = {
+      ...state.aiTasks,
+      prompt: "",
+      sourceUrl: "",
+      sourceText: "",
+      preview: null,
+      error: "",
+    };
+    render();
+    return;
+  }
+
+  if (event.target.closest("[data-ai-tasks-refresh]")) {
+    event.preventDefault();
+    await loadAiTasks({ force: true });
     return;
   }
 

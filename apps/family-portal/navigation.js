@@ -12,6 +12,7 @@
     Object.freeze({ route: "documents", label: "Documents" }),
     Object.freeze({ route: "fax", label: "Fax" }),
     Object.freeze({ route: "mail", label: "Mail" }),
+    Object.freeze({ route: "ai-tasks", label: "AI Tasks" }),
     Object.freeze({ route: "services", label: "Utils" }),
     Object.freeze({ route: "settings", label: "Settings" }),
   ]);
@@ -25,6 +26,7 @@
     "add-supply": "supplies",
     "add-memo": "memos",
     "add-document": "documents",
+    "add-ai-task": "ai-tasks",
     service: "services",
   });
 

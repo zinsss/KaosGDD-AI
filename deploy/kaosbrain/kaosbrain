@@ -204,6 +204,11 @@ preflight() {
     document_tag_token_path=$(host_secret_path "${KAOSBRAIN_DOCUMENT_TAG_API_TOKEN_FILE}")
     [[ -s "${document_tag_token_path}" ]] || die "missing or empty KaosBrain document tag token file: ${document_tag_token_path}"
   fi
+  if [[ -z "${KAOSBRAIN_AI_TASK_API_TOKEN:-}" && -n "${KAOSBRAIN_AI_TASK_API_TOKEN_FILE:-}" ]]; then
+    local ai_task_token_path
+    ai_task_token_path=$(host_secret_path "${KAOSBRAIN_AI_TASK_API_TOKEN_FILE}")
+    [[ -s "${ai_task_token_path}" ]] || die "missing or empty KaosBrain AI task token file: ${ai_task_token_path}"
+  fi
   if [[ "${KAOSBRAIN_IMAGING_ENABLED:-false}" == "true" ]]; then
     case "${KAOSBRAIN_IMAGING_PROVIDER:-ollama}" in
       ollama|kaosai|kaosbrain-openai) ;;

@@ -25,6 +25,9 @@ class KaosAIPlanner(Protocol):
     async def suggest_document_tags(self, context: Mapping[str, Any]) -> tuple[str, ...]:
         """Return existing Paperless tag names suggested for a document."""
 
+    async def preview_official_memo(self, request: Mapping[str, Any]) -> dict[str, Any]:
+        """Return a preview-only Memos draft for an official document/source."""
+
     async def second_look(self, request: Mapping[str, Any]) -> dict[str, Any]:
         """Return a temporary medical image second-look result."""
 
@@ -48,6 +51,9 @@ class DisabledKaosAIPlanner:
 
     async def suggest_document_tags(self, context: Mapping[str, Any]) -> tuple[str, ...]:
         return ()
+
+    async def preview_official_memo(self, request: Mapping[str, Any]) -> dict[str, Any]:
+        raise KaosAIError("kaosai_disabled")
 
     async def second_look(self, request: Mapping[str, Any]) -> dict[str, Any]:
         raise KaosAIError("kaosai_disabled")
@@ -74,6 +80,12 @@ class OpenClawKaosAIPlanner:
             return ()
         raw = await self._complete_message(f"{KAOSAI_DOCUMENT_TAG_SYSTEM_PROMPT}\n\n{_render_document_tag_request(context)}")
         return merge_document_tag_suggestions(document_tag_rule_suggestions(context), parse_document_tag_response(raw, context))
+
+    async def preview_official_memo(self, request: Mapping[str, Any]) -> dict[str, Any]:
+        if not self.config.enabled:
+            raise KaosAIError("kaosai_disabled")
+        raw = await self._complete_message(f"{KAOSAI_OFFICIAL_MEMO_SYSTEM_PROMPT}\n\n{_render_official_memo_request(request)}")
+        return parse_official_memo_response(raw, request)
 
     async def second_look(self, request: Mapping[str, Any]) -> dict[str, Any]:
         if not self.config.enabled:
@@ -197,6 +209,21 @@ Rules:
 - If the text is unclear, still return the safest preview; KaosGDD will show it for confirmation before any save."""
 
 
+KAOSAI_OFFICIAL_MEMO_SYSTEM_PROMPT = """You are KaosBrain-OpenAI helping KaosGDD turn an official source into a Memos-ready summary.
+Return exactly one JSON object and no markdown wrapper.
+Allowed schema:
+{"title":"...","content":"...","sourceTitle":"...","sourceUrl":"...","checkedAt":"YYYY-MM-DD"}
+
+Rules:
+- This is preview only. Do not write, save, call tools, or claim anything was created.
+- Use Korean unless the source/request is clearly English.
+- Summarize only facts supported by sourceText. If the source does not state something, say so plainly.
+- Prefer a practical memo format: short overview, key points, dates/eligibility/actions, and source/check date.
+- Keep the title natural and concise.
+- Put the source URL and checked date in the memo content when available.
+- Do not invent official policies, prices, dates, contacts, or links."""
+
+
 KAOSAI_SECOND_LOOK_SYSTEM_PROMPT = """You are KaosBrain-OpenAI providing a temporary medical image second-look checklist.
 Return exactly one JSON object and no markdown.
 Do not diagnose, do not claim certainty, and do not provide a final report.
@@ -295,6 +322,37 @@ def parse_calendar_preview_response(raw: str, request: Mapping[str, Any]) -> lis
         if len(events) >= 12:
             break
     return events
+
+
+def parse_official_memo_response(raw: str, request: Mapping[str, Any]) -> dict[str, Any]:
+    text = raw.strip()
+    if text.startswith("```"):
+        text = _strip_fence(text)
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise KaosAIError("invalid_official_memo_json") from exc
+    if not isinstance(payload, Mapping):
+        raise KaosAIError("official_memo_response_must_be_object")
+    title = " ".join(str(payload.get("title") or "").split())
+    content = str(payload.get("content") or "").strip()
+    if not title:
+        raise KaosAIError("official_memo_title_required")
+    if not content:
+        raise KaosAIError("official_memo_content_required")
+    source = request.get("source") if isinstance(request.get("source"), Mapping) else {}
+    source_title = " ".join(str(payload.get("sourceTitle") or source.get("title") or "").split())[:200]
+    source_url = str(payload.get("sourceUrl") or source.get("url") or "").strip()[:500]
+    checked_at = str(payload.get("checkedAt") or request.get("checkedAt") or "").strip()[:40]
+    if not content.lstrip().startswith("#"):
+        content = f"# {title}\n\n{content}"
+    return {
+        "title": title[:160],
+        "content": content[:7900],
+        "sourceTitle": source_title,
+        "sourceUrl": source_url,
+        "checkedAt": checked_at,
+    }
 
 
 def document_tag_rule_suggestions(context: Mapping[str, Any]) -> tuple[str, ...]:
@@ -589,6 +647,24 @@ def _render_calendar_preview_request(request: Mapping[str, Any]) -> str:
             "date": str(request.get("date") or ""),
             "profile": str(request.get("profile") or "family"),
             "grammarEvents": grammar_events if isinstance(grammar_events, list) else [],
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+
+
+def _render_official_memo_request(request: Mapping[str, Any]) -> str:
+    source = request.get("source") if isinstance(request.get("source"), Mapping) else {}
+    return json.dumps(
+        {
+            "prompt": str(request.get("prompt") or "")[:1200],
+            "checkedAt": str(request.get("checkedAt") or ""),
+            "source": {
+                "type": str(source.get("type") or ""),
+                "title": str(source.get("title") or "")[:200],
+                "url": str(source.get("url") or "")[:500],
+                "text": str(source.get("text") or "")[:20000],
+            },
         },
         ensure_ascii=False,
         sort_keys=True,

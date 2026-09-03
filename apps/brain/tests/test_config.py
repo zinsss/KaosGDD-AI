@@ -35,6 +35,7 @@ class SettingsTests(unittest.TestCase):
         self.assertFalse(settings.imaging_enabled)
         self.assertEqual(settings.calendar_preview_api_token, "")
         self.assertEqual(settings.document_tag_api_token, "")
+        self.assertEqual(settings.ai_task_api_token, "")
         self.assertFalse(settings.kaosai_reauth_enabled)
         self.assertEqual(settings.active_control_repost_seconds, 7200)
         self.assertEqual(settings.active_control_quiet_start_hour, 0)

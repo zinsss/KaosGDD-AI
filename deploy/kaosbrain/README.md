@@ -131,6 +131,18 @@ KAOSBRAIN_DOCUMENT_TAG_API_TOKEN_FILE=/run/secrets/governor_api_token
 The Brain route returns suggested existing tag names only. The PWA still
 requires metadata `PREVIEW` and confirmed `APPLY` before Paperless is updated.
 
+For AI Tasks such as official-source summaries into Memos, Governor calls
+KaosBrain on H4:
+
+```text
+AI_TASKS_BRAIN_URL=http://<kaosbrain-tailscale-ip>:8099/internal/ai-tasks/official-doc-memo/preview
+KAOSBRAIN_AI_TASK_API_TOKEN_FILE=/run/secrets/governor_api_token
+```
+
+The Brain route returns a memo draft only. The PWA still requires `SAVE MEMO`
+before anything is written to Memos, then Governor marks the AI Task archived
+record as applied.
+
 Use the deploy helper to switch KaosBrain-OpenAI modes without hand-editing the
 env file:
 

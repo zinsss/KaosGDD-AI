@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import socket
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -15,8 +16,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import uuid
 import hashlib
+import ipaddress
+from html.parser import HTMLParser
 
 from kaos_governor import ledger
+from kaos_governor.ai_tasks import AITaskArchive, AITaskError
 from kaos_governor.calendar import GeneratedCalendarSettings
 from kaos_governor.database import connect, database_status, wait_for_database_and_migrate
 from kaos_governor.documents import (
@@ -45,6 +49,12 @@ DOCUMENT_TAG_AI_URL = os.environ.get("DOCUMENT_TAG_AI_URL", "").strip()
 DOCUMENT_TAG_AI_TOKEN = os.environ.get("DOCUMENT_TAG_AI_TOKEN", "").strip()
 DOCUMENT_TAG_AI_TOKEN_FILE = os.environ.get("DOCUMENT_TAG_AI_TOKEN_FILE", "").strip()
 DOCUMENT_TAG_AI_TIMEOUT_SECONDS = float(os.environ.get("DOCUMENT_TAG_AI_TIMEOUT_SECONDS", "20") or "20")
+AI_TASKS_BRAIN_URL = os.environ.get("AI_TASKS_BRAIN_URL", "").strip()
+AI_TASKS_BRAIN_TOKEN = os.environ.get("AI_TASKS_BRAIN_TOKEN", "").strip()
+AI_TASKS_BRAIN_TOKEN_FILE = os.environ.get("AI_TASKS_BRAIN_TOKEN_FILE", "").strip()
+AI_TASKS_BRAIN_TIMEOUT_SECONDS = float(os.environ.get("AI_TASKS_BRAIN_TIMEOUT_SECONDS", "60") or "60")
+OFFICIAL_MEMO_FETCH_TIMEOUT_SECONDS = float(os.environ.get("OFFICIAL_MEMO_FETCH_TIMEOUT_SECONDS", "15") or "15")
+OFFICIAL_MEMO_MAX_SOURCE_CHARS = int(os.environ.get("OFFICIAL_MEMO_MAX_SOURCE_CHARS", "20000") or "20000")
 WEATHER_LOCATIONS = {
     "pohang": "포항",
     "daegu": "대구",
@@ -469,6 +479,11 @@ def document_intake_store() -> DocumentIntakeStore:
     return DocumentIntakeStore(Path(os.environ.get("DOCUMENT_INTAKE_STATE_PATH", "/data/documents/intake.json")))
 
 
+@lru_cache(maxsize=1)
+def ai_task_archive() -> AITaskArchive:
+    return AITaskArchive(Path(os.environ.get("AI_TASKS_STATE_PATH", "/data/ai-tasks/archive.json")))
+
+
 def paperless_status_for_error(exc: Exception) -> int:
     if isinstance(exc, memos_relay.MemosRelayError):
         return exc.status
@@ -494,6 +509,283 @@ def paperless_status_for_error(exc: Exception) -> int:
     }:
         return 400
     return 503
+
+
+class OfficialSourceTextParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.parts: list[str] = []
+        self.title_parts: list[str] = []
+        self.skip_depth = 0
+        self.in_title = False
+
+    def handle_starttag(self, tag: str, attrs) -> None:  # type: ignore[no-untyped-def]
+        normalized = tag.lower()
+        if normalized in {"script", "style", "noscript", "svg"}:
+            self.skip_depth += 1
+        if normalized == "title":
+            self.in_title = True
+        if normalized in {"p", "div", "section", "article", "li", "tr", "br", "h1", "h2", "h3"}:
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        normalized = tag.lower()
+        if normalized in {"script", "style", "noscript", "svg"} and self.skip_depth:
+            self.skip_depth -= 1
+        if normalized == "title":
+            self.in_title = False
+        if normalized in {"p", "div", "section", "article", "li", "tr", "h1", "h2", "h3"}:
+            self.parts.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        text = " ".join(str(data or "").split())
+        if not text:
+            return
+        if self.in_title:
+            self.title_parts.append(text)
+        if not self.skip_depth:
+            self.parts.append(text)
+
+    @property
+    def title(self) -> str:
+        return " ".join(" ".join(self.title_parts).split())[:200]
+
+    @property
+    def text(self) -> str:
+        return "\n".join(line.strip() for line in " ".join(self.parts).splitlines() if line.strip())
+
+
+def ai_task_status_for_error(exc: Exception) -> int:
+    if isinstance(exc, memos_relay.MemosRelayError):
+        return exc.status
+    code = exc.code if isinstance(exc, AITaskError) else str(exc)
+    if code in {"main_profile_required", "ai_task_not_found"}:
+        return 404
+    if code in {
+        "invalid_body_length",
+        "invalid_json_payload",
+        "ai_task_prompt_required",
+        "ai_task_source_required",
+        "ai_task_source_url_invalid",
+        "ai_task_source_url_blocked",
+        "ai_task_source_unsupported_content_type",
+        "ai_task_source_empty",
+        "ai_task_confirmation_required",
+        "ai_task_limit_invalid",
+    }:
+        return 400
+    return 503
+
+
+def ai_task_brain_token() -> str:
+    if AI_TASKS_BRAIN_TOKEN:
+        return AI_TASKS_BRAIN_TOKEN
+    if AI_TASKS_BRAIN_TOKEN_FILE:
+        try:
+            return Path(AI_TASKS_BRAIN_TOKEN_FILE).read_text(encoding="utf-8").strip()
+        except OSError:
+            return ""
+    return secret_value("AI_TASKS_BRAIN_TOKEN")
+
+
+def list_ai_tasks_payload(
+    query_string: str = "",
+    archive: AITaskArchive | None = None,
+) -> dict[str, object]:
+    active_archive = archive or ai_task_archive()
+    params = urllib.parse.parse_qs(query_string, keep_blank_values=True)
+    try:
+        limit = int((params.get("limit") or ["50"])[0])
+    except (TypeError, ValueError) as exc:
+        raise AITaskError("ai_task_limit_invalid") from exc
+    items = [record.as_dict() for record in active_archive.list_records(limit=limit)]
+    return {"ok": True, "items": items, "totalCount": len(items)}
+
+
+def ai_task_complete_id(path: str) -> str:
+    match = re.fullmatch(r"/api/ai-tasks/([^/]+)/complete", path)
+    return urllib.parse.unquote(match.group(1)) if match else ""
+
+
+def complete_ai_task_payload(
+    task_id: str,
+    payload: dict[str, object],
+    archive: AITaskArchive | None = None,
+) -> dict[str, object]:
+    if payload.get("confirmed") is not True:
+        raise AITaskError("ai_task_confirmation_required")
+    active_archive = archive or ai_task_archive()
+    record = active_archive.complete(task_id, memo_name=str(payload.get("memoName") or ""))
+    return {"ok": True, "applied": True, "task": record.as_dict()}
+
+
+def preview_official_doc_memo_payload(
+    payload: dict[str, object],
+    archive: AITaskArchive | None = None,
+    *,
+    urlopen=urllib.request.urlopen,
+) -> dict[str, object]:
+    prompt = " ".join(str(payload.get("prompt") or "").split())
+    if not prompt:
+        raise AITaskError("ai_task_prompt_required")
+    source = official_memo_source_payload(payload, urlopen=urlopen)
+    request = {
+        "prompt": prompt,
+        "checkedAt": datetime.now(UTC).date().isoformat(),
+        "source": source,
+    }
+    memo = call_ai_task_brain(request, urlopen=urlopen)
+    record = (archive or ai_task_archive()).add_preview(
+        kind="official_doc_memo",
+        prompt=prompt,
+        source={key: value for key, value in source.items() if key != "text"},
+        memo=memo,
+    )
+    return {"ok": True, "task": record.as_dict(), "memo": memo}
+
+
+def official_memo_source_payload(
+    payload: dict[str, object],
+    *,
+    urlopen=urllib.request.urlopen,
+) -> dict[str, object]:
+    source_text = str(payload.get("sourceText") or "").strip()
+    source_url = str(payload.get("sourceUrl") or "").strip()
+    source_title = " ".join(str(payload.get("sourceTitle") or "").split())[:200]
+    if source_text:
+        return {
+            "type": "text",
+            "title": source_title or "Pasted official text",
+            "url": source_url,
+            "text": source_text[:OFFICIAL_MEMO_MAX_SOURCE_CHARS],
+        }
+    if source_url:
+        return fetch_official_source(source_url, title=source_title, urlopen=urlopen)
+    raise AITaskError("ai_task_source_required")
+
+
+def fetch_official_source(
+    source_url: str,
+    *,
+    title: str = "",
+    urlopen=urllib.request.urlopen,
+) -> dict[str, object]:
+    parsed = urllib.parse.urlsplit(source_url)
+    if parsed.scheme not in {"https", "http"} or not parsed.hostname:
+        raise AITaskError("ai_task_source_url_invalid")
+    host = parsed.hostname.lower().rstrip(".")
+    if _blocked_fetch_host(host):
+        raise AITaskError("ai_task_source_url_blocked")
+    request = urllib.request.Request(
+        urllib.parse.urlunsplit(parsed),
+        headers={
+            "Accept": "text/html, text/plain;q=0.9, application/json;q=0.8",
+            "User-Agent": "KaosGovernor/ai-tasks",
+        },
+    )
+    try:
+        with urlopen(request, timeout=OFFICIAL_MEMO_FETCH_TIMEOUT_SECONDS) as response:
+            content_type = response.headers.get("Content-Type", "")
+            raw = response.read(1_000_000)
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise AITaskError("ai_task_source_fetch_failed") from exc
+    lower_type = content_type.lower()
+    if lower_type and not any(kind in lower_type for kind in ("text/html", "text/plain", "application/json")):
+        raise AITaskError("ai_task_source_unsupported_content_type")
+    text = raw.decode("utf-8", errors="replace")
+    if "html" in lower_type or "<html" in text[:500].lower():
+        parser = OfficialSourceTextParser()
+        parser.feed(text)
+        text = parser.text
+        title = title or parser.title
+    else:
+        text = "\n".join(line.strip() for line in text.splitlines() if line.strip())
+    if not text.strip():
+        raise AITaskError("ai_task_source_empty")
+    return {
+        "type": "url",
+        "title": title or host,
+        "url": urllib.parse.urlunsplit(parsed),
+        "host": host,
+        "text": text[:OFFICIAL_MEMO_MAX_SOURCE_CHARS],
+    }
+
+
+def _blocked_fetch_host(host: str) -> bool:
+    if host in {"localhost"} or host.endswith(".local"):
+        return True
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        try:
+            resolved = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
+        except socket.gaierror:
+            return False
+        for item in resolved:
+            try:
+                address = ipaddress.ip_address(item[4][0])
+            except ValueError:
+                return True
+            if address.is_private or address.is_loopback or address.is_link_local or address.is_reserved:
+                return True
+        return False
+    return address.is_private or address.is_loopback or address.is_link_local or address.is_reserved
+
+
+def call_ai_task_brain(
+    request_payload: dict[str, object],
+    *,
+    urlopen=urllib.request.urlopen,
+) -> dict[str, object]:
+    if not AI_TASKS_BRAIN_URL:
+        raise AITaskError("ai_task_brain_not_configured")
+    token = ai_task_brain_token()
+    if not token:
+        raise AITaskError("ai_task_brain_token_missing")
+    request = urllib.request.Request(
+        AI_TASKS_BRAIN_URL,
+        data=json.dumps(request_payload, ensure_ascii=False).encode("utf-8"),
+        method="POST",
+        headers={
+            "Accept": "application/json",
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "User-Agent": "KaosGovernor/ai-tasks",
+        },
+    )
+    try:
+        with urlopen(request, timeout=AI_TASKS_BRAIN_TIMEOUT_SECONDS) as response:
+            raw = response.read()
+    except urllib.error.HTTPError as exc:
+        try:
+            body = json.loads(exc.read().decode("utf-8"))
+            code = str(body.get("error") or f"ai_task_brain_http_{exc.code}")
+        except Exception:
+            code = f"ai_task_brain_http_{exc.code}"
+        raise AITaskError(code) from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise AITaskError("ai_task_brain_request_failed") from exc
+    try:
+        body = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise AITaskError("ai_task_brain_invalid_json") from exc
+    if not isinstance(body, dict) or body.get("ok") is not True:
+        error = str(body.get("error") or "ai_task_brain_failed") if isinstance(body, dict) else "ai_task_brain_invalid_response"
+        raise AITaskError(error)
+    memo = body.get("memo")
+    if not isinstance(memo, dict):
+        raise AITaskError("ai_task_brain_missing_memo")
+    title = " ".join(str(memo.get("title") or "").split())
+    content = str(memo.get("content") or "").strip()
+    if not title or not content:
+        raise AITaskError("ai_task_brain_invalid_memo")
+    return {
+        "title": title[:160],
+        "content": content[:7900],
+        "sourceTitle": " ".join(str(memo.get("sourceTitle") or "").split())[:200],
+        "sourceUrl": str(memo.get("sourceUrl") or "").strip()[:500],
+        "checkedAt": str(memo.get("checkedAt") or request_payload.get("checkedAt") or "").strip()[:40],
+    }
 
 
 def _paperless_query_int(params: dict[str, list[str]], name: str, default: int) -> int:
@@ -1834,6 +2126,17 @@ class Handler(BaseHTTPRequestHandler):
                 print(f"Supplies presets failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "supplies_unavailable"})
             return
+        if parsed.path == "/api/ai-tasks":
+            try:
+                require_main_access(self.headers)
+                json_response(self, 200, list_ai_tasks_payload(parsed.query))
+            except (ValueError, AITaskError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, (AITaskError, memos_relay.MemosRelayError)) else str(exc)
+                json_response(self, ai_task_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"AI task archive browse failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "ai_task_archive_unavailable"})
+            return
         if parsed.path == "/api/mail/messages":
             try:
                 require_main_access(self.headers)
@@ -2086,6 +2389,29 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 print(f"Paperless upload failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "paperless_upload_failed"})
+            return
+        if parsed.path == "/api/ai-tasks/official-doc-memo/preview":
+            try:
+                require_main_access(self.headers)
+                json_response(self, 200, preview_official_doc_memo_payload(json_request(self)))
+            except (ValueError, AITaskError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, (AITaskError, memos_relay.MemosRelayError)) else str(exc)
+                json_response(self, ai_task_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Official memo AI task preview failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "ai_task_preview_failed"})
+            return
+        completed_ai_task_id = ai_task_complete_id(parsed.path)
+        if completed_ai_task_id:
+            try:
+                require_main_access(self.headers)
+                json_response(self, 200, complete_ai_task_payload(completed_ai_task_id, json_request(self)))
+            except (ValueError, AITaskError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, (AITaskError, memos_relay.MemosRelayError)) else str(exc)
+                json_response(self, ai_task_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"AI task completion failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "ai_task_complete_failed"})
             return
         paperless_tag_suggestion_id = paperless_tag_suggestion_path(parsed.path)
         if paperless_tag_suggestion_id:
