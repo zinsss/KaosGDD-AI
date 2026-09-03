@@ -189,7 +189,6 @@ window.KAOS_TRANSLATIONS = {
     "event.addModeAria": "일정 추가 방식",
     "event.smart": "스마트 입력",
     "event.smartLabel": "스마트 입력",
-    "event.smartTextboxLabel": "그냥 쓰기",
     "event.smartPlaceholder": "연차/10:30 3교시 참관수업 / 2:30 스파예가",
     "event.smartHelp": "지금은 미리보기만 됩니다. 다음 단계에서 AI 분석과 저장을 연결합니다.",
     "event.smartPreview": "미리보기",
