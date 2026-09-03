@@ -14,6 +14,12 @@ test("main PWA exposes AI Tasks as a first-class read/confirm workflow", () => {
 });
 
 test("AI Tasks official document memo flow previews before saving to Memos", () => {
+  assert.match(appSource, /data-ai-task-mode="web"/);
+  assert.match(appSource, /data-ai-task-mode="official_doc_memo"/);
+  assert.match(appSource, /data-ai-task-web/);
+  assert.match(appSource, /\/api\/ai-tasks\/web\/preview/);
+  assert.match(appSource, /AI TASK RESULT/);
+  assert.match(appSource, /data-ai-task-copy/);
   assert.match(appSource, /data-ai-task-official-memo/);
   assert.match(appSource, /\/api\/ai-tasks\/official-doc-memo\/preview/);
   assert.match(appSource, /name="sourcePdf" type="file" accept="application\/pdf,\.pdf"/);
@@ -26,6 +32,8 @@ test("AI Tasks official document memo flow previews before saving to Memos", () 
 
 test("AI Tasks preview errors use actionable messages", () => {
   assert.match(appSource, /function aiTaskErrorMessage\(code\)/);
+  assert.match(appSource, /kaosbrain_web_search_not_configured: "KaosBrain web search is not configured with an OpenAI API key\."/);
+  assert.match(appSource, /web_task_openai_rate_limited: "OpenAI web search is rate-limited right now\."/);
   assert.match(appSource, /ai_task_archive_write_failed: "AI draft was made, but Governor could not write the AI Task archive\."/);
   assert.match(appSource, /ai_task_source_fetch_failed: "Could not fetch the source URL\. Try a specific article page or paste the source text\."/);
   assert.match(appSource, /ai_task_source_not_found: "The source page says it does not exist\. Try a specific article page or paste the text\."/);

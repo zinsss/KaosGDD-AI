@@ -10,6 +10,7 @@ from .config import Settings
 from .document_tags import BrainDocumentTagServer
 from .imaging import BrainImagingServer
 from .official_memos import BrainOfficialMemoServer
+from .web_tasks import BrainWebTaskServer
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,7 @@ class BrainHealthServer:
         app.router.add_post("/internal/calendar/smart-events/preview", BrainCalendarPreviewServer(self.settings).preview)
         app.router.add_post("/internal/documents/tag-suggestions/preview", BrainDocumentTagServer(self.settings).suggest)
         app.router.add_post("/internal/ai-tasks/official-doc-memo/preview", BrainOfficialMemoServer(self.settings).preview)
+        app.router.add_post("/internal/ai-tasks/web/preview", BrainWebTaskServer(self.settings).preview)
         app.router.add_post("/imaging/second-look", BrainImagingServer(self.settings).second_look)
         runner = web.AppRunner(app)
         await runner.setup()

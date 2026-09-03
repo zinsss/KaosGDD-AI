@@ -47,6 +47,25 @@ def fake_brain_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
     )
 
 
+def fake_web_brain_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
+    assert request.full_url == "http://brain.internal:8099/internal/ai-tasks/web/preview"
+    assert request.headers["Authorization"] == "Bearer secret"
+    body = json.loads(request.data.decode("utf-8"))
+    assert body["prompt"] == "공식 자료 찾아서 요약"
+    return FakeHTTPResponse(
+        {
+            "ok": True,
+            "result": {
+                "title": "공식 자료 요약",
+                "content": "요약 결과",
+                "sources": [{"title": "KDCA", "url": "https://www.kdca.go.kr/example"}],
+                "checkedAt": body["checkedAt"],
+                "model": "gpt-5.6",
+            },
+        }
+    )
+
+
 class GovernorAITaskTests(unittest.TestCase):
     def test_archive_write_errors_are_reported_as_ai_task_errors(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -118,6 +137,28 @@ class GovernorAITaskTests(unittest.TestCase):
             record = archive.list_records()[0]
             self.assertEqual(record.source["type"], "pdf")
             self.assertEqual(record.source["filename"], "notice.pdf")
+
+    def test_preview_web_ai_task_archives_result_without_memos_write(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            archive = AITaskArchive(Path(temporary_directory) / "ai-tasks.json")
+            with (
+                patch.object(api, "AI_TASKS_BRAIN_URL", "http://brain.internal:8099/internal/ai-tasks/official-doc-memo/preview"),
+                patch.object(api, "AI_TASKS_WEB_BRAIN_URL", ""),
+                patch.object(api, "AI_TASKS_BRAIN_TOKEN", "secret"),
+            ):
+                payload = api.preview_web_ai_task_payload(
+                    {"prompt": "공식 자료 찾아서 요약"},
+                    archive,
+                    urlopen=fake_web_brain_urlopen,
+                )
+
+            self.assertTrue(payload["ok"])
+            self.assertEqual(payload["result"]["title"], "공식 자료 요약")  # type: ignore[index]
+            records = archive.list_records()
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0].kind, "web")
+            self.assertEqual(records[0].status, "previewed")
+            self.assertEqual(records[0].source["type"], "web_search")
 
     def test_complete_marks_archived_task_applied(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

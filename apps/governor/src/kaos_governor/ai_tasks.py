@@ -81,6 +81,36 @@ class AITaskArchive:
         self._write(records)
         return record
 
+    def add_result(
+        self,
+        *,
+        kind: str,
+        prompt: str,
+        source: Mapping[str, object],
+        result: Mapping[str, object],
+        provider: str = "kaosbrain-openai",
+    ) -> AITaskRecord:
+        now = _now()
+        title = _clean_text(result.get("title"), 160) or _clean_text(prompt, 160) or "AI Task"
+        content = str(result.get("content") or "").strip()
+        record = AITaskRecord(
+            task_id=f"ait-{now.replace('-', '').replace(':', '').replace('Z', '')}-{secrets.token_hex(3)}",
+            kind=_clean_token(kind) or "web",
+            status="previewed",
+            prompt=_clean_text(prompt, 1200),
+            source={str(key): value for key, value in source.items()},
+            memo={"title": title, "content": content},
+            provider=_clean_text(provider, 80),
+            created_at=now,
+            updated_at=now,
+            result={str(key): value for key, value in result.items()},
+            error="",
+        )
+        records = [item for item in self._read() if item.task_id != record.task_id]
+        records.append(record)
+        self._write(records)
+        return record
+
     def complete(self, task_id: str, *, memo_name: str = "") -> AITaskRecord:
         normalized_id = str(task_id or "").strip()
         if not normalized_id:

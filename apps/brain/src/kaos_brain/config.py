@@ -141,6 +141,9 @@ class Settings:
     calendar_preview_api_token: str
     document_tag_api_token: str
     ai_task_api_token: str
+    openai_api_key: str
+    web_task_model: str
+    web_task_timeout_seconds: int
     memos_public_url: str
     paperless_public_url: str
     health_enabled: bool
@@ -288,6 +291,12 @@ class Settings:
             calendar_preview_api_token=_secret(source, "KAOSBRAIN_CALENDAR_PREVIEW_API_TOKEN"),
             document_tag_api_token=_secret(source, "KAOSBRAIN_DOCUMENT_TAG_API_TOKEN"),
             ai_task_api_token=_secret(source, "KAOSBRAIN_AI_TASK_API_TOKEN"),
+            openai_api_key=_secret(source, "KAOSBRAIN_OPENAI_API_KEY") or _secret(source, "OPENAI_API_KEY"),
+            web_task_model=source.get("KAOSBRAIN_WEB_TASK_MODEL", "gpt-5.6").strip() or "gpt-5.6",
+            web_task_timeout_seconds=_positive_int(
+                source.get("KAOSBRAIN_WEB_TASK_TIMEOUT_SECONDS", "90"),
+                "KAOSBRAIN_WEB_TASK_TIMEOUT_SECONDS",
+            ),
             memos_public_url=source.get("KAOSBRAIN_MEMOS_PUBLIC_URL", "").strip().rstrip("/"),
             paperless_public_url=source.get("KAOSBRAIN_PAPERLESS_PUBLIC_URL", "").strip().rstrip("/"),
             health_enabled=_boolean(source, "KAOSBRAIN_HEALTH_ENABLED"),

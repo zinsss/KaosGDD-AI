@@ -143,6 +143,20 @@ The Brain route returns a memo draft only. The PWA still requires `SAVE MEMO`
 before anything is written to Memos, then Governor marks the AI Task archived
 record as applied.
 
+For general AI Tasks with web search, Governor calls:
+
+```text
+AI_TASKS_WEB_BRAIN_URL=http://<kaosbrain-tailscale-ip>:8099/internal/ai-tasks/web/preview
+KAOSBRAIN_OPENAI_API_KEY_FILE=/run/secrets/openai_api_key
+KAOSBRAIN_WEB_TASK_MODEL=gpt-5.6
+```
+
+If `AI_TASKS_WEB_BRAIN_URL` is blank and `AI_TASKS_BRAIN_URL` points at the
+official-doc memo route above, Governor derives `/internal/ai-tasks/web/preview`
+automatically. Web AI Tasks are read-only: KaosBrain returns an archived result
+with sources, and the PWA offers optional copy/save-to-Memos actions only after
+the preview exists.
+
 Use the deploy helper to switch KaosBrain-OpenAI modes without hand-editing the
 env file:
 

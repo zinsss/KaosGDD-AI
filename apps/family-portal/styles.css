@@ -6826,6 +6826,37 @@ h3 {
   gap: 12px;
 }
 
+.app[data-profile="main"] .archiveTabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.app[data-profile="main"] .archiveTab {
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid var(--archive-line);
+  border-radius: 0;
+  background: rgba(67, 76, 94, 0.34);
+  color: var(--archive-text);
+  padding: 0 12px;
+  font: 850 0.86rem/1 "Sarasa Gothic Mono", ui-monospace, monospace;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.app[data-profile="main"] .archiveTab.isActive {
+  border-color: var(--main-tab-active-border);
+  background: var(--main-tab-active-bg);
+  color: var(--main-tab-active-text);
+}
+
+.app[data-profile="main"] .archiveTab:hover,
+.app[data-profile="main"] .archiveTab:focus-visible {
+  color: var(--archive-amber);
+  font-weight: 950;
+}
+
 .app[data-profile="main"] .aiTaskPrompt,
 .app[data-profile="main"] .aiTaskSourceText {
   align-items: start;
@@ -6834,6 +6865,29 @@ h3 {
 .app[data-profile="main"] .aiTaskPreview {
   display: grid;
   gap: 12px;
+}
+
+.app[data-profile="main"] .aiTaskSources {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.app[data-profile="main"] .aiTaskSources p {
+  margin: 0;
+  color: var(--archive-cyan);
+  font-size: 0.72rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.app[data-profile="main"] .aiTaskSources ol {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 1.2rem;
+  color: var(--archive-muted);
+  font-size: 0.78rem;
 }
 
 .app[data-profile="main"] .archiveRecordId {

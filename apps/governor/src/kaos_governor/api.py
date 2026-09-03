@@ -51,6 +51,7 @@ DOCUMENT_TAG_AI_TOKEN = os.environ.get("DOCUMENT_TAG_AI_TOKEN", "").strip()
 DOCUMENT_TAG_AI_TOKEN_FILE = os.environ.get("DOCUMENT_TAG_AI_TOKEN_FILE", "").strip()
 DOCUMENT_TAG_AI_TIMEOUT_SECONDS = float(os.environ.get("DOCUMENT_TAG_AI_TIMEOUT_SECONDS", "20") or "20")
 AI_TASKS_BRAIN_URL = os.environ.get("AI_TASKS_BRAIN_URL", "").strip()
+AI_TASKS_WEB_BRAIN_URL = os.environ.get("AI_TASKS_WEB_BRAIN_URL", "").strip()
 AI_TASKS_BRAIN_TOKEN = os.environ.get("AI_TASKS_BRAIN_TOKEN", "").strip()
 AI_TASKS_BRAIN_TOKEN_FILE = os.environ.get("AI_TASKS_BRAIN_TOKEN_FILE", "").strip()
 AI_TASKS_BRAIN_TIMEOUT_SECONDS = float(os.environ.get("AI_TASKS_BRAIN_TIMEOUT_SECONDS", "60") or "60")
@@ -581,6 +582,8 @@ def ai_task_status_for_error(exc: Exception) -> int:
         "ai_task_pdf_text_empty",
         "ai_task_confirmation_required",
         "ai_task_limit_invalid",
+        "web_task_prompt_required",
+        "web_task_prompt_too_long",
     }:
         return 400
     return 503
@@ -651,6 +654,35 @@ def preview_official_doc_memo_payload(
         memo=memo,
     )
     return {"ok": True, "task": record.as_dict(), "memo": memo}
+
+
+def preview_web_ai_task_payload(
+    payload: dict[str, object],
+    archive: AITaskArchive | None = None,
+    *,
+    urlopen=urllib.request.urlopen,
+) -> dict[str, object]:
+    prompt = " ".join(str(payload.get("prompt") or "").split())
+    if not prompt:
+        raise AITaskError("web_task_prompt_required")
+    if len(prompt) > 1600:
+        raise AITaskError("web_task_prompt_too_long")
+    request = {
+        "prompt": prompt,
+        "checkedAt": datetime.now(UTC).date().isoformat(),
+    }
+    result = call_ai_task_web_brain(request, urlopen=urlopen)
+    record = (archive or ai_task_archive()).add_result(
+        kind="web",
+        prompt=prompt,
+        source={
+            "type": "web_search",
+            "checkedAt": result.get("checkedAt") or request["checkedAt"],
+            "sources": result.get("sources") if isinstance(result.get("sources"), list) else [],
+        },
+        result=result,
+    )
+    return {"ok": True, "task": record.as_dict(), "result": result}
 
 
 def preview_official_doc_memo_request_payload(
@@ -857,6 +889,90 @@ def call_ai_task_brain(
         "sourceTitle": " ".join(str(memo.get("sourceTitle") or "").split())[:200],
         "sourceUrl": str(memo.get("sourceUrl") or "").strip()[:500],
         "checkedAt": str(memo.get("checkedAt") or request_payload.get("checkedAt") or "").strip()[:40],
+    }
+
+
+def ai_tasks_web_brain_url() -> str:
+    if AI_TASKS_WEB_BRAIN_URL:
+        return AI_TASKS_WEB_BRAIN_URL
+    marker = "/internal/ai-tasks/official-doc-memo/preview"
+    if AI_TASKS_BRAIN_URL.endswith(marker):
+        return f"{AI_TASKS_BRAIN_URL.removesuffix(marker)}/internal/ai-tasks/web/preview"
+    return ""
+
+
+def call_ai_task_web_brain(
+    request_payload: dict[str, object],
+    *,
+    urlopen=urllib.request.urlopen,
+) -> dict[str, object]:
+    brain_url = ai_tasks_web_brain_url()
+    if not brain_url:
+        raise AITaskError("ai_task_web_brain_not_configured")
+    token = ai_task_brain_token()
+    if not token:
+        raise AITaskError("ai_task_brain_token_missing")
+    request = urllib.request.Request(
+        brain_url,
+        data=json.dumps(request_payload, ensure_ascii=False).encode("utf-8"),
+        method="POST",
+        headers={
+            "Accept": "application/json",
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "User-Agent": "KaosGovernor/ai-tasks",
+        },
+    )
+    try:
+        with urlopen(request, timeout=AI_TASKS_BRAIN_TIMEOUT_SECONDS) as response:
+            raw = response.read()
+    except urllib.error.HTTPError as exc:
+        try:
+            body = json.loads(exc.read().decode("utf-8"))
+            code = str(body.get("error") or f"ai_task_web_brain_http_{exc.code}")
+        except Exception:
+            code = f"ai_task_web_brain_http_{exc.code}"
+        raise AITaskError(code) from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise AITaskError("ai_task_web_brain_request_failed") from exc
+    try:
+        body = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise AITaskError("ai_task_web_brain_invalid_json") from exc
+    if not isinstance(body, dict) or body.get("ok") is not True:
+        error = str(body.get("error") or "ai_task_web_brain_failed") if isinstance(body, dict) else "ai_task_web_brain_invalid_response"
+        raise AITaskError(error)
+    result = body.get("result")
+    if not isinstance(result, dict):
+        raise AITaskError("ai_task_web_brain_missing_result")
+    title = " ".join(str(result.get("title") or "").split())
+    content = str(result.get("content") or "").strip()
+    if not title or not content:
+        raise AITaskError("ai_task_web_brain_invalid_result")
+    sources = result.get("sources")
+    if not isinstance(sources, list):
+        sources = []
+    clean_sources: list[dict[str, str]] = []
+    for item in sources:
+        if not isinstance(item, dict):
+            continue
+        url = str(item.get("url") or "").strip()
+        if not url.startswith(("https://", "http://")):
+            continue
+        clean_sources.append(
+            {
+                "title": " ".join(str(item.get("title") or url).split())[:200],
+                "url": url[:800],
+            }
+        )
+        if len(clean_sources) >= 10:
+            break
+    return {
+        "title": title[:160],
+        "content": content[:12000],
+        "sources": clean_sources,
+        "checkedAt": str(result.get("checkedAt") or request_payload.get("checkedAt") or "").strip()[:40],
+        "model": str(result.get("model") or "").strip()[:80],
     }
 
 
@@ -2472,6 +2588,17 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 print(f"Official memo AI task preview failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "ai_task_preview_failed"})
+            return
+        if parsed.path == "/api/ai-tasks/web/preview":
+            try:
+                require_main_access(self.headers)
+                json_response(self, 200, preview_web_ai_task_payload(json_request(self)))
+            except (ValueError, AITaskError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, (AITaskError, memos_relay.MemosRelayError)) else str(exc)
+                json_response(self, ai_task_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Web AI task preview failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "ai_task_web_preview_failed"})
             return
         completed_ai_task_id = ai_task_complete_id(parsed.path)
         if completed_ai_task_id:
