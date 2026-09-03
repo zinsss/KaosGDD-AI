@@ -47,7 +47,7 @@ test("family smart event UI previews first and then saves with confirmation", ()
   assert.doesNotMatch(appSource, /event\.smartTextboxLabel/);
   assert.doesNotMatch(translations, /"event\.smartTextboxLabel"/);
   assert.match(appSource, /data-family-smart-event-preview/);
-  assert.match(appSource, /renderFamilySmartEventPreview\(familySmartEventProposals\(state\.selectedDate\)\)/);
+  assert.match(appSource, /renderFamilySmartEventPreview\(proposals\)/);
   assert.match(appSource, /data-family-smart-event-save/);
   assert.match(appSource, /saveFamilySmartEvents\(\)/);
   assert.match(appSource, /window\.confirm\(familySmartEventSaveConfirmMessage\(proposals\)\)/);
@@ -70,6 +70,8 @@ test("family smart event input updates preview on input without rerendering the 
   assert.match(inputListener[0], /data-family-smart-event-input/);
   assert.match(inputListener[0], /state\.smartEventEndOffsets = \{\};/);
   assert.match(inputListener[0], /updateFamilySmartEventPreview\(\);/);
+  assert.ok(appSource.includes('const saveButton = document.querySelector("[data-family-smart-event-save]");'));
+  assert.match(appSource, /saveButton\.disabled = !proposals\.length \|\| state\.smartEventSaving;/);
 
   const changeListener = appSource.match(/document\.addEventListener\("change", async \(event\) => \{[\s\S]*?\n\}\);/);
   assert.ok(changeListener);
@@ -103,5 +105,5 @@ test("family smart event assets include styling, translations, and cache busters
   assert.match(styles, /grid-template-columns: 96px minmax\(0, 1fr\);/);
   assert.match(indexSource, /href="\/styles\.css\?v=297"/);
   assert.match(indexSource, /src="\/translations\.js\?v=180"/);
-  assert.match(indexSource, /src="\/app\.js\?v=283"/);
+  assert.match(indexSource, /src="\/app\.js\?v=284"/);
 });

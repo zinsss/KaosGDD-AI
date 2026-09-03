@@ -1131,12 +1131,19 @@ async function saveFamilySmartEvents() {
 }
 
 function updateFamilySmartEventPreview() {
+  const proposals = familySmartEventProposals(state.selectedDate);
   const preview = document.querySelector("[data-family-smart-event-preview]");
-  if (!preview) return;
-  preview.innerHTML = `
-    <p class="label">${uiText("event.smartPreview", "Preview")}</p>
-    ${renderFamilySmartEventPreview(familySmartEventProposals(state.selectedDate))}
-  `;
+  if (preview) {
+    preview.innerHTML = `
+      <p class="label">${uiText("event.smartPreview", "Preview")}</p>
+      ${renderFamilySmartEventPreview(proposals)}
+    `;
+  }
+  const saveButton = document.querySelector("[data-family-smart-event-save]");
+  if (saveButton) {
+    saveButton.disabled = !proposals.length || state.smartEventSaving;
+    saveButton.textContent = state.smartEventSaving ? uiText("event.smartSaving", "Saving...") : uiText("event.smartSave", "Review and save");
+  }
 }
 
 function addTaskDraftFromForm(form) {
@@ -5723,7 +5730,7 @@ function renderFamilySmartEventPanel() {
       </div>
       <div class="panelBody">
         <textarea data-family-smart-event-input rows="4" autocomplete="off" aria-label="${uiText("event.smartLabel", "Smart input")}" placeholder="${uiText("event.smartPlaceholder", "연차/10:30 3교시 참관수업 / 2:30 스파예가")}">${escapeHtml(input)}</textarea>
-        <p class="formNote">${uiText("event.smartHelp", "First slice: this only previews locally. Brain parsing and confirmed saving come next.")}</p>
+        <p class="formNote">${uiText("event.smartHelp", "Review the preview, then save to the calendar.")}</p>
         <div class="familySmartEventPreview" data-family-smart-event-preview>
           <p class="label">${uiText("event.smartPreview", "Preview")}</p>
           ${renderFamilySmartEventPreview(proposals)}
