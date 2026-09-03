@@ -39,17 +39,20 @@ test("family smart event parser splits wife-style day text without saving", () =
   assert.match(appSource, /function familySmartEventDurationMinutes\(item\)/);
   assert.match(appSource, /function formatFamilySmartEventDuration\(item\)/);
   assert.match(appSource, /Math\.round\(\(endMs - startMs\) \/ 60_000\)/);
-  assert.doesNotMatch(appSource, /data-family-smart-event-save/);
 });
 
-test("family smart event UI is a preview-only contextual input", () => {
+test("family smart event UI previews first and then saves with confirmation", () => {
   assert.match(appSource, /function renderFamilySmartEventPanel\(\)/);
   assert.match(appSource, /data-family-smart-event-input/);
   assert.doesNotMatch(appSource, /event\.smartTextboxLabel/);
   assert.doesNotMatch(translations, /"event\.smartTextboxLabel"/);
   assert.match(appSource, /data-family-smart-event-preview/);
   assert.match(appSource, /renderFamilySmartEventPreview\(familySmartEventProposals\(state\.selectedDate\)\)/);
-  assert.match(appSource, /<button class="primaryButton" type="button" disabled>\$\{uiText\("event\.smartSavePending"/);
+  assert.match(appSource, /data-family-smart-event-save/);
+  assert.match(appSource, /saveFamilySmartEvents\(\)/);
+  assert.match(appSource, /window\.confirm\(familySmartEventSaveConfirmMessage\(proposals\)\)/);
+  assert.match(appSource, /postCalendarEvent\(payload\)/);
+  assert.match(appSource, /window\.location\.hash = "#\/calendar";/);
   assert.match(appSource, /data-add-event-mode="smart"/);
   assert.match(appSource, /familySmartEventPreviewBody/);
   assert.match(appSource, /data-family-smart-event-end-step="-60"/);
@@ -90,13 +93,15 @@ test("family smart event assets include styling, translations, and cache busters
   assert.match(styles, /grid-column: 2;/);
   assert.match(translations, /"event\.smart": "스마트 입력"/);
   assert.match(translations, /"event\.smartPlaceholder": "연차\/10:30 3교시 참관수업 \/ 2:30 스파예가"/);
-  assert.match(translations, /"event\.smartSavePending": "저장은 다음 단계"/);
+  assert.match(translations, /"event\.smartSave": "확인 후 저장"/);
+  assert.match(translations, /"event\.smartSaving": "저장 중\.\.\."/);
+  assert.match(translations, /"dialog\.familySmartEventSaveConfirm": "미리보기 일정 \{count\}개를 캘린더에 저장할까요\?"/);
   assert.match(translations, /"event\.smartShorter": "1시간 줄이기"/);
   assert.match(translations, /"event\.smartLonger": "1시간 늘리기"/);
   assert.match(translations, /"event\.smartHoursSuffix": "시간"/);
   assert.match(translations, /"event\.smartMinutesSuffix": "분"/);
   assert.match(styles, /grid-template-columns: 96px minmax\(0, 1fr\);/);
   assert.match(indexSource, /href="\/styles\.css\?v=297"/);
-  assert.match(indexSource, /src="\/translations\.js\?v=179"/);
-  assert.match(indexSource, /src="\/app\.js\?v=282"/);
+  assert.match(indexSource, /src="\/translations\.js\?v=180"/);
+  assert.match(indexSource, /src="\/app\.js\?v=283"/);
 });

@@ -171,6 +171,7 @@ const state = {
   addTaskDraft: null,
   smartEventInput: "",
   smartEventEndOffsets: {},
+  smartEventSaving: false,
   memoComposer: {
     content: "",
     saving: false,
@@ -1013,6 +1014,120 @@ function formatFamilySmartEventDuration(item) {
 function familySmartEventProposals(dateValue = state.selectedDate) {
   return parseFamilySmartEventInput(state.smartEventInput, dateValue)
     .map((item, index) => adjustFamilySmartEventEnd(item, Number(state.smartEventEndOffsets[index] || 0)));
+}
+
+function familySmartEventRangeLabel(item) {
+  if (item.allDay) return uiText("event.smartAllDayPreview", "All-day event");
+  return `${item.startDate} ${item.startTime}–${item.endDate === item.startDate ? item.endTime : `${item.endDate} ${item.endTime}`}`;
+}
+
+function familySmartEventPayload(item) {
+  return {
+    collectionId: writableCollectionIdForOwner("family", "VEVENT"),
+    title: String(item.title || "").trim(),
+    allDay: Boolean(item.allDay),
+    startDate: item.startDate || state.selectedDate,
+    startTime: item.startTime || DEFAULT_EVENT_START_TIME,
+    endDate: item.endDate || item.startDate || state.selectedDate,
+    endTime: item.endTime || DEFAULT_EVENT_END_TIME,
+    repeat: "",
+    alarmTime: "",
+    memo: "",
+  };
+}
+
+function familySmartEventSaveConfirmMessage(proposals) {
+  const lines = proposals.slice(0, 8).map((item) => `- ${familySmartEventRangeLabel(item)} ${item.title}`);
+  if (proposals.length > lines.length) lines.push(`- … +${proposals.length - lines.length}`);
+  return `${uiText("dialog.familySmartEventSaveConfirm", "Save {count} previewed event(s) to the calendar?", { count: proposals.length })}\n\n${lines.join("\n")}`;
+}
+
+async function postCalendarEvent(payload) {
+  const response = await fetch("/api/calendar/events", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const errorPayload = await response.json().catch(() => ({}));
+    throw new Error(errorPayload.error || `HTTP ${response.status}`);
+  }
+  return response.json().catch(() => ({}));
+}
+
+function eventPayloadFromFormData(formData) {
+  return {
+    collectionId: writableCollectionIdFromForm(formData, "VEVENT"),
+    title: String(formData.get("title") || "").trim(),
+    allDay: formData.get("allDay") === "on",
+    startDate: String(formData.get("startDate") || state.selectedDate),
+    startTime: String(formData.get("startTime") || DEFAULT_EVENT_START_TIME),
+    endDate: String(formData.get("endDate") || formData.get("startDate") || state.selectedDate),
+    endTime: String(formData.get("endTime") || DEFAULT_EVENT_END_TIME),
+    repeat: String(formData.get("repeat") || ""),
+    alarmTime: String(formData.get("alarm") || ""),
+    memo: String(formData.get("memo") || "").trim(),
+  };
+}
+
+async function saveFamilySmartEvents() {
+  if (portalProfile() !== "family" || state.smartEventSaving) return;
+  const proposals = familySmartEventProposals(state.selectedDate).filter((item) => String(item.title || "").trim());
+  if (!proposals.length) {
+    window.alert(uiText("dialog.familySmartEventEmpty", "Add at least one event before saving."));
+    return;
+  }
+  if (!window.confirm(familySmartEventSaveConfirmMessage(proposals))) return;
+  if (!state.remoteCalendar.live) {
+    if (!state.remoteCalendar.checked) await loadRemoteCalendar();
+    if (!state.remoteCalendar.live) {
+      window.alert(uiText("dialog.radicaleSaveError", "Could not save to Radicale: {error}", {
+        error: state.remoteCalendar.error || uiText("calendar.adapterUnavailable", "Calendar server unavailable"),
+      }));
+      return;
+    }
+  }
+  const payloads = proposals.map(familySmartEventPayload);
+  state.smartEventSaving = true;
+  render();
+  let savedCount = 0;
+  try {
+    for (const payload of payloads) {
+      await postCalendarEvent(payload);
+      savedCount += 1;
+    }
+    state.selectedDate = payloads[0]?.startDate || state.selectedDate;
+    state.smartEventInput = "";
+    state.smartEventEndOffsets = {};
+    state.addEventDraft = null;
+    state.eventPresetDraft = null;
+    window.alert(uiText("event.savedCount", "{count} saved", { count: payloads.length }));
+    window.location.hash = "#/calendar";
+    await loadRemoteCalendar();
+  } catch (error) {
+    if (savedCount > 0) {
+      state.selectedDate = payloads[0]?.startDate || state.selectedDate;
+      state.smartEventInput = "";
+      state.smartEventEndOffsets = {};
+      window.alert(uiText("dialog.radicalePartialSaveError", "{saved}/{total} saved. Please check the calendar: {error}", {
+        saved: savedCount,
+        total: payloads.length,
+        error: error.message || uiText("dialog.unknownError", "unknown error"),
+      }));
+      window.location.hash = "#/calendar";
+      await loadRemoteCalendar();
+      return;
+    }
+    window.alert(uiText("dialog.radicaleSaveError", "Could not save to Radicale: {error}", {
+      error: error.message || uiText("dialog.unknownError", "unknown error"),
+    }));
+  } finally {
+    state.smartEventSaving = false;
+    if (getRoute() === "add-event") render();
+  }
 }
 
 function updateFamilySmartEventPreview() {
@@ -3380,30 +3495,9 @@ async function createRemoteTask(formData) {
 }
 
 async function createRemoteEvent(formData) {
-  const response = await fetch("/api/calendar/events", {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      collectionId: writableCollectionIdFromForm(formData, "VEVENT"),
-      title: String(formData.get("title") || "").trim(),
-      allDay: formData.get("allDay") === "on",
-      startDate: String(formData.get("startDate") || state.selectedDate),
-      startTime: String(formData.get("startTime") || DEFAULT_EVENT_START_TIME),
-      endDate: String(formData.get("endDate") || formData.get("startDate") || state.selectedDate),
-      endTime: String(formData.get("endTime") || DEFAULT_EVENT_END_TIME),
-      repeat: String(formData.get("repeat") || ""),
-      alarmTime: String(formData.get("alarm") || ""),
-      memo: String(formData.get("memo") || "").trim(),
-    }),
-  });
-  if (!response.ok) {
-    const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.error || `HTTP ${response.status}`);
-  }
-  state.selectedDate = String(formData.get("startDate") || state.selectedDate);
+  const payload = eventPayloadFromFormData(formData);
+  await postCalendarEvent(payload);
+  state.selectedDate = payload.startDate || state.selectedDate;
   window.location.hash = "#/calendar";
   await loadRemoteCalendar();
 }
@@ -5636,7 +5730,7 @@ function renderFamilySmartEventPanel() {
         </div>
         <div class="formActions">
           <button class="openButton" type="button" data-add-event-mode="normal">${uiText("event.manualFallback", "Manual input")}</button>
-          <button class="primaryButton" type="button" disabled>${uiText("event.smartSavePending", "Save after Brain wiring")}</button>
+          <button class="primaryButton" type="button" data-family-smart-event-save ${!proposals.length || state.smartEventSaving ? "disabled" : ""}>${state.smartEventSaving ? uiText("event.smartSaving", "Saving...") : uiText("event.smartSave", "Review and save")}</button>
         </div>
       </div>
     </section>
@@ -9728,6 +9822,12 @@ document.addEventListener("click", async (event) => {
       state.smartEventEndOffsets[index] = Number(state.smartEventEndOffsets[index] || 0) + step;
       updateFamilySmartEventPreview();
     }
+    return;
+  }
+
+  if (event.target.closest("[data-family-smart-event-save]")) {
+    event.preventDefault();
+    await saveFamilySmartEvents();
     return;
   }
 
