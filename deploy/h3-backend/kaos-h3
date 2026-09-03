@@ -641,6 +641,17 @@ family_transition_preflight() {
   require_file "${governor_state_root}/postgres/PG_VERSION"
   require_dir "${calendar_adapter_root}"
   require_file "${calendar_adapter_root}/server.py"
+  if ! grep -q 'location = /api/text-presets' "${root}/config/family-portal/nginx.conf"; then
+    die "family portal nginx must proxy /api/text-presets"
+  fi
+  if ! awk '
+    /location = \/api\/text-presets[[:space:]]*\{/ { block = 1 }
+    block && /proxy_pass[[:space:]]+http:\/\/calendar-adapter:8091/ { found = 1 }
+    block && /^[[:space:]]*}/ { block = 0 }
+    END { exit found ? 0 : 1 }
+  ' "${root}/config/family-portal/nginx.conf"; then
+    die "family portal /api/text-presets must route to calendar-adapter"
+  fi
   mkdir -p "${root}/data/calendar-adapter-state"
   COMPOSE_PROFILES=family-transition "${SERVICES_COMPOSE[@]}" config --quiet
   info "Family transition preflight passed."

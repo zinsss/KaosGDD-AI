@@ -308,6 +308,38 @@ class CalendarAdapterServerTests(unittest.TestCase):
 
             self.assertEqual(caught.exception.document["revision"], 1)
 
+    def test_text_presets_document_saves_shared_categories_with_revision_guard(self) -> None:
+        server = load_server_module()
+        with tempfile.TemporaryDirectory() as temporary:
+            server.TEXT_PRESETS_FILE = str(Path(temporary) / "text-presets.json")
+            categories = [
+                {
+                    "id": "caregiver",
+                    "name": "돌봄",
+                    "texts": ["오늘도 잘 부탁드립니다.", ""],
+                }
+            ]
+
+            initial = server.text_presets_document()
+            saved = server.put_text_presets_document({"baseRevision": 0, "categories": categories})
+            current = server.text_presets_document()
+
+            self.assertEqual(initial["revision"], 0)
+            self.assertEqual(saved["revision"], 1)
+            self.assertEqual(current["categories"][0]["name"], "돌봄")
+            self.assertEqual(current["categories"][0]["texts"], ["오늘도 잘 부탁드립니다.", ""])
+
+            with self.assertRaises(server.TextPresetConflict) as caught:
+                server.put_text_presets_document({"baseRevision": 0, "categories": categories})
+
+            self.assertEqual(caught.exception.document["revision"], 1)
+
+    def test_text_presets_validation_rejects_empty_category_names(self) -> None:
+        server = load_server_module()
+
+        with self.assertRaisesRegex(ValueError, "invalid_text_preset_category_name"):
+            server.validate_text_preset_categories([{"id": "bad", "name": "", "texts": ["hello"]}])
+
     def test_rouny_validation_rejects_invalid_time_range(self) -> None:
         server = load_server_module()
 

@@ -175,6 +175,13 @@ const state = {
     error: "",
   },
   textPresets: {
+    checked: false,
+    loading: false,
+    saving: false,
+    error: "",
+    revision: null,
+    updatedAt: "",
+    categories: [],
     managing: false,
     selectedCategoryId: "",
     selectedTextIndex: 0,
@@ -3750,7 +3757,7 @@ function normalizeFamilyTextPresetDocument(value) {
   return categories.length ? { categories } : defaultFamilyTextPresetDocument();
 }
 
-function loadFamilyTextPresetDocument() {
+function localFamilyTextPresetDocument() {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(FAMILY_TEXT_PRESETS_STORAGE_KEY) || "null");
     return normalizeFamilyTextPresetDocument(parsed);
@@ -3759,10 +3766,114 @@ function loadFamilyTextPresetDocument() {
   }
 }
 
-function saveFamilyTextPresetDocument(presetDocument) {
+function cacheFamilyTextPresetDocument(presetDocument) {
   const normalized = normalizeFamilyTextPresetDocument(presetDocument);
   window.localStorage.setItem(FAMILY_TEXT_PRESETS_STORAGE_KEY, JSON.stringify(normalized));
   return normalized;
+}
+
+function familyTextPresetDocumentSignature(presetDocument) {
+  return JSON.stringify(normalizeFamilyTextPresetDocument(presetDocument).categories);
+}
+
+function applyFamilyTextPresetDocument(payload) {
+  const normalized = normalizeFamilyTextPresetDocument(payload);
+  state.textPresets.checked = true;
+  state.textPresets.loading = false;
+  state.textPresets.error = "";
+  state.textPresets.revision = Number.isInteger(payload?.revision) ? payload.revision : Math.max(0, Number(payload?.revision) || 0);
+  state.textPresets.updatedAt = String(payload?.updatedAt || "");
+  state.textPresets.categories = cloneValue(normalized.categories);
+  cacheFamilyTextPresetDocument(normalized);
+  selectedFamilyTextPresetCategory(normalized);
+  return { ...normalized, revision: state.textPresets.revision, updatedAt: state.textPresets.updatedAt };
+}
+
+function loadFamilyTextPresetDocument() {
+  if (Array.isArray(state.textPresets.categories) && state.textPresets.categories.length) {
+    return normalizeFamilyTextPresetDocument({ categories: cloneValue(state.textPresets.categories) });
+  }
+  return localFamilyTextPresetDocument();
+}
+
+function saveFamilyTextPresetDocument(presetDocument) {
+  const normalized = normalizeFamilyTextPresetDocument(presetDocument);
+  state.textPresets.categories = cloneValue(normalized.categories);
+  cacheFamilyTextPresetDocument(normalized);
+  return normalized;
+}
+
+async function maybeMigrateLocalTextPresetsToServer(remoteDocument, localDocument) {
+  if (!remoteDocument || remoteDocument.revision !== 0) return false;
+  if (!localDocument) return false;
+  if (familyTextPresetDocumentSignature(localDocument) === familyTextPresetDocumentSignature(defaultFamilyTextPresetDocument())) return false;
+  if (familyTextPresetDocumentSignature(localDocument) === familyTextPresetDocumentSignature(remoteDocument)) return false;
+  await persistFamilyTextPresetDocument(localDocument, { renderAfter: false });
+  return true;
+}
+
+async function loadFamilyTextPresets({ force = false } = {}) {
+  if (portalProfile() !== "family") return null;
+  if (state.textPresets.loading) return null;
+  if (state.textPresets.checked && !force) return true;
+  state.textPresets.loading = true;
+  state.textPresets.error = "";
+  let localDocumentBeforeLoad = null;
+  try {
+    localDocumentBeforeLoad = window.localStorage.getItem(FAMILY_TEXT_PRESETS_STORAGE_KEY)
+      ? localFamilyTextPresetDocument()
+      : null;
+  } catch {
+    localDocumentBeforeLoad = null;
+  }
+
+  try {
+    const response = await fetch("/api/text-presets", { headers: { Accept: "application/json" } });
+    const documentValue = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(documentValue.error || `HTTP ${response.status}`);
+    const remoteDocument = applyFamilyTextPresetDocument(documentValue);
+    try {
+      await maybeMigrateLocalTextPresetsToServer(remoteDocument, localDocumentBeforeLoad);
+    } catch (error) {
+      state.textPresets.error = error.message || uiText("textPresets.conflict", "Another device saved first. Reloaded server copy; try again.");
+    }
+  } catch (error) {
+    state.textPresets.checked = true;
+    state.textPresets.loading = false;
+    state.textPresets.error = error.message || uiText("textPresets.unavailable", "Could not load preset text.");
+    state.textPresets.categories = cloneValue(localFamilyTextPresetDocument().categories);
+  }
+  if (getRoute() === "text-presets") render();
+  return !state.textPresets.error;
+}
+
+async function persistFamilyTextPresetDocument(presetDocument, { renderAfter = true } = {}) {
+  const normalized = saveFamilyTextPresetDocument(presetDocument);
+  const baseRevision = Number.isInteger(state.textPresets.revision) ? state.textPresets.revision : 0;
+  state.textPresets.saving = true;
+  state.textPresets.error = "";
+  if (renderAfter && getRoute() === "text-presets") render();
+  try {
+    const response = await fetch("/api/text-presets", {
+      method: "PUT",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ baseRevision, categories: normalized.categories }),
+    });
+    const documentValue = await response.json().catch(() => ({}));
+    if (response.status === 409 && documentValue.document) {
+      applyFamilyTextPresetDocument(documentValue.document);
+      throw new Error(uiText("textPresets.conflict", "Another device saved first. Reloaded server copy; try again."));
+    }
+    if (!response.ok) throw new Error(documentValue.error || `HTTP ${response.status}`);
+    applyFamilyTextPresetDocument(documentValue);
+    return loadFamilyTextPresetDocument();
+  } catch (error) {
+    state.textPresets.error = error.message || uiText("textPresets.saveError", "Could not save preset text.");
+    throw error;
+  } finally {
+    state.textPresets.saving = false;
+    if (renderAfter && getRoute() === "text-presets") render();
+  }
 }
 
 function selectedFamilyTextPresetCategory(presetDocument = loadFamilyTextPresetDocument()) {
@@ -8565,6 +8676,17 @@ function renderTextPresets() {
   );
   const selectedText = selectedCategory?.texts[selectedIndex] || "";
   const totalCount = documentValue.categories.reduce((count, category) => count + normalizeFamilyTextPresets(category.texts).length, 0);
+  const statusHtml = `
+    ${state.textPresets.loading ? `<p class="formNote">${uiText("textPresets.loading", "Loading preset text...")}</p>` : ""}
+    ${state.textPresets.saving ? `<p class="formNote">${uiText("textPresets.saving", "Saving preset text...")}</p>` : ""}
+    ${state.textPresets.error ? `
+      <div class="caregiverError">
+        ${escapeHtml(uiText("textPresets.unavailable", "Could not load preset text."))}: ${escapeHtml(state.textPresets.error)}
+        <button type="button" data-family-text-presets-retry>${uiText("common.retry", "Retry")}</button>
+      </div>
+      <p class="formNote">${uiText("textPresets.localFallback", "Showing this device's cached copy until the server reconnects.")}</p>
+    ` : ""}
+  `;
   if (!state.textPresets.managing) {
     return `
       <section class="panel familyTextPresetsPage">
@@ -8576,11 +8698,12 @@ function renderTextPresets() {
           <button class="openButton" type="button" data-family-text-presets-manage>${uiText("textPresets.manage", "Manage")}</button>
         </div>
         <div class="panelBody">
+          ${statusHtml}
           <p class="formNote">${uiText("textPresets.help", "Tap a category to copy one random saved phrase.")}</p>
           <div class="familyTextPresetCategoryGrid">
             ${documentValue.categories.map(renderTextPresetCategoryButton).join("")}
           </div>
-          <p class="formNote">${uiText("textPresets.localOnly", "{categoryCount} categories · {textCount} texts · saved on this device", {
+          <p class="formNote">${uiText("textPresets.shared", "{categoryCount} categories · {textCount} texts · shared on the server", {
             categoryCount: documentValue.categories.length,
             textCount: totalCount,
           })}</p>
@@ -8598,6 +8721,7 @@ function renderTextPresets() {
         <button class="openButton" type="button" data-family-text-presets-done>${uiText("common.done", "Done")}</button>
       </div>
       <div class="panelBody">
+        ${statusHtml}
         ${renderTextPresetManagerCategoryTabs(documentValue, selectedCategory)}
         <div class="familyTextPresetManageActions">
           <button class="openButton" type="button" data-family-text-category-rename>${uiText("textPresets.renameCategory", "Rename category")}</button>
@@ -9344,6 +9468,7 @@ function render() {
     if (state.mail.mode === "unread") loadUnreadMail();
     else loadMail();
   }
+  if (route === "text-presets") loadFamilyTextPresets();
   if (route === "ledger") loadLedger();
   if (route === "add-memo") {
     window.setTimeout(() => document.querySelector("[data-memo-content]")?.focus(), 0);
@@ -9881,10 +10006,21 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (event.target.closest("[data-family-text-presets-retry]")) {
+    state.textPresets.checked = false;
+    state.textPresets.error = "";
+    loadFamilyTextPresets({ force: true });
+    return;
+  }
+
   if (event.target.closest("[data-family-text-presets-done]")) {
-    saveFamilyTextPresetEditorDraft();
-    state.textPresets.managing = false;
-    render();
+    try {
+      await persistFamilyTextPresetDocument(saveFamilyTextPresetEditorDraft());
+      state.textPresets.managing = false;
+      render();
+    } catch (error) {
+      window.alert(uiText("textPresets.saveError", "Could not save preset text."));
+    }
     return;
   }
 
@@ -9909,11 +10045,14 @@ document.addEventListener("click", async (event) => {
       texts: [""],
     };
     documentValue.categories.push(category);
-    saveFamilyTextPresetDocument(documentValue);
     state.textPresets.selectedCategoryId = category.id;
     state.textPresets.selectedTextIndex = 0;
     state.textPresets.managing = true;
-    render();
+    try {
+      await persistFamilyTextPresetDocument(documentValue);
+    } catch (error) {
+      window.alert(uiText("textPresets.saveError", "Could not save preset text."));
+    }
     return;
   }
 
@@ -9925,8 +10064,11 @@ document.addEventListener("click", async (event) => {
     const normalizedName = String(name || "").trim();
     if (!normalizedName) return;
     category.name = normalizedName;
-    saveFamilyTextPresetDocument(documentValue);
-    render();
+    try {
+      await persistFamilyTextPresetDocument(documentValue);
+    } catch (error) {
+      window.alert(uiText("textPresets.saveError", "Could not save preset text."));
+    }
     return;
   }
 
@@ -9942,8 +10084,11 @@ document.addEventListener("click", async (event) => {
     documentValue.categories = documentValue.categories.filter((item) => item.id !== category.id);
     state.textPresets.selectedCategoryId = documentValue.categories[0]?.id || "";
     state.textPresets.selectedTextIndex = 0;
-    saveFamilyTextPresetDocument(documentValue);
-    render();
+    try {
+      await persistFamilyTextPresetDocument(documentValue);
+    } catch (error) {
+      window.alert(uiText("textPresets.saveError", "Could not save preset text."));
+    }
     return;
   }
 
@@ -9972,8 +10117,11 @@ document.addEventListener("click", async (event) => {
     if (category.texts.length <= 1) category.texts = [""];
     else category.texts.splice(selectedIndex, 1);
     state.textPresets.selectedTextIndex = Math.min(selectedIndex, Math.max(0, category.texts.length - 1));
-    saveFamilyTextPresetDocument(documentValue);
-    render();
+    try {
+      await persistFamilyTextPresetDocument(documentValue);
+    } catch (error) {
+      window.alert(uiText("textPresets.saveError", "Could not save preset text."));
+    }
     return;
   }
 
@@ -10551,9 +10699,12 @@ document.addEventListener("submit", async (event) => {
   const familyTextPresetForm = event.target.closest("[data-family-text-preset-editor]");
   if (familyTextPresetForm) {
     event.preventDefault();
-    saveFamilyTextPresetEditorDraft();
-    window.alert(uiText("textPresets.saved", "Preset text saved."));
-    render();
+    try {
+      await persistFamilyTextPresetDocument(saveFamilyTextPresetEditorDraft());
+      window.alert(uiText("textPresets.saved", "Preset text saved."));
+    } catch (error) {
+      window.alert(uiText("textPresets.saveError", "Could not save preset text."));
+    }
     return;
   }
 

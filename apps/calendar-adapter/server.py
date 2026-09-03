@@ -18,6 +18,7 @@ STATE_DIR = os.environ.get("CALENDAR_ADAPTER_STATE_DIR", "/data/calendar-adapter
 EVENT_PRESETS_FILE = os.path.join(STATE_DIR, "event-presets.json")
 GENERATED_CALENDAR_FILE = os.path.join(STATE_DIR, "generated-calendar.json")
 ROUNY_TEMPLATES_FILE = os.path.join(STATE_DIR, "rouny-templates.json")
+TEXT_PRESETS_FILE = os.path.join(STATE_DIR, "text-presets.json")
 RADICALE_URL = os.environ.get("RADICALE_INTERNAL_URL", "http://100.94.208.16:5232").rstrip("/")
 RADICALE_USERNAME = os.environ.get("RADICALE_USERNAME", "")
 RADICALE_PASSWORD = os.environ.get("RADICALE_PASSWORD", "")
@@ -46,6 +47,11 @@ MAX_ROUNY_NAME_LENGTH = 200
 MAX_ROUNY_TITLE_LENGTH = 500
 MAX_ROUNY_ICON_LENGTH = 8
 MAX_ROUNY_MEMO_LENGTH = 10000
+MAX_TEXT_PRESET_CATEGORIES = 100
+MAX_TEXT_PRESET_TEXTS = 1000
+MAX_TEXT_PRESET_ID_LENGTH = 128
+MAX_TEXT_PRESET_NAME_LENGTH = 200
+MAX_TEXT_PRESET_BODY_LENGTH = 4000
 ROUNY_COLOR_PATTERN = re.compile(r"^#[0-9a-fA-F]{6}$")
 WEATHER_CITIES = {
     "pohang": "포항",
@@ -2576,6 +2582,12 @@ class RounyConflict(Exception):
         self.document = document
 
 
+class TextPresetConflict(Exception):
+    def __init__(self, document):
+        super().__init__("text_preset_revision_conflict")
+        self.document = document
+
+
 def clean_id(value):
     raw = str(value or "").strip()
     if not raw:
@@ -2722,6 +2734,115 @@ def put_rouny_document(payload):
         "updatedAt": current_utc_iso(),
     }
     write_state_file(ROUNY_TEMPLATES_FILE, updated)
+    return {"ok": True, **updated}
+
+
+def default_text_preset_categories():
+    return [
+        {
+            "id": "default",
+            "name": "기본",
+            "texts": [
+                "오늘도 잘 부탁드립니다.",
+                "확인했습니다. 감사합니다.",
+                "공유해 주셔서 감사합니다.",
+            ],
+        }
+    ]
+
+
+def required_text_preset_text(value, field, maximum):
+    normalized = str(value or "").strip()
+    if not normalized or len(normalized) > maximum:
+        raise ValueError(f"invalid_text_preset_{field}")
+    return normalized
+
+
+def optional_text_preset_text(value, field, maximum):
+    normalized = str(value or "").strip()
+    if len(normalized) > maximum:
+        raise ValueError(f"invalid_text_preset_{field}")
+    return normalized
+
+
+def validate_text_preset_categories(categories):
+    if not isinstance(categories, list) or len(categories) > MAX_TEXT_PRESET_CATEGORIES:
+        raise ValueError("invalid_text_preset_categories")
+
+    normalized = []
+    category_ids = set()
+    text_count = 0
+    for index, category in enumerate(categories):
+        if not isinstance(category, dict):
+            raise ValueError("invalid_text_preset_category")
+        category_id = required_text_preset_text(
+            category.get("id") or f"category-{index + 1}",
+            "category_id",
+            MAX_TEXT_PRESET_ID_LENGTH,
+        )
+        if category_id in category_ids:
+            raise ValueError("duplicate_text_preset_category_id")
+        category_ids.add(category_id)
+        texts = category.get("texts")
+        if not isinstance(texts, list):
+            raise ValueError("invalid_text_preset_texts")
+        if not texts:
+            texts = [""]
+        text_count += len(texts)
+        if text_count > MAX_TEXT_PRESET_TEXTS:
+            raise ValueError("text_preset_document_too_large")
+        normalized.append(
+            {
+                "id": category_id,
+                "name": required_text_preset_text(category.get("name"), "category_name", MAX_TEXT_PRESET_NAME_LENGTH),
+                "texts": [
+                    optional_text_preset_text(text, "body", MAX_TEXT_PRESET_BODY_LENGTH)
+                    for text in texts
+                ],
+            }
+        )
+    return normalized
+
+
+def text_presets_document():
+    payload = read_state_file(
+        TEXT_PRESETS_FILE,
+        {"scope": "family", "revision": 0, "categories": default_text_preset_categories(), "updatedAt": ""},
+    )
+    try:
+        revision = int(payload.get("revision") or 0)
+    except (TypeError, ValueError):
+        revision = 0
+    categories = payload.get("categories")
+    if not isinstance(categories, list) or not categories:
+        categories = default_text_preset_categories()
+    return {
+        "ok": True,
+        "scope": "family",
+        "revision": max(0, revision),
+        "categories": validate_text_preset_categories(categories),
+        "updatedAt": str(payload.get("updatedAt") or ""),
+    }
+
+
+def put_text_presets_document(payload):
+    base_revision = payload.get("baseRevision")
+    if isinstance(base_revision, bool) or not isinstance(base_revision, int) or base_revision < 0:
+        raise ValueError("invalid_text_preset_revision")
+    normalized = validate_text_preset_categories(payload.get("categories"))
+    if not normalized:
+        raise ValueError("invalid_text_preset_categories")
+    current = text_presets_document()
+    if current["revision"] != base_revision:
+        raise TextPresetConflict(current)
+
+    updated = {
+        "scope": "family",
+        "revision": base_revision + 1,
+        "categories": normalized,
+        "updatedAt": current_utc_iso(),
+    }
+    write_state_file(TEXT_PRESETS_FILE, updated)
     return {"ok": True, **updated}
 
 
@@ -2936,6 +3057,14 @@ class Handler(BaseHTTPRequestHandler):
                 status = 404 if str(exc) == "family_profile_required" else 400
                 json_response(self, status, {"ok": False, "error": str(exc)})
             return
+        if path == "/api/text-presets":
+            try:
+                require_family_profile(profile)
+                json_response(self, 200, text_presets_document())
+            except ValueError as exc:
+                status = 404 if str(exc) == "family_profile_required" else 400
+                json_response(self, status, {"ok": False, "error": str(exc)})
+            return
         if path == "/api/caregiver/month":
             try:
                 require_family_profile(profile)
@@ -3029,6 +3158,24 @@ class Handler(BaseHTTPRequestHandler):
                     {
                         "ok": False,
                         "error": "rouny_revision_conflict",
+                        "document": exc.document,
+                    },
+                )
+            except ValueError as exc:
+                status = 404 if str(exc) == "family_profile_required" else 400
+                json_response(self, status, {"ok": False, "error": str(exc)})
+            return
+        if path == "/api/text-presets":
+            try:
+                require_family_profile(profile)
+                json_response(self, 200, put_text_presets_document(read_json_request(self)))
+            except TextPresetConflict as exc:
+                json_response(
+                    self,
+                    409,
+                    {
+                        "ok": False,
+                        "error": "text_preset_revision_conflict",
                         "document": exc.document,
                     },
                 )
