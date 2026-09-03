@@ -36,7 +36,7 @@ The Family Calendar Adapter also reads `/srv/kaos/secrets/kaosgdd-adapters.env`.
 To enable AI-assisted Family smart-event previews, set:
 
 ```text
-CALENDAR_SMART_EVENTS_AI_URL=http://<kaosbrain-tailscale-ip>:8097/internal/calendar/smart-events/preview
+CALENDAR_SMART_EVENTS_AI_URL=http://<kaosbrain-tailscale-ip>:8099/internal/calendar/smart-events/preview
 CALENDAR_SMART_EVENTS_AI_TOKEN=<KAOSBRAIN_CALENDAR_PREVIEW_API_TOKEN value>
 ```
 

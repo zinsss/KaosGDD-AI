@@ -99,7 +99,7 @@ For KaosPACS-AIO second-look, AIO calls Governor on H3 and Governor forwards to
 KaosBrain:
 
 ```text
-IMAGING_SECOND_LOOK_URL=http://<kaosbrain-tailscale-ip>:8097/imaging/second-look
+IMAGING_SECOND_LOOK_URL=http://<kaosbrain-tailscale-ip>:8099/imaging/second-look
 IMAGING_SECOND_LOOK_TOKEN_FILE=/run/secrets/governor_api_token
 KAOSBRAIN_IMAGING_ENABLED=true
 KAOSBRAIN_IMAGING_PROVIDER=kaosbrain-openai
@@ -112,7 +112,7 @@ For Family smart calendar parsing, the Family PWA calls Calendar Adapter on H3,
 and Calendar Adapter can forward preview-only text to KaosBrain:
 
 ```text
-CALENDAR_SMART_EVENTS_AI_URL=http://<kaosbrain-tailscale-ip>:8097/internal/calendar/smart-events/preview
+CALENDAR_SMART_EVENTS_AI_URL=http://<kaosbrain-tailscale-ip>:8099/internal/calendar/smart-events/preview
 CALENDAR_SMART_EVENTS_AI_TOKEN=<same value as KAOSBRAIN_CALENDAR_PREVIEW_API_TOKEN>
 KAOSBRAIN_CALENDAR_PREVIEW_API_TOKEN_FILE=/run/secrets/governor_api_token
 ```
