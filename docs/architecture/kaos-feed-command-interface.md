@@ -11,6 +11,11 @@ command-feed console. The feed may look conversational, but its main control
 surface is openable cards, menus, buttons, and forms rather than a plain chat
 box.
 
+Prompt-driven Brain workflows are called **AI Tasks**. They are not throwaway
+chat turns: every run creates an archived task record with the prompt, source
+material, preview output, confirmation state, final result, timestamps, and
+error/rollback metadata.
+
 This replaces the assumption that Discord or Telegram must be the main
 communication gateway. Discord may remain as a fallback `#brain` topic during
 transition, but daily Kaos control should live in the PWA.
@@ -128,6 +133,7 @@ Initial useful cards:
 
 - daily digest
 - agenda/day summary
+- AI Task prompt, preview, receipt, and archive cards
 - task proposal
 - task due/overdue
 - document inbox item
@@ -138,6 +144,79 @@ Initial useful cards:
 - memo quick capture/result
 - system status/maintenance
 - MacBridge/iMessage triage, if added later
+
+## AI Tasks
+
+An AI Task is a durable command unit for work that benefits from language
+understanding or document synthesis.
+
+Examples:
+
+```text
+Official Doc -> Memo
+  prompt: "26-27절기 국가 인플루엔자 접종 계획 찾아서 요약 메모 만들어줘"
+  source policy: official domains only
+  output: memo draft with links and checked date
+  final write: confirmed save to Memos
+
+Paperless Tag Assist
+  prompt: implicit button action from a document
+  source policy: current Paperless document + existing Paperless tags
+  output: suggested existing tag names
+  final write: confirmed Paperless metadata apply
+
+Mail Summary
+  prompt: "보건소 메일 요약해서 미처리만 보여줘"
+  source policy: selected read-only mail folders
+  output: summary/checklist card
+  final write: none unless the user later confirms mark-read/delete/memo-save
+```
+
+### AI Task lifecycle
+
+```text
+draft
+  user enters prompt or opens a page-aware AI action
+source_selection
+  Governor collects allowed sources or asks the user to pick one
+preview
+  KaosBrain/KaosBrain-OpenAI drafts structured output
+confirm
+  PWA shows the proposed memo/event/tag/action before any write
+applied | archived_without_apply | failed
+  Governor stores the final receipt and archive entry
+```
+
+The archive is useful for recall and debugging:
+
+- what the user asked
+- which official/source URLs or internal records were used
+- which AI/provider produced the draft
+- what the preview said
+- whether the user applied, edited, cancelled, or the task failed
+- the resulting Memos/Paperless/Radicale/mail/fax record id when a write was
+  confirmed
+
+The archive is not an authority for domain state. Memos, Paperless, Radicale,
+mail, and fax remain the source of truth. AI Task archives are receipts and
+work history.
+
+### First planned AI Task
+
+The first general-purpose AI Task should be **Official Doc -> Memo**:
+
+```text
+PWA AI Tasks page
+  one prompt box
+  [ FIND SOURCES ] [ PREVIEW MEMO ] [ SAVE MEMO ]
+  source candidates from official domains
+  memo preview with citation links and checked date
+  archive row for every run
+```
+
+Initial implementation can support pasted official URLs or pasted official text
+first, then add official-domain search once a reliable search/fetcher service is
+chosen. Public-health documents should always use preview-before-save.
 
 ## Data Contract
 

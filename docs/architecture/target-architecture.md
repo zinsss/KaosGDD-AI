@@ -64,6 +64,9 @@ manager/orchestrator for language interpretation, provider routing, and guarded
 structured action proposals; KaosGovernor owns deterministic orchestration; and
 KaosDiscoord is the replaceable Discord transport. KaosBrain-OpenAI is the
 optional OpenClaw/ChatGPT Pro provider implementation formerly called KaosAI.
+Prompt-driven Brain workflows exposed in the PWA are called **AI Tasks**; they
+are archived as receipts/work history, not treated as authoritative domain
+state.
 Ready-made backend services keep their native
 operational identities, such as Radicale, Memos, Vaultwarden, SFTPGo, Caddy,
 and cloudflared, rather than being renamed to `kaosgdd-*`.
@@ -94,6 +97,7 @@ KaosGovernor
 ├── KaosFax
 ├── KaosInbox
 ├── KaosNotifications
+├── KaosAITasks
 └── KaosAudit
 ```
 
@@ -136,6 +140,21 @@ KaosScheduler wakes calendar jobs. KaosCalendar decides what the job means and w
 - optional rebuildable semantic index references
 
 Memos remains the source of truth. Embeddings and AI summaries are disposable derivatives.
+
+### KaosAITasks
+
+Owns archived AI workflow receipts:
+
+- prompt text and normalized task type
+- source candidates and selected source identifiers/URLs
+- AI/provider metadata
+- preview output shown to the user
+- confirmation/apply/cancel/failure state
+- final target record id when a confirmed write creates or updates data
+
+KaosAITasks does not own facts, documents, calendar events, reminders, mail, or
+memos. It records how an AI-assisted workflow happened so the PWA can show an
+archive and future debugging has a trail.
 
 ### KaosMail
 
