@@ -56,6 +56,7 @@ test("family smart event UI is a preview-only contextual input", () => {
   assert.match(appSource, /&lt;&lt;/);
   assert.match(appSource, /formatFamilySmartEventDuration\(item\)/);
   assert.match(appSource, /&gt;&gt;/);
+  assert.match(appSource, /item\.allDay \? uiText\("event\.allDayPill", "All Day"\) : `\$\{item\.startTime\}–\$\{item\.endTime\}`/);
 });
 
 test("family smart event input updates preview on input without rerendering the page", () => {
@@ -85,7 +86,8 @@ test("family smart event assets include styling, translations, and cache busters
   assert.match(translations, /"event\.smartLonger": "1시간 늘리기"/);
   assert.match(translations, /"event\.smartHoursSuffix": "시간"/);
   assert.match(translations, /"event\.smartMinutesSuffix": "분"/);
-  assert.match(indexSource, /href="\/styles\.css\?v=292"/);
+  assert.match(styles, /grid-template-columns: 96px minmax\(0, 1fr\);/);
+  assert.match(indexSource, /href="\/styles\.css\?v=293"/);
   assert.match(indexSource, /src="\/translations\.js\?v=178"/);
-  assert.match(indexSource, /src="\/app\.js\?v=280"/);
+  assert.match(indexSource, /src="\/app\.js\?v=281"/);
 });

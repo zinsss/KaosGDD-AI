@@ -5654,7 +5654,7 @@ function renderFamilySmartEventPreview(proposals) {
         .map(
           (item, index) => `
             <li>
-              <time class="${item.allDay ? "timelineAllDayPill" : ""}">${escapeHtml(item.allDay ? uiText("event.allDayPill", "All Day") : item.startTime)}</time>
+              <time class="${item.allDay ? "timelineAllDayPill" : ""}">${escapeHtml(item.allDay ? uiText("event.allDayPill", "All Day") : `${item.startTime}–${item.endTime}`)}</time>
               <span class="timelineLink familySmartEventPreviewBody">
                 <strong>${escapeHtml(item.title)}</strong>
                 <span class="familySmartEventRange">${escapeHtml(item.allDay ? uiText("event.smartAllDayPreview", "All-day event") : `${item.startTime}–${item.endTime}`)}</span>

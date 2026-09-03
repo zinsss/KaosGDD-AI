@@ -1688,7 +1688,7 @@ h3 {
 }
 
 .familySmartEventPreview .timeline li {
-  grid-template-columns: 76px minmax(0, 1fr);
+  grid-template-columns: 96px minmax(0, 1fr);
   min-height: 40px;
   padding: 7px 0;
 }
