@@ -926,12 +926,13 @@ function normalizeFamilySmartEventTime(hourValue, minuteValue, meridiem = "") {
 }
 
 function parseFamilySmartEventInput(value, dateValue = state.selectedDate) {
+  const timeExpression = String.raw`(?:(오전|오후)\s*)?(\d{1,2})(?::(\d{1,2})|시(?:\s*(\d{1,2})분?)?)`;
   return String(value || "")
     .split(/[\/\n]+/)
     .map((part) => part.trim())
     .filter(Boolean)
     .map((part) => {
-      const match = part.match(/^(?:(오전|오후)\s*)?(\d{1,2})(?::(\d{1,2})|시(?:\s*(\d{1,2})분?)?)\s*(.*)$/);
+      const match = part.match(new RegExp(`^${timeExpression}(?:\\s*[-~–—]\\s*${timeExpression})?\\s*(.*)$`));
       if (!match) {
         return {
           title: part,
@@ -942,8 +943,12 @@ function parseFamilySmartEventInput(value, dateValue = state.selectedDate) {
           endTime: "",
         };
       }
-      const startTime = normalizeFamilySmartEventTime(match[2], match[3] || match[4] || "0", match[1] || "");
-      const title = String(match[5] || "").trim() || part;
+      const startMarker = match[1] || "";
+      const startTime = normalizeFamilySmartEventTime(match[2], match[3] || match[4] || "0", startMarker);
+      const explicitEndTime = match[6]
+        ? normalizeFamilySmartEventTime(match[6], match[7] || match[8] || "0", match[5] || startMarker)
+        : "";
+      const title = String(match[9] || "").trim() || part;
       if (!startTime) {
         return {
           title: part,
@@ -954,7 +959,13 @@ function parseFamilySmartEventInput(value, dateValue = state.selectedDate) {
           endTime: "",
         };
       }
-      const end = addLocalMinutes(dateValue, startTime, 60);
+      const startMinutes = parseRounyMinutes(startTime);
+      const explicitEndMinutes = parseRounyMinutes(explicitEndTime);
+      const end = explicitEndMinutes === null
+        ? addLocalMinutes(dateValue, startTime, 60)
+        : explicitEndMinutes <= startMinutes
+          ? addLocalMinutes(dateValue, explicitEndTime, 24 * 60)
+          : { date: dateValue, time: explicitEndTime };
       return {
         title,
         allDay: false,
