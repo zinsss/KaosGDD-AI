@@ -63,6 +63,12 @@ const EVENT_PRESET_STORAGE_KEY = "kaosgdd.v2.eventPresets.v1";
 const COMPOSER_RECOVERY_STORAGE_KEY = "kaosgdd.v2.composerRecovery.v1";
 const FAMILY_FONT_STORAGE_KEY = "kaosgdd.v2.family.font.v1";
 const FAMILY_FONT_OPTIONS = new Set(["nanum", "pretendard", "nixgon", "skybori"]);
+const FAMILY_TEXT_PRESETS_STORAGE_KEY = "kaosgdd.v2.family.textPresets.v1";
+const DEFAULT_FAMILY_TEXT_PRESETS = Object.freeze([
+  "오늘도 잘 부탁드립니다.",
+  "확인했습니다. 감사합니다.",
+  "공유해 주셔서 감사합니다.",
+]);
 const MAIN_FONT_STORAGE_KEY = "kaosgdd.v2.main.font.v1";
 const MAIN_FONT_OPTIONS = new Set(["pretendard", "orbit", "sarasa"]);
 const WEATHER_LOCATION_STORAGE_KEY = "kaosgdd.v2.weather.location.v1";
@@ -3671,6 +3677,42 @@ function setFamilyFontPreference(value) {
   const normalized = FAMILY_FONT_OPTIONS.has(value) ? value : "nanum";
   window.localStorage.setItem(FAMILY_FONT_STORAGE_KEY, normalized);
   applyFamilyFontPreference(normalized);
+}
+
+function normalizeFamilyTextPresets(value) {
+  const source = Array.isArray(value)
+    ? value
+    : String(value || "").split(/\r?\n/);
+  return source
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
+}
+
+function loadFamilyTextPresets() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(FAMILY_TEXT_PRESETS_STORAGE_KEY) || "null");
+    const presets = normalizeFamilyTextPresets(parsed);
+    return presets.length ? presets : [...DEFAULT_FAMILY_TEXT_PRESETS];
+  } catch {
+    return [...DEFAULT_FAMILY_TEXT_PRESETS];
+  }
+}
+
+function saveFamilyTextPresets(presets) {
+  const normalized = normalizeFamilyTextPresets(presets);
+  window.localStorage.setItem(FAMILY_TEXT_PRESETS_STORAGE_KEY, JSON.stringify(normalized));
+  return normalized;
+}
+
+function collectFamilyTextPresets() {
+  const input = document.querySelector("[data-family-text-presets]");
+  return saveFamilyTextPresets(input?.value || "");
+}
+
+function randomFamilyTextPreset(presets = loadFamilyTextPresets()) {
+  const normalized = normalizeFamilyTextPresets(presets);
+  if (!normalized.length) return "";
+  return normalized[Math.floor(Math.random() * normalized.length)];
 }
 
 function mainFontPreference() {
@@ -8395,6 +8437,34 @@ function renderFamilyFontSettingsRow() {
   `;
 }
 
+function renderFamilyTextPresetSettings() {
+  const presets = loadFamilyTextPresets();
+  const countText = presets.length
+    ? uiText("settings.textPresetsCount", "{count} saved", { count: presets.length })
+    : uiText("settings.textPresetsEmptySummary", "None saved");
+  return `
+    <details class="settingsDisclosure" data-family-text-preset-settings open>
+      <summary>
+        <span>
+          <strong>${uiText("settings.textPresets", "Preset text")}</strong>
+          <small>${escapeHtml(countText)}</small>
+        </span>
+      </summary>
+      <div class="settingsDisclosureBody">
+        <p class="formNote">${uiText("settings.textPresetsHelp", "Save one preset per line. Copy Random chooses one line and copies it to this device clipboard.")}</p>
+        <label class="familyTextPresetEditor">
+          <span>${uiText("settings.textPresetsLines", "Preset lines")}</span>
+          <textarea data-family-text-presets rows="5" spellcheck="false">${escapeHtml(presets.join("\n"))}</textarea>
+        </label>
+        <div class="settingsActionRow">
+          <button class="openButton" type="button" data-family-text-presets-save>${uiText("settings.textPresetsSave", "Save")}</button>
+          <button class="primaryButton" type="button" data-family-text-presets-copy>${uiText("settings.textPresetsCopyRandom", "Copy Random")}</button>
+        </div>
+      </div>
+    </details>
+  `;
+}
+
 function mainSettingsWeatherLabel() {
   return state.governorSettings.data?.weather?.locationLabel || weatherLocationLabel();
 }
@@ -8498,6 +8568,7 @@ function renderSettings() {
           ${renderWeatherSettingsRow()}
           ${renderFamilyFontSettingsRow()}
         </dl>
+        ${renderFamilyTextPresetSettings()}
         ${renderGovernorSettingsStatus()}
         ${renderHolidaySettings()}
         ${renderGeneratedCalendarPolicyStatus()}
@@ -9627,6 +9698,29 @@ document.addEventListener("click", async (event) => {
       window.alert("돌봄 월간 요약을 복사했습니다.");
     } catch (error) {
       window.alert(`복사 실패: ${error.message || "unknown error"}`);
+    }
+    return;
+  }
+
+  if (event.target.closest("[data-family-text-presets-save]")) {
+    collectFamilyTextPresets();
+    window.alert(uiText("settings.textPresetsSaved", "Preset text saved."));
+    render();
+    return;
+  }
+
+  if (event.target.closest("[data-family-text-presets-copy]")) {
+    try {
+      const preset = randomFamilyTextPreset(collectFamilyTextPresets());
+      if (!preset) {
+        window.alert(uiText("settings.textPresetsEmpty", "No preset text to copy."));
+        return;
+      }
+      await writeTextToClipboard(preset);
+      window.alert(uiText("settings.textPresetsCopied", "Preset text copied."));
+      render();
+    } catch (error) {
+      window.alert(uiText("settings.textPresetsCopyError", "Could not copy preset text."));
     }
     return;
   }
