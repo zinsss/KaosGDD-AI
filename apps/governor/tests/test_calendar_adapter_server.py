@@ -508,6 +508,82 @@ class CalendarAdapterServerTests(unittest.TestCase):
             self.assertTrue(any(item["uid"] == "KAOS-MARKET-2026-01-05" for item in deleted))
             self.assertFalse(any(item["uid"] == "KAOS-MARKET-2028-01-05" for item in deleted))
 
+    def test_family_smart_event_parser_keeps_all_day_and_timed_ranges_separate(self) -> None:
+        server = load_server_module()
+
+        result = server.parse_family_smart_event_text("연차 / 12:30-14:00 메롱", "2026-09-03")
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "title": "연차",
+                    "allDay": True,
+                    "startDate": "2026-09-03",
+                    "startTime": "",
+                    "endDate": "2026-09-03",
+                    "endTime": "",
+                    "source": "grammar",
+                },
+                {
+                    "title": "메롱",
+                    "allDay": False,
+                    "startDate": "2026-09-03",
+                    "startTime": "12:30",
+                    "endDate": "2026-09-03",
+                    "endTime": "14:00",
+                    "source": "grammar",
+                },
+            ],
+        )
+
+    def test_family_smart_event_preview_falls_back_to_grammar_without_ai_write(self) -> None:
+        server = load_server_module()
+        server.SMART_EVENTS_AI_URL = ""
+
+        result = server.family_smart_event_preview(
+            {"text": "연차 / 12:30 메롱", "date": "2026-09-03", "useAi": True},
+            "family",
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "grammar")
+        self.assertEqual(result["ai"], {"configured": False, "used": False, "error": "not_configured"})
+        self.assertEqual(result["events"][0]["title"], "연차")
+        self.assertEqual(result["events"][1]["startTime"], "12:30")
+        self.assertEqual(result["events"][1]["endTime"], "13:30")
+
+    def test_family_smart_event_preview_normalizes_ai_proposals_when_configured(self) -> None:
+        server = load_server_module()
+        original_ai_url = server.SMART_EVENTS_AI_URL
+        original_call = server.call_smart_events_ai
+        try:
+            server.SMART_EVENTS_AI_URL = "http://brain.example/internal/calendar/preview"
+            server.call_smart_events_ai = lambda _payload: [
+                {
+                    "title": "참관수업",
+                    "allDay": False,
+                    "startDate": "2026-09-03",
+                    "startTime": "10:30",
+                    "endDate": "2026-09-03",
+                    "endTime": "11:30",
+                }
+            ]
+
+            result = server.family_smart_event_preview(
+                {"text": "10:30 3교시 참관수업", "date": "2026-09-03", "useAi": True},
+                "family",
+            )
+
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["source"], "ai")
+            self.assertEqual(result["ai"], {"configured": True, "used": True, "error": ""})
+            self.assertEqual(result["events"][0]["source"], "ai")
+            self.assertEqual(result["events"][0]["title"], "참관수업")
+        finally:
+            server.SMART_EVENTS_AI_URL = original_ai_url
+            server.call_smart_events_ai = original_call
+
 
 if __name__ == "__main__":
     unittest.main()

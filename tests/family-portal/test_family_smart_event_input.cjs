@@ -32,7 +32,11 @@ test("family smart event parser splits wife-style day text without saving", () =
   assert.match(appSource, /const title = String\(match\[9\] \|\| ""\)\.trim\(\) \|\| part;/);
   assert.match(appSource, /explicitEndMinutes === null[\s\S]*addLocalMinutes\(dateValue, startTime, 60\)/);
   assert.match(appSource, /explicitEndMinutes <= startMinutes[\s\S]*addLocalMinutes\(dateValue, explicitEndTime, 24 \* 60\)/);
+  assert.match(appSource, /function normalizeFamilySmartEventProposal\(item, dateValue = state\.selectedDate\)/);
+  assert.match(appSource, /function familySmartEventBaseProposals\(dateValue = state\.selectedDate\)/);
+  assert.match(appSource, /Array\.isArray\(state\.smartEventAiProposals\)/);
   assert.match(appSource, /function familySmartEventProposals\(dateValue = state\.selectedDate\)/);
+  assert.match(appSource, /familySmartEventBaseProposals\(dateValue\)/);
   assert.match(appSource, /adjustFamilySmartEventEnd\(item, Number\(state\.smartEventEndOffsets\[index\] \|\| 0\)\)/);
   assert.match(appSource, /function adjustFamilySmartEventEnd\(item, minutes\)/);
   assert.match(appSource, /endMs <= startMs\) return item;/);
@@ -52,6 +56,10 @@ test("family smart event UI previews first and then saves with confirmation", ()
   assert.doesNotMatch(translations, /"event\.smartTextboxLabel"/);
   assert.match(appSource, /data-family-smart-event-preview/);
   assert.match(appSource, /renderFamilySmartEventPreview\(proposals\)/);
+  assert.match(appSource, /data-family-smart-event-ai-preview/);
+  assert.match(appSource, /requestFamilySmartEventAiPreview\(\)/);
+  assert.match(appSource, /fetch\("\/api\/calendar\/smart-events\/preview"/);
+  assert.match(appSource, /useAi: true/);
   assert.match(appSource, /data-family-smart-event-save/);
   assert.match(appSource, /saveFamilySmartEvents\(\)/);
   assert.match(appSource, /window\.confirm\(familySmartEventSaveConfirmMessage\(proposals\)\)/);
@@ -72,6 +80,9 @@ test("family smart event input updates preview on input without rerendering the 
   const inputListener = appSource.match(/document\.addEventListener\("input", \(event\) => \{[\s\S]*?\n\}\);/);
   assert.ok(inputListener);
   assert.match(inputListener[0], /data-family-smart-event-input/);
+  assert.match(inputListener[0], /state\.smartEventAiProposals = null;/);
+  assert.match(inputListener[0], /state\.smartEventAiError = "";/);
+  assert.match(inputListener[0], /state\.smartEventPreviewSource = "grammar";/);
   assert.match(inputListener[0], /state\.smartEventEndOffsets = \{\};/);
   assert.match(inputListener[0], /updateFamilySmartEventPreview\(\);/);
   assert.ok(appSource.includes('const saveButton = document.querySelector("[data-family-smart-event-save]");'));
@@ -101,6 +112,9 @@ test("family smart event assets include styling, translations, and cache busters
   assert.match(translations, /"event\.smartPlaceholder": "연차\/10:30 3교시 참관수업 \/ 2:30 스파예가"/);
   assert.match(translations, /"event\.smartSave": "확인 후 저장"/);
   assert.match(translations, /"event\.smartSaving": "저장 중\.\.\."/);
+  assert.match(translations, /"event\.smartAiPreview": "AI 정리"/);
+  assert.match(translations, /"event\.smartSourceFallback": "AI를 사용할 수 없어 문법 미리보기를 사용했습니다\."/);
+  assert.match(translations, /"dialog\.familySmartEventAiError": "AI 정리를 불러오지 못했습니다: \{error\}"/);
   assert.match(translations, /"dialog\.familySmartEventSaveConfirm": "미리보기 일정 \{count\}개를 캘린더에 저장할까요\?"/);
   assert.match(translations, /"event\.smartShorter": "1시간 줄이기"/);
   assert.match(translations, /"event\.smartLonger": "1시간 늘리기"/);
@@ -108,6 +122,6 @@ test("family smart event assets include styling, translations, and cache busters
   assert.match(translations, /"event\.smartMinutesSuffix": "분"/);
   assert.match(styles, /grid-template-columns: 96px minmax\(0, 1fr\);/);
   assert.match(indexSource, /href="\/styles\.css\?v=297"/);
-  assert.match(indexSource, /src="\/translations\.js\?v=180"/);
-  assert.match(indexSource, /src="\/app\.js\?v=285"/);
+  assert.match(indexSource, /src="\/translations\.js\?v=181"/);
+  assert.match(indexSource, /src="\/app\.js\?v=286"/);
 });

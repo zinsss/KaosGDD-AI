@@ -52,6 +52,10 @@ MAX_TEXT_PRESET_TEXTS = 1000
 MAX_TEXT_PRESET_ID_LENGTH = 128
 MAX_TEXT_PRESET_NAME_LENGTH = 200
 MAX_TEXT_PRESET_BODY_LENGTH = 4000
+MAX_SMART_EVENT_PROPOSALS = 12
+SMART_EVENTS_AI_URL = os.environ.get("CALENDAR_SMART_EVENTS_AI_URL", "").strip()
+SMART_EVENTS_AI_TOKEN_FILE = os.environ.get("CALENDAR_SMART_EVENTS_AI_TOKEN_FILE", "").strip()
+SMART_EVENTS_AI_TIMEOUT = float(os.environ.get("CALENDAR_SMART_EVENTS_AI_TIMEOUT_SECONDS", "20") or "20")
 ROUNY_COLOR_PATTERN = re.compile(r"^#[0-9a-fA-F]{6}$")
 WEATHER_CITIES = {
     "pohang": "포항",
@@ -1626,6 +1630,219 @@ def validate_time(value):
         raise ValueError("invalid_due_time")
     datetime.strptime(raw, "%H:%M")
     return raw
+
+
+def smart_event_minutes(time_value):
+    match = re.fullmatch(r"(\d{2}):(\d{2})", str(time_value or "").strip())
+    if not match:
+        return None
+    hour = int(match.group(1))
+    minute = int(match.group(2))
+    if hour > 23 or minute > 59:
+        return None
+    return hour * 60 + minute
+
+
+def add_smart_event_minutes(date_value, time_value, minutes):
+    validate_date(date_value)
+    validate_time(time_value)
+    shifted = datetime.strptime(f"{date_value} {time_value}", "%Y-%m-%d %H:%M") + timedelta(minutes=minutes)
+    return {"date": shifted.strftime("%Y-%m-%d"), "time": shifted.strftime("%H:%M")}
+
+
+def normalize_smart_event_time(hour_value, minute_value="", meridiem=""):
+    try:
+        hour = int(str(hour_value or "").strip())
+        minute = int(str(minute_value or "0").strip() or "0")
+    except ValueError:
+        return ""
+    marker = str(meridiem or "").strip()
+    if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+        return ""
+    if marker == "오전" and hour == 12:
+        hour = 0
+    if marker == "오후" and hour < 12:
+        hour += 12
+    if not marker and 1 <= hour <= 7:
+        hour += 12
+    return f"{hour:02d}:{minute:02d}"
+
+
+def parse_family_smart_event_text(value, date_value):
+    date_value = validate_date(date_value) or datetime.now(LOCAL_TIMEZONE).strftime("%Y-%m-%d")
+    time_expression = r"(?:(오전|오후)\s*)?(\d{1,2})(?::(\d{1,2})|시(?:\s*(\d{1,2})분?)?)"
+    pattern = re.compile(rf"^{time_expression}(?:\s*[-~–—]\s*{time_expression})?\s*(.*)$")
+    proposals = []
+    for raw_part in re.split(r"[/\n]+", str(value or "")):
+        part = raw_part.strip()
+        if not part:
+            continue
+        match = pattern.match(part)
+        if not match:
+            proposals.append(
+                {
+                    "title": part,
+                    "allDay": True,
+                    "startDate": date_value,
+                    "startTime": "",
+                    "endDate": date_value,
+                    "endTime": "",
+                    "source": "grammar",
+                }
+            )
+            continue
+        start_marker = match.group(1) or ""
+        start_time = normalize_smart_event_time(match.group(2), match.group(3) or match.group(4) or "0", start_marker)
+        explicit_end_time = (
+            normalize_smart_event_time(match.group(6), match.group(7) or match.group(8) or "0", match.group(5) or start_marker)
+            if match.group(6)
+            else ""
+        )
+        title = (match.group(9) or "").strip() or part
+        if not start_time:
+            proposals.append(
+                {
+                    "title": part,
+                    "allDay": True,
+                    "startDate": date_value,
+                    "startTime": "",
+                    "endDate": date_value,
+                    "endTime": "",
+                    "source": "grammar",
+                }
+            )
+            continue
+        start_minutes = smart_event_minutes(start_time)
+        explicit_end_minutes = smart_event_minutes(explicit_end_time)
+        if explicit_end_minutes is None:
+            end = add_smart_event_minutes(date_value, start_time, 60)
+        elif explicit_end_minutes <= start_minutes:
+            end = add_smart_event_minutes(date_value, explicit_end_time, 24 * 60)
+        else:
+            end = {"date": date_value, "time": explicit_end_time}
+        proposals.append(
+            {
+                "title": title,
+                "allDay": False,
+                "startDate": date_value,
+                "startTime": start_time,
+                "endDate": end["date"],
+                "endTime": end["time"],
+                "source": "grammar",
+            }
+        )
+    return proposals[:MAX_SMART_EVENT_PROPOSALS]
+
+
+def normalize_smart_event_preview_item(item, date_value, source="ai"):
+    if not isinstance(item, dict):
+        raise ValueError("invalid_smart_event_item")
+    title = str(item.get("title") or item.get("summary") or "").strip()
+    if not title:
+        raise ValueError("invalid_smart_event_title")
+    start_date = validate_date(item.get("startDate") or item.get("date") or date_value) or date_value
+    all_day = bool(item.get("allDay"))
+    if all_day:
+        return {
+            "title": title[:500],
+            "allDay": True,
+            "startDate": start_date,
+            "startTime": "",
+            "endDate": validate_date(item.get("endDate") or start_date) or start_date,
+            "endTime": "",
+            "source": source,
+        }
+    start_time = validate_time(item.get("startTime") or "")
+    end_date = validate_date(item.get("endDate") or start_date) or start_date
+    end_time = validate_time(item.get("endTime") or "")
+    if not start_time or not end_time:
+        raise ValueError("invalid_smart_event_time")
+    start_at = datetime.strptime(f"{start_date} {start_time}", "%Y-%m-%d %H:%M")
+    end_at = datetime.strptime(f"{end_date} {end_time}", "%Y-%m-%d %H:%M")
+    if end_at <= start_at:
+        raise ValueError("invalid_smart_event_range")
+    return {
+        "title": title[:500],
+        "allDay": False,
+        "startDate": start_date,
+        "startTime": start_time,
+        "endDate": end_date,
+        "endTime": end_time,
+        "source": source,
+    }
+
+
+def smart_events_ai_token():
+    if not SMART_EVENTS_AI_TOKEN_FILE:
+        return ""
+    try:
+        with open(SMART_EVENTS_AI_TOKEN_FILE, "r", encoding="utf-8") as handle:
+            return handle.read().strip()
+    except OSError:
+        return ""
+
+
+def call_smart_events_ai(payload):
+    if not SMART_EVENTS_AI_URL:
+        return None
+    request_body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    request = urllib.request.Request(SMART_EVENTS_AI_URL, data=request_body, method="POST")
+    request.add_header("Accept", "application/json")
+    request.add_header("Content-Type", "application/json; charset=utf-8")
+    token = smart_events_ai_token()
+    if token:
+        request.add_header("Authorization", f"Bearer {token}")
+    with urllib.request.urlopen(request, timeout=SMART_EVENTS_AI_TIMEOUT) as response:
+        body = response.read().decode("utf-8", errors="replace")
+    parsed = json.loads(body or "{}")
+    if not isinstance(parsed, dict):
+        raise ValueError("invalid_smart_event_ai_response")
+    items = parsed.get("events")
+    if items is None:
+        items = parsed.get("proposals")
+    if not isinstance(items, list):
+        raise ValueError("invalid_smart_event_ai_events")
+    return items[:MAX_SMART_EVENT_PROPOSALS]
+
+
+def family_smart_event_preview(payload, profile="main"):
+    if profile != "family":
+        raise ValueError("family_profile_required")
+    text = str(payload.get("text") or "").strip()
+    if not text:
+        return {
+            "ok": True,
+            "source": "grammar",
+            "events": [],
+            "ai": {"configured": bool(SMART_EVENTS_AI_URL), "used": False, "error": ""},
+        }
+    date_value = validate_date(payload.get("date") or "") or datetime.now(LOCAL_TIMEZONE).strftime("%Y-%m-%d")
+    grammar = [normalize_smart_event_preview_item(item, date_value, "grammar") for item in parse_family_smart_event_text(text, date_value)]
+    ai_status = {"configured": bool(SMART_EVENTS_AI_URL), "used": False, "error": ""}
+    if payload.get("useAi"):
+        if not SMART_EVENTS_AI_URL:
+            ai_status["error"] = "not_configured"
+        else:
+            try:
+                ai_items = call_smart_events_ai(
+                    {
+                        "text": text,
+                        "date": date_value,
+                        "profile": profile,
+                        "grammarEvents": grammar,
+                        "instruction": "Return preview-only calendar event proposals. Do not write or save anything.",
+                    }
+                )
+                if ai_items is not None:
+                    normalized = [
+                        normalize_smart_event_preview_item(item, date_value, "ai")
+                        for item in ai_items[:MAX_SMART_EVENT_PROPOSALS]
+                    ]
+                    ai_status["used"] = True
+                    return {"ok": True, "source": "ai", "events": normalized, "ai": ai_status}
+            except (ValueError, json.JSONDecodeError, urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
+                ai_status["error"] = type(exc).__name__ if not isinstance(exc, ValueError) else str(exc)
+    return {"ok": True, "source": "grammar", "events": grammar, "ai": ai_status}
 
 
 def validate_priority(value):
@@ -3322,6 +3539,15 @@ class Handler(BaseHTTPRequestHandler):
                 json_response(self, 400, {"error": str(exc)})
             except (ET.ParseError, urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
                 json_response(self, 502, {"configured": configured(profile), "live": False, "profile": profile, "error": type(exc).__name__})
+            return
+        if path == "/api/calendar/smart-events/preview":
+            try:
+                json_response(self, 200, family_smart_event_preview(read_json_request(self), profile))
+            except ValueError as exc:
+                status = 404 if str(exc) == "family_profile_required" else 400
+                json_response(self, status, {"ok": False, "error": str(exc)})
+            except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
+                json_response(self, 502, {"ok": False, "error": type(exc).__name__})
             return
         if path == "/api/calendar/tasks":
             try:

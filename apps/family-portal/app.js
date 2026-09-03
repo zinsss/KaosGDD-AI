@@ -170,6 +170,10 @@ const state = {
   addEventDraft: null,
   addTaskDraft: null,
   smartEventInput: "",
+  smartEventAiProposals: null,
+  smartEventAiLoading: false,
+  smartEventAiError: "",
+  smartEventPreviewSource: "grammar",
   smartEventEndOffsets: {},
   smartEventSaving: false,
   memoComposer: {
@@ -979,6 +983,52 @@ function parseFamilySmartEventInput(value, dateValue = state.selectedDate) {
     });
 }
 
+function normalizeFamilySmartEventProposal(item, dateValue = state.selectedDate) {
+  if (!item || typeof item !== "object") return null;
+  const title = String(item.title || item.summary || "").trim();
+  const startDate = /^\d{4}-\d{2}-\d{2}$/.test(String(item.startDate || item.date || ""))
+    ? String(item.startDate || item.date)
+    : dateValue;
+  if (!title) return null;
+  if (item.allDay) {
+    return {
+      title,
+      allDay: true,
+      startDate,
+      startTime: "",
+      endDate: /^\d{4}-\d{2}-\d{2}$/.test(String(item.endDate || "")) ? String(item.endDate) : startDate,
+      endTime: "",
+      source: item.source || state.smartEventPreviewSource || "grammar",
+    };
+  }
+  const startTime = /^\d{2}:\d{2}$/.test(String(item.startTime || "")) ? String(item.startTime) : "";
+  const endDate = /^\d{4}-\d{2}-\d{2}$/.test(String(item.endDate || "")) ? String(item.endDate) : startDate;
+  const endTime = /^\d{2}:\d{2}$/.test(String(item.endTime || "")) ? String(item.endTime) : "";
+  const startMs = startTime ? new Date(`${startDate}T${startTime}:00`).getTime() : NaN;
+  const endMs = endTime ? new Date(`${endDate}T${endTime}:00`).getTime() : NaN;
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return null;
+  return {
+    title,
+    allDay: false,
+    startDate,
+    startTime,
+    endDate,
+    endTime,
+    source: item.source || state.smartEventPreviewSource || "grammar",
+  };
+}
+
+function familySmartEventBaseProposals(dateValue = state.selectedDate) {
+  if (Array.isArray(state.smartEventAiProposals)) {
+    return state.smartEventAiProposals
+      .map((item) => normalizeFamilySmartEventProposal(item, dateValue))
+      .filter(Boolean);
+  }
+  return parseFamilySmartEventInput(state.smartEventInput, dateValue)
+    .map((item) => normalizeFamilySmartEventProposal(item, dateValue))
+    .filter(Boolean);
+}
+
 function adjustFamilySmartEventEnd(item, minutes) {
   if (item.allDay || !minutes) return item;
   const end = addLocalMinutes(item.endDate, item.endTime, minutes);
@@ -1027,7 +1077,7 @@ function formatFamilySmartEventDuration(item) {
 }
 
 function familySmartEventProposals(dateValue = state.selectedDate) {
-  return parseFamilySmartEventInput(state.smartEventInput, dateValue)
+  return familySmartEventBaseProposals(dateValue)
     .map((item, index) => adjustFamilySmartEventEnd(item, Number(state.smartEventEndOffsets[index] || 0)));
 }
 
@@ -1073,6 +1123,48 @@ async function postCalendarEvent(payload) {
   return response.json().catch(() => ({}));
 }
 
+async function requestFamilySmartEventAiPreview() {
+  if (portalProfile() !== "family" || state.smartEventAiLoading) return;
+  const text = String(state.smartEventInput || "").trim();
+  if (!text) {
+    window.alert(uiText("dialog.familySmartEventEmpty", "Add at least one event before saving."));
+    return;
+  }
+  state.smartEventAiLoading = true;
+  state.smartEventAiError = "";
+  render();
+  try {
+    const response = await fetch("/api/calendar/smart-events/preview", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        text,
+        date: state.selectedDate,
+        useAi: true,
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload.ok === false) throw new Error(payload.error || `HTTP ${response.status}`);
+    state.smartEventPreviewSource = payload.source === "ai" ? "ai" : "grammar";
+    state.smartEventAiError = payload.ai?.error || "";
+    state.smartEventAiProposals = Array.isArray(payload.events)
+      ? payload.events.map((item) => normalizeFamilySmartEventProposal(item, state.selectedDate)).filter(Boolean)
+      : [];
+    state.smartEventEndOffsets = {};
+  } catch (error) {
+    state.smartEventAiError = error.message || uiText("dialog.unknownError", "unknown error");
+    window.alert(uiText("dialog.familySmartEventAiError", "Could not load AI preview: {error}", {
+      error: state.smartEventAiError,
+    }));
+  } finally {
+    state.smartEventAiLoading = false;
+    render();
+  }
+}
+
 function eventPayloadFromFormData(formData) {
   return {
     collectionId: writableCollectionIdFromForm(formData, "VEVENT"),
@@ -1116,6 +1208,9 @@ async function saveFamilySmartEvents() {
     }
     state.selectedDate = payloads[0]?.startDate || state.selectedDate;
     state.smartEventInput = "";
+    state.smartEventAiProposals = null;
+    state.smartEventAiError = "";
+    state.smartEventPreviewSource = "grammar";
     state.smartEventEndOffsets = {};
     state.addEventDraft = null;
     state.eventPresetDraft = null;
@@ -1126,6 +1221,9 @@ async function saveFamilySmartEvents() {
     if (savedCount > 0) {
       state.selectedDate = payloads[0]?.startDate || state.selectedDate;
       state.smartEventInput = "";
+      state.smartEventAiProposals = null;
+      state.smartEventAiError = "";
+      state.smartEventPreviewSource = "grammar";
       state.smartEventEndOffsets = {};
       window.alert(uiText("dialog.radicalePartialSaveError", "{saved}/{total} saved. Please check the calendar: {error}", {
         saved: savedCount,
@@ -1151,8 +1249,14 @@ function updateFamilySmartEventPreview() {
   if (preview) {
     preview.innerHTML = `
       <p class="label">${uiText("event.smartPreview", "Preview")}</p>
+      ${renderFamilySmartEventSourceNote()}
       ${renderFamilySmartEventPreview(proposals)}
     `;
+  }
+  const aiButton = document.querySelector("[data-family-smart-event-ai-preview]");
+  if (aiButton) {
+    aiButton.disabled = !String(state.smartEventInput || "").trim() || state.smartEventAiLoading;
+    aiButton.textContent = state.smartEventAiLoading ? uiText("event.smartAiLoading", "Cleaning...") : uiText("event.smartAiPreview", "AI clean");
   }
   const saveButton = document.querySelector("[data-family-smart-event-save]");
   if (saveButton) {
@@ -5735,6 +5839,7 @@ function renderFamilySmartEventPanel() {
   const selectedDate = state.selectedDate || ymd(new Date());
   const input = state.smartEventInput || "";
   const proposals = familySmartEventProposals(selectedDate);
+  const canClean = Boolean(String(input).trim()) && !state.smartEventAiLoading;
   return `
     <section class="panel familySmartEventPanel">
       <div class="panelHeader">
@@ -5748,15 +5853,30 @@ function renderFamilySmartEventPanel() {
         <p class="formNote">${uiText("event.smartHelp", "Review the preview, then save to the calendar.")}</p>
         <div class="familySmartEventPreview" data-family-smart-event-preview>
           <p class="label">${uiText("event.smartPreview", "Preview")}</p>
+          ${renderFamilySmartEventSourceNote()}
           ${renderFamilySmartEventPreview(proposals)}
         </div>
         <div class="formActions">
           <button class="openButton" type="button" data-add-event-mode="normal">${uiText("event.manualFallback", "Manual input")}</button>
+          <button class="openButton" type="button" data-family-smart-event-ai-preview ${canClean ? "" : "disabled"}>${state.smartEventAiLoading ? uiText("event.smartAiLoading", "Cleaning...") : uiText("event.smartAiPreview", "AI clean")}</button>
           <button class="primaryButton" type="button" data-family-smart-event-save ${!proposals.length || state.smartEventSaving ? "disabled" : ""}>${state.smartEventSaving ? uiText("event.smartSaving", "Saving...") : uiText("event.smartSave", "Review and save")}</button>
         </div>
       </div>
     </section>
   `;
+}
+
+function renderFamilySmartEventSourceNote() {
+  if (state.smartEventAiLoading) {
+    return `<p class="formNote" data-family-smart-event-source>${uiText("event.smartAiLoading", "Cleaning...")}</p>`;
+  }
+  if (state.smartEventPreviewSource === "ai") {
+    return `<p class="formNote" data-family-smart-event-source>${uiText("event.smartSourceAi", "AI preview")}</p>`;
+  }
+  if (state.smartEventAiError) {
+    return `<p class="formNote" data-family-smart-event-source>${uiText("event.smartSourceFallback", "AI unavailable; grammar preview is shown.")}</p>`;
+  }
+  return `<p class="formNote" data-family-smart-event-source>${uiText("event.smartSourceGrammar", "Grammar preview")}</p>`;
 }
 
 function renderFamilySmartEventPreview(proposals) {
@@ -9841,13 +9961,19 @@ document.addEventListener("click", async (event) => {
     const index = Number(smartEventEndStep.dataset.familySmartEventIndex);
     const step = Number(smartEventEndStep.dataset.familySmartEventEndStep);
     if (Number.isInteger(index) && Number.isInteger(step)) {
-      const item = parseFamilySmartEventInput(state.smartEventInput, state.selectedDate)[index];
+      const item = familySmartEventBaseProposals(state.selectedDate)[index];
       const currentOffset = Number(state.smartEventEndOffsets[index] || 0);
       state.smartEventEndOffsets[index] = item
         ? nextFamilySmartEventEndOffset(item, currentOffset, step)
         : currentOffset + step;
       updateFamilySmartEventPreview();
     }
+    return;
+  }
+
+  if (event.target.closest("[data-family-smart-event-ai-preview]")) {
+    event.preventDefault();
+    await requestFamilySmartEventAiPreview();
     return;
   }
 
@@ -11484,6 +11610,9 @@ document.addEventListener("input", (event) => {
   const smartEventInput = event.target.closest("[data-family-smart-event-input]");
   if (smartEventInput) {
     state.smartEventInput = smartEventInput.value;
+    state.smartEventAiProposals = null;
+    state.smartEventAiError = "";
+    state.smartEventPreviewSource = "grammar";
     state.smartEventEndOffsets = {};
     updateFamilySmartEventPreview();
     return;
