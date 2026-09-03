@@ -1671,11 +1671,35 @@ def normalize_smart_event_time(hour_value, minute_value="", meridiem=""):
 
 def split_family_smart_event_text(value):
     normalized = re.sub(r"\r\n?", "\n", str(value or "")).replace("，", ",").replace("、", ",")
-    return [
+    strong_parts = [
         part.strip()
-        for part in re.split(r"(?:[/\n,+&]+|\s+(?:그리고|그다음|그 다음|다음|또|및)\s+)", normalized)
+        for part in re.split(r"(?:[/\n+&]+|\s+(?:그리고|그다음|그 다음|다음|또|및)\s+)", normalized)
         if part.strip()
     ]
+    parts = []
+    for part in strong_parts:
+        parts.extend(split_family_smart_event_weak_comma(part))
+    return parts
+
+
+def split_family_smart_event_weak_comma(value):
+    comma_parts = [part.strip() for part in str(value or "").split(",") if part.strip()]
+    if len(comma_parts) <= 1:
+        return comma_parts
+    parts = []
+    current = comma_parts[0]
+    for part in comma_parts[1:]:
+        if family_smart_event_comma_starts_new_event(part):
+            parts.append(current.strip())
+            current = part
+        else:
+            current = f"{current},{part}"
+    parts.append(current.strip())
+    return [part for part in parts if part]
+
+
+def family_smart_event_comma_starts_new_event(value):
+    return bool(re.match(r"^(?:오전|오후)?\s*\d{1,2}(?::\d{1,2}|시(?:\s*\d{1,2}분?)?)(?:\s|$)", str(value or "").strip()))
 
 
 def parse_family_smart_event_text(value, date_value):

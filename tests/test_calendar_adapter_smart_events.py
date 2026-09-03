@@ -34,6 +34,18 @@ class CalendarAdapterSmartEventParserTests(unittest.TestCase):
         self.assertEqual(events[1]["startTime"], "12:30")
         self.assertEqual(events[1]["endTime"], "14:00")
 
+    def test_keeps_comma_separated_appointment_details_together(self) -> None:
+        events = calendar_adapter.parse_family_smart_event_text(
+            "반차/ 1:40 영대병원-초음파,피검사,엑스레이",
+            "2026-09-03",
+        )
+
+        self.assertEqual([event["title"] for event in events], ["반차", "영대병원-초음파,피검사,엑스레이"])
+        self.assertTrue(events[0]["allDay"])
+        self.assertFalse(events[1]["allDay"])
+        self.assertEqual(events[1]["startTime"], "13:40")
+        self.assertEqual(events[1]["endTime"], "14:40")
+
 
 if __name__ == "__main__":
     unittest.main()

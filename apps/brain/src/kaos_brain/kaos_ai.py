@@ -198,7 +198,9 @@ Allowed schema:
 Rules:
 - This is preview only. Do not write, save, call tools, or claim anything was created.
 - Use the request date as the default date.
-- Split bundled day notes into separate events when they are separated by slash, newline, comma, +, &, or Korean connectors such as "그리고", "그 다음", "다음", "또", and "및".
+- Split bundled day notes into separate events when they are separated by slash, newline, +, &, or Korean connectors such as "그리고", "그 다음", "다음", "또", and "및".
+- Treat comma as a weak separator: split on comma only when the next comma segment clearly starts a new event, usually with a time such as "12:30", "2시", "오후 3시". Do not split comma-separated detail lists inside one appointment.
+- Example: "반차/ 1:40 영대병원-초음파,피검사,엑스레이" should become exactly two events: all-day "반차" and one timed event titled "영대병원-초음파,피검사,엑스레이".
 - Keep Korean titles natural and concise.
 - Preserve explicitly provided start times.
 - Use HH:MM 24-hour times.

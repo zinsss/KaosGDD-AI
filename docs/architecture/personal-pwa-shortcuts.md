@@ -122,9 +122,11 @@ Paused follow-up state, 2026-09-03:
   implementation for now.
 - When resumed, tune the parser and KaosBrain prompt from real Family examples
   captured from normal use, not invented edge cases.
-- Current accepted separators include slash, newline, comma, `+`, `&`, and
-  Korean connectors such as `그리고`, `그다음`, `그 다음`, `다음`, `또`, and
-  `및`.
+- Current strong separators include slash, newline, `+`, `&`, and Korean
+  connectors such as `그리고`, `그다음`, `그 다음`, `다음`, `또`, and `및`.
+  Comma is intentionally weak: split only when the next segment clearly starts
+  a new event, so appointment detail lists like `초음파,피검사,엑스레이` stay
+  inside the same event.
 - Keep the existing safety shape: AI or grammar always produces preview rows
   first; Radicale writes happen only after explicit `확인 후 저장`.
 - Next likely UI slice: make preview rows directly editable before save,
