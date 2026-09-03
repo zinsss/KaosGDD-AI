@@ -552,6 +552,9 @@ services_preflight() {
   if ! grep -q 'location \^~ /api/mail/' "${root}/config/family-portal/nginx.conf"; then
     die "family portal must route the scoped Mail API explicitly"
   fi
+  if ! grep -q 'location \^~ /api/ai-tasks/' "${root}/config/family-portal/nginx.conf"; then
+    die "family portal must route the scoped AI Tasks API explicitly"
+  fi
   if ! grep -q 'location \^~ /api/system/' "${root}/config/family-portal/nginx.conf"; then
     die "family portal must route the read-only System API explicitly"
   fi
@@ -603,6 +606,9 @@ family_portal_source_preflight() {
   fi
   if ! grep -q 'location \^~ /api/mail/' "${nginx_source}"; then
     die "family portal source must route the scoped Mail API explicitly"
+  fi
+  if ! grep -q 'location \^~ /api/ai-tasks/' "${nginx_source}"; then
+    die "family portal source must route the scoped AI Tasks API explicitly"
   fi
   if ! grep -q 'location \^~ /api/system/' "${nginx_source}"; then
     die "family portal source must route the read-only System API explicitly"
