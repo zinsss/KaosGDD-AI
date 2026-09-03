@@ -120,7 +120,10 @@ def official_health_search_candidates(
     preferred = _preferred_hosts(preferred_domains)
     sites = _ordered_sites(preferred)
     candidates: list[OfficialSearchCandidate] = []
-    candidates.extend(_hira_insurance_criteria_candidates(queries, preferred=preferred, urlopen=urlopen))
+    hira_candidates = _hira_insurance_criteria_candidates(queries, preferred=preferred, urlopen=urlopen)
+    if hira_candidates and any(host in preferred for host in ("hira.or.kr", "www.hira.or.kr")):
+        return _ranked_unique_candidates(hira_candidates)[:limit]
+    candidates.extend(hira_candidates)
     for site in sites:
         if not site.search_url:
             continue
