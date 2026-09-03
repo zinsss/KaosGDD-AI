@@ -116,6 +116,24 @@ Initial Family AI input candidates:
 - Caregiver helper: parse or explain monthly care notes only after the
   existing deterministic caregiver summary remains stable.
 
+Paused follow-up state, 2026-09-03:
+
+- Family Calendar smart input is usable enough to step away from active
+  implementation for now.
+- When resumed, tune the parser and KaosBrain prompt from real Family examples
+  captured from normal use, not invented edge cases.
+- Current accepted separators include slash, newline, comma, `+`, `&`, and
+  Korean connectors such as `그리고`, `그다음`, `그 다음`, `다음`, `또`, and
+  `및`.
+- Keep the existing safety shape: AI or grammar always produces preview rows
+  first; Radicale writes happen only after explicit `확인 후 저장`.
+- Next likely UI slice: make preview rows directly editable before save,
+  including title, all-day/timed mode, start time, and end time.
+- Next likely settings slice: add a Family setting for default timed-event
+  duration if real usage shows that 1 hour is not enough.
+- Next likely product slice: add the same contextual smart textbox pattern to
+  Family Tasks, with preview and confirmation rather than a chat prompt.
+
 Non-goals for the first slice:
 
 - Do not add a prominent Family chatbot.
