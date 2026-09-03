@@ -34,6 +34,11 @@ from kaos_governor.fax import FaxConfig, FaxError, FaxService
 from kaos_governor.mail import MailOrganizerConfig, MailOrganizerError, NaverMailOrganizer
 from kaos_governor.mail.naver import KST, NaverMailConfig, NaverMailError, NaverMailPoller
 from kaos_governor.memos import relay as memos_relay
+from kaos_governor.official_search import (
+    allowed_official_health_hosts,
+    is_allowed_official_health_host,
+    official_health_search_candidates,
+)
 from kaos_governor.tasks import PostgresRecurringTaskStore, RecurringTaskDefinition, RecurringTaskError, RecurringTaskService, validate_payload
 from kaos_governor.system_updates import SystemUpdatesError, read_system_updates
 
@@ -572,7 +577,9 @@ def ai_task_status_for_error(exc: Exception) -> int:
         "ai_task_source_required",
         "ai_task_source_url_invalid",
         "ai_task_source_url_blocked",
+        "ai_task_source_host_not_allowed",
         "ai_task_source_unsupported_content_type",
+        "ai_task_source_too_large",
         "ai_task_source_not_found",
         "ai_task_source_empty",
         "ai_task_pdf_required",
@@ -584,6 +591,9 @@ def ai_task_status_for_error(exc: Exception) -> int:
         "ai_task_limit_invalid",
         "web_task_prompt_required",
         "web_task_prompt_too_long",
+        "official_web_sources_required",
+        "ai_task_official_web_query_required",
+        "ai_task_official_web_sources_not_found",
     }:
         return 400
     return 503
@@ -671,18 +681,134 @@ def preview_web_ai_task_payload(
         "prompt": prompt,
         "checkedAt": datetime.now(UTC).date().isoformat(),
     }
-    result = call_ai_task_web_brain(request, urlopen=urlopen)
+    plan_request = {
+        **request,
+        "allowedDomains": allowed_official_health_hosts(),
+    }
+    plan = _clean_official_web_plan(call_ai_task_official_web_brain("plan", plan_request, urlopen=urlopen), prompt=prompt)
+    source_payloads = fetch_official_web_sources(plan, urlopen=urlopen)
+    if not source_payloads:
+        raise AITaskError("ai_task_official_web_sources_not_found")
+    summary_request = {
+        **request,
+        "plan": plan,
+        "sources": source_payloads,
+    }
+    result = _clean_official_web_result(
+        call_ai_task_official_web_brain("summarize", summary_request, urlopen=urlopen),
+        request=summary_request,
+    )
     record = (archive or ai_task_archive()).add_result(
         kind="web",
         prompt=prompt,
         source={
-            "type": "web_search",
+            "type": "official_web_search",
             "checkedAt": result.get("checkedAt") or request["checkedAt"],
+            "plan": plan,
             "sources": result.get("sources") if isinstance(result.get("sources"), list) else [],
         },
         result=result,
     )
     return {"ok": True, "task": record.as_dict(), "result": result}
+
+
+def _clean_official_web_plan(plan: dict[str, object], *, prompt: str) -> dict[str, object]:
+    query = " ".join(str(plan.get("query") or prompt).split())[:200]
+    if not query:
+        raise AITaskError("ai_task_official_web_query_required")
+    alternate_queries = _clean_string_list(plan.get("alternateQueries"), limit=3, max_chars=200)
+    preferred_domains = [
+        host
+        for host in _clean_string_list(plan.get("preferredDomains"), limit=6, max_chars=120)
+        if is_allowed_official_health_host(host)
+    ]
+    task = str(plan.get("task") or "summary").strip().lower()
+    if task not in {"summary", "list", "explain", "compare"}:
+        task = "summary"
+    language = str(plan.get("language") or "ko").strip().lower()
+    if language not in {"ko", "en"}:
+        language = "ko"
+    return {
+        "query": query,
+        "alternateQueries": alternate_queries,
+        "preferredDomains": preferred_domains,
+        "task": task,
+        "language": language,
+    }
+
+
+def _clean_official_web_result(result: dict[str, object], *, request: dict[str, object]) -> dict[str, object]:
+    title = " ".join(str(result.get("title") or "").split())
+    content = str(result.get("content") or "").strip()
+    if not title or not content:
+        raise AITaskError("ai_task_official_web_invalid_result")
+    sources = []
+    for source in result.get("sources") or []:
+        if not isinstance(source, dict):
+            continue
+        url = str(source.get("url") or "").strip()
+        host = urllib.parse.urlsplit(url).hostname or ""
+        if not url.startswith(("https://", "http://")) or not is_allowed_official_health_host(host):
+            continue
+        sources.append({"title": " ".join(str(source.get("title") or url).split())[:200], "url": url[:800]})
+        if len(sources) >= 10:
+            break
+    if not sources:
+        for source in request.get("sources") or []:
+            if not isinstance(source, dict):
+                continue
+            url = str(source.get("url") or "").strip()
+            if url.startswith(("https://", "http://")):
+                sources.append({"title": " ".join(str(source.get("title") or url).split())[:200], "url": url[:800]})
+            if len(sources) >= 10:
+                break
+    return {
+        "title": title[:160],
+        "content": content[:12000],
+        "sources": sources,
+        "checkedAt": str(result.get("checkedAt") or request.get("checkedAt") or "").strip()[:40],
+        "model": str(result.get("model") or "kaosbrain-openai").strip()[:80],
+    }
+
+
+def _clean_string_list(value: object, *, limit: int, max_chars: int) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    items: list[str] = []
+    for item in value:
+        text = " ".join(str(item or "").split())[:max_chars]
+        if text and text not in items:
+            items.append(text)
+        if len(items) >= limit:
+            break
+    return items
+
+
+def fetch_official_web_sources(plan: dict[str, object], *, urlopen=urllib.request.urlopen) -> list[dict[str, object]]:
+    candidates = official_health_search_candidates(
+        str(plan.get("query") or ""),
+        alternate_queries=_clean_string_list(plan.get("alternateQueries"), limit=3, max_chars=200),
+        preferred_domains=_clean_string_list(plan.get("preferredDomains"), limit=6, max_chars=120),
+        limit=8,
+        urlopen=urlopen,
+    )
+    sources: list[dict[str, object]] = []
+    for candidate in candidates:
+        try:
+            source = fetch_official_source(
+                candidate.url,
+                title=candidate.title,
+                require_allowed_health_host=True,
+                urlopen=urlopen,
+            )
+        except AITaskError:
+            continue
+        source["searchScore"] = candidate.score
+        source["searchSource"] = candidate.source
+        sources.append(source)
+        if len(sources) >= 5:
+            break
+    return sources
 
 
 def preview_official_doc_memo_request_payload(
@@ -769,6 +895,7 @@ def fetch_official_source(
     source_url: str,
     *,
     title: str = "",
+    require_allowed_health_host: bool = False,
     urlopen=urllib.request.urlopen,
 ) -> dict[str, object]:
     parsed = urllib.parse.urlsplit(source_url)
@@ -777,23 +904,38 @@ def fetch_official_source(
     host = parsed.hostname.lower().rstrip(".")
     if _blocked_fetch_host(host):
         raise AITaskError("ai_task_source_url_blocked")
+    if require_allowed_health_host and not is_allowed_official_health_host(host):
+        raise AITaskError("ai_task_source_host_not_allowed")
     request = urllib.request.Request(
         urllib.parse.urlunsplit(parsed),
         headers={
-            "Accept": "text/html, text/plain;q=0.9, application/json;q=0.8",
+            "Accept": "text/html, text/plain;q=0.9, application/json;q=0.8, application/pdf;q=0.7",
             "User-Agent": "KaosGovernor/ai-tasks",
         },
     )
     try:
         with urlopen(request, timeout=OFFICIAL_MEMO_FETCH_TIMEOUT_SECONDS) as response:
             content_type = response.headers.get("Content-Type", "")
-            raw = response.read(1_000_000)
+            read_limit = OFFICIAL_MEMO_MAX_PDF_BYTES if "pdf" in content_type.lower() else 1_000_000
+            raw = response.read(read_limit + 1)
     except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError) as exc:
         raise AITaskError("ai_task_source_fetch_failed") from exc
     lower_type = content_type.lower()
-    if lower_type and not any(kind in lower_type for kind in ("text/html", "text/plain", "application/json")):
+    if len(raw) > (OFFICIAL_MEMO_MAX_PDF_BYTES if "pdf" in lower_type else 1_000_000):
+        raise AITaskError("ai_task_source_too_large")
+    if lower_type and not any(kind in lower_type for kind in ("text/html", "text/plain", "application/json", "application/pdf")):
         raise AITaskError("ai_task_source_unsupported_content_type")
-    text = raw.decode("utf-8", errors="replace")
+    if "pdf" in lower_type or raw.startswith(b"%PDF-"):
+        filename = Path(urllib.parse.unquote(parsed.path)).name or "official-source.pdf"
+        text = extract_official_memo_pdf_text(filename if filename.lower().endswith(".pdf") else f"{filename}.pdf", raw)
+        return {
+            "type": "url_pdf",
+            "title": title or filename or host,
+            "url": urllib.parse.urlunsplit(parsed),
+            "host": host,
+            "text": text[:OFFICIAL_MEMO_MAX_SOURCE_CHARS],
+        }
+    text = _decode_http_text(raw, content_type)
     if "html" in lower_type or "<html" in text[:500].lower():
         parser = OfficialSourceTextParser()
         parser.feed(text)
@@ -813,6 +955,15 @@ def fetch_official_source(
         "host": host,
         "text": text[:OFFICIAL_MEMO_MAX_SOURCE_CHARS],
     }
+
+
+def _decode_http_text(raw: bytes, content_type: str) -> str:
+    match = re.search(r"charset=([\w.-]+)", content_type or "", flags=re.I)
+    charset = match.group(1) if match else "utf-8"
+    try:
+        return raw.decode(charset, errors="replace")
+    except LookupError:
+        return raw.decode("utf-8", errors="replace")
 
 
 def _blocked_fetch_host(host: str) -> bool:
@@ -899,6 +1050,67 @@ def ai_tasks_web_brain_url() -> str:
     if AI_TASKS_BRAIN_URL.endswith(marker):
         return f"{AI_TASKS_BRAIN_URL.removesuffix(marker)}/internal/ai-tasks/web/preview"
     return ""
+
+
+def ai_tasks_official_web_brain_url(kind: str) -> str:
+    base = ""
+    marker = "/internal/ai-tasks/official-doc-memo/preview"
+    if AI_TASKS_BRAIN_URL.endswith(marker):
+        base = AI_TASKS_BRAIN_URL.removesuffix(marker)
+    elif AI_TASKS_WEB_BRAIN_URL.endswith("/internal/ai-tasks/web/preview"):
+        base = AI_TASKS_WEB_BRAIN_URL.removesuffix("/internal/ai-tasks/web/preview")
+    if not base:
+        return ""
+    return f"{base}/internal/ai-tasks/official-web/{kind}"
+
+
+def call_ai_task_official_web_brain(
+    kind: str,
+    request_payload: dict[str, object],
+    *,
+    urlopen=urllib.request.urlopen,
+) -> dict[str, object]:
+    brain_url = ai_tasks_official_web_brain_url(kind)
+    if not brain_url:
+        raise AITaskError("ai_task_official_web_brain_not_configured")
+    token = ai_task_brain_token()
+    if not token:
+        raise AITaskError("ai_task_brain_token_missing")
+    request = urllib.request.Request(
+        brain_url,
+        data=json.dumps(request_payload, ensure_ascii=False).encode("utf-8"),
+        method="POST",
+        headers={
+            "Accept": "application/json",
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "User-Agent": "KaosGovernor/ai-tasks",
+        },
+    )
+    try:
+        with urlopen(request, timeout=AI_TASKS_BRAIN_TIMEOUT_SECONDS) as response:
+            raw = response.read()
+    except urllib.error.HTTPError as exc:
+        try:
+            body = json.loads(exc.read().decode("utf-8"))
+            code = str(body.get("error") or f"ai_task_official_web_brain_http_{exc.code}")
+        except Exception:
+            code = f"ai_task_official_web_brain_http_{exc.code}"
+        raise AITaskError(code) from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise AITaskError("ai_task_official_web_brain_request_failed") from exc
+    try:
+        body = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise AITaskError("ai_task_official_web_brain_invalid_json") from exc
+    if not isinstance(body, dict) or body.get("ok") is not True:
+        error = str(body.get("error") or "ai_task_official_web_brain_failed") if isinstance(body, dict) else "ai_task_official_web_brain_invalid_response"
+        raise AITaskError(error)
+    expected_key = "plan" if kind == "plan" else "result"
+    value = body.get(expected_key)
+    if not isinstance(value, dict):
+        raise AITaskError(f"ai_task_official_web_missing_{expected_key}")
+    return value
 
 
 def call_ai_task_web_brain(

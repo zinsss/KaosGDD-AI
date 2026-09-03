@@ -252,22 +252,45 @@ Safety boundaries:
 - The archive records the images' derived fields, searched sources, candidates,
   and whether the user rejected/accepted the lookup as a personal note.
 
-### First planned AI Task
+### Official health web-search AI Task
 
-The first general-purpose AI Task should be **Official Doc -> Memo**:
+The general-purpose AI Task workbench now has two related official-source
+flows:
 
 ```text
-PWA AI Tasks page
-  one prompt box
-  [ FIND SOURCES ] [ PREVIEW MEMO ] [ SAVE MEMO ]
-  source candidates from official domains
-  memo preview with citation links and checked date
-  archive row for every run
+DOC -> MEMO
+  user supplies official URL, source text, or a text-based PDF
+  Governor fetches/extracts source text
+  KaosBrain-OpenAI drafts a memo
+  PWA writes to Memos only after explicit SAVE MEMO
+
+WEB SEARCH
+  user supplies a natural-language prompt
+  KaosBrain-OpenAI turns the prompt into a structured search job
+  Governor searches/fetches only allowlisted official health/public sites
+  KaosBrain-OpenAI summarizes and reasons from the fetched excerpts only
+  PWA shows a read-only result with source links and archives the task
 ```
 
-Initial implementation can support pasted official URLs or pasted official text
-first, then add official-domain search once a reliable search/fetcher service is
-chosen. Public-health documents should always use preview-before-save.
+Initial searchable source adapters target the main national sites that have
+public search pages:
+
+- `mohw.go.kr`
+- `kdca.go.kr`
+- `mfds.go.kr`
+- `hira.or.kr`
+
+The wider official health/public allowlist also permits fetched source links
+from national public-health, insurance, evaluation, medicine, and affiliated
+agency domains such as `nhis.or.kr`, `longtermcare.or.kr`,
+`nedrug.mfds.go.kr`, `nip.kdca.go.kr`, `health.kdca.go.kr`, `nih.go.kr`,
+`nmc.or.kr`, `ncc.re.kr`, `neca.re.kr`, `khealth.or.kr`, `khidi.or.kr`,
+`kohi.or.kr`, `k-his.or.kr`, `k-medi.or.kr`, `kuksiwon.or.kr`,
+`koda1458.kr`, and `koiha.kr`.
+
+This is deliberately not broad web browsing. The model does not choose arbitrary
+URLs and Governor rejects fetched pages outside the allowlist. Public-health
+documents should always stay preview-before-save.
 
 ## Data Contract
 

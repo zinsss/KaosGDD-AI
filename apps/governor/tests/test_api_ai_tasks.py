@@ -48,22 +48,50 @@ def fake_brain_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
 
 
 def fake_web_brain_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
-    assert request.full_url == "http://brain.internal:8099/internal/ai-tasks/web/preview"
-    assert request.headers["Authorization"] == "Bearer secret"
-    body = json.loads(request.data.decode("utf-8"))
-    assert body["prompt"] == "공식 자료 찾아서 요약"
-    return FakeHTTPResponse(
-        {
-            "ok": True,
-            "result": {
-                "title": "공식 자료 요약",
-                "content": "요약 결과",
-                "sources": [{"title": "KDCA", "url": "https://www.kdca.go.kr/example"}],
-                "checkedAt": body["checkedAt"],
-                "model": "gpt-5.6",
-            },
-        }
-    )
+    if request.full_url == "http://brain.internal:8099/internal/ai-tasks/official-web/plan":
+        assert request.headers["Authorization"] == "Bearer secret"
+        body = json.loads(request.data.decode("utf-8"))
+        assert body["prompt"] == "공식 자료 찾아서 요약"
+        assert "www.kdca.go.kr" in body["allowedDomains"]
+        return FakeHTTPResponse(
+            {
+                "ok": True,
+                "plan": {
+                    "query": "인플루엔자 접종 계획",
+                    "alternateQueries": ["국가 인플루엔자 예방접종"],
+                    "preferredDomains": ["kdca.go.kr"],
+                    "task": "summary",
+                    "language": "ko",
+                },
+            }
+        )
+    if request.full_url.startswith("https://www.kdca.go.kr/search.do?"):
+        return FakeHTTPResponse(
+            '<html><body><a href="/board/notice">26-27절기 국가 인플루엔자 예방접종 계획</a></body></html>',
+            "text/html; charset=utf-8",
+        )
+    if request.full_url == "https://www.kdca.go.kr/board/notice":
+        return FakeHTTPResponse(
+            "<html><head><title>인플루엔자 계획</title></head><body>국가 인플루엔자 예방접종 공식 본문입니다.</body></html>",
+            "text/html; charset=utf-8",
+        )
+    if request.full_url == "http://brain.internal:8099/internal/ai-tasks/official-web/summarize":
+        assert request.headers["Authorization"] == "Bearer secret"
+        body = json.loads(request.data.decode("utf-8"))
+        assert body["sources"][0]["url"] == "https://www.kdca.go.kr/board/notice"
+        return FakeHTTPResponse(
+            {
+                "ok": True,
+                "result": {
+                    "title": "공식 자료 요약",
+                    "content": "요약 결과",
+                    "sources": [{"title": "KDCA", "url": "https://www.kdca.go.kr/board/notice"}],
+                    "checkedAt": body["checkedAt"],
+                    "model": "kaosbrain-openai",
+                },
+            }
+        )
+    raise AssertionError(request.full_url)
 
 
 class GovernorAITaskTests(unittest.TestCase):
@@ -158,7 +186,8 @@ class GovernorAITaskTests(unittest.TestCase):
             self.assertEqual(len(records), 1)
             self.assertEqual(records[0].kind, "web")
             self.assertEqual(records[0].status, "previewed")
-            self.assertEqual(records[0].source["type"], "web_search")
+            self.assertEqual(records[0].source["type"], "official_web_search")
+            self.assertEqual(records[0].source["plan"]["query"], "인플루엔자 접종 계획")
 
     def test_complete_marks_archived_task_applied(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

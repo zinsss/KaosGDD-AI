@@ -28,6 +28,12 @@ class KaosAIPlanner(Protocol):
     async def preview_official_memo(self, request: Mapping[str, Any]) -> dict[str, Any]:
         """Return a preview-only Memos draft for an official document/source."""
 
+    async def plan_official_web_task(self, request: Mapping[str, Any]) -> dict[str, Any]:
+        """Return a structured official-source web search job."""
+
+    async def summarize_official_web_task(self, request: Mapping[str, Any]) -> dict[str, Any]:
+        """Return a summary/reasoning result for Governor-fetched official sources."""
+
     async def second_look(self, request: Mapping[str, Any]) -> dict[str, Any]:
         """Return a temporary medical image second-look result."""
 
@@ -53,6 +59,12 @@ class DisabledKaosAIPlanner:
         return ()
 
     async def preview_official_memo(self, request: Mapping[str, Any]) -> dict[str, Any]:
+        raise KaosAIError("kaosai_disabled")
+
+    async def plan_official_web_task(self, request: Mapping[str, Any]) -> dict[str, Any]:
+        raise KaosAIError("kaosai_disabled")
+
+    async def summarize_official_web_task(self, request: Mapping[str, Any]) -> dict[str, Any]:
         raise KaosAIError("kaosai_disabled")
 
     async def second_look(self, request: Mapping[str, Any]) -> dict[str, Any]:
@@ -86,6 +98,22 @@ class OpenClawKaosAIPlanner:
             raise KaosAIError("kaosai_disabled")
         raw = await self._complete_message(f"{KAOSAI_OFFICIAL_MEMO_SYSTEM_PROMPT}\n\n{_render_official_memo_request(request)}")
         return parse_official_memo_response(raw, request)
+
+    async def plan_official_web_task(self, request: Mapping[str, Any]) -> dict[str, Any]:
+        if not self.config.enabled:
+            raise KaosAIError("kaosai_disabled")
+        raw = await self._complete_message(
+            f"{KAOSAI_OFFICIAL_WEB_PLAN_SYSTEM_PROMPT}\n\n{_render_official_web_plan_request(request)}"
+        )
+        return parse_official_web_plan_response(raw, request)
+
+    async def summarize_official_web_task(self, request: Mapping[str, Any]) -> dict[str, Any]:
+        if not self.config.enabled:
+            raise KaosAIError("kaosai_disabled")
+        raw = await self._complete_message(
+            f"{KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT}\n\n{_render_official_web_summary_request(request)}"
+        )
+        return parse_official_web_summary_response(raw, request)
 
     async def second_look(self, request: Mapping[str, Any]) -> dict[str, Any]:
         if not self.config.enabled:
@@ -226,6 +254,35 @@ Rules:
 - Do not invent official policies, prices, dates, contacts, or links."""
 
 
+KAOSAI_OFFICIAL_WEB_PLAN_SYSTEM_PROMPT = """You are KaosBrain-OpenAI planning a read-only official-source search for KaosGDD.
+Return exactly one JSON object and no markdown.
+Allowed schema:
+{"query":"...","alternateQueries":["..."],"preferredDomains":["..."],"task":"summary|list|explain|compare","language":"ko|en"}
+
+Rules:
+- You cannot browse or fetch sources. Governor will search only its allowlisted Korean health/public domains.
+- Convert the user prompt into short Korean search queries suitable for government/public health search pages.
+- Keep query factual and compact; remove instructions like "summarize" when they do not help search.
+- Use preferredDomains only when the prompt implies a source family. Examples: drug coverage -> hira.or.kr/mohw.go.kr; infection/vaccine -> kdca.go.kr; food/drug/device safety -> mfds.go.kr.
+- Include at most 3 alternateQueries and at most 6 preferredDomains.
+- Default language to "ko" unless the user clearly asks English."""
+
+
+KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT = """You are KaosBrain-OpenAI helping KaosGDD answer from Governor-fetched official/public health sources.
+Return exactly one JSON object and no markdown wrapper.
+Allowed schema:
+{"title":"...","content":"...","sources":[{"title":"...","url":"..."}],"checkedAt":"YYYY-MM-DD","model":"..."}
+
+Rules:
+- This is read-only. Do not claim anything was saved, sent, applied, or modified.
+- Use Korean unless the request is clearly English.
+- Use only the provided sources and excerpts. If the sources are insufficient, say what is missing.
+- Prefer practical output: answer first, then key points, dates/eligibility/actions, and source notes.
+- Cite source titles/URLs in content when useful.
+- Do not invent policy, medicine, insurance, dates, prices, contacts, or links.
+- Keep content concise but enough for the user to act on the information."""
+
+
 KAOSAI_SECOND_LOOK_SYSTEM_PROMPT = """You are KaosBrain-OpenAI providing a temporary medical image second-look checklist.
 Return exactly one JSON object and no markdown.
 Do not diagnose, do not claim certainty, and do not provide a final report.
@@ -354,6 +411,77 @@ def parse_official_memo_response(raw: str, request: Mapping[str, Any]) -> dict[s
         "sourceTitle": source_title,
         "sourceUrl": source_url,
         "checkedAt": checked_at,
+    }
+
+
+def parse_official_web_plan_response(raw: str, request: Mapping[str, Any]) -> dict[str, Any]:
+    text = raw.strip()
+    if text.startswith("```"):
+        text = _strip_fence(text)
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise KaosAIError("invalid_official_web_plan_json") from exc
+    if not isinstance(payload, Mapping):
+        raise KaosAIError("official_web_plan_must_be_object")
+    prompt = " ".join(str(request.get("prompt") or "").split())
+    query = " ".join(str(payload.get("query") or prompt).split())
+    if not query:
+        raise KaosAIError("official_web_plan_query_required")
+    alternate_queries = _string_list(payload.get("alternateQueries"), limit=3)
+    preferred_domains = [
+        re.sub(r"^https?://", "", str(domain or "").strip().lower()).split("/", 1)[0].rstrip(".")
+        for domain in _string_list(payload.get("preferredDomains"), limit=6)
+    ]
+    preferred_domains = [domain for domain in preferred_domains if domain]
+    task = str(payload.get("task") or "summary").strip().lower()
+    if task not in {"summary", "list", "explain", "compare"}:
+        task = "summary"
+    language = str(payload.get("language") or "ko").strip().lower()
+    if language not in {"ko", "en"}:
+        language = "ko"
+    return {
+        "query": query[:200],
+        "alternateQueries": alternate_queries,
+        "preferredDomains": preferred_domains,
+        "task": task,
+        "language": language,
+    }
+
+
+def parse_official_web_summary_response(raw: str, request: Mapping[str, Any]) -> dict[str, Any]:
+    text = raw.strip()
+    if text.startswith("```"):
+        text = _strip_fence(text)
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise KaosAIError("invalid_official_web_summary_json") from exc
+    if not isinstance(payload, Mapping):
+        raise KaosAIError("official_web_summary_must_be_object")
+    title = " ".join(str(payload.get("title") or "").split())
+    content = str(payload.get("content") or "").strip()
+    if not title:
+        raise KaosAIError("official_web_summary_title_required")
+    if not content:
+        raise KaosAIError("official_web_summary_content_required")
+    sources = []
+    for source in payload.get("sources") or []:
+        if not isinstance(source, Mapping):
+            continue
+        url = str(source.get("url") or "").strip()
+        if not url.startswith(("https://", "http://")):
+            continue
+        sources.append({"title": " ".join(str(source.get("title") or url).split())[:200], "url": url[:800]})
+        if len(sources) >= 10:
+            break
+    checked_at = str(payload.get("checkedAt") or request.get("checkedAt") or "").strip()[:40]
+    return {
+        "title": title[:160],
+        "content": content[:12000],
+        "sources": sources,
+        "checkedAt": checked_at,
+        "model": str(payload.get("model") or "kaosbrain-openai").strip()[:80],
     }
 
 
@@ -667,6 +795,53 @@ def _render_official_memo_request(request: Mapping[str, Any]) -> str:
                 "url": str(source.get("url") or "")[:500],
                 "text": str(source.get("text") or "")[:20000],
             },
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+
+
+def _render_official_web_plan_request(request: Mapping[str, Any]) -> str:
+    allowed_domains = request.get("allowedDomains")
+    return json.dumps(
+        {
+            "prompt": str(request.get("prompt") or "")[:1600],
+            "checkedAt": str(request.get("checkedAt") or ""),
+            "allowedDomains": _string_list(allowed_domains, limit=80),
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+
+
+def _render_official_web_summary_request(request: Mapping[str, Any]) -> str:
+    plan = request.get("plan") if isinstance(request.get("plan"), Mapping) else {}
+    sources = []
+    for source in request.get("sources") or []:
+        if not isinstance(source, Mapping):
+            continue
+        sources.append(
+            {
+                "title": str(source.get("title") or "")[:200],
+                "url": str(source.get("url") or "")[:800],
+                "host": str(source.get("host") or "")[:120],
+                "excerpt": str(source.get("text") or source.get("excerpt") or "")[:6000],
+            }
+        )
+        if len(sources) >= 6:
+            break
+    return json.dumps(
+        {
+            "prompt": str(request.get("prompt") or "")[:1600],
+            "checkedAt": str(request.get("checkedAt") or ""),
+            "plan": {
+                "query": str(plan.get("query") or "")[:200],
+                "alternateQueries": _string_list(plan.get("alternateQueries"), limit=3),
+                "preferredDomains": _string_list(plan.get("preferredDomains"), limit=6),
+                "task": str(plan.get("task") or "summary"),
+                "language": str(plan.get("language") or "ko"),
+            },
+            "sources": sources,
         },
         ensure_ascii=False,
         sort_keys=True,

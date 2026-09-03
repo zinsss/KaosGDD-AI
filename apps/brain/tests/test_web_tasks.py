@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 from importlib.util import find_spec
 
+from kaos_brain.kaos_ai import parse_official_web_plan_response, parse_official_web_summary_response
 from kaos_brain.web_tasks import _extract_response_text, _extract_sources, validate_web_task_request
 
 AIOHTTP_AVAILABLE = find_spec("aiohttp") is not None
@@ -79,6 +80,24 @@ class WebTaskValidationTests(unittest.TestCase):
 
         self.assertEqual(_extract_response_text(payload), "요약 결과")
         self.assertEqual(_extract_sources(payload), [{"title": "KDCA", "url": "https://www.kdca.go.kr/example"}])
+
+    def test_parses_official_web_plan_response(self) -> None:
+        plan = parse_official_web_plan_response(
+            '{"query":"인플루엔자 접종 계획","alternateQueries":["국가예방접종"],"preferredDomains":["kdca.go.kr"],"task":"summary","language":"ko"}',
+            {"prompt": "공식 자료 찾아서 요약"},
+        )
+
+        self.assertEqual(plan["query"], "인플루엔자 접종 계획")
+        self.assertEqual(plan["preferredDomains"], ["kdca.go.kr"])
+
+    def test_parses_official_web_summary_response(self) -> None:
+        result = parse_official_web_summary_response(
+            '{"title":"요약","content":"본문","sources":[{"title":"KDCA","url":"https://www.kdca.go.kr/notice"}],"checkedAt":"2026-09-03","model":"default"}',
+            {"checkedAt": "2026-09-03"},
+        )
+
+        self.assertEqual(result["title"], "요약")
+        self.assertEqual(result["sources"], [{"title": "KDCA", "url": "https://www.kdca.go.kr/notice"}])
 
 
 if __name__ == "__main__":
