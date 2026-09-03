@@ -288,6 +288,13 @@ HIRA often indexes current criteria by ingredient or therapeutic class rather
 than by product name. Current examples include `알모그란/알모트립탄 ->
 Almotriptan/편두통 치료제` and `글리아티린 -> Choline alfoscerate/콜린알포세레이트`.
 
+약학정보원 `health.kr` is allowed as a medicine dictionary helper, not as the
+final authority for insurance-benefit decisions. Governor can read its
+product-name search and drug detail JSON to discover brand names, English/Korean
+ingredient names, MFDS classification codes, and practical category hints, then
+use those terms to search HIRA. If HIRA candidates are found for a HIRA-preferred
+benefit query, the summary source set is narrowed back to HIRA criteria.
+
 The wider official health/public allowlist also permits fetched source links
 from national public-health, insurance, evaluation, medicine, and affiliated
 agency domains such as `nhis.or.kr`, `longtermcare.or.kr`,

@@ -193,6 +193,8 @@ class GovernorAITaskTests(unittest.TestCase):
     def test_hira_insurance_criteria_search_expands_almogran_to_ingredient(self) -> None:
         def fake_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
             body = request.data.decode("utf-8") if getattr(request, "data", None) else ""
+            if request.full_url.startswith("https://health.kr/"):
+                return FakeHTTPResponse("<html></html>", "text/html; charset=utf-8")
             if request.full_url.startswith("https://www.hira.or.kr/rc/insu/insuadtcrtr/InsuAdtCrtrList.do"):
                 if "Almotriptan" not in body:
                     return FakeHTTPResponse("<html><body>검색된 내용이 없습니다.</body></html>", "text/html; charset=utf-8")
@@ -219,8 +221,61 @@ class GovernorAITaskTests(unittest.TestCase):
         self.assertIn("InsuAdtCrtrPopup.do", candidates[0].url)
         self.assertIn("mtgHmeDd=20240901", candidates[0].url)
 
+    def test_health_kr_drug_dictionary_expands_brand_for_hira_search(self) -> None:
+        def fake_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
+            if request.full_url == "https://health.kr/searchDrug/search_total_result.asp":
+                return FakeHTTPResponse('<script>window.csrfToken = "token123";</script>', "text/html; charset=utf-8")
+            if request.full_url.startswith("https://health.kr/searchDrug/ajax/ajax_commonSearch.asp"):
+                return FakeHTTPResponse(
+                    [
+                        {
+                            "drug_code": "D123",
+                            "drug_name": "테스트약정",
+                            "drug_enm": "Testdrug Tab.",
+                            "list_sunb_name": "Faketriptan Malate 10mg",
+                            "effect": "편두통의 급성치료",
+                        }
+                    ]
+                )
+            if request.full_url == "https://health.kr/searchDrug/ajax/ajax_result_drug.asp?drug_cd=D123":
+                return FakeHTTPResponse(
+                    [
+                        {
+                            "drug_code": "D123",
+                            "drug_name": "테스트약정",
+                            "sunb": '<a href="/searchIngredient/detail.asp?ingd_code=I123">Faketriptan Malate　가짜트립탄말산염　10mg</a>@',
+                            "cls_code_num": "114",
+                        }
+                    ]
+                )
+            body = request.data.decode("utf-8") if getattr(request, "data", None) else ""
+            if request.full_url.startswith("https://www.hira.or.kr/rc/insu/insuadtcrtr/InsuAdtCrtrList.do"):
+                if "Faketriptan" not in body:
+                    return FakeHTTPResponse("<html><body>검색된 내용이 없습니다.</body></html>", "text/html; charset=utf-8")
+                return FakeHTTPResponse(
+                    """<html><body>
+                    <a href="#none" onclick="viewInsuAdtCrtr(1, '20260101', '7', '0002', '1'); return false;"
+                       title="가짜 편두통 치료제 새창으로 열기">가짜 편두통 치료제</a>
+                    </body></html>""",
+                    "text/html; charset=utf-8",
+                )
+            return FakeHTTPResponse("<html></html>", "text/html; charset=utf-8")
+
+        candidates = official_health_search_candidates(
+            "테스트약정 급여기준",
+            preferred_domains=["hira.or.kr"],
+            urlopen=fake_urlopen,
+        )
+
+        self.assertGreaterEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].source, "건강보험심사평가원 보험인정기준")
+        self.assertEqual(candidates[0].title, "가짜 편두통 치료제")
+        self.assertIn("mtgHmeDd=20260101", candidates[0].url)
+
     def test_search_filters_skip_links(self) -> None:
         def fake_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
+            if request.full_url.startswith("https://health.kr/"):
+                return FakeHTTPResponse("<html></html>", "text/html; charset=utf-8")
             if request.full_url.startswith("https://www.kdca.go.kr/search.do"):
                 return FakeHTTPResponse(
                     '<html><body><a href="/search.do?kwd=인플루엔자">본문 바로가기</a>'

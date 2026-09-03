@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import html
 from html.parser import HTMLParser
+import json
 import re
 import urllib.parse
 import urllib.request
@@ -13,6 +14,10 @@ MAX_SEARCH_PAGE_BYTES = 1_000_000
 MAX_CANDIDATES_PER_SEARCH = 12
 HIRA_INSURANCE_CRITERIA_URL = "https://www.hira.or.kr/rc/insu/insuadtcrtr/InsuAdtCrtrList.do?pgmid=HIRAA030069000400"
 HIRA_INSURANCE_CRITERIA_POPUP_URL = "https://www.hira.or.kr/rc/insu/insuadtcrtr/InsuAdtCrtrPopup.do"
+HEALTH_KR_SEARCH_PAGE_URL = "https://health.kr/searchDrug/search_total_result.asp"
+HEALTH_KR_DRUG_SEARCH_URL = "https://health.kr/searchDrug/ajax/ajax_commonSearch.asp"
+HEALTH_KR_DRUG_DETAIL_URL = "https://health.kr/searchDrug/ajax/ajax_result_drug.asp"
+HEALTH_KR_DRUG_PAGE_URL = "https://health.kr/searchDrug/result_drug.asp"
 
 
 @dataclass(frozen=True)
@@ -36,6 +41,7 @@ OFFICIAL_HEALTH_SITES: tuple[OfficialSearchSite, ...] = (
     OfficialSearchSite("질병관리청", ("kdca.go.kr", "www.kdca.go.kr"), "https://www.kdca.go.kr/search.do?kwd={query}&category=TOTAL"),
     OfficialSearchSite("식품의약품안전처", ("mfds.go.kr", "www.mfds.go.kr"), "https://www.mfds.go.kr/search/search.do?searchWord={query}"),
     OfficialSearchSite("건강보험심사평가원", ("hira.or.kr", "www.hira.or.kr")),
+    OfficialSearchSite("약학정보원", ("health.kr", "www.health.kr")),
     OfficialSearchSite("국민건강보험공단", ("nhis.or.kr", "www.nhis.or.kr")),
     OfficialSearchSite("노인장기요양보험", ("longtermcare.or.kr", "www.longtermcare.or.kr")),
     OfficialSearchSite("국립보건연구원", ("nih.go.kr", "www.nih.go.kr")),
@@ -117,9 +123,11 @@ def official_health_search_candidates(
     queries = _expanded_queries(_unique_queries([query, *alternate_queries]))
     if not queries:
         return []
+    health_kr_queries, health_kr_candidates = _health_kr_drug_queries_and_candidates(queries, urlopen=urlopen)
+    queries = _expanded_queries(_unique_queries([*queries, *health_kr_queries]))
     preferred = _preferred_hosts(preferred_domains)
     sites = _ordered_sites(preferred)
-    candidates: list[OfficialSearchCandidate] = []
+    candidates: list[OfficialSearchCandidate] = list(health_kr_candidates)
     hira_candidates = _hira_insurance_criteria_candidates(queries, preferred=preferred, urlopen=urlopen)
     if hira_candidates and any(host in preferred for host in ("hira.or.kr", "www.hira.or.kr")):
         return _ranked_unique_candidates(hira_candidates)[:limit]
@@ -262,6 +270,201 @@ def _hira_insurance_criteria_candidates(
             if len(candidates) >= MAX_CANDIDATES_PER_SEARCH:
                 return candidates
     return candidates
+
+
+def _health_kr_drug_queries_and_candidates(
+    queries: list[str],
+    *,
+    urlopen: Callable = urllib.request.urlopen,
+) -> tuple[list[str], list[OfficialSearchCandidate]]:
+    discovered_queries: list[str] = []
+    candidates: list[OfficialSearchCandidate] = []
+    searched_terms: set[str] = set()
+    for query in queries[:4]:
+        for search_term in _health_kr_search_terms(query):
+            if search_term.casefold() in searched_terms:
+                continue
+            searched_terms.add(search_term.casefold())
+            results = _health_kr_search_drugs(search_term, urlopen=urlopen)
+            for result in results[:3]:
+                drug_code = str(result.get("drug_code") or "").strip()
+                drug_name = str(result.get("drug_name") or "").strip()
+                if not drug_code or not drug_name:
+                    continue
+                details = _health_kr_drug_detail(drug_code, urlopen=urlopen)
+                fields = {**result, **details}
+                terms = _health_kr_terms_from_drug(fields)
+                discovered_queries.extend(terms)
+                url = f"{HEALTH_KR_DRUG_PAGE_URL}?{urllib.parse.urlencode({'drug_cd': drug_code})}"
+                candidate_title = _health_kr_candidate_title(fields)
+                score = _candidate_score(candidate_title, url, [*queries, *terms]) + 4
+                candidates.append(
+                    OfficialSearchCandidate(
+                        title=candidate_title[:200],
+                        url=url[:800],
+                        host="health.kr",
+                        score=score,
+                        source="약학정보원 약품정보",
+                    )
+                )
+            if discovered_queries:
+                break
+    return _unique_queries(discovered_queries), _ranked_unique_candidates(candidates)[:MAX_CANDIDATES_PER_SEARCH]
+
+
+def _health_kr_search_terms(query: str) -> list[str]:
+    compact = " ".join(str(query or "").split())
+    cleaned = re.sub(
+        r"(요양급여기준|급여기준|급여목록|보험기준|급여|보험|처방|기준|약제|투여|본인부담|대상|조건|수량|기간|확인|요약|알려줘|찾아줘)",
+        " ",
+        compact,
+        flags=re.I,
+    )
+    terms = [compact, " ".join(cleaned.split())]
+    terms.extend(re.findall(r"[0-9A-Za-z가-힣][0-9A-Za-z가-힣.+-]{1,}", cleaned))
+    return _unique_queries(terms)
+
+
+def _health_kr_search_drugs(search_term: str, *, urlopen: Callable = urllib.request.urlopen) -> list[dict[str, object]]:
+    encoded = urllib.parse.quote(search_term)
+    body = urllib.parse.urlencode({"search_word": search_term, "search_flag": "all"}).encode("utf-8")
+    page_request = urllib.request.Request(
+        HEALTH_KR_SEARCH_PAGE_URL,
+        data=body,
+        method="POST",
+        headers={
+            "Accept": "text/html, text/plain;q=0.9",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": "Mozilla/5.0 (KaosGovernor/official-search)",
+        },
+    )
+    try:
+        with urlopen(page_request, timeout=7) as response:
+            page = _decode(response.read(MAX_SEARCH_PAGE_BYTES), response.headers.get("Content-Type", ""))
+            cookies = _cookie_header(response.headers)
+    except Exception:
+        return []
+    token_match = re.search(r"window\.csrfToken\s*=\s*\"([^\"]+)\"", page)
+    token = token_match.group(1) if token_match else ""
+    if not token:
+        return []
+    ajax_request = urllib.request.Request(
+        f"{HEALTH_KR_DRUG_SEARCH_URL}?search_word={encoded}&csrf_token={urllib.parse.quote(token)}&search_flag=all",
+        data=urllib.parse.urlencode({"csrf_token": token}).encode("utf-8"),
+        method="POST",
+        headers={
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "Referer": HEALTH_KR_SEARCH_PAGE_URL,
+            "User-Agent": "Mozilla/5.0 (KaosGovernor/official-search)",
+            "X-Requested-With": "XMLHttpRequest",
+            "X-CSRF-Token": token,
+            **({"Cookie": cookies} if cookies else {}),
+        },
+    )
+    try:
+        with urlopen(ajax_request, timeout=7) as response:
+            payload = _decode(response.read(MAX_SEARCH_PAGE_BYTES), response.headers.get("Content-Type", ""))
+    except Exception:
+        return []
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(data, list):
+        return []
+    return [item for item in data if isinstance(item, dict)]
+
+
+def _health_kr_drug_detail(drug_code: str, *, urlopen: Callable = urllib.request.urlopen) -> dict[str, object]:
+    request = urllib.request.Request(
+        f"{HEALTH_KR_DRUG_DETAIL_URL}?{urllib.parse.urlencode({'drug_cd': drug_code})}",
+        headers={
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "User-Agent": "Mozilla/5.0 (KaosGovernor/official-search)",
+            "X-Requested-With": "XMLHttpRequest",
+        },
+    )
+    try:
+        with urlopen(request, timeout=5) as response:
+            payload = _decode(response.read(MAX_SEARCH_PAGE_BYTES), response.headers.get("Content-Type", ""))
+    except Exception:
+        return {}
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError:
+        return {}
+    if isinstance(data, list) and data and isinstance(data[0], dict):
+        return data[0]
+    return {}
+
+
+def _health_kr_terms_from_drug(fields: dict[str, object]) -> list[str]:
+    terms: list[str] = []
+    for key in ("drug_name", "drug_enm", "list_sunb_name", "ingr_mg", "sunb", "effect"):
+        terms.extend(_health_kr_text_terms(str(fields.get(key) or "")))
+    kpic_categories = _health_kr_kpic_terms(str(fields.get("kpic_category") or ""))
+    terms.extend(kpic_categories)
+    if str(fields.get("cls_code_num") or "") == "114" or str(fields.get("cls_code") or "") == "114":
+        terms.append("해열 진통 소염제")
+    joined = " ".join(terms)
+    if "편두통" in joined or "almotriptan" in joined.casefold():
+        terms.append("편두통 치료제")
+    return _unique_queries(terms)
+
+
+def _health_kr_text_terms(value: str) -> list[str]:
+    text = _strip_tags(html.unescape(value)).replace("\u3000", " ")
+    terms: list[str] = []
+    for raw in re.findall(r"[A-Za-z][A-Za-z -]{2,}|[가-힣][가-힣·]{1,}", text):
+        token = " ".join(raw.split()).strip(" -·")
+        if not token:
+            continue
+        lowered = token.casefold()
+        if lowered in {"br", "mg", "tab", "tablet"}:
+            continue
+        if re.fullmatch(r"[A-Za-z]+", token) and len(token) <= 3:
+            continue
+        terms.append(token)
+        if lowered.endswith(" malate"):
+            terms.append(token[: -len(" malate")].strip())
+        if token.endswith("말산염"):
+            terms.append(token[: -len("말산염")].strip())
+    return terms
+
+
+def _health_kr_kpic_terms(value: str) -> list[str]:
+    text = _strip_tags(html.unescape(value)).replace("\u3000", " ")
+    return [item.strip() for item in re.split(r">\s*|\n+", text) if item.strip()]
+
+
+def _health_kr_candidate_title(fields: dict[str, object]) -> str:
+    drug_name = " ".join(str(fields.get("drug_name") or "").split())
+    ingredient = " ".join(_strip_tags(str(fields.get("sunb") or fields.get("list_sunb_name") or "")).split())
+    if ingredient:
+        return f"{drug_name} // {ingredient}"
+    return drug_name or "약학정보원 약품정보"
+
+
+def _strip_tags(value: str) -> str:
+    return re.sub(r"<[^>]+>", " ", value)
+
+
+def _cookie_header(headers: object) -> str:
+    values: list[str] = []
+    get_all = getattr(headers, "get_all", None)
+    if callable(get_all):
+        values = [str(value) for value in get_all("Set-Cookie") or []]
+    if not values:
+        value = getattr(headers, "get", lambda *_args: "")("Set-Cookie", "")
+        if value:
+            values = [str(value)]
+    cookies = []
+    for value in values:
+        first = value.split(";", 1)[0].strip()
+        if first:
+            cookies.append(first)
+    return "; ".join(cookies)
 
 
 def _search_page_links(search_url: str, *, urlopen: Callable = urllib.request.urlopen) -> list[dict[str, str]]:
