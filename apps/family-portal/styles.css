@@ -3189,12 +3189,94 @@ h3 {
   padding-top: 8px;
 }
 
+.familyTextPresetCategoryGrid {
+  display: grid;
+  gap: 10px;
+}
+
+.familyTextPresetCategory {
+  display: grid;
+  gap: 4px;
+  min-height: 76px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+}
+
+.familyTextPresetCategory strong {
+  font-size: 1.18rem;
+  font-weight: 900;
+}
+
+.familyTextPresetCategory span,
+.familyTextPresetCategory small {
+  color: var(--dim);
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+.familyTextPresetCategory:active {
+  border-color: rgba(136, 192, 208, 0.76);
+  background: rgba(136, 192, 208, 0.12);
+}
+
+.familyTextPresetTabs {
+  display: flex;
+  gap: 8px;
+  margin: -2px -2px 0;
+  padding: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.familyTextPresetTabs::-webkit-scrollbar {
+  display: none;
+}
+
+.familyTextPresetTabs button {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 820;
+}
+
+.familyTextPresetTabs button.isActive {
+  border-color: rgba(180, 142, 173, 0.72);
+  background: rgba(180, 142, 173, 0.18);
+  color: var(--nord15);
+}
+
+.familyTextPresetTabs.isTextTabs button {
+  min-width: 44px;
+}
+
+.familyTextPresetManageActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .familyTextPresetEditor {
+  display: grid;
+  gap: 10px;
+}
+
+.familyTextPresetEditor label {
   display: grid;
   gap: 6px;
 }
 
-.familyTextPresetEditor span {
+.familyTextPresetEditor label span {
   color: var(--nord7);
   font-size: 0.68rem;
   font-weight: 850;

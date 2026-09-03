@@ -19,6 +19,7 @@ const routes = {
   service: "Service",
   rouny: "Rouny",
   memos: "Memos",
+  "text-presets": "Preset Text",
   ledger: "Ledger",
   settings: "Settings",
 };
@@ -39,6 +40,7 @@ const familyRoutes = {
   service: uiText("route.services", "Utils"),
   rouny: uiText("route.rouny", "Rouny"),
   memos: uiText("route.memos", "Memos"),
+  "text-presets": uiText("route.textPresets", "Preset Text"),
   ledger: uiText("route.ledger", "Ledger"),
   settings: uiText("route.settings", "Settings"),
 };
@@ -64,10 +66,16 @@ const COMPOSER_RECOVERY_STORAGE_KEY = "kaosgdd.v2.composerRecovery.v1";
 const FAMILY_FONT_STORAGE_KEY = "kaosgdd.v2.family.font.v1";
 const FAMILY_FONT_OPTIONS = new Set(["nanum", "pretendard", "nixgon", "skybori"]);
 const FAMILY_TEXT_PRESETS_STORAGE_KEY = "kaosgdd.v2.family.textPresets.v1";
-const DEFAULT_FAMILY_TEXT_PRESETS = Object.freeze([
-  "오늘도 잘 부탁드립니다.",
-  "확인했습니다. 감사합니다.",
-  "공유해 주셔서 감사합니다.",
+const DEFAULT_FAMILY_TEXT_PRESET_CATEGORIES = Object.freeze([
+  {
+    id: "default",
+    name: "기본",
+    texts: [
+      "오늘도 잘 부탁드립니다.",
+      "확인했습니다. 감사합니다.",
+      "공유해 주셔서 감사합니다.",
+    ],
+  },
 ]);
 const MAIN_FONT_STORAGE_KEY = "kaosgdd.v2.main.font.v1";
 const MAIN_FONT_OPTIONS = new Set(["pretendard", "orbit", "sarasa"]);
@@ -137,6 +145,7 @@ const profileConfigs = {
       { route: "tasks", label: uiText("route.tasks", "Tasks") },
       { route: "rouny", label: uiText("route.rouny", "Rouny") },
       { route: "memos", label: uiText("route.memos", "Memos") },
+      { route: "text-presets", label: uiText("route.textPresets", "문구") },
       { route: "ledger", label: uiText("route.ledger", "Ledger") },
       { route: "settings", label: uiText("route.settings", "Settings") },
     ],
@@ -164,6 +173,11 @@ const state = {
     content: "",
     saving: false,
     error: "",
+  },
+  textPresets: {
+    managing: false,
+    selectedCategoryId: "",
+    selectedTextIndex: 0,
   },
   memos: {
     checked: false,
@@ -3646,7 +3660,7 @@ function getRoute() {
   if (!routes[route]) return profileConfig().defaultRoute;
   if (portalProfile() === "family" && route === "services") return profileConfig().defaultRoute;
   if (portalProfile() === "family" && ["supplies", "documents", "add-document", "fax", "mail"].includes(route)) return profileConfig().defaultRoute;
-  if (portalProfile() === "main" && (route === "rouny" || route === "caregiver" || route === "ledger")) return profileConfig().defaultRoute;
+  if (portalProfile() === "main" && (route === "rouny" || route === "caregiver" || route === "text-presets" || route === "ledger")) return profileConfig().defaultRoute;
   return route;
 }
 
@@ -3688,29 +3702,96 @@ function normalizeFamilyTextPresets(value) {
     .filter(Boolean);
 }
 
-function loadFamilyTextPresets() {
+function normalizeFamilyTextPresetTextboxes(value) {
+  const source = Array.isArray(value)
+    ? value
+    : String(value || "").split(/\r?\n/);
+  const texts = source.map((line) => String(line || "").trim());
+  return texts.length ? texts : [""];
+}
+
+function defaultFamilyTextPresetDocument() {
+  return {
+    categories: DEFAULT_FAMILY_TEXT_PRESET_CATEGORIES.map((category) => ({
+      id: category.id,
+      name: category.name,
+      texts: [...category.texts],
+    })),
+  };
+}
+
+function normalizeFamilyTextPresetCategory(category, index = 0) {
+  if (!category || typeof category !== "object") return null;
+  const name = String(category.name || "").trim() || uiText("textPresets.untitledCategory", "Untitled");
+  return {
+    id: String(category.id || `category-${index + 1}`),
+    name,
+    texts: normalizeFamilyTextPresetTextboxes(category.texts),
+  };
+}
+
+function normalizeFamilyTextPresetDocument(value) {
+  if (Array.isArray(value)) {
+    const texts = normalizeFamilyTextPresets(value);
+    return {
+      categories: [
+        {
+          id: "default",
+          name: uiText("textPresets.defaultCategory", "Default"),
+          texts: texts.length ? texts : [...DEFAULT_FAMILY_TEXT_PRESET_CATEGORIES[0].texts],
+        },
+      ],
+    };
+  }
+  if (!value || typeof value !== "object") return defaultFamilyTextPresetDocument();
+  const categories = Array.isArray(value.categories)
+    ? value.categories.map(normalizeFamilyTextPresetCategory).filter(Boolean)
+    : [];
+  return categories.length ? { categories } : defaultFamilyTextPresetDocument();
+}
+
+function loadFamilyTextPresetDocument() {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(FAMILY_TEXT_PRESETS_STORAGE_KEY) || "null");
-    const presets = normalizeFamilyTextPresets(parsed);
-    return presets.length ? presets : [...DEFAULT_FAMILY_TEXT_PRESETS];
+    return normalizeFamilyTextPresetDocument(parsed);
   } catch {
-    return [...DEFAULT_FAMILY_TEXT_PRESETS];
+    return defaultFamilyTextPresetDocument();
   }
 }
 
-function saveFamilyTextPresets(presets) {
-  const normalized = normalizeFamilyTextPresets(presets);
+function saveFamilyTextPresetDocument(presetDocument) {
+  const normalized = normalizeFamilyTextPresetDocument(presetDocument);
   window.localStorage.setItem(FAMILY_TEXT_PRESETS_STORAGE_KEY, JSON.stringify(normalized));
   return normalized;
 }
 
-function collectFamilyTextPresets() {
-  const input = document.querySelector("[data-family-text-presets]");
-  return saveFamilyTextPresets(input?.value || "");
+function selectedFamilyTextPresetCategory(presetDocument = loadFamilyTextPresetDocument()) {
+  const categories = presetDocument.categories;
+  const selectedId = state.textPresets.selectedCategoryId;
+  const selected = categories.find((category) => category.id === selectedId) || categories[0];
+  state.textPresets.selectedCategoryId = selected?.id || "";
+  if (state.textPresets.selectedTextIndex < 0 || state.textPresets.selectedTextIndex >= (selected?.texts.length || 1)) {
+    state.textPresets.selectedTextIndex = 0;
+  }
+  return selected;
 }
 
-function randomFamilyTextPreset(presets = loadFamilyTextPresets()) {
-  const normalized = normalizeFamilyTextPresets(presets);
+function saveFamilyTextPresetEditorDraft() {
+  const form = document.querySelector("[data-family-text-preset-editor]");
+  const documentValue = loadFamilyTextPresetDocument();
+  if (!form) return documentValue;
+  const categoryId = form.dataset.familyTextCategory || "";
+  const textIndex = Number(form.dataset.familyTextIndex || "0");
+  const textInput = form.querySelector("[data-family-text-current-text]");
+  const category = documentValue.categories.find((item) => item.id === categoryId);
+  if (!category || !Number.isInteger(textIndex) || textIndex < 0) return documentValue;
+  while (category.texts.length <= textIndex) category.texts.push("");
+  category.texts[textIndex] = String(textInput?.value || "").trim();
+  return saveFamilyTextPresetDocument(documentValue);
+}
+
+function randomFamilyTextPreset(category) {
+  const normalized = normalizeFamilyTextPresets(category?.texts || []);
   if (!normalized.length) return "";
   return normalized[Math.floor(Math.random() * normalized.length)];
 }
@@ -8437,31 +8518,104 @@ function renderFamilyFontSettingsRow() {
   `;
 }
 
-function renderFamilyTextPresetSettings() {
-  const presets = loadFamilyTextPresets();
-  const countText = presets.length
-    ? uiText("settings.textPresetsCount", "{count} saved", { count: presets.length })
-    : uiText("settings.textPresetsEmptySummary", "None saved");
+function renderTextPresetCategoryButton(category) {
+  const count = normalizeFamilyTextPresets(category.texts).length;
   return `
-    <details class="settingsDisclosure" data-family-text-preset-settings open>
-      <summary>
-        <span>
-          <strong>${uiText("settings.textPresets", "Preset text")}</strong>
-          <small>${escapeHtml(countText)}</small>
-        </span>
-      </summary>
-      <div class="settingsDisclosureBody">
-        <p class="formNote">${uiText("settings.textPresetsHelp", "Save one preset per line. Copy Random chooses one line and copies it to this device clipboard.")}</p>
-        <label class="familyTextPresetEditor">
-          <span>${uiText("settings.textPresetsLines", "Preset lines")}</span>
-          <textarea data-family-text-presets rows="5" spellcheck="false">${escapeHtml(presets.join("\n"))}</textarea>
-        </label>
-        <div class="settingsActionRow">
-          <button class="openButton" type="button" data-family-text-presets-save>${uiText("settings.textPresetsSave", "Save")}</button>
-          <button class="primaryButton" type="button" data-family-text-presets-copy>${uiText("settings.textPresetsCopyRandom", "Copy Random")}</button>
+    <button class="familyTextPresetCategory" type="button" data-family-text-category-copy="${escapeHtml(category.id)}">
+      <strong>${escapeHtml(category.name)}</strong>
+      <span>${uiText("textPresets.copyRandom", "Copy random")}</span>
+      <small>${uiText("textPresets.textCount", "{count} texts", { count })}</small>
+    </button>
+  `;
+}
+
+function renderTextPresetManagerCategoryTabs(documentValue, selectedCategory) {
+  return `
+    <div class="familyTextPresetTabs" role="tablist" aria-label="${uiText("textPresets.categories", "Categories")}">
+      ${documentValue.categories.map((category) => `
+        <button class="${category.id === selectedCategory.id ? "isActive" : ""}" type="button" data-family-text-category-select="${escapeHtml(category.id)}">
+          ${escapeHtml(category.name)}
+        </button>
+      `).join("")}
+      <button type="button" data-family-text-category-add>+ ${uiText("textPresets.category", "Category")}</button>
+    </div>
+  `;
+}
+
+function renderTextPresetManagerTextTabs(category, selectedIndex) {
+  const texts = category.texts.length ? category.texts : [""];
+  return `
+    <div class="familyTextPresetTabs isTextTabs" role="tablist" aria-label="${uiText("textPresets.textTabs", "Preset text tabs")}">
+      ${texts.map((text, index) => `
+        <button class="${index === selectedIndex ? "isActive" : ""}" type="button" data-family-text-tab="${index}">
+          ${index + 1}${String(text || "").trim() ? "" : "*"}
+        </button>
+      `).join("")}
+      <button type="button" data-family-text-tab-add>+</button>
+    </div>
+  `;
+}
+
+function renderTextPresets() {
+  const documentValue = loadFamilyTextPresetDocument();
+  const selectedCategory = selectedFamilyTextPresetCategory(documentValue);
+  const selectedIndex = Math.min(
+    Math.max(0, state.textPresets.selectedTextIndex),
+    Math.max(0, (selectedCategory?.texts.length || 1) - 1),
+  );
+  const selectedText = selectedCategory?.texts[selectedIndex] || "";
+  const totalCount = documentValue.categories.reduce((count, category) => count + normalizeFamilyTextPresets(category.texts).length, 0);
+  if (!state.textPresets.managing) {
+    return `
+      <section class="panel familyTextPresetsPage">
+        <div class="panelHeader">
+          <div>
+            <p class="label">${uiText("textPresets.label", "Preset Text")}</p>
+            <h2>${uiText("textPresets.title", "문구")}</h2>
+          </div>
+          <button class="openButton" type="button" data-family-text-presets-manage>${uiText("textPresets.manage", "Manage")}</button>
         </div>
+        <div class="panelBody">
+          <p class="formNote">${uiText("textPresets.help", "Tap a category to copy one random saved phrase.")}</p>
+          <div class="familyTextPresetCategoryGrid">
+            ${documentValue.categories.map(renderTextPresetCategoryButton).join("")}
+          </div>
+          <p class="formNote">${uiText("textPresets.localOnly", "{categoryCount} categories · {textCount} texts · saved on this device", {
+            categoryCount: documentValue.categories.length,
+            textCount: totalCount,
+          })}</p>
+        </div>
+      </section>
+    `;
+  }
+  return `
+    <section class="panel familyTextPresetsPage">
+      <div class="panelHeader">
+        <div>
+          <p class="label">${uiText("textPresets.label", "Preset Text")}</p>
+          <h2>${uiText("textPresets.manageTitle", "문구 관리")}</h2>
+        </div>
+        <button class="openButton" type="button" data-family-text-presets-done>${uiText("common.done", "Done")}</button>
       </div>
-    </details>
+      <div class="panelBody">
+        ${renderTextPresetManagerCategoryTabs(documentValue, selectedCategory)}
+        <div class="familyTextPresetManageActions">
+          <button class="openButton" type="button" data-family-text-category-rename>${uiText("textPresets.renameCategory", "Rename category")}</button>
+          <button class="dangerButton" type="button" data-family-text-category-delete>${uiText("textPresets.deleteCategory", "Delete category")}</button>
+        </div>
+        <form class="familyTextPresetEditor" data-family-text-preset-editor data-family-text-category="${escapeHtml(selectedCategory.id)}" data-family-text-index="${selectedIndex}">
+          ${renderTextPresetManagerTextTabs(selectedCategory, selectedIndex)}
+          <label>
+            <span>${uiText("textPresets.text", "Text")}</span>
+            <textarea data-family-text-current-text rows="6" spellcheck="false">${escapeHtml(selectedText)}</textarea>
+          </label>
+          <div class="settingsActionRow">
+            <button class="dangerButton" type="button" data-family-text-tab-delete>${uiText("textPresets.deleteText", "Delete text")}</button>
+            <button class="primaryButton" type="submit">${uiText("common.save", "Save")}</button>
+          </div>
+        </form>
+      </div>
+    </section>
   `;
 }
 
@@ -8568,7 +8722,6 @@ function renderSettings() {
           ${renderWeatherSettingsRow()}
           ${renderFamilyFontSettingsRow()}
         </dl>
-        ${renderFamilyTextPresetSettings()}
         ${renderGovernorSettingsStatus()}
         ${renderHolidaySettings()}
         ${renderGeneratedCalendarPolicyStatus()}
@@ -9162,6 +9315,7 @@ function render() {
   else if (route === "rouny") view.innerHTML = renderRouny();
   else if (route === "memos") view.innerHTML = renderMemos();
   else if (route === "add-memo") view.innerHTML = renderAddMemo();
+  else if (route === "text-presets") view.innerHTML = renderTextPresets();
   else if (route === "ledger") view.innerHTML = renderLedger();
   else if (route === "settings") view.innerHTML = renderSettings();
   else view.innerHTML = renderToday();
@@ -9702,26 +9856,124 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
-  if (event.target.closest("[data-family-text-presets-save]")) {
-    collectFamilyTextPresets();
-    window.alert(uiText("settings.textPresetsSaved", "Preset text saved."));
+  const copyTextPresetCategory = event.target.closest("[data-family-text-category-copy]");
+  if (copyTextPresetCategory) {
+    const documentValue = loadFamilyTextPresetDocument();
+    const category = documentValue.categories.find((item) => item.id === copyTextPresetCategory.dataset.familyTextCategoryCopy);
+    const preset = randomFamilyTextPreset(category);
+    if (!preset) {
+      window.alert(uiText("textPresets.emptyCategory", "This category has no saved text yet."));
+      return;
+    }
+    try {
+      await writeTextToClipboard(preset);
+      window.alert(uiText("textPresets.copied", "Preset text copied."));
+    } catch (error) {
+      window.alert(uiText("textPresets.copyError", "Could not copy preset text."));
+    }
+    return;
+  }
+
+  if (event.target.closest("[data-family-text-presets-manage]")) {
+    state.textPresets.managing = true;
+    selectedFamilyTextPresetCategory();
     render();
     return;
   }
 
-  if (event.target.closest("[data-family-text-presets-copy]")) {
-    try {
-      const preset = randomFamilyTextPreset(collectFamilyTextPresets());
-      if (!preset) {
-        window.alert(uiText("settings.textPresetsEmpty", "No preset text to copy."));
-        return;
-      }
-      await writeTextToClipboard(preset);
-      window.alert(uiText("settings.textPresetsCopied", "Preset text copied."));
-      render();
-    } catch (error) {
-      window.alert(uiText("settings.textPresetsCopyError", "Could not copy preset text."));
+  if (event.target.closest("[data-family-text-presets-done]")) {
+    saveFamilyTextPresetEditorDraft();
+    state.textPresets.managing = false;
+    render();
+    return;
+  }
+
+  const selectTextPresetCategory = event.target.closest("[data-family-text-category-select]");
+  if (selectTextPresetCategory) {
+    saveFamilyTextPresetEditorDraft();
+    state.textPresets.selectedCategoryId = selectTextPresetCategory.dataset.familyTextCategorySelect || "";
+    state.textPresets.selectedTextIndex = 0;
+    render();
+    return;
+  }
+
+  if (event.target.closest("[data-family-text-category-add]")) {
+    saveFamilyTextPresetEditorDraft();
+    const name = window.prompt(uiText("textPresets.categoryNamePrompt", "Category name?"), "");
+    const normalizedName = String(name || "").trim();
+    if (!normalizedName) return;
+    const documentValue = loadFamilyTextPresetDocument();
+    const category = {
+      id: createId("text-preset-category"),
+      name: normalizedName,
+      texts: [""],
+    };
+    documentValue.categories.push(category);
+    saveFamilyTextPresetDocument(documentValue);
+    state.textPresets.selectedCategoryId = category.id;
+    state.textPresets.selectedTextIndex = 0;
+    state.textPresets.managing = true;
+    render();
+    return;
+  }
+
+  if (event.target.closest("[data-family-text-category-rename]")) {
+    saveFamilyTextPresetEditorDraft();
+    const documentValue = loadFamilyTextPresetDocument();
+    const category = selectedFamilyTextPresetCategory(documentValue);
+    const name = window.prompt(uiText("textPresets.categoryNamePrompt", "Category name?"), category.name);
+    const normalizedName = String(name || "").trim();
+    if (!normalizedName) return;
+    category.name = normalizedName;
+    saveFamilyTextPresetDocument(documentValue);
+    render();
+    return;
+  }
+
+  if (event.target.closest("[data-family-text-category-delete]")) {
+    saveFamilyTextPresetEditorDraft();
+    const documentValue = loadFamilyTextPresetDocument();
+    const category = selectedFamilyTextPresetCategory(documentValue);
+    if (documentValue.categories.length <= 1) {
+      window.alert(uiText("textPresets.keepOneCategory", "Keep at least one category."));
+      return;
     }
+    if (!window.confirm(uiText("textPresets.deleteCategoryConfirm", "Delete this category?"))) return;
+    documentValue.categories = documentValue.categories.filter((item) => item.id !== category.id);
+    state.textPresets.selectedCategoryId = documentValue.categories[0]?.id || "";
+    state.textPresets.selectedTextIndex = 0;
+    saveFamilyTextPresetDocument(documentValue);
+    render();
+    return;
+  }
+
+  const selectTextPresetTab = event.target.closest("[data-family-text-tab]");
+  if (selectTextPresetTab) {
+    saveFamilyTextPresetEditorDraft();
+    state.textPresets.selectedTextIndex = Number(selectTextPresetTab.dataset.familyTextTab || "0") || 0;
+    render();
+    return;
+  }
+
+  if (event.target.closest("[data-family-text-tab-add]")) {
+    const documentValue = saveFamilyTextPresetEditorDraft();
+    const category = selectedFamilyTextPresetCategory(documentValue);
+    category.texts.push("");
+    state.textPresets.selectedTextIndex = category.texts.length - 1;
+    saveFamilyTextPresetDocument(documentValue);
+    render();
+    return;
+  }
+
+  if (event.target.closest("[data-family-text-tab-delete]")) {
+    const documentValue = saveFamilyTextPresetEditorDraft();
+    const category = selectedFamilyTextPresetCategory(documentValue);
+    const selectedIndex = Math.min(Math.max(0, state.textPresets.selectedTextIndex), Math.max(0, category.texts.length - 1));
+    if (category.texts.length <= 1) category.texts = [""];
+    else category.texts.splice(selectedIndex, 1);
+    state.textPresets.selectedTextIndex = Math.min(selectedIndex, Math.max(0, category.texts.length - 1));
+    saveFamilyTextPresetDocument(documentValue);
+    render();
     return;
   }
 
@@ -10296,6 +10548,15 @@ document.addEventListener("click", async (event) => {
 });
 
 document.addEventListener("submit", async (event) => {
+  const familyTextPresetForm = event.target.closest("[data-family-text-preset-editor]");
+  if (familyTextPresetForm) {
+    event.preventDefault();
+    saveFamilyTextPresetEditorDraft();
+    window.alert(uiText("textPresets.saved", "Preset text saved."));
+    render();
+    return;
+  }
+
   const documentMetadataForm = event.target.closest("[data-document-metadata-review]");
   if (documentMetadataForm) {
     event.preventDefault();

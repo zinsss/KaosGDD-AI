@@ -8,31 +8,49 @@ const indexSource = fs.readFileSync(path.join(__dirname, "../../apps/family-port
 const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
 const translations = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/translations.js"), "utf8");
 
-test("family settings has browser-local preset text saved as one line per item", () => {
+test("family preset text is a standalone browser-local route with categories", () => {
   assert.match(appSource, /FAMILY_TEXT_PRESETS_STORAGE_KEY = "kaosgdd\.v2\.family\.textPresets\.v1"/);
-  assert.match(appSource, /DEFAULT_FAMILY_TEXT_PRESETS = Object\.freeze/);
+  assert.match(appSource, /DEFAULT_FAMILY_TEXT_PRESET_CATEGORIES = Object\.freeze/);
   assert.match(appSource, /function normalizeFamilyTextPresets\(value\)/);
-  assert.match(appSource, /function loadFamilyTextPresets\(\)/);
-  assert.match(appSource, /function saveFamilyTextPresets\(presets\)/);
-  assert.match(appSource, /data-family-text-presets/);
-  assert.match(appSource, /data-family-text-presets-save/);
+  assert.match(appSource, /function loadFamilyTextPresetDocument\(\)/);
+  assert.match(appSource, /function saveFamilyTextPresetDocument\(presetDocument\)/);
+  assert.match(appSource, /function renderTextPresets\(\)/);
+  assert.match(appSource, /"text-presets": uiText\("route\.textPresets"/);
+  assert.match(appSource, /route === "text-presets"\) view\.innerHTML = renderTextPresets\(\);/);
+  assert.match(appSource, /portalProfile\(\) === "main"[\s\S]*route === "text-presets"/);
 });
 
-test("copy random preset saves the visible textarea and uses the shared clipboard helper", () => {
-  assert.match(appSource, /function randomFamilyTextPreset\(presets = loadFamilyTextPresets\(\)\)/);
+test("category buttons copy one random saved text with the shared clipboard helper", () => {
+  assert.match(appSource, /data-family-text-category-copy/);
+  assert.match(appSource, /function randomFamilyTextPreset\(category\)/);
   assert.match(appSource, /Math\.floor\(Math\.random\(\) \* normalized\.length\)/);
-  assert.match(appSource, /const preset = randomFamilyTextPreset\(collectFamilyTextPresets\(\)\);/);
+  assert.match(appSource, /const preset = randomFamilyTextPreset\(category\);/);
   assert.match(appSource, /await writeTextToClipboard\(preset\);/);
-  assert.match(appSource, /settings\.textPresetsCopied/);
-  assert.match(appSource, /settings\.textPresetsCopyError/);
+  assert.match(appSource, /textPresets\.copied/);
+  assert.match(appSource, /textPresets\.copyError/);
+});
+
+test("preset text manager supports category and text-tab editing", () => {
+  assert.match(appSource, /data-family-text-presets-manage/);
+  assert.match(appSource, /data-family-text-presets-done/);
+  assert.match(appSource, /data-family-text-category-add/);
+  assert.match(appSource, /data-family-text-category-rename/);
+  assert.match(appSource, /data-family-text-category-delete/);
+  assert.match(appSource, /data-family-text-tab-add/);
+  assert.match(appSource, /data-family-text-tab-delete/);
+  assert.match(appSource, /data-family-text-current-text/);
+  assert.match(appSource, /saveFamilyTextPresetEditorDraft\(\)/);
 });
 
 test("family preset text assets include styles, translations, and cache-busted bundles", () => {
+  assert.match(styles, /\.familyTextPresetCategoryGrid \{/);
+  assert.match(styles, /\.familyTextPresetTabs \{/);
   assert.match(styles, /\.familyTextPresetEditor \{/);
   assert.match(styles, /\.familyTextPresetEditor textarea \{/);
-  assert.match(translations, /"settings\.textPresets": "문구 프리셋"/);
-  assert.match(translations, /"settings\.textPresetsCopyRandom": "랜덤 복사"/);
-  assert.match(indexSource, /href="\/styles\.css\?v=286"/);
-  assert.match(indexSource, /src="\/translations\.js\?v=172"/);
-  assert.match(indexSource, /src="\/app\.js\?v=273"/);
+  assert.match(translations, /"route\.textPresets": "문구"/);
+  assert.match(translations, /"textPresets\.manageTitle": "문구 관리"/);
+  assert.match(translations, /"textPresets\.copyRandom": "랜덤 복사"/);
+  assert.match(indexSource, /href="\/styles\.css\?v=287"/);
+  assert.match(indexSource, /src="\/translations\.js\?v=173"/);
+  assert.match(indexSource, /src="\/app\.js\?v=274"/);
 });
