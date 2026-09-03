@@ -991,6 +991,25 @@ function adjustFamilySmartEventEnd(item, minutes) {
   };
 }
 
+function familySmartEventDurationMinutes(item) {
+  if (item.allDay || !item.startDate || !item.startTime || !item.endDate || !item.endTime) return 0;
+  const startMs = new Date(`${item.startDate}T${item.startTime}:00`).getTime();
+  const endMs = new Date(`${item.endDate}T${item.endTime}:00`).getTime();
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return 0;
+  return Math.round((endMs - startMs) / 60_000);
+}
+
+function formatFamilySmartEventDuration(item) {
+  const minutes = familySmartEventDurationMinutes(item);
+  if (!minutes) return "";
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  const parts = [];
+  if (hours) parts.push(`${hours}${uiText("event.smartHoursSuffix", "h")}`);
+  if (remainder) parts.push(`${remainder}${uiText("event.smartMinutesSuffix", "m")}`);
+  return parts.join(" ");
+}
+
 function familySmartEventProposals(dateValue = state.selectedDate) {
   return parseFamilySmartEventInput(state.smartEventInput, dateValue)
     .map((item, index) => adjustFamilySmartEventEnd(item, Number(state.smartEventEndOffsets[index] || 0)));
@@ -5641,8 +5660,9 @@ function renderFamilySmartEventPreview(proposals) {
                 <span class="familySmartEventRange">${escapeHtml(item.allDay ? uiText("event.smartAllDayPreview", "All-day event") : `${item.startTime}–${item.endTime}`)}</span>
                 ${item.allDay ? "" : `
                   <span class="familySmartEventControls">
-                    <button class="familySmartEventStep" type="button" data-family-smart-event-end-step="-60" data-family-smart-event-index="${index}" aria-label="${uiText("event.smartShorter", "Shorten by one hour")}">-1h</button>
-                    <button class="familySmartEventStep" type="button" data-family-smart-event-end-step="60" data-family-smart-event-index="${index}" aria-label="${uiText("event.smartLonger", "Extend by one hour")}">+1h</button>
+                    <button class="familySmartEventStep" type="button" data-family-smart-event-end-step="-60" data-family-smart-event-index="${index}" aria-label="${uiText("event.smartShorter", "Shorten by one hour")}">&lt;&lt;</button>
+                    <span class="familySmartEventDuration">${escapeHtml(formatFamilySmartEventDuration(item))}</span>
+                    <button class="familySmartEventStep" type="button" data-family-smart-event-end-step="60" data-family-smart-event-index="${index}" aria-label="${uiText("event.smartLonger", "Extend by one hour")}">&gt;&gt;</button>
                   </span>
                 `}
               </span>

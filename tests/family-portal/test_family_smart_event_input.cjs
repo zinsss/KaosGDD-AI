@@ -36,6 +36,9 @@ test("family smart event parser splits wife-style day text without saving", () =
   assert.match(appSource, /adjustFamilySmartEventEnd\(item, Number\(state\.smartEventEndOffsets\[index\] \|\| 0\)\)/);
   assert.match(appSource, /function adjustFamilySmartEventEnd\(item, minutes\)/);
   assert.match(appSource, /endMs <= startMs\) return item;/);
+  assert.match(appSource, /function familySmartEventDurationMinutes\(item\)/);
+  assert.match(appSource, /function formatFamilySmartEventDuration\(item\)/);
+  assert.match(appSource, /Math\.round\(\(endMs - startMs\) \/ 60_000\)/);
   assert.doesNotMatch(appSource, /data-family-smart-event-save/);
 });
 
@@ -50,6 +53,9 @@ test("family smart event UI is a preview-only contextual input", () => {
   assert.match(appSource, /data-family-smart-event-end-step="-60"/);
   assert.match(appSource, /data-family-smart-event-end-step="60"/);
   assert.match(appSource, /data-family-smart-event-index="\$\{index\}"/);
+  assert.match(appSource, /&lt;&lt;/);
+  assert.match(appSource, /formatFamilySmartEventDuration\(item\)/);
+  assert.match(appSource, /&gt;&gt;/);
 });
 
 test("family smart event input updates preview on input without rerendering the page", () => {
@@ -69,6 +75,7 @@ test("family smart event assets include styling, translations, and cache busters
   assert.match(styles, /\.familySmartEventPreview \{/);
   assert.match(styles, /\.familySmartEventControls \{/);
   assert.match(styles, /\.familySmartEventStep \{/);
+  assert.match(styles, /\.familySmartEventDuration \{/);
   assert.match(styles, /\.familySmartEventPreviewBody \{/);
   assert.match(styles, /grid-column: 2;/);
   assert.match(translations, /"event\.smart": "스마트 입력"/);
@@ -76,7 +83,9 @@ test("family smart event assets include styling, translations, and cache busters
   assert.match(translations, /"event\.smartSavePending": "저장은 다음 단계"/);
   assert.match(translations, /"event\.smartShorter": "1시간 줄이기"/);
   assert.match(translations, /"event\.smartLonger": "1시간 늘리기"/);
-  assert.match(indexSource, /href="\/styles\.css\?v=291"/);
-  assert.match(indexSource, /src="\/translations\.js\?v=177"/);
-  assert.match(indexSource, /src="\/app\.js\?v=279"/);
+  assert.match(translations, /"event\.smartHoursSuffix": "시간"/);
+  assert.match(translations, /"event\.smartMinutesSuffix": "분"/);
+  assert.match(indexSource, /href="\/styles\.css\?v=292"/);
+  assert.match(indexSource, /src="\/translations\.js\?v=178"/);
+  assert.match(indexSource, /src="\/app\.js\?v=280"/);
 });

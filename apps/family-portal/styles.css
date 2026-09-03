@@ -1715,8 +1715,16 @@ h3 {
   align-self: center;
   justify-self: end;
   display: flex;
+  align-items: center;
   gap: 10px;
   margin-top: 0;
+}
+
+.familySmartEventDuration {
+  color: var(--text);
+  font-size: 0.72rem;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .familySmartEventStep {

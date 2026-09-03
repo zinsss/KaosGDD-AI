@@ -199,6 +199,8 @@ window.KAOS_TRANSLATIONS = {
     "event.manualFallback": "직접 입력",
     "event.smartShorter": "1시간 줄이기",
     "event.smartLonger": "1시간 늘리기",
+    "event.smartHoursSuffix": "시간",
+    "event.smartMinutesSuffix": "분",
     "event.normal": "직접 입력",
     "event.noPresets": "저장된 일정 프리셋이 없습니다.",
     "event.untitledPreset": "이름 없는 프리셋",
