@@ -36,6 +36,10 @@ test("family smart event parser splits wife-style day text without saving", () =
   assert.match(appSource, /adjustFamilySmartEventEnd\(item, Number\(state\.smartEventEndOffsets\[index\] \|\| 0\)\)/);
   assert.match(appSource, /function adjustFamilySmartEventEnd\(item, minutes\)/);
   assert.match(appSource, /endMs <= startMs\) return item;/);
+  assert.match(appSource, /function nextFamilySmartEventEndOffset\(item, currentOffset, step\)/);
+  assert.match(appSource, /currentEndMinutes % 60 !== 0/);
+  assert.match(appSource, /stepMinutes = 60 - \(currentEndMinutes % 60\)/);
+  assert.match(appSource, /if \(step < 0 && currentOffset > 0 && nextOffset < 0\) nextOffset = 0;/);
   assert.match(appSource, /function familySmartEventDurationMinutes\(item\)/);
   assert.match(appSource, /function formatFamilySmartEventDuration\(item\)/);
   assert.match(appSource, /Math\.round\(\(endMs - startMs\) \/ 60_000\)/);
@@ -105,5 +109,5 @@ test("family smart event assets include styling, translations, and cache busters
   assert.match(styles, /grid-template-columns: 96px minmax\(0, 1fr\);/);
   assert.match(indexSource, /href="\/styles\.css\?v=297"/);
   assert.match(indexSource, /src="\/translations\.js\?v=180"/);
-  assert.match(indexSource, /src="\/app\.js\?v=284"/);
+  assert.match(indexSource, /src="\/app\.js\?v=285"/);
 });

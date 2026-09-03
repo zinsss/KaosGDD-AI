@@ -992,6 +992,21 @@ function adjustFamilySmartEventEnd(item, minutes) {
   };
 }
 
+function nextFamilySmartEventEndOffset(item, currentOffset, step) {
+  if (item.allDay || !step) return currentOffset;
+  const current = adjustFamilySmartEventEnd(item, currentOffset);
+  const currentEndMinutes = parseRounyMinutes(current.endTime);
+  let stepMinutes = step;
+  if (step > 0 && currentEndMinutes !== null && currentEndMinutes % 60 !== 0) {
+    stepMinutes = 60 - (currentEndMinutes % 60);
+  }
+  let nextOffset = currentOffset + stepMinutes;
+  if (step < 0 && currentOffset > 0 && nextOffset < 0) nextOffset = 0;
+  const next = adjustFamilySmartEventEnd(item, nextOffset);
+  if (next.endDate === current.endDate && next.endTime === current.endTime) return currentOffset;
+  return nextOffset;
+}
+
 function familySmartEventDurationMinutes(item) {
   if (item.allDay || !item.startDate || !item.startTime || !item.endDate || !item.endTime) return 0;
   const startMs = new Date(`${item.startDate}T${item.startTime}:00`).getTime();
@@ -9826,7 +9841,11 @@ document.addEventListener("click", async (event) => {
     const index = Number(smartEventEndStep.dataset.familySmartEventIndex);
     const step = Number(smartEventEndStep.dataset.familySmartEventEndStep);
     if (Number.isInteger(index) && Number.isInteger(step)) {
-      state.smartEventEndOffsets[index] = Number(state.smartEventEndOffsets[index] || 0) + step;
+      const item = parseFamilySmartEventInput(state.smartEventInput, state.selectedDate)[index];
+      const currentOffset = Number(state.smartEventEndOffsets[index] || 0);
+      state.smartEventEndOffsets[index] = item
+        ? nextFamilySmartEventEndOffset(item, currentOffset, step)
+        : currentOffset + step;
       updateFamilySmartEventPreview();
     }
     return;
