@@ -82,6 +82,7 @@ KAOSBRAIN_GOVERNOR_TOOLS_PROFILE=main
 KAOSBRAIN_IMAGING_ENABLED=false
 KAOSBRAIN_IMAGING_PROVIDER=kaosai
 KAOSBRAIN_IMAGING_API_TOKEN_FILE=/run/secrets/governor_api_token
+KAOSBRAIN_CALENDAR_PREVIEW_API_TOKEN_FILE=/run/secrets/governor_api_token
 GOVERNOR_API_TOKEN_FILE=/run/secrets/governor_api_token
 ```
 
@@ -106,6 +107,18 @@ KAOSBRAIN_IMAGING_PROVIDER=kaosbrain-openai
 
 The payload contains rendered previews only. KaosBrain/KaosBrain-OpenAI returns a
 temporary second-look checklist, not a diagnosis or clinical report.
+
+For Family smart calendar parsing, the Family PWA calls Calendar Adapter on H3,
+and Calendar Adapter can forward preview-only text to KaosBrain:
+
+```text
+CALENDAR_SMART_EVENTS_AI_URL=http://<kaosbrain-tailscale-ip>:8097/internal/calendar/smart-events/preview
+CALENDAR_SMART_EVENTS_AI_TOKEN=<same value as KAOSBRAIN_CALENDAR_PREVIEW_API_TOKEN>
+KAOSBRAIN_CALENDAR_PREVIEW_API_TOKEN_FILE=/run/secrets/governor_api_token
+```
+
+The Brain route returns candidate events only. The PWA still requires
+`확인 후 저장` before Calendar Adapter writes to Radicale.
 
 Use the deploy helper to switch KaosBrain-OpenAI modes without hand-editing the
 env file:

@@ -54,6 +54,7 @@ MAX_TEXT_PRESET_NAME_LENGTH = 200
 MAX_TEXT_PRESET_BODY_LENGTH = 4000
 MAX_SMART_EVENT_PROPOSALS = 12
 SMART_EVENTS_AI_URL = os.environ.get("CALENDAR_SMART_EVENTS_AI_URL", "").strip()
+SMART_EVENTS_AI_TOKEN = os.environ.get("CALENDAR_SMART_EVENTS_AI_TOKEN", "").strip()
 SMART_EVENTS_AI_TOKEN_FILE = os.environ.get("CALENDAR_SMART_EVENTS_AI_TOKEN_FILE", "").strip()
 SMART_EVENTS_AI_TIMEOUT = float(os.environ.get("CALENDAR_SMART_EVENTS_AI_TIMEOUT_SECONDS", "20") or "20")
 ROUNY_COLOR_PATTERN = re.compile(r"^#[0-9a-fA-F]{6}$")
@@ -1773,6 +1774,8 @@ def normalize_smart_event_preview_item(item, date_value, source="ai"):
 
 
 def smart_events_ai_token():
+    if SMART_EVENTS_AI_TOKEN:
+        return SMART_EVENTS_AI_TOKEN
     if not SMART_EVENTS_AI_TOKEN_FILE:
         return ""
     try:

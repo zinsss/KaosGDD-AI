@@ -584,6 +584,19 @@ class CalendarAdapterServerTests(unittest.TestCase):
             server.SMART_EVENTS_AI_URL = original_ai_url
             server.call_smart_events_ai = original_call
 
+    def test_smart_event_ai_token_prefers_direct_environment_value(self) -> None:
+        server = load_server_module()
+        original_token = server.SMART_EVENTS_AI_TOKEN
+        original_token_file = server.SMART_EVENTS_AI_TOKEN_FILE
+        try:
+            server.SMART_EVENTS_AI_TOKEN = "direct-token"
+            server.SMART_EVENTS_AI_TOKEN_FILE = "/missing/token"
+
+            self.assertEqual(server.smart_events_ai_token(), "direct-token")
+        finally:
+            server.SMART_EVENTS_AI_TOKEN = original_token
+            server.SMART_EVENTS_AI_TOKEN_FILE = original_token_file
+
 
 if __name__ == "__main__":
     unittest.main()

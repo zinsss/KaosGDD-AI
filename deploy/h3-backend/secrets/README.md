@@ -31,3 +31,14 @@ For Apple Watch text alerts, `pushover_app_token` is the API token for the
 KaosGDD Notifications application and `pushover_user_key` is the recipient key
 shown on the Pushover dashboard. Both are required only when
 `PUSHOVER_ENABLED=true`.
+
+The Family Calendar Adapter also reads `/srv/kaos/secrets/kaosgdd-adapters.env`.
+To enable AI-assisted Family smart-event previews, set:
+
+```text
+CALENDAR_SMART_EVENTS_AI_URL=http://<kaosbrain-tailscale-ip>:8097/internal/calendar/smart-events/preview
+CALENDAR_SMART_EVENTS_AI_TOKEN=<KAOSBRAIN_CALENDAR_PREVIEW_API_TOKEN value>
+```
+
+This is preview-only. Confirmed calendar writes still go through the normal
+Calendar Adapter `/api/calendar/events` path after the PWA confirmation step.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from datetime import datetime
 import json
 import re
 from uuid import uuid4
@@ -17,6 +18,9 @@ class KaosAIError(RuntimeError):
 class KaosAIPlanner(Protocol):
     async def plan(self, user_text: str, *, context: Mapping[str, Any]) -> dict[str, Any] | None:
         """Return a KaosBrain-OpenAI plan or None when planning is unavailable."""
+
+    async def preview_calendar_events(self, request: Mapping[str, Any]) -> list[dict[str, Any]]:
+        """Return preview-only calendar event proposals."""
 
     async def suggest_document_tags(self, context: Mapping[str, Any]) -> tuple[str, ...]:
         """Return existing Paperless tag names suggested for a document."""
@@ -39,6 +43,9 @@ class DisabledKaosAIPlanner:
     async def plan(self, user_text: str, *, context: Mapping[str, Any]) -> dict[str, Any] | None:
         return None
 
+    async def preview_calendar_events(self, request: Mapping[str, Any]) -> list[dict[str, Any]]:
+        raise KaosAIError("kaosai_disabled")
+
     async def suggest_document_tags(self, context: Mapping[str, Any]) -> tuple[str, ...]:
         return ()
 
@@ -55,6 +62,12 @@ class OpenClawKaosAIPlanner:
             return None
         raw = await self._complete(user_text, context=context)
         return normalize_kaosai_plan_scope(user_text, parse_kaosai_plan_response(raw))
+
+    async def preview_calendar_events(self, request: Mapping[str, Any]) -> list[dict[str, Any]]:
+        if not self.config.enabled:
+            raise KaosAIError("kaosai_disabled")
+        raw = await self._complete_message(f"{KAOSAI_CALENDAR_PREVIEW_SYSTEM_PROMPT}\n\n{_render_calendar_preview_request(request)}")
+        return parse_calendar_preview_response(raw, request)
 
     async def suggest_document_tags(self, context: Mapping[str, Any]) -> tuple[str, ...]:
         if not self.config.enabled:
@@ -165,6 +178,25 @@ Rules:
 - Return {"tags":[]} when no tag clearly fits."""
 
 
+KAOSAI_CALENDAR_PREVIEW_SYSTEM_PROMPT = """You are KaosBrain-OpenAI helping KaosGDD turn short Family calendar notes into preview-only event proposals.
+Return exactly one JSON object and no markdown.
+Allowed schema:
+{"events":[{"title":"...","allDay":true,"startDate":"YYYY-MM-DD","startTime":"","endDate":"YYYY-MM-DD","endTime":""},{"title":"...","allDay":false,"startDate":"YYYY-MM-DD","startTime":"HH:MM","endDate":"YYYY-MM-DD","endTime":"HH:MM"}]}
+
+Rules:
+- This is preview only. Do not write, save, call tools, or claim anything was created.
+- Use the request date as the default date.
+- Split slash-separated or newline-separated notes into separate events.
+- Keep Korean titles natural and concise.
+- Preserve explicitly provided start times.
+- Use HH:MM 24-hour times.
+- If a timed event has a start but no end, make it 1 hour long.
+- If a timed event has an end earlier than or equal to the start, treat it as overnight on the next date.
+- Make items without a time all-day events.
+- Return at most 12 events.
+- If the text is unclear, still return the safest preview; KaosGDD will show it for confirmation before any save."""
+
+
 KAOSAI_SECOND_LOOK_SYSTEM_PROMPT = """You are KaosBrain-OpenAI providing a temporary medical image second-look checklist.
 Return exactly one JSON object and no markdown.
 Do not diagnose, do not claim certainty, and do not provide a final report.
@@ -239,6 +271,30 @@ def parse_document_tag_response(raw: str, context: Mapping[str, Any]) -> tuple[s
         if len(selected) >= 5:
             break
     return tuple(selected)
+
+
+def parse_calendar_preview_response(raw: str, request: Mapping[str, Any]) -> list[dict[str, Any]]:
+    text = raw.strip()
+    if text.startswith("```"):
+        text = _strip_fence(text)
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise KaosAIError("invalid_calendar_preview_json") from exc
+    if not isinstance(payload, Mapping):
+        raise KaosAIError("calendar_preview_response_must_be_object")
+    raw_events = payload.get("events")
+    if not isinstance(raw_events, list):
+        raise KaosAIError("calendar_preview_events_required")
+    date_value = _calendar_preview_date(request)
+    events: list[dict[str, Any]] = []
+    for raw_event in raw_events:
+        if not isinstance(raw_event, Mapping):
+            raise KaosAIError("calendar_preview_event_must_be_object")
+        events.append(_normalize_calendar_preview_event(raw_event, default_date=date_value))
+        if len(events) >= 12:
+            break
+    return events
 
 
 def document_tag_rule_suggestions(context: Mapping[str, Any]) -> tuple[str, ...]:
@@ -329,6 +385,66 @@ def _normalize_tag_name(value: object) -> str:
 
 def _clean_document_tag(value: object) -> str:
     return re.sub(r"[\x00-\x1f\x7f#]+", "", str(value or "")).strip()[:100]
+
+
+def _calendar_preview_date(source: Mapping[str, Any]) -> str:
+    raw = str(source.get("date") or source.get("startDate") or "").strip()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw):
+        return ""
+    try:
+        datetime.strptime(raw, "%Y-%m-%d")
+        return raw
+    except ValueError:
+        return ""
+
+
+def _calendar_preview_time(value: object) -> str:
+    raw = str(value or "").strip()
+    if not re.fullmatch(r"\d{2}:\d{2}", raw):
+        return ""
+    hour, minute = (int(part) for part in raw.split(":", 1))
+    if hour > 23 or minute > 59:
+        return ""
+    return raw
+
+
+def _calendar_preview_at(date_value: str, time_value: str) -> int:
+    year, month, day = (int(part) for part in date_value.split("-", 2))
+    hour, minute = (int(part) for part in time_value.split(":", 1))
+    return (((year * 12 + month) * 31 + day) * 24 + hour) * 60 + minute
+
+
+def _normalize_calendar_preview_event(event: Mapping[str, Any], *, default_date: str) -> dict[str, Any]:
+    title = str(event.get("title") or event.get("summary") or "").strip()
+    if not title:
+        raise KaosAIError("calendar_preview_title_required")
+    start_date = _calendar_preview_date(event) or default_date
+    if not start_date:
+        raise KaosAIError("calendar_preview_date_required")
+    end_date = _calendar_preview_date({"date": event.get("endDate")}) or start_date
+    if bool(event.get("allDay")):
+        return {
+            "title": title[:500],
+            "allDay": True,
+            "startDate": start_date,
+            "startTime": "",
+            "endDate": end_date,
+            "endTime": "",
+        }
+    start_time = _calendar_preview_time(event.get("startTime"))
+    end_time = _calendar_preview_time(event.get("endTime"))
+    if not start_time or not end_time:
+        raise KaosAIError("calendar_preview_time_required")
+    if _calendar_preview_at(end_date, end_time) <= _calendar_preview_at(start_date, start_time):
+        raise KaosAIError("calendar_preview_range_invalid")
+    return {
+        "title": title[:500],
+        "allDay": False,
+        "startDate": start_date,
+        "startTime": start_time,
+        "endDate": end_date,
+        "endTime": end_time,
+    }
 
 
 def _document_tag_text(context: Mapping[str, Any]) -> str:
@@ -459,6 +575,20 @@ def _render_document_tag_request(context: Mapping[str, Any]) -> str:
                 "contentExcerpt": str(document.get("contentExcerpt") or "")[:4000] if isinstance(document, Mapping) else "",
             },
             "availableTags": [dict(item) for item in _available_tag_items(context)],
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+
+
+def _render_calendar_preview_request(request: Mapping[str, Any]) -> str:
+    grammar_events = request.get("grammarEvents")
+    return json.dumps(
+        {
+            "text": str(request.get("text") or "")[:4000],
+            "date": str(request.get("date") or ""),
+            "profile": str(request.get("profile") or "family"),
+            "grammarEvents": grammar_events if isinstance(grammar_events, list) else [],
         },
         ensure_ascii=False,
         sort_keys=True,

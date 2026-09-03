@@ -4,6 +4,7 @@ from importlib.util import find_spec
 
 from kaos_brain.kaos_ai import (
     DisabledKaosAIPlanner,
+    KAOSAI_CALENDAR_PREVIEW_SYSTEM_PROMPT,
     KAOSAI_DOCUMENT_TAG_SYSTEM_PROMPT,
     KAOSAI_PLAN_SYSTEM_PROMPT,
     KaosAIConfig,
@@ -12,6 +13,7 @@ from kaos_brain.kaos_ai import (
     document_tag_rule_suggestions,
     merge_document_tag_suggestions,
     normalize_kaosai_plan_scope,
+    parse_calendar_preview_response,
     parse_document_tag_response,
     parse_kaosai_plan_response,
     parse_second_look_response,
@@ -28,6 +30,8 @@ class KaosAITests(unittest.IsolatedAsyncioTestCase):
         planner = DisabledKaosAIPlanner()
 
         self.assertIsNone(await planner.plan("hello", context={}))
+        with self.assertRaisesRegex(KaosAIError, "kaosai_disabled"):
+            await planner.preview_calendar_events({})
         self.assertEqual(await planner.suggest_document_tags({}), ())
         with self.assertRaisesRegex(KaosAIError, "kaosai_disabled"):
             await planner.second_look({})
@@ -48,6 +52,36 @@ class KaosAITests(unittest.IsolatedAsyncioTestCase):
     def test_document_tag_prompt_limits_ai_to_existing_tags(self) -> None:
         self.assertIn("Prefer tag names from availableTags", KAOSAI_DOCUMENT_TAG_SYSTEM_PROMPT)
         self.assertIn("user to confirm before creating", KAOSAI_DOCUMENT_TAG_SYSTEM_PROMPT)
+
+    def test_calendar_preview_prompt_is_preview_only_json(self) -> None:
+        self.assertIn("preview-only event proposals", KAOSAI_CALENDAR_PREVIEW_SYSTEM_PROMPT)
+        self.assertIn("Do not write, save, call tools", KAOSAI_CALENDAR_PREVIEW_SYSTEM_PROMPT)
+        self.assertIn("Return at most 12 events", KAOSAI_CALENDAR_PREVIEW_SYSTEM_PROMPT)
+        self.assertIn('"events"', KAOSAI_CALENDAR_PREVIEW_SYSTEM_PROMPT)
+
+    def test_parse_calendar_preview_response_normalizes_event_shapes(self) -> None:
+        events = parse_calendar_preview_response(
+            (
+                '{"events":['
+                '{"title":"연차","allDay":true,"startDate":"2026-09-03","endDate":"2026-09-03"},'
+                '{"title":"메롱","allDay":false,"startDate":"2026-09-03","startTime":"12:30","endDate":"2026-09-03","endTime":"13:30"}'
+                "]}"
+            ),
+            {"date": "2026-09-03"},
+        )
+
+        self.assertEqual(events[0]["title"], "연차")
+        self.assertTrue(events[0]["allDay"])
+        self.assertEqual(events[0]["startTime"], "")
+        self.assertEqual(events[1]["startTime"], "12:30")
+        self.assertEqual(events[1]["endTime"], "13:30")
+
+    def test_parse_calendar_preview_response_rejects_invalid_ranges(self) -> None:
+        with self.assertRaisesRegex(KaosAIError, "calendar_preview_range_invalid"):
+            parse_calendar_preview_response(
+                '{"events":[{"title":"bad","allDay":false,"startDate":"2026-09-03","startTime":"12:30","endDate":"2026-09-03","endTime":"12:30"}]}',
+                {"date": "2026-09-03"},
+            )
 
     def test_parse_second_look_response_normalizes_json(self) -> None:
         result = parse_second_look_response(
@@ -242,6 +276,76 @@ class KaosAITests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(requests[1]["params"]["promptMode"], "none")
             self.assertIn("cannot call tools", requests[1]["params"]["message"])
             self.assertIn("rustdesk 메모 찾아줘", requests[1]["params"]["message"])
+        finally:
+            await runner.cleanup()
+
+    @unittest.skipUnless(AIOHTTP_AVAILABLE, "aiohttp is required for OpenClawKaosAIPlanner tests")
+    async def test_openclaw_calendar_preview_uses_gateway_contract(self) -> None:
+        requests: list[dict[str, Any]] = []
+
+        async def handler(request):
+            websocket = web.WebSocketResponse()
+            await websocket.prepare(request)
+            await websocket.send_json({"type": "event", "event": "connect.challenge", "payload": {"nonce": "nonce"}})
+            async for message in websocket:
+                frame = message.json()
+                requests.append(frame)
+                if frame["method"] == "connect":
+                    await websocket.send_json({"type": "res", "id": frame["id"], "ok": True, "payload": {"features": {"methods": ["agent"]}}})
+                elif frame["method"] == "agent":
+                    await websocket.send_json({"type": "res", "id": frame["id"], "ok": True, "payload": {"status": "accepted"}})
+                    await websocket.send_json(
+                        {
+                            "type": "res",
+                            "id": frame["id"],
+                            "ok": True,
+                            "payload": {
+                                "status": "ok",
+                                "result": {
+                                    "payloads": [
+                                        {
+                                            "text": (
+                                                '{"events":[{"title":"메롱","allDay":false,'
+                                                '"startDate":"2026-09-03","startTime":"12:30",'
+                                                '"endDate":"2026-09-03","endTime":"13:30"}]}'
+                                            )
+                                        }
+                                    ]
+                                },
+                            },
+                        }
+                    )
+            return websocket
+
+        runner, base_url = await self._start_server(handler)
+        try:
+            planner = OpenClawKaosAIPlanner(
+                KaosAIConfig(
+                    enabled=True,
+                    provider="openclaw",
+                    base_url=base_url,
+                    model="openai/gpt-5",
+                    api_token="gateway-token",
+                    timeout_seconds=1,
+                )
+            )
+
+            events = await planner.preview_calendar_events(
+                {
+                    "text": "12:30 메롱",
+                    "date": "2026-09-03",
+                    "profile": "family",
+                    "grammarEvents": [],
+                }
+            )
+
+            self.assertEqual(events[0]["title"], "메롱")
+            self.assertEqual(events[0]["startTime"], "12:30")
+            self.assertEqual(requests[1]["method"], "agent")
+            self.assertEqual(requests[1]["params"]["provider"], "openai")
+            self.assertEqual(requests[1]["params"]["model"], "gpt-5")
+            self.assertIn("preview only", requests[1]["params"]["message"])
+            self.assertIn("12:30 메롱", requests[1]["params"]["message"])
         finally:
             await runner.cleanup()
 

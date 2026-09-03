@@ -33,6 +33,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.health_host, "127.0.0.1")
         self.assertEqual(settings.health_port, 8099)
         self.assertFalse(settings.imaging_enabled)
+        self.assertEqual(settings.calendar_preview_api_token, "")
         self.assertFalse(settings.kaosai_reauth_enabled)
         self.assertEqual(settings.active_control_repost_seconds, 7200)
         self.assertEqual(settings.active_control_quiet_start_hour, 0)
@@ -318,6 +319,15 @@ class SettingsTests(unittest.TestCase):
         self.assertTrue(settings.health_enabled)
         self.assertEqual(settings.health_host, "100.113.169.46")
         self.assertEqual(settings.health_port, 8099)
+
+    def test_calendar_preview_token_can_be_loaded_from_secret_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            token_file = Path(temporary_directory) / "calendar-preview-token"
+            token_file.write_text("calendar-preview-secret\n", encoding="utf-8")
+
+            settings = Settings.from_env({**BASE_ENV, "KAOSBRAIN_CALENDAR_PREVIEW_API_TOKEN_FILE": str(token_file)})
+
+        self.assertEqual(settings.calendar_preview_api_token, "calendar-preview-secret")
 
     def test_kaosai_reauth_requires_local_agent_url_and_token(self) -> None:
         with self.assertRaisesRegex(ConfigurationError, "KAOSAI_REAUTH_BASE_URL"):
