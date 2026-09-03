@@ -14,13 +14,15 @@ test("main PWA exposes AI Tasks as a first-class read/confirm workflow", () => {
 });
 
 test("AI Tasks official document memo flow previews before saving to Memos", () => {
-  assert.match(appSource, /data-ai-task-mode="web"/);
-  assert.match(appSource, /data-ai-task-mode="official_doc_memo"/);
-  assert.match(appSource, /data-ai-task-web/);
+  assert.match(appSource, /data-ai-task-unified/);
+  assert.match(appSource, /Prompt-only searches official sources\. Add PDF, URL, or text to work from a source\./);
+  assert.match(appSource, /async function previewUnifiedAiTask\(form\)/);
+  assert.match(appSource, /if \(hasSourcePdf \|\| sourceUrl \|\| sourceText\) \{/);
+  assert.match(appSource, /await previewOfficialDocMemo\(form\)/);
+  assert.match(appSource, /await previewWebAiTask\(form\)/);
   assert.match(appSource, /\/api\/ai-tasks\/web\/preview/);
   assert.match(appSource, /AI TASK RESULT/);
   assert.match(appSource, /data-ai-task-copy/);
-  assert.match(appSource, /data-ai-task-official-memo/);
   assert.match(appSource, /\/api\/ai-tasks\/official-doc-memo\/preview/);
   assert.match(appSource, /name="sourcePdf" type="file" accept="application\/pdf,\.pdf"/);
   assert.match(appSource, /const hasSourcePdf = sourcePdf instanceof File && sourcePdf\.size > 0;/);

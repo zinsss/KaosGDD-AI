@@ -254,18 +254,19 @@ Safety boundaries:
 
 ### Official health web-search AI Task
 
-The general-purpose AI Task workbench now has two related official-source
-flows:
+The general-purpose AI Task workbench uses one prompt-first composer. The user
+does not choose `WEB SEARCH` versus `DOC -> MEMO` up front; Governor routes the
+task from the provided source inputs:
 
 ```text
-DOC -> MEMO
-  user supplies official URL, source text, or a text-based PDF
+Prompt + PDF/URL/text
+  user supplies a natural-language prompt plus official URL, source text, or a
+  text-based PDF
   Governor fetches/extracts source text
   KaosBrain-OpenAI drafts a memo
   PWA writes to Memos only after explicit SAVE MEMO
 
-WEB SEARCH
-  user supplies a natural-language prompt
+Prompt only
   KaosBrain-OpenAI turns the prompt into a structured search job
   Governor searches/fetches only allowlisted official health/public sites
   KaosBrain-OpenAI summarizes and reasons from the fetched excerpts only

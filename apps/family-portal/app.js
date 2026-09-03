@@ -2343,6 +2343,19 @@ async function previewWebAiTask(form) {
   }
 }
 
+async function previewUnifiedAiTask(form) {
+  const formData = new FormData(form);
+  const sourceUrl = String(formData.get("sourceUrl") || "").trim();
+  const sourceText = String(formData.get("sourceText") || "").trim();
+  const sourcePdf = formData.get("sourcePdf");
+  const hasSourcePdf = sourcePdf instanceof File && sourcePdf.size > 0;
+  if (hasSourcePdf || sourceUrl || sourceText) {
+    await previewOfficialDocMemo(form);
+    return;
+  }
+  await previewWebAiTask(form);
+}
+
 function aiTaskErrorMessage(code) {
   const normalized = String(code || "").trim();
   const messages = {
@@ -8950,63 +8963,31 @@ function renderAiTasks() {
   const memo = preview?.memo || {};
   const result = preview?.result || {};
   const resultSources = Array.isArray(result.sources) ? result.sources : [];
-  const activeMode = aiTasks.mode === "official_doc_memo" ? "official_doc_memo" : "web";
   return `
     <section class="archiveTerminal" data-archive-kind="ai-tasks" aria-label="AI Tasks">
-      <div class="archiveTabs" role="tablist" aria-label="AI task type">
-        <button class="archiveTab ${activeMode === "web" ? "isActive" : ""}" type="button" data-ai-task-mode="web" aria-selected="${activeMode === "web" ? "true" : "false"}">WEB SEARCH</button>
-        <button class="archiveTab ${activeMode === "official_doc_memo" ? "isActive" : ""}" type="button" data-ai-task-mode="official_doc_memo" aria-selected="${activeMode === "official_doc_memo" ? "true" : "false"}">DOC -&gt; MEMO</button>
-      </div>
-      ${
-        activeMode === "web"
-          ? `
-            <form class="archiveIndex aiTaskComposer" data-ai-task-web>
-              <header class="archiveIndexHeader">
-                <div>
-                  <h3>WEB SEARCH</h3>
-                  <p class="archiveStatusMessage">Read-only AI work. Results are archived; saving elsewhere is manual.</p>
-                </div>
-                <button class="archiveAction" type="button" data-ai-tasks-refresh ${aiTasks.loading ? "disabled" : ""}>↻</button>
-              </header>
-              <label class="archiveCommandLine aiTaskPrompt">
-                <span>PROMPT</span>
-                <textarea name="prompt" rows="4" placeholder="예: 26-27절기 국가 인플루엔자 접종 계획 공식 자료 찾아서 요약">${escapeHtml(aiTasks.prompt)}</textarea>
-              </label>
-              ${
-                aiTasks.error
-                  ? `<div class="archiveError" role="alert"><p>${escapeHtml(aiTasks.error)}</p></div>`
-                  : ""
-              }
-              <div class="archiveActions">
-                <button class="archiveAction isActive" type="submit" ${aiTasks.previewing ? "disabled" : ""}>${aiTasks.previewing ? "WORKING" : "RUN"}</button>
-                <button class="archiveAction" type="button" data-ai-task-clear>CLEAR</button>
-              </div>
-            </form>
-          `
-          : `
-      <form class="archiveIndex aiTaskComposer" data-ai-task-official-memo>
+      <form class="archiveIndex aiTaskComposer" data-ai-task-unified>
         <header class="archiveIndexHeader">
           <div>
-            <h3>OFFICIAL DOC -&gt; MEMO</h3>
-            <p class="archiveStatusMessage">AI drafts only. Press SAVE MEMO to write into Memos.</p>
+            <h3>AI TASK</h3>
+            <p class="archiveStatusMessage">Prompt-only searches official sources. Add PDF, URL, or text to work from a source.</p>
           </div>
           <button class="archiveAction" type="button" data-ai-tasks-refresh ${aiTasks.loading ? "disabled" : ""}>↻</button>
         </header>
         <label class="archiveCommandLine aiTaskPrompt">
           <span>PROMPT</span>
-          <textarea name="prompt" rows="3" placeholder="예: 26-27절기 국가 인플루엔자 접종 계획 요약해서 메모로" required>${escapeHtml(aiTasks.prompt)}</textarea>
-        </label>
-        <label class="archiveCommandLine">
-          <span>URL</span>
-          <input name="sourceUrl" type="url" inputmode="url" autocomplete="url" placeholder="official source URL" value="${escapeHtml(aiTasks.sourceUrl)}" />
+          <textarea name="prompt" rows="4" placeholder="예: 알모그란정 급여기준과 차트 기재 추천">${escapeHtml(aiTasks.prompt)}</textarea>
         </label>
         <label class="archiveCommandLine">
           <span>PDF</span>
           <input name="sourcePdf" type="file" accept="application/pdf,.pdf" />
         </label>
+        <label class="archiveCommandLine">
+          <span>URL</span>
+          <input name="sourceUrl" type="url" inputmode="url" autocomplete="url" placeholder="optional official source URL" value="${escapeHtml(aiTasks.sourceUrl)}" />
+        </label>
         <label class="archiveCommandLine aiTaskSourceText">
           <span>TEXT</span>
-          <textarea name="sourceText" rows="5" placeholder="or paste official source text">${escapeHtml(aiTasks.sourceText)}</textarea>
+          <textarea name="sourceText" rows="4" placeholder="optional pasted source text">${escapeHtml(aiTasks.sourceText)}</textarea>
         </label>
         ${
           aiTasks.error
@@ -9014,12 +8995,10 @@ function renderAiTasks() {
             : ""
         }
         <div class="archiveActions">
-          <button class="archiveAction isActive" type="submit" ${aiTasks.previewing ? "disabled" : ""}>${aiTasks.previewing ? "PREVIEWING" : "PREVIEW"}</button>
+          <button class="archiveAction isActive" type="submit" ${aiTasks.previewing ? "disabled" : ""}>${aiTasks.previewing ? "WORKING" : "RUN"}</button>
           <button class="archiveAction" type="button" data-ai-task-clear>CLEAR</button>
         </div>
       </form>
-          `
-      }
       ${
         preview?.kind === "web"
           ? `
@@ -11764,19 +11743,6 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
-  const aiTaskModeButton = event.target.closest("[data-ai-task-mode]");
-  if (aiTaskModeButton) {
-    event.preventDefault();
-    state.aiTasks = {
-      ...state.aiTasks,
-      mode: aiTaskModeButton.dataset.aiTaskMode === "official_doc_memo" ? "official_doc_memo" : "web",
-      preview: null,
-      error: "",
-    };
-    render();
-    return;
-  }
-
   if (event.target.closest("[data-ai-task-clear]")) {
     event.preventDefault();
     state.aiTasks = {
@@ -11907,6 +11873,13 @@ document.addEventListener("submit", async (event) => {
       };
       render();
     }
+    return;
+  }
+
+  const aiTaskUnifiedForm = event.target.closest("[data-ai-task-unified]");
+  if (aiTaskUnifiedForm) {
+    event.preventDefault();
+    await previewUnifiedAiTask(aiTaskUnifiedForm);
     return;
   }
 
