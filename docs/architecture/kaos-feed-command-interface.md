@@ -280,6 +280,14 @@ public search pages:
 - `mfds.go.kr`
 - `hira.or.kr`
 
+HIRA is handled as a special case for medicine benefit questions. Governor uses
+the HIRA 보험인정기준 POST search endpoint instead of the generic site search,
+then links directly to the matching 보험인정기준 detail popup. Korean brand-name
+queries may be expanded to ingredient/class terms before searching, because
+HIRA often indexes current criteria by ingredient or therapeutic class rather
+than by product name. Current examples include `알모그란/알모트립탄 ->
+Almotriptan/편두통 치료제` and `글리아티린 -> Choline alfoscerate/콜린알포세레이트`.
+
 The wider official health/public allowlist also permits fetched source links
 from national public-health, insurance, evaluation, medicine, and affiliated
 agency domains such as `nhis.or.kr`, `longtermcare.or.kr`,

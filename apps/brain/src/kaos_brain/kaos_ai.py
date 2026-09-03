@@ -264,6 +264,7 @@ Rules:
 - Convert the user prompt into short Korean search queries suitable for government/public health search pages.
 - Keep query factual and compact; remove instructions like "summarize" when they do not help search.
 - Use preferredDomains only when the prompt implies a source family. Examples: drug coverage -> hira.or.kr/mohw.go.kr; infection/vaccine -> kdca.go.kr; food/drug/device safety -> mfds.go.kr.
+- For Korean medicine brand names, include known ingredient/class names as separate alternateQueries when you know them; HIRA insurance criteria often indexes ingredients/classes rather than product names.
 - Include at most 3 alternateQueries and at most 6 preferredDomains.
 - Default language to "ko" unless the user clearly asks English."""
 

@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from kaos_governor import api
 from kaos_governor.ai_tasks import AITaskArchive, AITaskError
+from kaos_governor.official_search import official_health_search_candidates
 
 
 class FakeHTTPResponse:
@@ -188,6 +189,49 @@ class GovernorAITaskTests(unittest.TestCase):
             self.assertEqual(records[0].status, "previewed")
             self.assertEqual(records[0].source["type"], "official_web_search")
             self.assertEqual(records[0].source["plan"]["query"], "인플루엔자 접종 계획")
+
+    def test_hira_insurance_criteria_search_expands_almogran_to_ingredient(self) -> None:
+        def fake_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
+            body = request.data.decode("utf-8") if getattr(request, "data", None) else ""
+            if request.full_url.startswith("https://www.hira.or.kr/rc/insu/insuadtcrtr/InsuAdtCrtrList.do"):
+                if "Almotriptan" not in body:
+                    return FakeHTTPResponse("<html><body>검색된 내용이 없습니다.</body></html>", "text/html; charset=utf-8")
+                return FakeHTTPResponse(
+                    """<html><body>
+                    <a href="#none" onclick="viewInsuAdtCrtr(1, '20130901', '1', '0046', '1'); return false;"
+                       title="Almotriptan 경구제 (품명: 알모그란정) 새창으로 열기">Almotriptan 경구제</a>
+                    <a href="#none" onclick="viewInsuAdtCrtr(1, '20240901', '3', '0001', '1'); return false;"
+                       title="편두통 치료제  새창으로 열기">편두통 치료제</a>
+                    </body></html>""",
+                    "text/html; charset=utf-8",
+                )
+            return FakeHTTPResponse("<html></html>", "text/html; charset=utf-8")
+
+        candidates = official_health_search_candidates(
+            "알모그란정 급여기준",
+            preferred_domains=["hira.or.kr"],
+            urlopen=fake_urlopen,
+        )
+
+        self.assertGreaterEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].host, "www.hira.or.kr")
+        self.assertEqual(candidates[0].title, "편두통 치료제")
+        self.assertIn("InsuAdtCrtrPopup.do", candidates[0].url)
+        self.assertIn("mtgHmeDd=20240901", candidates[0].url)
+
+    def test_search_filters_skip_links(self) -> None:
+        def fake_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
+            if request.full_url.startswith("https://www.kdca.go.kr/search.do"):
+                return FakeHTTPResponse(
+                    '<html><body><a href="/search.do?kwd=인플루엔자">본문 바로가기</a>'
+                    '<a href="/board/notice">인플루엔자 예방접종 계획</a></body></html>',
+                    "text/html; charset=utf-8",
+                )
+            return FakeHTTPResponse("<html><body>검색된 내용이 없습니다.</body></html>", "text/html; charset=utf-8")
+
+        candidates = official_health_search_candidates("인플루엔자", preferred_domains=["kdca.go.kr"], urlopen=fake_urlopen)
+
+        self.assertEqual([item.title for item in candidates], ["인플루엔자 예방접종 계획"])
 
     def test_complete_marks_archived_task_applied(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

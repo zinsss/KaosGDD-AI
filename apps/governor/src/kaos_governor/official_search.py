@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import html
 from html.parser import HTMLParser
 import re
 import urllib.parse
@@ -10,6 +11,8 @@ from typing import Callable, Iterable
 
 MAX_SEARCH_PAGE_BYTES = 1_000_000
 MAX_CANDIDATES_PER_SEARCH = 12
+HIRA_INSURANCE_CRITERIA_URL = "https://www.hira.or.kr/rc/insu/insuadtcrtr/InsuAdtCrtrList.do?pgmid=HIRAA030069000400"
+HIRA_INSURANCE_CRITERIA_POPUP_URL = "https://www.hira.or.kr/rc/insu/insuadtcrtr/InsuAdtCrtrPopup.do"
 
 
 @dataclass(frozen=True)
@@ -32,7 +35,7 @@ OFFICIAL_HEALTH_SITES: tuple[OfficialSearchSite, ...] = (
     OfficialSearchSite("보건복지부", ("mohw.go.kr", "www.mohw.go.kr"), "https://www.mohw.go.kr/search.es?mid=a10503000000&act=view&kwd={query}"),
     OfficialSearchSite("질병관리청", ("kdca.go.kr", "www.kdca.go.kr"), "https://www.kdca.go.kr/search.do?kwd={query}&category=TOTAL"),
     OfficialSearchSite("식품의약품안전처", ("mfds.go.kr", "www.mfds.go.kr"), "https://www.mfds.go.kr/search/search.do?searchWord={query}"),
-    OfficialSearchSite("건강보험심사평가원", ("hira.or.kr", "www.hira.or.kr"), "https://www.hira.or.kr/search/search.do?searchWord={query}"),
+    OfficialSearchSite("건강보험심사평가원", ("hira.or.kr", "www.hira.or.kr")),
     OfficialSearchSite("국민건강보험공단", ("nhis.or.kr", "www.nhis.or.kr")),
     OfficialSearchSite("노인장기요양보험", ("longtermcare.or.kr", "www.longtermcare.or.kr")),
     OfficialSearchSite("국립보건연구원", ("nih.go.kr", "www.nih.go.kr")),
@@ -111,12 +114,13 @@ def official_health_search_candidates(
     limit: int = 8,
     urlopen: Callable = urllib.request.urlopen,
 ) -> list[OfficialSearchCandidate]:
-    queries = _unique_queries([query, *alternate_queries])
+    queries = _expanded_queries(_unique_queries([query, *alternate_queries]))
     if not queries:
         return []
     preferred = _preferred_hosts(preferred_domains)
     sites = _ordered_sites(preferred)
     candidates: list[OfficialSearchCandidate] = []
+    candidates.extend(_hira_insurance_criteria_candidates(queries, preferred=preferred, urlopen=urlopen))
     for site in sites:
         if not site.search_url:
             continue
@@ -142,6 +146,32 @@ def _unique_queries(values: Iterable[str]) -> list[str]:
     return selected
 
 
+def _expanded_queries(queries: list[str]) -> list[str]:
+    expanded = list(queries)
+    joined = " ".join(queries).casefold()
+    aliases = {
+        "알모그란": ("Almotriptan", "편두통 치료제"),
+        "알모트립탄": ("Almotriptan", "편두통 치료제"),
+        "almotriptan": ("편두통 치료제",),
+        "글리아티린": ("choline alfoscerate", "콜린알포세레이트"),
+        "콜린알포세레이트": ("choline alfoscerate",),
+        "choline alfoscerate": ("콜린알포세레이트",),
+        "수마트립탄": ("Sumatriptan", "편두통 치료제"),
+        "이미그란": ("Sumatriptan", "편두통 치료제"),
+        "졸미트립탄": ("Zolmitriptan", "편두통 치료제"),
+        "조믹": ("Zolmitriptan", "편두통 치료제"),
+        "나라트립탄": ("Naratriptan", "편두통 치료제"),
+        "나라믹": ("Naratriptan", "편두통 치료제"),
+        "프로바트립탄": ("Frovatriptan", "편두통 치료제"),
+        "미가드": ("Frovatriptan", "편두통 치료제"),
+        "수벡스": ("Sumatriptan Naproxen", "편두통 치료제"),
+    }
+    for needle, replacements in aliases.items():
+        if needle in joined:
+            expanded.extend(replacements)
+    return _unique_queries(expanded)
+
+
 def _preferred_hosts(values: Iterable[str]) -> set[str]:
     hosts: set[str] = set()
     for value in values:
@@ -157,6 +187,78 @@ def _preferred_hosts(values: Iterable[str]) -> set[str]:
 def _ordered_sites(preferred: set[str]) -> list[OfficialSearchSite]:
     with_search = [site for site in OFFICIAL_HEALTH_SITES if site.search_url]
     return sorted(with_search, key=lambda site: 0 if any(host in preferred for host in site.hosts) else 1)
+
+
+def _hira_insurance_criteria_candidates(
+    queries: list[str],
+    *,
+    preferred: set[str],
+    urlopen: Callable = urllib.request.urlopen,
+) -> list[OfficialSearchCandidate]:
+    candidates: list[OfficialSearchCandidate] = []
+    for search_query in queries[:6]:
+        request = urllib.request.Request(
+            HIRA_INSURANCE_CRITERIA_URL,
+            data=urllib.parse.urlencode(
+                {
+                    "pageIndex": "1",
+                    "tabGbn": "01",
+                    "searchYn": "Y",
+                    "decIteTpCd": "01",
+                    "recordCountPerPage": "10",
+                    "searchCondition": "TXTALL",
+                    "searchKeyword": search_query,
+                    "searchWord": search_query,
+                    "startDt": "",
+                    "endDt": "",
+                    "seqListYn": "N",
+                    "seqList": "",
+                    "divRngCdSc": "",
+                }
+            ).encode("utf-8"),
+            method="POST",
+            headers={
+                "Accept": "text/html, text/plain;q=0.9",
+                "Content-Type": "application/x-www-form-urlencoded",
+                "User-Agent": "KaosGovernor/official-search",
+            },
+        )
+        try:
+            with urlopen(request, timeout=7) as response:
+                raw = response.read(MAX_SEARCH_PAGE_BYTES)
+                content_type = response.headers.get("Content-Type", "")
+        except Exception:
+            continue
+        text = _decode(raw, content_type)
+        for match in re.finditer(
+            r"viewInsuAdtCrtr\(\s*\d+\s*,\s*'(?P<date>\d{8})'\s*,\s*'(?P<sno>[^']+)'\s*,\s*'(?P<reg>[^']+)'\s*,\s*'\d+'\s*\).*?title=\"(?P<title>[^\"]+)\"",
+            text,
+            flags=re.S,
+        ):
+            params = urllib.parse.urlencode(
+                {
+                    "mtgHmeDd": match.group("date"),
+                    "mtgMtrRegSno": match.group("reg"),
+                    "sno": match.group("sno"),
+                }
+            )
+            title = " ".join(html.unescape(match.group("title")).replace("새창으로 열기", "").split())
+            url = f"{HIRA_INSURANCE_CRITERIA_POPUP_URL}?{params}"
+            score = _candidate_score(title, url, queries) + 15 + _hira_criteria_recency_score(match.group("date"))
+            if any(host in preferred for host in ("hira.or.kr", "www.hira.or.kr")):
+                score += 8
+            candidates.append(
+                OfficialSearchCandidate(
+                    title=title[:200],
+                    url=url[:800],
+                    host="www.hira.or.kr",
+                    score=score,
+                    source="건강보험심사평가원 보험인정기준",
+                )
+            )
+            if len(candidates) >= MAX_CANDIDATES_PER_SEARCH:
+                return candidates
+    return candidates
 
 
 def _search_page_links(search_url: str, *, urlopen: Callable = urllib.request.urlopen) -> list[dict[str, str]]:
@@ -207,6 +309,8 @@ def _candidate_from_link(
     if _looks_like_noise_url(url):
         return None
     title = " ".join((link.get("title") or "").split()) or host
+    if _looks_like_noise_title(title):
+        return None
     score = _candidate_score(title, url, queries)
     if any(host == item or host.endswith(f".{item}") for item in preferred):
         score += 8
@@ -226,6 +330,10 @@ def _looks_like_noise_url(url: str) -> bool:
         "/privacy",
         "/copyright",
         "/sitemap",
+        "/search.do",
+        "/search/",
+        "/search.es",
+        "/menu.es",
         "facebook.com",
         "instagram.com",
         "youtube.com",
@@ -233,6 +341,36 @@ def _looks_like_noise_url(url: str) -> bool:
         "twitter.com",
     )
     return any(item in lowered for item in noise)
+
+
+def _looks_like_noise_title(title: str) -> bool:
+    normalized = " ".join(str(title or "").split()).casefold()
+    return normalized in {
+        "본문 바로가기",
+        "본문으로 바로가기",
+        "메뉴 바로가기",
+        "통합검색",
+        "로그인",
+        "회원가입",
+        "english",
+        "공공누리",
+        "정책실명제",
+        "전체메뉴로 이동",
+        "보건복지부 자료실",
+        "기초연금",
+    }
+
+
+def _hira_criteria_recency_score(date_value: str) -> int:
+    try:
+        date_number = int(date_value)
+    except ValueError:
+        return 0
+    if date_number >= 20240101:
+        return 6
+    if date_number >= 20200101:
+        return 3
+    return 0
 
 
 def _candidate_score(title: str, url: str, queries: list[str]) -> int:
