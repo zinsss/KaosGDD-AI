@@ -1,6 +1,6 @@
 # Brain / Governor / Discoord / iOS Migration Plan
 
-Last updated: 2026-09-02
+Last updated: 2026-09-03
 
 This is the canonical implementation and progress tracker for separating
 KaosBrain, KaosGovernor, KaosDiscoord, KaosGDD domain services, notifications,
@@ -45,6 +45,11 @@ H4, office-service, and stateful-service cutovers.
   a chat-like timeline of openable command cards, buttons, forms, receipts, and
   optional Ask Kaos input. Normal deterministic actions remain button/form
   driven and do not invoke Brain.
+- Family AI direction: do not make a broad chatbot the normal Family AI
+  surface. Calendar and task AI should appear as small page-context textboxes
+  that parse natural entries behind the scenes, show a structured preview, and
+  write only after explicit confirmation through Governor; see
+  [Family AI Without Chat](../architecture/personal-pwa-shortcuts.md#family-ai-without-chat).
 - Brain direction: `#brain` remains a natural-language KaosGDD gateway and may
   grow into a conversational system-operations console. Brain never becomes a
   privileged runner; Governor and restricted host executors own typed,
@@ -1754,6 +1759,7 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-09-03 | 6 | Added Family preset-text random clipboard utility | Commit `29fbae8`; Family Settings now has browser-local preset text lines, `[ Save ]`, and `[ Copy Random ]`; the copy action saves the visible textarea first, ignores blank lines, chooses one saved line at random, and uses the existing iOS-safe clipboard helper; versioned `styles.css?v=286`, `translations.js?v=172`, and `app.js?v=273`; JavaScript syntax checks and 55 Family portal tests pass; H3 static sync, nginx validation, byte-sync, and served asset/code smoke pass | H3 static portal promoted; localStorage-only feature, no backend/API/schema/Governor/data behavior change; each browser/device keeps its own preset pool |
 | 2026-09-03 | 6 | Promoted Family preset text to its own category/tab page | Commit `48ced1b`; `family.kaosgdd.net/#/text-presets` is now a standalone Family-only page with category copy buttons, a manage mode, add/rename/delete category prompts, per-category text tabs, add/delete text tabs, and old flat preset arrays migrated into the default category; versioned `styles.css?v=287`, `translations.js?v=173`, and `app.js?v=274`; JavaScript syntax checks, `git diff --check`, and 56 Family portal tests pass | Static PWA-only feature. No backend/API/schema/Governor/data behavior change; presets remain localStorage-scoped per browser/device and can later be promoted to governed shared settings |
 | 2026-09-03 | 6 | Shared Family preset text through a server-backed document | Commit `72e6fe8`; added Family-only Calendar Adapter `GET/PUT /api/text-presets` with revision conflict protection, proxied it through the Family portal nginx, added deploy preflight guards, and changed `family.kaosgdd.net/#/text-presets` so localStorage is only offline cache/first-run migration while Save/Done/add/rename/delete persist the shared server document; versioned `styles.css?v=288`, `translations.js?v=174`, and `app.js?v=275`; JavaScript syntax checks, Python calendar-adapter syntax check, deploy-helper syntax check, `git diff --check`, 57 Family portal tests, and focused Calendar Adapter tests pass; H3 served the new asset versions and `family.kaosgdd.net /api/text-presets` returned the shared default document while `kaosgdd.net /api/text-presets` returned 404 | Deployed on H3 without database migrations; replaces the prior browser-local limitation. H4 sync/doctor was attempted but blocked from the H3 shell by DNS resolution failure for `h4`, `kaos-h4`, and `h4.local` |
+| 2026-09-03 | 6 | Planned Family AI as contextual form input rather than chat | Added the Family AI Without Chat plan: when a Family user selects a calendar date or task context, the PWA can show one small natural-language textbox; KaosBrain parses the text into candidate events/tasks, the PWA shows a simple preview, and KaosGovernor performs confirmed writes to Radicale. Calendar examples include splitting `연차/10:30 3교시 참관수업 / 2:30 스파예가`; task examples include splitting dated short notes like `오늘 장보기, 내일 세린이 준비물 챙기기` | Documentation only. No PWA route, API endpoint, Brain prompt, Governor operation, Radicale mutation, or deployment behavior changed |
 
 ## How to Update This Tracker
 

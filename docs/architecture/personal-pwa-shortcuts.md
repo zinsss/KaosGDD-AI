@@ -55,6 +55,75 @@ Discord #brain / Ask Kaos
 The PWA, Shortcuts, native CalDAV clients, and Brain are parallel clients. None
 of them becomes an authoritative data store.
 
+## Family AI Without Chat
+
+Family AI should feel like a smart input method inside existing pages, not a
+general chat prompt. A blank chatbot box can overwhelm a non-technical family
+user because it asks them to invent both the goal and the command shape. The
+preferred Family pattern is:
+
+```text
+Family PWA page
+  user selects the normal object/context, such as a calendar date or task list
+  user types in one small natural-language textbox
+  KaosBrain parses the text behind the scenes
+  PWA shows a short structured preview
+  user confirms
+  KaosGovernor validates and writes to the domain service
+```
+
+Calendar example:
+
+```text
+Selected date: 2026-09-03
+Input: 연차/10:30 3교시 참관수업 / 2:30 스파예가
+
+Preview:
+- All day: 연차
+- 10:30: 3교시 참관수업
+- 14:30: 스파예가
+```
+
+Tasks example:
+
+```text
+Input: 오늘 장보기, 내일 세린이 준비물 챙기기, 금요일 병원 예약
+
+Preview:
+- 장보기 — today
+- 세린이 준비물 챙기기 — tomorrow
+- 병원 예약 — Friday
+```
+
+Ownership rules:
+
+- The Family PWA owns the date/list selection, textbox, preview, and
+  confirmation UI.
+- KaosBrain owns natural-language parsing and ambiguity detection only.
+- KaosGovernor owns validation, required fields, actor/scope policy, conflict
+  checks, confirmation requirements, and execution.
+- Radicale remains the calendar/task source of truth.
+- Brain must not directly mutate Radicale, browser storage, or service state.
+- Deterministic buttons, such as completing a known task, should continue to
+  bypass Brain.
+
+Initial Family AI input candidates:
+
+- Calendar day parser: split one day note into all-day and timed events.
+- Task parser: split short natural text into dated/undated task proposals.
+- Rouny helper: parse class blocks only after current timetable editing is
+  stable.
+- Caregiver helper: parse or explain monthly care notes only after the
+  existing deterministic caregiver summary remains stable.
+
+Non-goals for the first slice:
+
+- Do not add a prominent Family chatbot.
+- Do not require the user to learn prompts, slash commands, or action JSON.
+- Do not auto-save AI output without a preview and explicit confirmation.
+- Do not route normal deterministic task/calendar operations through Brain.
+- Do not create a second Family calendar or task store.
+
 ## Domain Authority
 
 | Personal surface | Source of truth | Initial PWA responsibility |
