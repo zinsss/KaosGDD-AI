@@ -20,3 +20,11 @@ test("AI Tasks official document memo flow previews before saving to Memos", () 
   assert.match(appSource, /await createMemo\(content\)/);
   assert.match(appSource, /\/api\/ai-tasks\/\$\{encodeURIComponent\(taskId\)\}\/complete/);
 });
+
+test("AI Tasks preview errors use actionable messages", () => {
+  assert.match(appSource, /function aiTaskErrorMessage\(code\)/);
+  assert.match(appSource, /ai_task_archive_write_failed: "AI draft was made, but Governor could not write the AI Task archive\."/);
+  assert.match(appSource, /ai_task_source_fetch_failed: "Could not fetch the source URL\. Try a specific article page or paste the source text\."/);
+  assert.match(appSource, /ai_task_source_not_found: "The source page says it does not exist\. Try a specific article page or paste the text\."/);
+  assert.match(appSource, /error: aiTaskErrorMessage\(error\.message \|\| "ai_task_preview_failed"\)/);
+});

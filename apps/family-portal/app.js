@@ -2276,11 +2276,37 @@ async function previewOfficialDocMemo(form) {
     state.aiTasks = {
       ...state.aiTasks,
       previewing: false,
-      error: error.message || "AI Task preview failed",
+      error: aiTaskErrorMessage(error.message || "ai_task_preview_failed"),
       preview: null,
     };
     render();
   }
+}
+
+function aiTaskErrorMessage(code) {
+  const normalized = String(code || "").trim();
+  const messages = {
+    ai_task_source_required: "URL or pasted official source text is required.",
+    ai_task_source_url_invalid: "That source URL is invalid.",
+    ai_task_source_url_blocked: "That source URL is blocked for safety.",
+    ai_task_source_fetch_failed: "Could not fetch the source URL. Try a specific article page or paste the source text.",
+    ai_task_source_unsupported_content_type: "That source type is not readable yet. Paste the text for PDFs/files.",
+    ai_task_source_not_found: "The source page says it does not exist. Try a specific article page or paste the text.",
+    ai_task_source_empty: "The source page did not contain readable text. Try a specific article page or paste the text.",
+    ai_task_brain_not_configured: "KaosBrain AI Tasks endpoint is not configured.",
+    ai_task_brain_token_missing: "KaosBrain AI Tasks token is missing.",
+    ai_task_brain_request_failed: "Could not reach KaosBrain.",
+    ai_task_brain_invalid_json: "KaosBrain returned an unreadable response.",
+    ai_task_brain_missing_memo: "KaosBrain did not return a memo draft.",
+    ai_task_brain_invalid_memo: "KaosBrain returned an incomplete memo draft.",
+    ai_task_archive_write_failed: "AI draft was made, but Governor could not write the AI Task archive.",
+    kaosbrain_openai_disabled: "KaosBrain-OpenAI is disabled.",
+    kaosbrain_official_memo_unavailable: "KaosBrain could not draft this memo.",
+    kaosbrain_ai_task_unauthorized: "KaosBrain rejected the AI Task token.",
+    cloudflare_access_required: "Cloudflare login is required.",
+    main_profile_required: "AI Tasks are only available on kaosgdd.net.",
+  };
+  return messages[normalized] || normalized || "AI Task preview failed";
 }
 
 async function saveAiTaskMemo() {

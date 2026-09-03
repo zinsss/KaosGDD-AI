@@ -127,14 +127,17 @@ class AITaskArchive:
         return [record for item in raw_records if (record := _record_from_json(item))]
 
     def _write(self, records: list[AITaskRecord]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
-            "version": 1,
-            "records": [record.as_dict() for record in sorted(records, key=lambda item: item.created_at, reverse=True)[:500]],
-        }
-        temporary_path = self.path.with_suffix(f"{self.path.suffix}.tmp")
-        temporary_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-        temporary_path.replace(self.path)
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "version": 1,
+                "records": [record.as_dict() for record in sorted(records, key=lambda item: item.created_at, reverse=True)[:500]],
+            }
+            temporary_path = self.path.with_suffix(f"{self.path.suffix}.tmp")
+            temporary_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+            temporary_path.replace(self.path)
+        except OSError as exc:
+            raise AITaskError("ai_task_archive_write_failed") from exc
 
 
 def _record_from_json(value: object) -> AITaskRecord | None:

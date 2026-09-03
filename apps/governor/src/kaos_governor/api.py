@@ -569,6 +569,7 @@ def ai_task_status_for_error(exc: Exception) -> int:
         "ai_task_source_url_invalid",
         "ai_task_source_url_blocked",
         "ai_task_source_unsupported_content_type",
+        "ai_task_source_not_found",
         "ai_task_source_empty",
         "ai_task_confirmation_required",
         "ai_task_limit_invalid",
@@ -702,6 +703,9 @@ def fetch_official_source(
         text = "\n".join(line.strip() for line in text.splitlines() if line.strip())
     if not text.strip():
         raise AITaskError("ai_task_source_empty")
+    normalized_text = " ".join(text.split())
+    if (title == "알림메세지" and "존재 하지 않습니다" in normalized_text) or "게시물이 존재하지 않습니다" in normalized_text:
+        raise AITaskError("ai_task_source_not_found")
     return {
         "type": "url",
         "title": title or host,

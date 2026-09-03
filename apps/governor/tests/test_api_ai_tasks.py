@@ -11,9 +11,9 @@ from kaos_governor.ai_tasks import AITaskArchive, AITaskError
 
 
 class FakeHTTPResponse:
-    def __init__(self, payload: dict) -> None:
+    def __init__(self, payload: dict | str, content_type: str = "application/json") -> None:
         self.payload = payload
-        self.headers = {"Content-Type": "application/json"}
+        self.headers = {"Content-Type": content_type}
 
     def __enter__(self):
         return self
@@ -22,6 +22,8 @@ class FakeHTTPResponse:
         return None
 
     def read(self, *_args) -> bytes:
+        if isinstance(self.payload, str):
+            return self.payload.encode("utf-8")
         return json.dumps(self.payload, ensure_ascii=False).encode("utf-8")
 
 
@@ -45,6 +47,18 @@ def fake_brain_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
 
 
 class GovernorAITaskTests(unittest.TestCase):
+    def test_archive_write_errors_are_reported_as_ai_task_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            archive = AITaskArchive(Path(temporary_directory) / "ai-tasks.json")
+            with patch.object(Path, "write_text", side_effect=PermissionError("denied")):
+                with self.assertRaisesRegex(AITaskError, "ai_task_archive_write_failed"):
+                    archive.add_preview(
+                        kind="official_doc_memo",
+                        prompt="요약",
+                        source={"title": "공식"},
+                        memo={"title": "메모", "content": "본문"},
+                    )
+
     def test_preview_official_doc_memo_archives_draft_without_memos_write(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             archive = AITaskArchive(Path(temporary_directory) / "ai-tasks.json")
@@ -98,6 +112,16 @@ class GovernorAITaskTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(AITaskError, "ai_task_source_url_blocked"):
                 api.fetch_official_source("https://internal.example.test/notice")
+
+    def test_korean_not_found_source_pages_are_rejected(self) -> None:
+        def fake_urlopen(_request, timeout=0):  # type: ignore[no-untyped-def]
+            return FakeHTTPResponse(
+                "<html><head><title>알림메세지</title></head><body>메뉴이(가) 존재 하지 않습니다.</body></html>",
+                "text/html; charset=utf-8",
+            )
+
+        with self.assertRaisesRegex(AITaskError, "ai_task_source_not_found"):
+            api.fetch_official_source("https://www.kdca.go.kr/kdca/284/subview.do", urlopen=fake_urlopen)
 
 
 if __name__ == "__main__":

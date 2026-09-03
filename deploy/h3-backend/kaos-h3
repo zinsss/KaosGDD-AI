@@ -92,42 +92,25 @@ install_state_directories() {
   local uid gid
   uid=$(id -u)
   gid=$(id -g)
-  if mkdir -p \
-    "${root}/mail" \
-    "${root}/fax" \
-    "${root}/discord-calendar" \
-    "${root}/discord-tasks" \
-    "${root}/discord-supplies" \
-    "${root}/discord-inbox" \
-    "${root}/discord-system" \
-    "${root}/ai-tasks" \
-    "${root}/documents" \
-    "${root}/notifications" 2>/dev/null; then
-    chmod 0770 \
-      "${root}/mail" \
-      "${root}/fax" \
-      "${root}/discord-calendar" \
-      "${root}/discord-tasks" \
-      "${root}/discord-supplies" \
-      "${root}/discord-inbox" \
-      "${root}/discord-system" \
-      "${root}/ai-tasks" \
-      "${root}/documents" \
-      "${root}/notifications"
+  local paths=(
+    "${root}/mail"
+    "${root}/fax"
+    "${root}/discord-calendar"
+    "${root}/discord-tasks"
+    "${root}/discord-supplies"
+    "${root}/discord-inbox"
+    "${root}/discord-system"
+    "${root}/ai-tasks"
+    "${root}/documents"
+    "${root}/notifications"
+  )
+  if mkdir -p "${paths[@]}" 2>/dev/null \
+    && chgrp "${gid}" "${paths[@]}" 2>/dev/null \
+    && chmod 0770 "${paths[@]}" 2>/dev/null; then
     return
   fi
   require_command sudo
-  sudo install -d -m 0770 -o "${uid}" -g "${gid}" \
-    "${root}/mail" \
-    "${root}/fax" \
-    "${root}/discord-calendar" \
-    "${root}/discord-tasks" \
-    "${root}/discord-supplies" \
-    "${root}/discord-inbox" \
-    "${root}/discord-system" \
-    "${root}/ai-tasks" \
-    "${root}/documents" \
-    "${root}/notifications"
+  sudo install -d -m 0770 -o "${uid}" -g "${gid}" "${paths[@]}"
 }
 
 governor_state_root() {
@@ -756,7 +739,7 @@ case "${command}" in
   services-up) services_preflight; "${SERVICES_COMPOSE[@]}" up --detach memos radicale vaultwarden sftpgo family-portal ;;
   services-down) load_env; "${SERVICES_COMPOSE[@]}" stop memos radicale vaultwarden sftpgo family-portal ;;
   family-preflight) family_transition_preflight ;;
-  family-up) family_transition_preflight; COMPOSE_PROFILES=family-transition "${SERVICES_COMPOSE[@]}" up --detach --build governor-postgres governor-api calendar-adapter family-memos-web personal-memos-web ;;
+  family-up) family_transition_preflight; load_env; install_state_directories "$(governor_state_root)"; COMPOSE_PROFILES=family-transition "${SERVICES_COMPOSE[@]}" up --detach --build governor-postgres governor-api calendar-adapter family-memos-web personal-memos-web ;;
   family-down) load_env; COMPOSE_PROFILES=family-transition "${SERVICES_COMPOSE[@]}" stop governor-api family-memos-web personal-memos-web calendar-adapter governor-postgres ;;
   edge-preflight) edge_preflight ;;
   edge-config) load_env; "${EDGE_COMPOSE[@]}" config | redact_config ;;
