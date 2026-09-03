@@ -170,7 +170,7 @@ const state = {
   addEventDraft: null,
   addTaskDraft: null,
   smartEventInput: "",
-  smartEventTimeOffsets: {},
+  smartEventEndOffsets: {},
   memoComposer: {
     content: "",
     saving: false,
@@ -978,14 +978,14 @@ function parseFamilySmartEventInput(value, dateValue = state.selectedDate) {
     });
 }
 
-function shiftFamilySmartEventItem(item, minutes) {
+function adjustFamilySmartEventEnd(item, minutes) {
   if (item.allDay || !minutes) return item;
-  const start = addLocalMinutes(item.startDate, item.startTime, minutes);
   const end = addLocalMinutes(item.endDate, item.endTime, minutes);
+  const startMs = new Date(`${item.startDate}T${item.startTime}:00`).getTime();
+  const endMs = new Date(`${end.date}T${end.time}:00`).getTime();
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return item;
   return {
     ...item,
-    startDate: start.date,
-    startTime: start.time,
     endDate: end.date,
     endTime: end.time,
   };
@@ -993,7 +993,7 @@ function shiftFamilySmartEventItem(item, minutes) {
 
 function familySmartEventProposals(dateValue = state.selectedDate) {
   return parseFamilySmartEventInput(state.smartEventInput, dateValue)
-    .map((item, index) => shiftFamilySmartEventItem(item, Number(state.smartEventTimeOffsets[index] || 0)));
+    .map((item, index) => adjustFamilySmartEventEnd(item, Number(state.smartEventEndOffsets[index] || 0)));
 }
 
 function updateFamilySmartEventPreview() {
@@ -5636,13 +5636,13 @@ function renderFamilySmartEventPreview(proposals) {
           (item, index) => `
             <li>
               <time class="${item.allDay ? "timelineAllDayPill" : ""}">${escapeHtml(item.allDay ? uiText("event.allDayPill", "All Day") : item.startTime)}</time>
-              <span class="timelineLink">
+              <span class="timelineLink familySmartEventPreviewBody">
                 <strong>${escapeHtml(item.title)}</strong>
-                <span>${escapeHtml(item.allDay ? uiText("event.smartAllDayPreview", "All-day event") : `${item.startTime}–${item.endTime}`)}</span>
+                <span class="familySmartEventRange">${escapeHtml(item.allDay ? uiText("event.smartAllDayPreview", "All-day event") : `${item.startTime}–${item.endTime}`)}</span>
                 ${item.allDay ? "" : `
                   <span class="familySmartEventControls">
-                    <button class="familySmartEventStep" type="button" data-family-smart-event-time-step="-60" data-family-smart-event-index="${index}" aria-label="${uiText("event.smartEarlier", "Move one hour earlier")}">-1h</button>
-                    <button class="familySmartEventStep" type="button" data-family-smart-event-time-step="60" data-family-smart-event-index="${index}" aria-label="${uiText("event.smartLater", "Move one hour later")}">+1h</button>
+                    <button class="familySmartEventStep" type="button" data-family-smart-event-end-step="-60" data-family-smart-event-index="${index}" aria-label="${uiText("event.smartShorter", "Shorten by one hour")}">-1h</button>
+                    <button class="familySmartEventStep" type="button" data-family-smart-event-end-step="60" data-family-smart-event-index="${index}" aria-label="${uiText("event.smartLonger", "Extend by one hour")}">+1h</button>
                   </span>
                 `}
               </span>
@@ -9703,12 +9703,12 @@ document.addEventListener("click", async (event) => {
 
   if (!event.target.closest(".topAddWrap")) closeTopAddMenu();
 
-  const smartEventTimeStep = event.target.closest("[data-family-smart-event-time-step]");
-  if (smartEventTimeStep) {
-    const index = Number(smartEventTimeStep.dataset.familySmartEventIndex);
-    const step = Number(smartEventTimeStep.dataset.familySmartEventTimeStep);
+  const smartEventEndStep = event.target.closest("[data-family-smart-event-end-step]");
+  if (smartEventEndStep) {
+    const index = Number(smartEventEndStep.dataset.familySmartEventIndex);
+    const step = Number(smartEventEndStep.dataset.familySmartEventEndStep);
     if (Number.isInteger(index) && Number.isInteger(step)) {
-      state.smartEventTimeOffsets[index] = Number(state.smartEventTimeOffsets[index] || 0) + step;
+      state.smartEventEndOffsets[index] = Number(state.smartEventEndOffsets[index] || 0) + step;
       updateFamilySmartEventPreview();
     }
     return;
@@ -11341,7 +11341,7 @@ document.addEventListener("input", (event) => {
   const smartEventInput = event.target.closest("[data-family-smart-event-input]");
   if (smartEventInput) {
     state.smartEventInput = smartEventInput.value;
-    state.smartEventTimeOffsets = {};
+    state.smartEventEndOffsets = {};
     updateFamilySmartEventPreview();
     return;
   }

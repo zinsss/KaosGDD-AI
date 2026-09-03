@@ -1698,10 +1698,25 @@ h3 {
   font-size: 0.74rem;
 }
 
+.familySmartEventPreviewBody {
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 12px;
+  align-items: center;
+}
+
+.familySmartEventPreviewBody strong,
+.familySmartEventRange {
+  grid-column: 1;
+}
+
 .familySmartEventControls {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  justify-self: end;
   display: flex;
   gap: 10px;
-  margin-top: 4px;
+  margin-top: 0;
 }
 
 .familySmartEventStep {
