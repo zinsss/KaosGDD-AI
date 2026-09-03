@@ -217,6 +217,7 @@ const state = {
     applying: false,
     error: "",
     mode: "web",
+    selectedId: "",
     prompt: "",
     sourceUrl: "",
     sourceText: "",
@@ -2197,10 +2198,32 @@ function normalizeAiTask(item) {
     title: String(result.title || memo.title || source.prompt || "AI Task"),
     createdAt: String(source.createdAt || ""),
     updatedAt: String(source.updatedAt || ""),
+    provider: String(source.provider || ""),
+    source: sourceInfo,
     sourceTitle: String(sourceInfo.title || memo.sourceTitle || ""),
     sourceUrl: String(sourceInfo.url || memo.sourceUrl || ""),
     memo,
     result,
+    error: String(source.error || ""),
+  };
+}
+
+function aiTaskPreviewFromRecord(item) {
+  if (!item || typeof item !== "object") return null;
+  return {
+    archived: true,
+    kind: item.kind,
+    taskId: item.id,
+    status: item.status,
+    prompt: item.prompt,
+    title: item.title,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    provider: item.provider,
+    source: item.source || {},
+    memo: item.memo || {},
+    result: item.result || {},
+    error: item.error || "",
   };
 }
 
@@ -2249,6 +2272,7 @@ async function previewOfficialDocMemo(form) {
     prompt,
     sourceUrl,
     sourceText,
+    selectedId: "",
     previewing: true,
     error: "",
     preview: null,
@@ -2304,6 +2328,7 @@ async function previewWebAiTask(form) {
     ...state.aiTasks,
     mode: "web",
     prompt,
+    selectedId: "",
     previewing: true,
     error: "",
     preview: null,
@@ -2442,6 +2467,7 @@ async function saveAiTaskMemo() {
       ...state.aiTasks,
       applying: false,
       preview: null,
+      selectedId: "",
       prompt: "",
       sourceUrl: "",
       sourceText: "",
@@ -2464,7 +2490,12 @@ function aiTaskMemoContentFromPreview(preview) {
   const title = String(payload.title || "AI Task").trim();
   const content = String(payload.content || "").trim();
   if (!content) return "";
-  const sources = Array.isArray(payload.sources) ? payload.sources : [];
+  const previewSource = preview?.source && typeof preview.source === "object" ? preview.source : {};
+  const sources = Array.isArray(payload.sources)
+    ? payload.sources
+    : Array.isArray(previewSource.sources)
+      ? previewSource.sources
+      : [];
   const sourceLines = sources
     .map((source) => {
       if (!source || typeof source !== "object") return "";
@@ -2475,7 +2506,7 @@ function aiTaskMemoContentFromPreview(preview) {
     })
     .filter(Boolean);
   if (preview?.kind !== "web" || !sourceLines.length) return content;
-  const checkedAt = String(payload.checkedAt || "").trim();
+  const checkedAt = String(payload.checkedAt || previewSource.checkedAt || "").trim();
   return [
     content.startsWith("#") ? content : `# ${title}\n\n${content}`,
     "## Sources",
@@ -2495,6 +2526,32 @@ async function copyAiTaskResult() {
   } catch (_error) {
     window.prompt("Copy AI Task result", content);
   }
+}
+
+function openAiTaskArchive(id) {
+  const taskId = String(id || "").trim();
+  if (!taskId) return;
+  const selected = state.aiTasks.items.find((item) => item.id === taskId) || null;
+  state.aiTasks = {
+    ...state.aiTasks,
+    selectedId: taskId,
+    preview: aiTaskPreviewFromRecord(selected),
+    error: selected ? "" : "AI Task archive item is unavailable",
+  };
+  render();
+  window.requestAnimationFrame(() => document.querySelector("[data-ai-task-detail]")?.focus());
+}
+
+function closeAiTaskArchive() {
+  const taskId = state.aiTasks.selectedId;
+  state.aiTasks = {
+    ...state.aiTasks,
+    selectedId: "",
+    preview: null,
+    error: "",
+  };
+  render();
+  if (taskId) document.querySelector(`[data-ai-task-open="${cssIdentifier(taskId)}"]`)?.focus();
 }
 
 function memoNameId(name) {
@@ -8944,17 +9001,18 @@ function renderLedger() {
 
 function renderAiTasks() {
   const aiTasks = state.aiTasks;
+  const selectedId = String(aiTasks.selectedId || "");
   const rows = aiTasks.items
     .map((item) => {
       const date = archiveDateParts(item.createdAt);
       return `
-        <li class="archiveRecord">
-          <div class="archiveRecordButton">
+        <li class="archiveRecord ${selectedId === String(item.id) ? "isSelected" : ""}">
+          <button class="archiveRecordButton" type="button" data-ai-task-open="${escapeHtml(item.id)}" aria-current="${selectedId === String(item.id) ? "true" : "false"}">
             <span class="archiveRecordId">#${escapeHtml(item.id)}</span>
             <time class="archiveRecordDate" datetime="${escapeHtml(date.raw)}">${escapeHtml(date.label)}</time>
             <strong class="archiveRecordTitle">${escapeHtml(item.title)}</strong>
             <span class="archiveRecordStatus ${archiveStatusClass(item.status)}">${escapeHtml(item.status.toUpperCase())}</span>
-          </div>
+          </button>
         </li>
       `;
     })
@@ -8962,7 +9020,22 @@ function renderAiTasks() {
   const preview = aiTasks.preview;
   const memo = preview?.memo || {};
   const result = preview?.result || {};
-  const resultSources = Array.isArray(result.sources) ? result.sources : [];
+  const sourceInfo = preview?.source && typeof preview.source === "object" ? preview.source : {};
+  const resultSources = Array.isArray(result.sources)
+    ? result.sources
+    : Array.isArray(sourceInfo.sources)
+      ? sourceInfo.sources
+      : [];
+  const webResult = {
+    title: String(result.title || memo.title || preview?.title || "AI Task"),
+    content: String(result.content || memo.content || ""),
+    checkedAt: String(result.checkedAt || sourceInfo.checkedAt || ""),
+    model: String(result.model || preview?.provider || ""),
+    sources: resultSources,
+  };
+  const isArchivedPreview = Boolean(preview?.archived);
+  const isAppliedPreview = String(preview?.status || "") === "applied";
+  const canSavePreview = Boolean(preview && !isAppliedPreview && String(preview.taskId || "").trim() && aiTaskMemoContentFromPreview(preview));
   return `
     <section class="archiveTerminal" data-archive-kind="ai-tasks" aria-label="AI Tasks">
       <form class="archiveIndex aiTaskComposer" data-ai-task-unified>
@@ -9005,29 +9078,38 @@ function renderAiTasks() {
             <section class="archiveDetail aiTaskPreview" aria-label="AI task result">
               <header class="archiveDetailHeader">
                 <div>
-                  <p>AI TASK RESULT</p>
-                  <h3>${escapeHtml(result.title || "AI Task")}</h3>
+                  <p>${isArchivedPreview ? "AI TASK ARCHIVE" : "AI TASK RESULT"}</p>
+                  <h3>${escapeHtml(webResult.title)}</h3>
                 </div>
                 <div class="archiveActions">
+                  ${isArchivedPreview ? `<button class="archiveAction" type="button" data-ai-task-close>BACK</button>` : ""}
                   <button class="archiveAction" type="button" data-ai-task-copy>copy</button>
-                  <button class="archiveAction isActive" type="button" data-ai-task-save-memo ${aiTasks.applying ? "disabled" : ""}>${aiTasks.applying ? "SAVING" : "SAVE MEMO"}</button>
+                  ${
+                    canSavePreview
+                      ? `<button class="archiveAction isActive" type="button" data-ai-task-save-memo ${aiTasks.applying ? "disabled" : ""}>${aiTasks.applying ? "SAVING" : "SAVE MEMO"}</button>`
+                      : isAppliedPreview
+                        ? `<span class="archiveAction isDisabled">SAVED</span>`
+                        : ""
+                  }
                 </div>
               </header>
               <dl class="archiveMetadata">
-                ${archiveMeta("Checked", result.checkedAt || "")}
-                ${archiveMeta("Model", result.model || "")}
+                ${archiveMeta("Status", preview?.status || "")}
+                ${archiveMeta("Checked", webResult.checkedAt)}
+                ${archiveMeta("Model", webResult.model)}
+                ${archiveMeta("Memo", result.memoName || "")}
               </dl>
-              <div class="archiveOcrRegion" role="region" aria-label="AI task result" tabindex="0">
+              <div class="archiveOcrRegion" data-ai-task-detail role="region" aria-label="AI task result" tabindex="0">
                 <p>RESULT</p>
-                <pre>${escapeHtml(result.content || "")}</pre>
+                <pre>${escapeHtml(webResult.content)}</pre>
               </div>
               ${
-                resultSources.length
+                webResult.sources.length
                   ? `
                     <div class="aiTaskSources">
                       <p>SOURCES</p>
                       <ol>
-                        ${resultSources
+                        ${webResult.sources
                           .map((source) => `<li><a class="archiveInlineLink" href="${escapeHtml(source.url || "#")}" target="_blank" rel="noreferrer">${escapeHtml(source.title || source.url || "source")}</a></li>`)
                           .join("")}
                       </ol>
@@ -9042,20 +9124,29 @@ function renderAiTasks() {
             <section class="archiveDetail aiTaskPreview" aria-label="AI memo preview">
               <header class="archiveDetailHeader">
                 <div>
-                  <p>MEMO PREVIEW</p>
+                  <p>${isArchivedPreview ? "AI TASK ARCHIVE" : "MEMO PREVIEW"}</p>
                   <h3>${escapeHtml(memo.title || "AI memo")}</h3>
                 </div>
                 <div class="archiveActions">
+                  ${isArchivedPreview ? `<button class="archiveAction" type="button" data-ai-task-close>BACK</button>` : ""}
                   <button class="archiveAction" type="button" data-ai-task-copy>copy</button>
-                  <button class="archiveAction isActive" type="button" data-ai-task-save-memo ${aiTasks.applying ? "disabled" : ""}>${aiTasks.applying ? "SAVING" : "SAVE MEMO"}</button>
+                  ${
+                    canSavePreview
+                      ? `<button class="archiveAction isActive" type="button" data-ai-task-save-memo ${aiTasks.applying ? "disabled" : ""}>${aiTasks.applying ? "SAVING" : "SAVE MEMO"}</button>`
+                      : isAppliedPreview
+                        ? `<span class="archiveAction isDisabled">SAVED</span>`
+                        : ""
+                  }
                 </div>
               </header>
               <dl class="archiveMetadata">
-                ${archiveMeta("Source", memo.sourceTitle || "")}
-                ${archiveMeta("URL", memo.sourceUrl || "")}
+                ${archiveMeta("Status", preview?.status || "")}
+                ${archiveMeta("Source", memo.sourceTitle || sourceInfo.title || "")}
+                ${archiveMeta("URL", memo.sourceUrl || sourceInfo.url || "")}
                 ${archiveMeta("Checked", memo.checkedAt || "")}
+                ${archiveMeta("Memo", result.memoName || "")}
               </dl>
-              <div class="archiveOcrRegion" role="region" aria-label="AI memo content" tabindex="0">
+              <div class="archiveOcrRegion" data-ai-task-detail role="region" aria-label="AI memo content" tabindex="0">
                 <p>MEMO TEXT</p>
                 <pre>${escapeHtml(memo.content || "")}</pre>
               </div>
@@ -11743,10 +11834,24 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const aiTaskOpenButton = event.target.closest("[data-ai-task-open]");
+  if (aiTaskOpenButton) {
+    event.preventDefault();
+    openAiTaskArchive(aiTaskOpenButton.dataset.aiTaskOpen || "");
+    return;
+  }
+
+  if (event.target.closest("[data-ai-task-close]")) {
+    event.preventDefault();
+    closeAiTaskArchive();
+    return;
+  }
+
   if (event.target.closest("[data-ai-task-clear]")) {
     event.preventDefault();
     state.aiTasks = {
       ...state.aiTasks,
+      selectedId: "",
       prompt: "",
       sourceUrl: "",
       sourceText: "",

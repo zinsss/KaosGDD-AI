@@ -22,6 +22,13 @@ test("AI Tasks official document memo flow previews before saving to Memos", () 
   assert.match(appSource, /await previewWebAiTask\(form\)/);
   assert.match(appSource, /\/api\/ai-tasks\/web\/preview/);
   assert.match(appSource, /AI TASK RESULT/);
+  assert.match(appSource, /data-ai-task-open/);
+  assert.match(appSource, /function openAiTaskArchive\(id\)/);
+  assert.match(appSource, /aiTaskPreviewFromRecord\(selected\)/);
+  assert.match(appSource, /data-ai-task-close/);
+  assert.match(appSource, /function closeAiTaskArchive\(\)/);
+  assert.match(appSource, /AI TASK ARCHIVE/);
+  assert.match(appSource, /SAVED/);
   assert.match(appSource, /data-ai-task-copy/);
   assert.match(appSource, /\/api\/ai-tasks\/official-doc-memo\/preview/);
   assert.match(appSource, /name="sourcePdf" type="file" accept="application\/pdf,\.pdf"/);
