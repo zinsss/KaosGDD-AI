@@ -5,6 +5,7 @@ const test = require("node:test");
 
 const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
 const navSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/navigation.js"), "utf8");
+const nginxSource = fs.readFileSync(path.join(__dirname, "../../deploy/h3-backend/family-portal/nginx.conf"), "utf8");
 
 test("main PWA exposes AI Tasks as a first-class read/confirm workflow", () => {
   assert.match(navSource, /route: "ai-tasks", label: "AI Tasks"/);
@@ -48,4 +49,10 @@ test("AI Tasks preview errors use actionable messages", () => {
   assert.match(appSource, /ai_task_source_not_found: "The source page says it does not exist\. Try a specific article page or paste the text\."/);
   assert.match(appSource, /ai_task_pdf_text_empty: "Could not read text from that PDF\. If it is scanned, use Paperless OCR first or paste the text\."/);
   assert.match(appSource, /error: aiTaskErrorMessage\(error\.message \|\| "ai_task_preview_failed"\)/);
+});
+
+test("AI Tasks API proxy allows long-running official-source searches", () => {
+  assert.match(nginxSource, /location \^~ \/api\/ai-tasks\/ \{[\s\S]*proxy_read_timeout 180s;/);
+  assert.match(nginxSource, /location \^~ \/api\/ai-tasks\/ \{[\s\S]*proxy_send_timeout 180s;/);
+  assert.match(nginxSource, /location = \/api\/ai-tasks \{[\s\S]*proxy_read_timeout 180s;/);
 });
