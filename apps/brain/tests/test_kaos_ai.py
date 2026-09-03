@@ -51,7 +51,7 @@ class KaosAITests(unittest.IsolatedAsyncioTestCase):
 
     def test_document_tag_prompt_limits_ai_to_existing_tags(self) -> None:
         self.assertIn("Prefer tag names from availableTags", KAOSAI_DOCUMENT_TAG_SYSTEM_PROMPT)
-        self.assertIn("user to confirm before creating", KAOSAI_DOCUMENT_TAG_SYSTEM_PROMPT)
+        self.assertIn("suggest only tags present in availableTags", KAOSAI_DOCUMENT_TAG_SYSTEM_PROMPT)
 
     def test_calendar_preview_prompt_is_preview_only_json(self) -> None:
         self.assertIn("preview-only event proposals", KAOSAI_CALENDAR_PREVIEW_SYSTEM_PROMPT)

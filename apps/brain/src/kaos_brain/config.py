@@ -139,6 +139,7 @@ class Settings:
     imaging_enabled: bool
     imaging_api_token: str
     calendar_preview_api_token: str
+    document_tag_api_token: str
     memos_public_url: str
     paperless_public_url: str
     health_enabled: bool
@@ -284,6 +285,7 @@ class Settings:
             imaging_enabled=imaging_enabled,
             imaging_api_token=imaging_api_token,
             calendar_preview_api_token=_secret(source, "KAOSBRAIN_CALENDAR_PREVIEW_API_TOKEN"),
+            document_tag_api_token=_secret(source, "KAOSBRAIN_DOCUMENT_TAG_API_TOKEN"),
             memos_public_url=source.get("KAOSBRAIN_MEMOS_PUBLIC_URL", "").strip().rstrip("/"),
             paperless_public_url=source.get("KAOSBRAIN_PAPERLESS_PUBLIC_URL", "").strip().rstrip("/"),
             health_enabled=_boolean(source, "KAOSBRAIN_HEALTH_ENABLED"),

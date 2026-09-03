@@ -172,7 +172,7 @@ Allowed schema:
 
 Rules:
 - Prefer tag names from availableTags when they fit.
-- You may suggest short new tags when the document clearly supports them; KaosGovernor will ask the user to confirm before creating them.
+- For the KaosGDD PWA flow, suggest only tags present in availableTags.
 - Use at most 5 tags.
 - Prefer tags supported by the document title, filename, correspondent, and contentExcerpt.
 - Return {"tags":[]} when no tag clearly fits."""

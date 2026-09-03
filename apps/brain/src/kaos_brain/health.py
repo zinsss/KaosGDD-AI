@@ -7,6 +7,7 @@ from aiohttp import web
 
 from .calendar_preview import BrainCalendarPreviewServer
 from .config import Settings
+from .document_tags import BrainDocumentTagServer
 from .imaging import BrainImagingServer
 
 
@@ -46,6 +47,7 @@ class BrainHealthServer:
         app = web.Application(client_max_size=32 * 1024 * 1024)
         app.router.add_get("/health", self.handle_health)
         app.router.add_post("/internal/calendar/smart-events/preview", BrainCalendarPreviewServer(self.settings).preview)
+        app.router.add_post("/internal/documents/tag-suggestions/preview", BrainDocumentTagServer(self.settings).suggest)
         app.router.add_post("/imaging/second-look", BrainImagingServer(self.settings).second_look)
         runner = web.AppRunner(app)
         await runner.setup()

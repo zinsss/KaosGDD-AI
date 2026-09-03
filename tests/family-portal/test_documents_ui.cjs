@@ -23,6 +23,9 @@ test("documents metadata review previews before confirmed apply", () => {
   assert.match(appSource, /archiveMeta\("Tags", selected\.tags\?\.length/);
   assert.match(appSource, /renderDocumentMetadataReview\(\{ documentId: selected\.id, title: selected\.title, tags: selected\.tags \}\)/);
   assert.match(appSource, /metadata\/proposal/);
+  assert.match(appSource, /data-document-ai-tags/);
+  assert.match(appSource, /metadata\/tag-suggestions/);
+  assert.match(appSource, /AI TAGS/);
   assert.match(appSource, /CONFIRM BEFORE APPLYING/);
   assert.match(appSource, /window\.confirm\(`Apply Paperless metadata/);
   assert.match(appSource, /metadata\/apply/);

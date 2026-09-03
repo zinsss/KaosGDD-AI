@@ -83,6 +83,7 @@ KAOSBRAIN_IMAGING_ENABLED=false
 KAOSBRAIN_IMAGING_PROVIDER=kaosai
 KAOSBRAIN_IMAGING_API_TOKEN_FILE=/run/secrets/governor_api_token
 KAOSBRAIN_CALENDAR_PREVIEW_API_TOKEN_FILE=/run/secrets/governor_api_token
+KAOSBRAIN_DOCUMENT_TAG_API_TOKEN_FILE=/run/secrets/governor_api_token
 GOVERNOR_API_TOKEN_FILE=/run/secrets/governor_api_token
 ```
 
@@ -119,6 +120,16 @@ KAOSBRAIN_CALENDAR_PREVIEW_API_TOKEN_FILE=/run/secrets/governor_api_token
 
 The Brain route returns candidate events only. The PWA still requires
 `확인 후 저장` before Calendar Adapter writes to Radicale.
+
+For personal Paperless tag suggestions, Governor calls KaosBrain on H4:
+
+```text
+DOCUMENT_TAG_AI_URL=http://<kaosbrain-tailscale-ip>:8099/internal/documents/tag-suggestions/preview
+KAOSBRAIN_DOCUMENT_TAG_API_TOKEN_FILE=/run/secrets/governor_api_token
+```
+
+The Brain route returns suggested existing tag names only. The PWA still
+requires metadata `PREVIEW` and confirmed `APPLY` before Paperless is updated.
 
 Use the deploy helper to switch KaosBrain-OpenAI modes without hand-editing the
 env file:

@@ -41,6 +41,10 @@ CALENDAR_ADAPTER_INTERNAL_URL = os.environ.get("CALENDAR_ADAPTER_INTERNAL_URL", 
 CALENDAR_ADAPTER_TIMEOUT_SECONDS = float(os.environ.get("CALENDAR_ADAPTER_TIMEOUT_SECONDS", "20"))
 SYSTEM_STATUS_TOOLS_BASE_URL = os.environ.get("SYSTEM_STATUS_TOOLS_BASE_URL", "http://governor-discord:8098").rstrip("/")
 SYSTEM_STATUS_TIMEOUT_SECONDS = float(os.environ.get("SYSTEM_STATUS_TIMEOUT_SECONDS", "5"))
+DOCUMENT_TAG_AI_URL = os.environ.get("DOCUMENT_TAG_AI_URL", "").strip()
+DOCUMENT_TAG_AI_TOKEN = os.environ.get("DOCUMENT_TAG_AI_TOKEN", "").strip()
+DOCUMENT_TAG_AI_TOKEN_FILE = os.environ.get("DOCUMENT_TAG_AI_TOKEN_FILE", "").strip()
+DOCUMENT_TAG_AI_TIMEOUT_SECONDS = float(os.environ.get("DOCUMENT_TAG_AI_TIMEOUT_SECONDS", "20") or "20")
 WEATHER_LOCATIONS = {
     "pohang": "포항",
     "daegu": "대구",
@@ -558,6 +562,11 @@ def paperless_metadata_path(path: str) -> tuple[str, str]:
     return (match.group(1), match.group(2)) if match else ("", "")
 
 
+def paperless_tag_suggestion_path(path: str) -> str:
+    match = re.fullmatch(r"/api/paperless/documents/([1-9][0-9]*)/metadata/tag-suggestions", path)
+    return match.group(1) if match else ""
+
+
 def paperless_metadata_tags(payload: dict[str, object]) -> tuple[str, ...]:
     raw_tags = payload.get("tags") or []
     if not isinstance(raw_tags, list):
@@ -568,6 +577,117 @@ def paperless_metadata_tags(payload: dict[str, object]) -> tuple[str, ...]:
         if tag and tag not in tags:
             tags.append(tag)
     return tuple(tags[:25])
+
+
+def document_tag_ai_token() -> str:
+    if DOCUMENT_TAG_AI_TOKEN:
+        return DOCUMENT_TAG_AI_TOKEN
+    if DOCUMENT_TAG_AI_TOKEN_FILE:
+        try:
+            return Path(DOCUMENT_TAG_AI_TOKEN_FILE).read_text(encoding="utf-8").strip()
+        except OSError:
+            return ""
+    return secret_value("DOCUMENT_TAG_AI_TOKEN")
+
+
+def paperless_document_tag_context(
+    document_id: str,
+    payload: dict[str, object],
+    service: PaperlessDocumentService | None = None,
+) -> tuple[dict[str, object], tuple[str, ...]]:
+    active_service = service or paperless_service()
+    document = active_service.get(document_id)
+    available_tags = active_service.list_tags()
+    title_override = " ".join(str(payload.get("title") or "").split())
+    document_payload = document.as_dict()
+    if title_override:
+        document_payload["title"] = title_override
+    context = {
+        "document": {
+            "id": document_payload.get("id"),
+            "title": document_payload.get("title"),
+            "created": document_payload.get("created"),
+            "filename": document_payload.get("filename"),
+            "correspondent": document_payload.get("correspondent"),
+            "currentTags": document_payload.get("tags") or [],
+            "contentExcerpt": str(document_payload.get("content") or "")[:4000],
+        },
+        "availableTags": [tag.as_dict() for tag in available_tags],
+    }
+    return context, tuple(tag.name for tag in available_tags)
+
+
+def call_document_tag_ai(context: dict[str, object], *, urlopen=urllib.request.urlopen) -> tuple[str, ...]:
+    if not DOCUMENT_TAG_AI_URL:
+        raise DocumentIntakeError("paperless_tag_ai_not_configured")
+    token = document_tag_ai_token()
+    if not token:
+        raise DocumentIntakeError("paperless_tag_ai_token_missing")
+    request = urllib.request.Request(
+        DOCUMENT_TAG_AI_URL,
+        data=json.dumps(context, ensure_ascii=False).encode("utf-8"),
+        method="POST",
+        headers={
+            "Accept": "application/json",
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "User-Agent": "KaosGovernor/document-tag-ai",
+        },
+    )
+    try:
+        with urlopen(request, timeout=DOCUMENT_TAG_AI_TIMEOUT_SECONDS) as response:
+            raw = response.read()
+    except urllib.error.HTTPError as exc:
+        try:
+            body = json.loads(exc.read().decode("utf-8"))
+            code = str(body.get("error") or f"paperless_tag_ai_http_{exc.code}")
+        except Exception:
+            code = f"paperless_tag_ai_http_{exc.code}"
+        raise DocumentIntakeError(code) from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise DocumentIntakeError("paperless_tag_ai_request_failed") from exc
+    try:
+        body = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise DocumentIntakeError("paperless_tag_ai_invalid_json") from exc
+    if not isinstance(body, dict) or body.get("ok") is not True:
+        error = str(body.get("error") or "paperless_tag_ai_failed") if isinstance(body, dict) else "paperless_tag_ai_invalid_response"
+        raise DocumentIntakeError(error)
+    raw_tags = body.get("tags") or body.get("suggestions") or []
+    if not isinstance(raw_tags, list):
+        raise DocumentIntakeError("paperless_tag_ai_invalid_tags")
+    return paperless_metadata_tags({"tags": raw_tags})[:5]
+
+
+def filter_existing_paperless_tags(tags: tuple[str, ...], available_names: tuple[str, ...]) -> tuple[str, ...]:
+    available = {" ".join(name.strip().lstrip("#").split()).casefold(): name for name in available_names if name.strip()}
+    selected: list[str] = []
+    for tag in tags:
+        normalized = " ".join(str(tag or "").strip().lstrip("#").split())
+        existing = available.get(normalized.casefold())
+        if existing and existing not in selected:
+            selected.append(existing)
+        if len(selected) >= 5:
+            break
+    return tuple(selected)
+
+
+def paperless_tag_suggestions_payload(
+    document_id: str,
+    payload: dict[str, object],
+    service: PaperlessDocumentService | None = None,
+    *,
+    urlopen=urllib.request.urlopen,
+) -> dict[str, object]:
+    context, available_names = paperless_document_tag_context(document_id, payload, service)
+    suggested = filter_existing_paperless_tags(call_document_tag_ai(context, urlopen=urlopen), available_names)
+    return {
+        "ok": True,
+        "source": "ai",
+        "document": context["document"],
+        "tags": list(suggested),
+        "suggestions": list(suggested),
+    }
 
 
 def paperless_metadata_proposal_payload(
@@ -1966,6 +2086,22 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 print(f"Paperless upload failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "paperless_upload_failed"})
+            return
+        paperless_tag_suggestion_id = paperless_tag_suggestion_path(parsed.path)
+        if paperless_tag_suggestion_id:
+            try:
+                require_main_access(self.headers)
+                json_response(self, 200, paperless_tag_suggestions_payload(paperless_tag_suggestion_id, json_request(self)))
+            except (ValueError, DocumentIntakeError, memos_relay.MemosRelayError) as exc:
+                code = (
+                    exc.code
+                    if isinstance(exc, (DocumentIntakeError, memos_relay.MemosRelayError))
+                    else str(exc)
+                )
+                json_response(self, paperless_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Paperless tag suggestion failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "paperless_tag_suggestion_failed"})
             return
         paperless_id, paperless_metadata_action = paperless_metadata_path(parsed.path)
         if paperless_id:

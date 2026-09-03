@@ -126,5 +126,5 @@ test("family smart event assets include styling, translations, and cache busters
   assert.match(styles, /grid-template-columns: 96px minmax\(0, 1fr\);/);
   assert.match(indexSource, /href="\/styles\.css\?v=297"/);
   assert.match(indexSource, /src="\/translations\.js\?v=181"/);
-  assert.match(indexSource, /src="\/app\.js\?v=287"/);
+  assert.match(indexSource, /src="\/app\.js\?v=288"/);
 });

@@ -349,6 +349,7 @@ const state = {
       tags: "",
       loading: false,
       applying: false,
+      tagSuggesting: false,
       error: "",
       proposal: null,
       applied: false,
@@ -2825,10 +2826,66 @@ function resetDocumentMetadataReview(recordId = "", documentId = "", title = "")
     tags: "",
     loading: false,
     applying: false,
+    tagSuggesting: false,
     error: "",
     proposal: null,
     applied: false,
   };
+}
+
+async function suggestDocumentMetadataTags(form) {
+  const documentId = String(form?.dataset.documentMetadataReview || "");
+  if (!documentId) return;
+  const recordId = String(form?.dataset.documentMetadataRecord || "");
+  const formData = new FormData(form);
+  const title = String(formData.get("title") || "").trim();
+  const tagsText = String(formData.get("tags") || "");
+  state.documents.metadataReview = {
+    ...state.documents.metadataReview,
+    recordId,
+    documentId,
+    title,
+    tags: tagsText,
+    loading: false,
+    applying: false,
+    tagSuggesting: true,
+    error: "",
+    proposal: null,
+    applied: false,
+  };
+  render();
+  try {
+    const response = await fetch(`/api/paperless/documents/${encodeURIComponent(documentId)}/metadata/tag-suggestions`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ title }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    const suggestedTags = Array.isArray(payload.tags) ? payload.tags.map((tag) => String(tag || "").trim()).filter(Boolean) : [];
+    const mergedTags = [...parseDocumentTagInput(tagsText), ...suggestedTags].filter(
+      (tag, index, tags) => tags.findIndex((candidate) => candidate.toLowerCase() === tag.toLowerCase()) === index,
+    );
+    state.documents.metadataReview = {
+      ...state.documents.metadataReview,
+      tagSuggesting: false,
+      tags: mergedTags.length ? mergedTags.map((tag) => `#${tag}`).join(" ") : tagsText,
+      error: suggestedTags.length ? "" : "AI found no matching existing Paperless tags.",
+      proposal: null,
+      applied: false,
+    };
+  } catch (error) {
+    state.documents.metadataReview = {
+      ...state.documents.metadataReview,
+      tagSuggesting: false,
+      error: error.message || "Could not suggest document tags",
+      proposal: null,
+    };
+  }
+  render();
 }
 
 async function proposeDocumentMetadata(form) {
@@ -2847,6 +2904,7 @@ async function proposeDocumentMetadata(form) {
     tags: tagsText,
     loading: true,
     applying: false,
+    tagSuggesting: false,
     error: "",
     proposal: null,
     applied: false,
@@ -3019,6 +3077,7 @@ function renderDocumentMetadataReview(options = {}) {
   const ownsReview = review.documentId === documentId && String(review.recordId || "") === recordId;
   const proposal = ownsReview ? review.proposal || null : null;
   const proposalTags = Array.isArray(proposal?.tags) ? proposal.tags : [];
+  const metadataBusy = ownsReview && (review.loading || review.applying || review.tagSuggesting);
   const titleValue = ownsReview ? review.title : String(options.title || "");
   const optionTags = Array.isArray(options.tags) ? options.tags : [];
   const tagsValue = ownsReview
@@ -3037,7 +3096,8 @@ function renderDocumentMetadataReview(options = {}) {
         <input name="tags" type="text" value="${escapeHtml(tagsValue)}" placeholder="#clinic #receipt" autocomplete="off" />
       </div>
       <div class="archiveActions">
-        <button class="archiveAction" type="submit" ${review.loading || review.applying ? "disabled" : ""}>${review.loading ? "PREVIEWING" : "PREVIEW"}</button>
+        <button class="archiveAction" type="button" data-document-ai-tags ${metadataBusy ? "disabled" : ""}>${ownsReview && review.tagSuggesting ? "AI TAGGING" : "AI TAGS"}</button>
+        <button class="archiveAction" type="submit" ${metadataBusy ? "disabled" : ""}>${ownsReview && review.loading ? "PREVIEWING" : "PREVIEW"}</button>
       </div>
     </form>
     ${
@@ -10149,6 +10209,13 @@ document.addEventListener("click", async (event) => {
 
   if (event.target.closest("[data-document-metadata-apply]")) {
     await applyDocumentMetadata();
+    return;
+  }
+
+  const documentAiTags = event.target.closest("[data-document-ai-tags]");
+  if (documentAiTags) {
+    const form = documentAiTags.closest("[data-document-metadata-review]");
+    await suggestDocumentMetadataTags(form);
     return;
   }
 

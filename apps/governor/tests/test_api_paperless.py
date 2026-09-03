@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from io import BytesIO
 from pathlib import Path
 import tempfile
@@ -15,6 +16,7 @@ from kaos_governor.documents import (
     PaperlessResult,
     PaperlessSearchPage,
     PaperlessSearchResult,
+    PaperlessTag,
     PaperlessTask,
 )
 
@@ -43,6 +45,14 @@ class FakePaperless:
     def get(self, document_id: object) -> PaperlessDocument:
         self.calls.append(("get", document_id))
         return PaperlessDocument(7, "Fax report", "2026-08-29", "fax.pdf", content="OCR text", tag_names=("clinic",))
+
+    def list_tags(self) -> tuple[PaperlessTag, ...]:
+        self.calls.append(("tags",))
+        return (
+            PaperlessTag(7, "clinic"),
+            PaperlessTag(8, "receipt"),
+            PaperlessTag(9, "보험"),
+        )
 
     def submit_pdf(
         self,
@@ -230,6 +240,55 @@ class PaperlessApiTests(unittest.TestCase):
         self.assertEqual(payload["proposal"]["title"], "Updated title")  # type: ignore[index]
         self.assertEqual(payload["proposal"]["tags"], ["clinic", "receipt"])  # type: ignore[index]
         self.assertEqual(service.update_calls, [])
+
+    def test_tag_suggestions_use_ai_context_and_existing_paperless_tags(self) -> None:
+        service = FakePaperless()
+        calls: list[tuple[str, bytes | None]] = []
+
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, traceback) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return json.dumps(
+                    {
+                        "ok": True,
+                        "tags": ["receipt", "made-up", "Clinic", "receipt", "보험"],
+                    },
+                    ensure_ascii=False,
+                ).encode("utf-8")
+
+        def fake_urlopen(request, timeout):
+            calls.append((request.full_url, request.data))
+            self.assertEqual(timeout, 20)
+            self.assertEqual(request.headers["Authorization"], "Bearer document-token")
+            body = json.loads((request.data or b"{}").decode("utf-8"))
+            self.assertEqual(body["document"]["title"], "Updated title")
+            self.assertEqual(body["document"]["contentExcerpt"], "OCR text")
+            self.assertEqual(body["availableTags"][0]["name"], "clinic")
+            return Response()
+
+        with patch.object(api, "DOCUMENT_TAG_AI_URL", "http://kaosbrain/internal/documents/tag-suggestions/preview"):
+            with patch.object(api, "DOCUMENT_TAG_AI_TOKEN", "document-token"):
+                payload = api.paperless_tag_suggestions_payload(
+                    "7",
+                    {"title": "Updated title"},
+                    service,
+                    urlopen=fake_urlopen,
+                )  # type: ignore[arg-type]
+
+        self.assertEqual(service.calls, [("get", "7"), ("tags",)])
+        self.assertEqual(calls[0][0], "http://kaosbrain/internal/documents/tag-suggestions/preview")
+        self.assertEqual(payload["source"], "ai")
+        self.assertEqual(payload["tags"], ["receipt", "clinic", "보험"])
+
+    def test_tag_suggestions_require_ai_wiring(self) -> None:
+        with patch.object(api, "DOCUMENT_TAG_AI_URL", ""):
+            with self.assertRaisesRegex(DocumentIntakeError, "paperless_tag_ai_not_configured"):
+                api.paperless_tag_suggestions_payload("7", {}, FakePaperless())  # type: ignore[arg-type]
 
     def test_metadata_apply_requires_confirmed_flag(self) -> None:
         service = FakePaperless()

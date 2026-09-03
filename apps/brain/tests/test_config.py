@@ -34,6 +34,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.health_port, 8099)
         self.assertFalse(settings.imaging_enabled)
         self.assertEqual(settings.calendar_preview_api_token, "")
+        self.assertEqual(settings.document_tag_api_token, "")
         self.assertFalse(settings.kaosai_reauth_enabled)
         self.assertEqual(settings.active_control_repost_seconds, 7200)
         self.assertEqual(settings.active_control_quiet_start_hour, 0)
@@ -328,6 +329,15 @@ class SettingsTests(unittest.TestCase):
             settings = Settings.from_env({**BASE_ENV, "KAOSBRAIN_CALENDAR_PREVIEW_API_TOKEN_FILE": str(token_file)})
 
         self.assertEqual(settings.calendar_preview_api_token, "calendar-preview-secret")
+
+    def test_document_tag_token_can_be_loaded_from_secret_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            token_file = Path(temporary_directory) / "document-tag-token"
+            token_file.write_text("document-tag-secret\n", encoding="utf-8")
+
+            settings = Settings.from_env({**BASE_ENV, "KAOSBRAIN_DOCUMENT_TAG_API_TOKEN_FILE": str(token_file)})
+
+        self.assertEqual(settings.document_tag_api_token, "document-tag-secret")
 
     def test_kaosai_reauth_requires_local_agent_url_and_token(self) -> None:
         with self.assertRaisesRegex(ConfigurationError, "KAOSAI_REAUTH_BASE_URL"):

@@ -42,3 +42,14 @@ CALENDAR_SMART_EVENTS_AI_TOKEN=<KAOSBRAIN_CALENDAR_PREVIEW_API_TOKEN value>
 
 This is preview-only. Confirmed calendar writes still go through the normal
 Calendar Adapter `/api/calendar/events` path after the PWA confirmation step.
+
+The personal Documents page can ask KaosBrain for Paperless tag suggestions.
+Set this in `/srv/kaos/secrets/governor-api.env`; Governor uses the existing
+`governor_api_token` secret when calling H4:
+
+```text
+DOCUMENT_TAG_AI_URL=http://<kaosbrain-tailscale-ip>:8099/internal/documents/tag-suggestions/preview
+```
+
+Suggestions are read-only until the PWA metadata `PREVIEW` and `APPLY` steps,
+and Governor keeps only tags that already exist in Paperless.
