@@ -58,6 +58,8 @@ class KaosAITests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Do not write, save, call tools", KAOSAI_CALENDAR_PREVIEW_SYSTEM_PROMPT)
         self.assertIn("Return at most 12 events", KAOSAI_CALENDAR_PREVIEW_SYSTEM_PROMPT)
         self.assertIn('"events"', KAOSAI_CALENDAR_PREVIEW_SYSTEM_PROMPT)
+        self.assertIn("comma, +, &", KAOSAI_CALENDAR_PREVIEW_SYSTEM_PROMPT)
+        self.assertIn('"그리고"', KAOSAI_CALENDAR_PREVIEW_SYSTEM_PROMPT)
 
     def test_parse_calendar_preview_response_normalizes_event_shapes(self) -> None:
         events = parse_calendar_preview_response(

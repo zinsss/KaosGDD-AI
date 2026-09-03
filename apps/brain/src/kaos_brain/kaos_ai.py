@@ -186,7 +186,7 @@ Allowed schema:
 Rules:
 - This is preview only. Do not write, save, call tools, or claim anything was created.
 - Use the request date as the default date.
-- Split slash-separated or newline-separated notes into separate events.
+- Split bundled day notes into separate events when they are separated by slash, newline, comma, +, &, or Korean connectors such as "그리고", "그 다음", "다음", "또", and "및".
 - Keep Korean titles natural and concise.
 - Preserve explicitly provided start times.
 - Use HH:MM 24-hour times.

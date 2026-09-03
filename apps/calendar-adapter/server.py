@@ -1669,12 +1669,21 @@ def normalize_smart_event_time(hour_value, minute_value="", meridiem=""):
     return f"{hour:02d}:{minute:02d}"
 
 
+def split_family_smart_event_text(value):
+    normalized = re.sub(r"\r\n?", "\n", str(value or "")).replace("，", ",").replace("、", ",")
+    return [
+        part.strip()
+        for part in re.split(r"(?:[/\n,+&]+|\s+(?:그리고|그다음|그 다음|다음|또|및)\s+)", normalized)
+        if part.strip()
+    ]
+
+
 def parse_family_smart_event_text(value, date_value):
     date_value = validate_date(date_value) or datetime.now(LOCAL_TIMEZONE).strftime("%Y-%m-%d")
     time_expression = r"(?:(오전|오후)\s*)?(\d{1,2})(?::(\d{1,2})|시(?:\s*(\d{1,2})분?)?)"
     pattern = re.compile(rf"^{time_expression}(?:\s*[-~–—]\s*{time_expression})?\s*(.*)$")
     proposals = []
-    for raw_part in re.split(r"[/\n]+", str(value or "")):
+    for raw_part in split_family_smart_event_text(value):
         part = raw_part.strip()
         if not part:
             continue

@@ -931,10 +931,18 @@ function normalizeFamilySmartEventTime(hourValue, minuteValue, meridiem = "") {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
+function splitFamilySmartEventInput(value) {
+  return String(value || "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[，、]/g, ",")
+    .split(/(?:[\/\n,+&]+|\s+(?:그리고|그다음|그 다음|다음|또|및)\s+)/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
 function parseFamilySmartEventInput(value, dateValue = state.selectedDate) {
   const timeExpression = String.raw`(?:(오전|오후)\s*)?(\d{1,2})(?::(\d{1,2})|시(?:\s*(\d{1,2})분?)?)`;
-  return String(value || "")
-    .split(/[\/\n]+/)
+  return splitFamilySmartEventInput(value)
     .map((part) => part.trim())
     .filter(Boolean)
     .map((part) => {
