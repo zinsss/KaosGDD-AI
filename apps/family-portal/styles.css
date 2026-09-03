@@ -1678,6 +1678,30 @@ h3 {
   gap: 12px;
 }
 
+.app[data-profile="family"] .familySmartEventPanel textarea {
+  min-height: 112px;
+  border-color: rgba(188, 126, 170, 0.28);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(255, 250, 255, 0.86), rgba(244, 237, 248, 0.92));
+  color: var(--text);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.74);
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.app[data-profile="family"] .familySmartEventPanel textarea:focus {
+  border-color: rgba(180, 116, 166, 0.58);
+  outline: 0;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.78),
+    0 0 0 3px rgba(244, 199, 223, 0.34);
+}
+
+.app[data-profile="family"] .familySmartEventPanel textarea::placeholder {
+  color: rgba(130, 111, 138, 0.62);
+}
+
 .familySmartEventPreview {
   display: grid;
   gap: 8px;
