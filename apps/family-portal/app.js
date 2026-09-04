@@ -695,9 +695,21 @@ function renderCollectionPill(item) {
 function renderAutomationPill(kind) {
   const labels = {
     brain: uiText("badge.brain", "Brain"),
-    repeating: uiText("badge.repeating", "Repeating"),
   };
   return `<span class="calendarPill is-${escapeHtml(kind)}">${escapeHtml(labels[kind] || kind)}</span>`;
+}
+
+function isBrainManagedItem(item) {
+  if (!item) return false;
+  if (isGeneratedCalendarEvent(item)) return true;
+  return isRecurringTask(item);
+}
+
+function renderItemPills(item) {
+  return [
+    renderCollectionPill(item),
+    isBrainManagedItem(item) ? renderAutomationPill("brain") : "",
+  ].join("");
 }
 
 function filterByCollectionView(items, viewId) {
@@ -4677,6 +4689,7 @@ function normalizeTask(task) {
     lastModified: task.lastModified || task.created || "",
     notes: parsed.notes,
     subtasks: parsed.subtasks,
+    categories: Array.isArray(task.categories) ? task.categories.map((value) => String(value).toUpperCase()) : [],
     meta: taskMeta(task, parsed, done),
     mode: taskBucket(task, done),
     done,
@@ -5619,14 +5632,12 @@ function renderTimeline(events, emptyText = uiText("common.noItems", "No items")
           .map((event) => {
             const timeLabel = event.allDay ? uiText("event.allDayPill", "All Day") : event.time;
             const holidayClass = isPublicHolidayEvent(event) ? "isPublicHoliday" : isObservanceEvent(event) ? "isObservance" : "";
-            const generated = isGeneratedCalendarEvent(event);
             const content = `
               <span class="timelineTitleRow">
                 <strong>${escapeHtml(event.title)}</strong>
-                ${renderCollectionPill(event)}
-                ${generated ? renderAutomationPill("brain") : ""}
+                ${renderItemPills(event)}
               </span>
-              ${!generated && event.detail ? `<span>${escapeHtml(event.detail)}</span>` : ""}
+              ${!isGeneratedCalendarEvent(event) && event.detail ? `<span>${escapeHtml(event.detail)}</span>` : ""}
             `;
             return `
               <li class="${holidayClass}">
@@ -5660,8 +5671,7 @@ function renderTaskRows(tasks) {
                 <a class="taskEditLink" href="#/edit-task?uid=${encodeURIComponent(task.id)}">
                   <span class="taskTitleRow">
                     <p class="taskTitle">${escapeHtml(task.title)}</p>
-                    ${renderCollectionPill(task)}
-                    ${isRecurringTask(task) ? renderAutomationPill("repeating") : ""}
+                    ${renderItemPills(task)}
                   </span>
                   <span class="taskMeta">${escapeHtml(task.meta)}</span>
                 </a>
@@ -6125,13 +6135,12 @@ function renderFamilyAgendaMixedRow(item) {
     const eventLabel = uiText("agenda.eventMarker", "Event");
     const timeLabel = event.allDay ? "" : familyAgendaEventTime(event);
     const holidayClass = isPublicHolidayEvent(event) ? "isPublicHoliday" : isObservanceEvent(event) ? "isObservance" : "";
-    const generated = isGeneratedCalendarEvent(event);
     const content = `
       <span class="taskTitleRow">
         <strong>${escapeHtml(event.title)}</strong>
-        ${generated ? renderAutomationPill("brain") : ""}
+        ${renderItemPills(event)}
       </span>
-      ${!generated && event.detail ? `<span>${escapeHtml(event.detail)}</span>` : ""}
+      ${!isGeneratedCalendarEvent(event) && event.detail ? `<span>${escapeHtml(event.detail)}</span>` : ""}
     `;
     return `
       <li class="familyAgendaMixedRow isEvent ${timeLabel ? "hasTime" : "isTimeless"} ${holidayClass}">
@@ -6152,7 +6161,7 @@ function renderFamilyAgendaMixedRow(item) {
       <a class="familyAgendaMixedLink" href="#/edit-task?uid=${encodeURIComponent(task.id)}">
         <span class="taskTitleRow">
           <strong>${escapeHtml(task.title)}</strong>
-          ${renderCollectionPill(task)}
+          ${renderItemPills(task)}
         </span>
         ${task.subtasks.length ? `<span>${uiText("task.subtasksCount", "{count} subtasks", { count: task.subtasks.length })}</span>` : ""}
       </a>
