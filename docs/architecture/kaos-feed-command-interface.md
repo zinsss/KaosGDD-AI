@@ -273,6 +273,30 @@ Prompt only
   PWA shows a read-only result with source links and archives the task
 ```
 
+Treatment-option prompts are handled as a source-bounded medical reference task,
+not as personal medical advice. A prompt such as `질환명 치료 옵션 찾아줘` should
+prefer:
+
+1. Korean official/public health pages for patient-facing baseline information.
+2. Domestic medicine/regulatory/insurance sources when drugs, 허가사항, or 급여 are
+   relevant.
+3. Guideline-grade international sources when Korean public sources are thin or
+   outdated, such as PubMed/NCBI, NIH/NINDS, NICE CKS, and professional society
+   guideline pages.
+
+The result should separate:
+
+- non-drug/lifestyle or trigger-management options
+- evaluation/tests to consider
+- medication/procedure options
+- referral or urgent-caution points
+- Korea-specific 허가/급여 확인 필요점 when applicable
+- source list and checked date
+
+The PWA should label this as a discussion/reference summary. It must not present
+the answer as a patient-specific diagnosis, medication order, dosage instruction,
+or substitute for clinician judgment.
+
 Initial searchable source adapters target the main national sites that have
 public search pages:
 
@@ -280,6 +304,11 @@ public search pages:
 - `kdca.go.kr`
 - `mfds.go.kr`
 - `hira.or.kr`
+- `mentalhealth.go.kr`
+- `pubmed.ncbi.nlm.nih.gov`
+- `ninds.nih.gov`
+- `cks.nice.org.uk`
+- `aasm.org`
 
 HIRA is handled as a special case for medicine benefit questions. Governor uses
 the HIRA 보험인정기준 POST search endpoint instead of the generic site search,
@@ -314,6 +343,48 @@ agency domains such as `nhis.or.kr`, `longtermcare.or.kr`,
 This is deliberately not broad web browsing. The model does not choose arbitrary
 URLs and Governor rejects fetched pages outside the allowlist. Public-health
 documents should always stay preview-before-save.
+
+### Indexed PDF textbook source tier plan
+
+Server-side medical textbook PDFs can become an AI Task source tier after the web
+source workflow is stable. They should be indexed locally rather than uploaded in
+full on every prompt.
+
+Planned pipeline:
+
+```text
+PDF folder on H3/H4
+  operator places trusted textbook/reference PDFs in a configured read-only folder
+ingestion job
+  extracts embedded text or OCR text, page by page
+  stores chunk metadata: filename, page, section heading when available, hash
+local index
+  builds a searchable local index over chunks
+AI Task prompt
+  Governor searches official web sources and local textbook chunks separately
+  only the most relevant excerpts are sent to KaosBrain-OpenAI
+result archive
+  stores source citations as filename + page/section + hash, not full copied text
+```
+
+Source priority:
+
+1. Current official/guideline sources decide present recommendations.
+2. Textbooks provide background, mechanism, differential diagnosis, and clinical
+   framing.
+3. If textbook content conflicts with newer official/guideline sources, the AI
+   Task should surface the conflict and prefer newer dated guidance.
+
+Guardrails:
+
+- The configured textbook folder is server-side only; the PWA does not expose a
+  raw file browser.
+- Do not send whole books to OpenAI; send bounded excerpts only.
+- Cite page/section, checked index date, and source hash.
+- Keep copyright-sensitive output as summaries and short citations, not long
+  copied passages.
+- Treat this as reference support for the user, not autonomous clinical
+  decision-making.
 
 ## Data Contract
 

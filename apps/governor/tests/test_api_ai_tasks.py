@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from kaos_governor import api
 from kaos_governor.ai_tasks import AITaskArchive, AITaskError
-from kaos_governor.official_search import official_health_search_candidates
+from kaos_governor.official_search import allowed_official_health_hosts, official_health_search_candidates
 
 
 class FakeHTTPResponse:
@@ -386,6 +386,52 @@ class GovernorAITaskTests(unittest.TestCase):
 
         self.assertEqual(candidates[0].host, "nedrug.mfds.go.kr")
         self.assertEqual(candidates[0].source, "의약품통합정보시스템")
+
+    def test_treatment_option_queries_search_trusted_guideline_sources(self) -> None:
+        urls: list[str] = []
+
+        def fake_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
+            urls.append(request.full_url)
+            if request.full_url.startswith("https://health.kr/"):
+                raise AssertionError("health.kr should not be queried for generic disease treatment options")
+            if request.full_url.startswith("https://www.hira.or.kr/"):
+                return FakeHTTPResponse("<html><body>검색된 내용이 없습니다.</body></html>", "text/html; charset=utf-8")
+            if request.full_url.startswith("https://pubmed.ncbi.nlm.nih.gov/"):
+                return FakeHTTPResponse(
+                    '<html><body><a href="/?term=test">Main Content</a><a href="/account/settings/">Account settings</a><a href="/39324694/">Restless legs syndrome treatment clinical practice guideline</a></body></html>',
+                    "text/html; charset=utf-8",
+                )
+            if request.full_url == "https://pubmed.ncbi.nlm.nih.gov/39324694/":
+                return FakeHTTPResponse("<html><body>Guideline content</body></html>", "text/html; charset=utf-8")
+            return FakeHTTPResponse("<html><body>검색된 내용이 없습니다.</body></html>", "text/html; charset=utf-8")
+
+        candidates = official_health_search_candidates(
+            "하지불안증후군 치료 옵션",
+            alternate_queries=["restless legs syndrome treatment guideline"],
+            urlopen=fake_urlopen,
+        )
+
+        self.assertIn("pubmed.ncbi.nlm.nih.gov", allowed_official_health_hosts())
+        self.assertIn("cks.nice.org.uk", allowed_official_health_hosts())
+        self.assertIn("www.ninds.nih.gov", allowed_official_health_hosts())
+        self.assertTrue(any(url.startswith("https://pubmed.ncbi.nlm.nih.gov/?term=") for url in urls))
+        self.assertEqual(candidates[0].host, "pubmed.ncbi.nlm.nih.gov")
+        self.assertEqual(candidates[0].source, "PubMed")
+
+    def test_treatment_options_task_survives_governor_plan_cleanup(self) -> None:
+        plan = api._clean_official_web_plan(  # pylint: disable=protected-access
+            {
+                "query": "하지불안증후군 치료 옵션",
+                "alternateQueries": ["restless legs syndrome treatment guideline"],
+                "preferredDomains": ["pubmed.ncbi.nlm.nih.gov", "cks.nice.org.uk"],
+                "task": "treatment_options",
+                "language": "ko",
+            },
+            prompt="하지불안증후군 치료 옵션",
+        )
+
+        self.assertEqual(plan["task"], "treatment_options")
+        self.assertEqual(plan["preferredDomains"], ["pubmed.ncbi.nlm.nih.gov", "cks.nice.org.uk"])
 
     def test_health_kr_drug_dictionary_expands_brand_for_hira_search(self) -> None:
         def fake_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]

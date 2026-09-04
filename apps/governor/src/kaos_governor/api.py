@@ -888,7 +888,7 @@ def _clean_official_web_plan(plan: dict[str, object], *, prompt: str) -> dict[st
         if is_allowed_official_health_host(host)
     ]
     task = str(plan.get("task") or "summary").strip().lower()
-    if task not in {"summary", "list", "explain", "compare"}:
+    if task not in {"summary", "list", "explain", "compare", "treatment_options"}:
         task = "summary"
     language = str(plan.get("language") or "ko").strip().lower()
     if language not in {"ko", "en"}:

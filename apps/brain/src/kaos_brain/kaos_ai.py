@@ -269,13 +269,14 @@ Rules:
 KAOSAI_OFFICIAL_WEB_PLAN_SYSTEM_PROMPT = """You are KaosBrain-OpenAI planning a read-only official-source search for KaosGDD.
 Return exactly one JSON object and no markdown.
 Allowed schema:
-{"query":"...","alternateQueries":["..."],"preferredDomains":["..."],"task":"summary|list|explain|compare","language":"ko|en"}
+{"query":"...","alternateQueries":["..."],"preferredDomains":["..."],"task":"summary|list|explain|compare|treatment_options","language":"ko|en"}
 
 Rules:
 - You cannot browse or fetch sources. Governor will search only its allowlisted Korean health/public domains.
 - Convert the user prompt into short Korean search queries suitable for government/public health search pages.
 - Keep query factual and compact; remove instructions like "summarize" when they do not help search.
-- Use preferredDomains only when the prompt implies a source family. Examples: drug coverage -> hira.or.kr/mohw.go.kr; infection/vaccine -> kdca.go.kr; food/drug/device safety -> mfds.go.kr.
+- Use preferredDomains only when the prompt implies a source family. Examples: drug coverage -> hira.or.kr/mohw.go.kr; infection/vaccine -> kdca.go.kr; food/drug/device safety -> mfds.go.kr; treatment options/guidelines -> health.kdca.go.kr/mentalhealth.go.kr/pubmed.ncbi.nlm.nih.gov/cks.nice.org.uk/www.ninds.nih.gov.
+- If the user asks for treatment options, management, therapy, 진료지침, or 치료법 for a condition, set task to "treatment_options" and include alternate queries with treatment/guideline terms when useful.
 - For Korean medicine brand names, include known ingredient/class names as separate alternateQueries when you know them; HIRA insurance criteria often indexes ingredients/classes rather than product names.
 - Include at most 3 alternateQueries and at most 6 preferredDomains.
 - Default language to "ko" unless the user clearly asks English."""
@@ -291,6 +292,7 @@ Rules:
 - Use Korean unless the request is clearly English.
 - Use only the provided sources and excerpts. If the sources are insufficient, say what is missing.
 - Prefer practical output: answer first, then key points, dates/eligibility/actions, and source notes.
+- For `treatment_options` tasks, organize by non-drug measures, evaluation/tests, medication/procedure options, when to refer/urgent cautions, and Korea-specific 허가/급여 확인 필요점 when relevant. Make clear this is a source-bounded clinical reference for discussion with a clinician, not a personal diagnosis or treatment order.
 - For Korean medicine insurance/benefit criteria questions such as 급여기준, 요양급여, 본인부담, 투여조건, or 삭감, include a separate `차트 기재 추천` section when the fetched sources support it. Give copyable Korean chart-note examples and a short checklist of source-supported clinical facts to document, such as diagnosis, symptom/severity, eligibility criteria met, dose/quantity/interval, and follow-up plan. Do not invent patient facts; mark placeholders clearly.
 - If source excerpts do not support chart-note guidance, say `차트 기재 추천: 제공된 근거만으로는 작성 불가` and name the missing criteria.
 - Cite source titles/URLs in content when useful.
@@ -470,7 +472,7 @@ def parse_official_web_plan_response(raw: str, request: Mapping[str, Any]) -> di
     ]
     preferred_domains = [domain for domain in preferred_domains if domain]
     task = str(payload.get("task") or "summary").strip().lower()
-    if task not in {"summary", "list", "explain", "compare"}:
+    if task not in {"summary", "list", "explain", "compare", "treatment_options"}:
         task = "summary"
     language = str(payload.get("language") or "ko").strip().lower()
     if language not in {"ko", "en"}:

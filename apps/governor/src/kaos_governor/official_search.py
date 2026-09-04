@@ -44,6 +44,7 @@ OFFICIAL_HEALTH_SITES: tuple[OfficialSearchSite, ...] = (
     OfficialSearchSite("약학정보원", ("health.kr", "www.health.kr")),
     OfficialSearchSite("국민건강보험공단", ("nhis.or.kr", "www.nhis.or.kr")),
     OfficialSearchSite("노인장기요양보험", ("longtermcare.or.kr", "www.longtermcare.or.kr")),
+    OfficialSearchSite("국가정신건강정보포털", ("mentalhealth.go.kr", "www.mentalhealth.go.kr"), "https://www.mentalhealth.go.kr/portal/search/search.do?query={query}"),
     OfficialSearchSite("국립보건연구원", ("nih.go.kr", "www.nih.go.kr")),
     OfficialSearchSite("감염병포털", ("dportal.kdca.go.kr",)),
     OfficialSearchSite("예방접종도우미", ("nip.kdca.go.kr",)),
@@ -71,6 +72,10 @@ OFFICIAL_HEALTH_SITES: tuple[OfficialSearchSite, ...] = (
     OfficialSearchSite("한국보건의료인국가시험원", ("kuksiwon.or.kr", "www.kuksiwon.or.kr")),
     OfficialSearchSite("한국장기조직기증원", ("koda1458.kr", "www.koda1458.kr")),
     OfficialSearchSite("의료기관평가인증원", ("koiha.kr", "www.koiha.kr")),
+    OfficialSearchSite("PubMed", ("pubmed.ncbi.nlm.nih.gov",), "https://pubmed.ncbi.nlm.nih.gov/?term={query}"),
+    OfficialSearchSite("NIH NINDS", ("ninds.nih.gov", "www.ninds.nih.gov"), "https://www.ninds.nih.gov/search?search={query}"),
+    OfficialSearchSite("NICE CKS", ("cks.nice.org.uk",), "https://cks.nice.org.uk/search/?q={query}"),
+    OfficialSearchSite("American Academy of Sleep Medicine", ("aasm.org", "www.aasm.org"), "https://aasm.org/?s={query}"),
 )
 
 
@@ -127,11 +132,25 @@ def official_health_search_candidates(
     queries = _expanded_queries(_unique_queries([query, *alternate_queries]))
     if not queries:
         return []
-    health_kr_queries, health_kr_candidates = _health_kr_drug_queries_and_candidates(queries, urlopen=urlopen)
+    health_kr_queries: list[str] = []
+    health_kr_candidates: list[OfficialSearchCandidate] = []
+    if _looks_like_drug_lookup_query(queries):
+        health_kr_queries, health_kr_candidates = _health_kr_drug_queries_and_candidates(queries, urlopen=urlopen)
     queries = _expanded_queries(_unique_queries([*queries, *health_kr_queries]))
     preferred = _preferred_hosts(preferred_domains)
     if _looks_like_medicine_benefit_query(queries):
         preferred.update({"hira.or.kr", "www.hira.or.kr"})
+    if _looks_like_treatment_options_query(queries):
+        preferred.update(
+            {
+                "health.kdca.go.kr",
+                "mentalhealth.go.kr",
+                "www.mentalhealth.go.kr",
+                "pubmed.ncbi.nlm.nih.gov",
+                "cks.nice.org.uk",
+                "www.ninds.nih.gov",
+            }
+        )
     sites = _ordered_sites(preferred)
     candidates: list[OfficialSearchCandidate] = list(health_kr_candidates)
     hira_candidates = _hira_insurance_criteria_candidates(queries, preferred=preferred, urlopen=urlopen)
@@ -206,6 +225,58 @@ def _looks_like_medicine_benefit_query(queries: Iterable[str]) -> bool:
     benefit_words = ("급여기준", "요양급여", "보험인정", "본인부담", "투여조건", "삭감", "약제급여", "급여목록")
     medicine_words = ("정", "캡슐", "시럽", "주사", "경구", "mg", "성분", "약제", "투여", "almotriptan", "choline", "triptan")
     return any(word in text for word in benefit_words) and any(word.casefold() in text for word in medicine_words)
+
+
+def _looks_like_drug_lookup_query(queries: Iterable[str]) -> bool:
+    text = " ".join(str(query or "") for query in queries).casefold()
+    lookup_words = (
+        "급여기준",
+        "요양급여",
+        "보험인정",
+        "본인부담",
+        "투여조건",
+        "삭감",
+        "약제급여",
+        "급여목록",
+        "성분",
+        "제품정보",
+        "허가사항",
+        "약품",
+        "약제",
+        "의약품",
+        "mg",
+    )
+    dosage_form_words = ("정", "캡슐", "시럽", "주사", "점안", "연고", "크림", "패취", "액")
+    known_ingredient_words = ("almotriptan", "triptan", "choline alfoscerate", "gabapentin", "pregabalin", "pramipexole")
+    return (
+        any(word in text for word in lookup_words)
+        or any(word.casefold() in text for word in known_ingredient_words)
+        or (any(word in text for word in dosage_form_words) and any(word in text for word in ("급여", "허가", "성분", "약")))
+    )
+
+
+def _looks_like_treatment_options_query(queries: Iterable[str]) -> bool:
+    text = " ".join(str(query or "") for query in queries).casefold()
+    treatment_words = (
+        "치료",
+        "치료옵션",
+        "치료 옵션",
+        "치료법",
+        "치료방법",
+        "처치",
+        "관리",
+        "management",
+        "treatment",
+        "therapy",
+        "guideline",
+        "가이드라인",
+        "진료지침",
+        "권고",
+    )
+    benefit_only_words = ("급여기준", "요양급여", "본인부담", "삭감", "급여목록")
+    return any(word in text for word in treatment_words) and not (
+        any(word in text for word in benefit_only_words) and "치료" not in text
+    )
 
 
 def _ordered_sites(preferred: set[str]) -> list[OfficialSearchSite]:
@@ -549,10 +620,16 @@ def _looks_like_noise_url(url: str) -> bool:
         "/privacy",
         "/copyright",
         "/sitemap",
+        "/account/",
+        "/advanced",
+        "/clipboard",
+        "/myncbi",
         "/search.do",
         "/search/",
         "/search.es",
         "/menu.es",
+        "pubmed.ncbi.nlm.nih.gov/?term=",
+        "aasm.org/?s=",
         "facebook.com",
         "instagram.com",
         "youtube.com",
@@ -567,7 +644,17 @@ def _looks_like_noise_title(title: str) -> bool:
     return normalized in {
         "본문 바로가기",
         "본문으로 바로가기",
+        "본문바로가기",
         "메뉴 바로가기",
+        "메뉴바로가기",
+        "skip to main page content",
+        "skip to main content",
+        "skip to content",
+        "main content",
+        "account settings",
+        "advanced",
+        "clipboard",
+        "dashboard",
         "통합검색",
         "로그인",
         "회원가입",
@@ -601,6 +688,18 @@ def _candidate_score(title: str, url: str, queries: list[str]) -> int:
     score = sum(5 for token in unique_tokens if token in text)
     if any(kind in text for kind in ("보도자료", "고시", "지침", "정책", "공고", "faq", "pdf", "자료")):
         score += 4
+    if any(kind in text for kind in ("치료", "management", "treatment", "guideline", "practice guideline", "clinical practice", "diagnosis", "진료지침", "권고")):
+        score += 5
+    if any(kind in text for kind in ("clinical practice guideline", "american academy", "aasm", "practice guideline summary", "nice cks", "nih")):
+        score += 8
+    if "american academy of sleep medicine" in text:
+        score += 12
+    if "plain language summary" in text:
+        score += 4
+    if "poor effect" in text:
+        score -= 10
+    if any(host in text for host in ("pubmed.ncbi.nlm.nih.gov", "cks.nice.org.uk", "ninds.nih.gov", "health.kdca.go.kr", "mentalhealth.go.kr")):
+        score += 2
     return score
 
 

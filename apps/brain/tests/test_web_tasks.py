@@ -4,6 +4,7 @@ import unittest
 from importlib.util import find_spec
 
 from kaos_brain.kaos_ai import (
+    KAOSAI_OFFICIAL_WEB_PLAN_SYSTEM_PROMPT,
     KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT,
     parse_general_web_task_response,
     parse_official_web_plan_response,
@@ -135,6 +136,15 @@ class WebTaskValidationTests(unittest.TestCase):
         self.assertEqual(plan["query"], "인플루엔자 접종 계획")
         self.assertEqual(plan["preferredDomains"], ["kdca.go.kr"])
 
+    def test_parses_treatment_options_plan_response(self) -> None:
+        plan = parse_official_web_plan_response(
+            '{"query":"하지불안증후군 치료 옵션","alternateQueries":["restless legs syndrome treatment guideline"],"preferredDomains":["pubmed.ncbi.nlm.nih.gov","cks.nice.org.uk"],"task":"treatment_options","language":"ko"}',
+            {"prompt": "하지불안증후군 치료 옵션 찾아줘"},
+        )
+
+        self.assertEqual(plan["task"], "treatment_options")
+        self.assertEqual(plan["preferredDomains"], ["pubmed.ncbi.nlm.nih.gov", "cks.nice.org.uk"])
+
     def test_parses_official_web_summary_response(self) -> None:
         result = parse_official_web_summary_response(
             '{"title":"요약","content":"본문","sources":[{"title":"KDCA","url":"https://www.kdca.go.kr/notice"}],"checkedAt":"2026-09-03","model":"default"}',
@@ -159,6 +169,12 @@ class WebTaskValidationTests(unittest.TestCase):
         self.assertIn("차트 기재 추천", KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
         self.assertIn("급여기준", KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
         self.assertIn("Do not invent patient facts", KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
+
+    def test_official_web_prompts_support_treatment_options(self) -> None:
+        self.assertIn("treatment_options", KAOSAI_OFFICIAL_WEB_PLAN_SYSTEM_PROMPT)
+        self.assertIn("treatment options/guidelines", KAOSAI_OFFICIAL_WEB_PLAN_SYSTEM_PROMPT)
+        self.assertIn("For `treatment_options` tasks", KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
+        self.assertIn("not a personal diagnosis or treatment order", KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
 
 
 if __name__ == "__main__":
