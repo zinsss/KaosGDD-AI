@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import urllib.error
 from unittest.mock import patch
 
 from kaos_governor import api
@@ -231,6 +232,38 @@ class GovernorAITaskTests(unittest.TestCase):
             self.assertEqual(records[0].status, "previewed")
             self.assertEqual(records[0].source["type"], "general_web_search")
             self.assertEqual(records[0].source["sources"][0]["url"], "https://example.com/context")
+
+    def test_preview_general_web_ai_task_archives_web_search_failure(self) -> None:
+        attempts = 0
+
+        def fake_failing_general_web_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
+            nonlocal attempts
+            attempts += 1
+            payload = json.dumps({"ok": False, "error": "kaosbrain_web_search_unavailable"}).encode("utf-8")
+            raise urllib.error.HTTPError(request.full_url, 502, "Bad Gateway", {}, BytesIO(payload))
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            archive = AITaskArchive(Path(temporary_directory) / "ai-tasks.json")
+            with (
+                patch.object(api, "AI_TASKS_BRAIN_URL", "http://brain.internal:8099/internal/ai-tasks/official-doc-memo/preview"),
+                patch.object(api, "AI_TASKS_WEB_BRAIN_URL", ""),
+                patch.object(api, "AI_TASKS_BRAIN_TOKEN", "secret"),
+            ):
+                payload = api.preview_general_web_ai_task_payload(
+                    {"prompt": "공식 결과를 바탕으로 일반 웹도 확인"},
+                    archive,
+                    urlopen=fake_failing_general_web_urlopen,
+                )
+
+            self.assertTrue(payload["ok"])
+            self.assertEqual(attempts, 2)
+            self.assertEqual(payload["task"]["status"], "failed")  # type: ignore[index]
+            self.assertEqual(payload["task"]["error"], "kaosbrain_web_search_unavailable")  # type: ignore[index]
+            records = archive.list_records()
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0].kind, "general_web")
+            self.assertEqual(records[0].status, "failed")
+            self.assertEqual(records[0].error, "kaosbrain_web_search_unavailable")
 
     def test_start_ai_task_returns_running_record_before_worker_finishes(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

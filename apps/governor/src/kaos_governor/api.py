@@ -795,8 +795,21 @@ def preview_general_web_ai_task_payload(
     urlopen=urllib.request.urlopen,
 ) -> dict[str, object]:
     prompt = _ai_task_prompt(payload, web=True)
-    source, result = _general_web_ai_task_result(prompt, urlopen=urlopen)
-    record = (archive or ai_task_archive()).add_result(
+    active_archive = archive or ai_task_archive()
+    try:
+        source, result = _general_web_ai_task_result(prompt, urlopen=urlopen)
+    except AITaskError as exc:
+        record = active_archive.add_running(
+            kind="general_web",
+            prompt=prompt,
+            source={
+                "type": "general_web_search",
+                "checkedAt": datetime.now(UTC).date().isoformat(),
+            },
+        )
+        failed = active_archive.fail(record.task_id, error=exc.code)
+        return {"ok": True, "task": failed.as_dict(), "result": {}}
+    record = active_archive.add_result(
         kind="general_web",
         prompt=prompt,
         source=source,
@@ -1310,18 +1323,34 @@ def call_ai_task_web_brain(
             "User-Agent": "KaosGovernor/ai-tasks",
         },
     )
-    try:
-        with urlopen(request, timeout=AI_TASKS_BRAIN_TIMEOUT_SECONDS) as response:
-            raw = response.read()
-    except urllib.error.HTTPError as exc:
+    retryable_errors = {
+        "ai_task_web_brain_http_502",
+        "ai_task_web_brain_http_503",
+        "ai_task_web_brain_http_504",
+        "ai_task_web_brain_request_failed",
+        "kaosbrain_web_search_unavailable",
+        "web_task_openai_timeout",
+        "web_task_openai_request_failed",
+    }
+    raw = b""
+    for attempt in range(2):
         try:
-            body = json.loads(exc.read().decode("utf-8"))
-            code = str(body.get("error") or f"ai_task_web_brain_http_{exc.code}")
-        except Exception:
-            code = f"ai_task_web_brain_http_{exc.code}"
-        raise AITaskError(code) from exc
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        raise AITaskError("ai_task_web_brain_request_failed") from exc
+            with urlopen(request, timeout=AI_TASKS_BRAIN_TIMEOUT_SECONDS) as response:
+                raw = response.read()
+            break
+        except urllib.error.HTTPError as exc:
+            try:
+                body = json.loads(exc.read().decode("utf-8"))
+                code = str(body.get("error") or f"ai_task_web_brain_http_{exc.code}")
+            except Exception:
+                code = f"ai_task_web_brain_http_{exc.code}"
+            if attempt == 0 and code in retryable_errors:
+                continue
+            raise AITaskError(code) from exc
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            if attempt == 0:
+                continue
+            raise AITaskError("ai_task_web_brain_request_failed") from exc
     try:
         body = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
