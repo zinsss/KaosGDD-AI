@@ -3292,7 +3292,7 @@ async function loadDocumentDetail(id) {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
     state.documents.selected = window.KAOS_PORTAL_DOCUMENTS.normalizeDocument(payload.document);
-    resetDocumentMetadataReview("", state.documents.selected.id, state.documents.selected.title);
+    resetDocumentMetadataReview("", state.documents.selected.id, state.documents.selected.title, state.documents.selected.tags);
   } catch (error) {
     state.documents.detailError = error.message || "Paperless document is unavailable";
   } finally {
@@ -3382,12 +3382,15 @@ function parseDocumentTagInput(value) {
     .slice(0, 25);
 }
 
-function resetDocumentMetadataReview(recordId = "", documentId = "", title = "") {
+function resetDocumentMetadataReview(recordId = "", documentId = "", title = "", tags = "") {
+  const normalizedTags = Array.isArray(tags)
+    ? tags.map((tag) => String(tag || "").trim()).filter(Boolean).map((tag) => `#${tag}`).join(" ")
+    : String(tags || "");
   state.documents.metadataReview = {
     recordId: String(recordId || ""),
     documentId: String(documentId || ""),
     title: String(title || ""),
-    tags: "",
+    tags: normalizedTags,
     loading: false,
     applying: false,
     tagSuggesting: false,
@@ -3533,8 +3536,14 @@ async function applyDocumentMetadata() {
     }
     state.documents.mode = "archive";
     state.documents.selectedInboxId = "";
+    state.documents.selectedId = documentId;
     resetDocumentMetadataReview();
     state.documents.selected = normalizedDocument;
+    state.documents.items = state.documents.items.map((item) => (
+      String(item.id) === documentId && normalizedDocument
+        ? Object.freeze({ ...item, title: normalizedDocument.title, created: normalizedDocument.created, filename: normalizedDocument.filename, correspondent: normalizedDocument.correspondent, url: normalizedDocument.url })
+        : item
+    ));
     state.documents.checked = false;
     refreshMainAttentionShell();
     await loadDocuments({ force: true });
@@ -7528,7 +7537,8 @@ function renderDocuments() {
             <dl class="archiveMetadata">
               ${archiveMeta("Correspondent", selected.correspondent || "unknown")}
               ${archiveMeta("Created", selected.created ? formatDocumentDate(selected.created) : "")}
-              ${archiveMeta("Tags", selected.tags?.length ? selected.tags.map((tag) => `#${tag}`).join(" ") : "")}
+              ${archiveMeta("File", selected.filename || "unknown")}
+              ${archiveMeta("Tags", selected.tags?.length ? selected.tags.map((tag) => `#${tag}`).join(" ") : "none")}
             </dl>
             <div class="archiveActions">
               ${selected.url ? `<a class="archiveAction" href="${escapeHtml(selected.url)}" target="_blank" rel="noopener noreferrer">OPEN PAPERLESS</a>` : ""}

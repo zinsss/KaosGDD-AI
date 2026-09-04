@@ -25,6 +25,10 @@ test("documents metadata review previews before confirmed apply", () => {
   assert.match(appSource, /metadata\/proposal/);
   assert.match(appSource, /data-document-ai-tags/);
   assert.match(appSource, /metadata\/tag-suggestions/);
+  assert.match(appSource, /resetDocumentMetadataReview\("", state\.documents\.selected\.id, state\.documents\.selected\.title, state\.documents\.selected\.tags\);/);
+  assert.match(appSource, /archiveMeta\("File", selected\.filename \|\| "unknown"\)/);
+  assert.match(appSource, /archiveMeta\("Tags", selected\.tags\?\.length/);
+  assert.match(appSource, /: "none"\)/);
   assert.match(appSource, /AI TAGS/);
   assert.match(appSource, /CONFIRM BEFORE APPLYING/);
   assert.match(appSource, /window\.confirm\(`Apply Paperless metadata/);

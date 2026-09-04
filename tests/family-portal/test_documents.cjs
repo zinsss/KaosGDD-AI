@@ -59,3 +59,14 @@ test("normalizes document intake inbox records", () => {
   assert.equal(inbox.items[0].documentId, 42);
   assert.equal(inbox.items[0].url, "https://paperless.kaosgdd.net/documents/42/details");
 });
+
+test("normalizes document inbox without applied records", () => {
+  const inbox = normalizeInbox({
+    items: [
+      { id: "doc-open", status: "archived", title: "Review me", sha256: "abc" },
+      { id: "doc-done", status: "applied", title: "Already filed", sha256: "def" },
+    ],
+  });
+
+  assert.deepEqual(inbox.items.map((item) => item.id), ["doc-open"]);
+});

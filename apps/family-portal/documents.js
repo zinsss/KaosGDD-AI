@@ -83,7 +83,11 @@
   function normalizeInbox(payload) {
     const source = payload && typeof payload === "object" ? payload : {};
     return Object.freeze({
-      items: Object.freeze((Array.isArray(source.items) ? source.items : []).map(normalizeInboxItem).filter((item) => item.id)),
+      items: Object.freeze(
+        (Array.isArray(source.items) ? source.items : [])
+          .map(normalizeInboxItem)
+          .filter((item) => item.id && item.status !== "applied"),
+      ),
     });
   }
 
