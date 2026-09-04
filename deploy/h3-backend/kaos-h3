@@ -535,6 +535,12 @@ services_preflight() {
   if ! grep -q 'location \^~ /api/mail/' "${root}/config/family-portal/nginx.conf"; then
     die "family portal must route the scoped Mail API explicitly"
   fi
+  if ! grep -q 'location \^~ /api/memos/' "${root}/config/family-portal/nginx.conf"; then
+    die "family portal must route the scoped Memos API explicitly"
+  fi
+  if ! grep -A8 'location \^~ /api/memos/' "${root}/config/family-portal/nginx.conf" | grep -q 'proxy_pass http://governor-api:8096;'; then
+    die "family portal must route /api/memos to governor-api"
+  fi
   if ! grep -q 'location \^~ /api/ai-tasks/' "${root}/config/family-portal/nginx.conf"; then
     die "family portal must route the scoped AI Tasks API explicitly"
   fi
@@ -592,6 +598,12 @@ family_portal_source_preflight() {
   fi
   if ! grep -q 'location \^~ /api/mail/' "${nginx_source}"; then
     die "family portal source must route the scoped Mail API explicitly"
+  fi
+  if ! grep -q 'location \^~ /api/memos/' "${nginx_source}"; then
+    die "family portal source must route the scoped Memos API explicitly"
+  fi
+  if ! grep -A8 'location \^~ /api/memos/' "${nginx_source}" | grep -q 'proxy_pass http://governor-api:8096;'; then
+    die "family portal source must route /api/memos to governor-api"
   fi
   if ! grep -q 'location \^~ /api/ai-tasks/' "${nginx_source}"; then
     die "family portal source must route the scoped AI Tasks API explicitly"

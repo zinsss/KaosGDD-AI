@@ -9635,19 +9635,6 @@ function renderAiTasks() {
 }
 
 function renderMemos() {
-  if (portalProfile() === "family") {
-    return `
-      <section class="memosWorkspace">
-        <iframe
-          class="memosFrame"
-          src="/memos-app/"
-          title="${escapeHtml(uiText("memos.label", "Memos"))}"
-          allow="clipboard-read; clipboard-write"
-          referrerpolicy="strict-origin-when-cross-origin"
-        ></iframe>
-      </section>
-    `;
-  }
   const memos = state.memos;
   const rows = memos.items
     .map((item) => {
@@ -9724,6 +9711,7 @@ function renderMemos() {
           ${memos.appliedQuery ? `<button class="archiveSearchClear" type="button" data-memos-clear aria-label="Clear memo search">×</button>` : ""}
         </label>
         <button class="archiveAction archiveTopAction" type="button" data-memos-refresh aria-label="Refresh memos" title="Refresh memos" ${memos.loading ? "disabled" : ""}>↻</button>
+        <a class="archiveAction archiveTopAction" href="#/add-memo">NEW</a>
         <button class="srOnly" type="submit">Search</button>
       </form>
       <div class="archiveWorkspace ${hasDetail ? "hasDetail" : ""}">
@@ -10999,7 +10987,7 @@ function render() {
   if (route === "add-supply") {
     window.setTimeout(() => document.querySelector('[data-create-supply] input[name="title"]')?.focus(), 0);
   }
-  if (route === "memos" && portalProfile() === "main") loadMemos();
+  if (route === "memos") loadMemos();
   if (route === "documents" && portalProfile() === "main") {
     loadDocumentTags();
     loadDocumentInbox();

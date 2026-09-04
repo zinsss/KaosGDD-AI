@@ -17,10 +17,19 @@ test("memo composer posts one private content payload through the Governor relay
   assert.match(appSource, /JSON\.stringify\(\{ content: normalized, visibility: "PRIVATE" \}\)/);
 });
 
-test("main memos route renders native archive board controls", () => {
+test("main and family memos routes render native archive board controls", () => {
   assert.match(appSource, /data-archive-kind="memos"/);
   assert.match(appSource, /data-memo-search/);
   assert.match(appSource, /data-memos-refresh/);
+  assert.match(appSource, /href="#\/add-memo">NEW<\/a>/);
   assert.match(appSource, /data-memo-open/);
-  assert.match(appSource, /if \(route === "memos" && portalProfile\(\) === "main"\) loadMemos\(\);/);
+  assert.match(appSource, /if \(route === "memos"\) loadMemos\(\);/);
+  assert.doesNotMatch(appSource, /portalProfile\(\) === "family"[\s\S]*memosFrame/);
+});
+
+test("family portal proxies native memos api to governor", () => {
+  const nginxSource = fs.readFileSync(path.join(__dirname, "../../deploy/h3-backend/family-portal/nginx.conf"), "utf8");
+
+  assert.match(nginxSource, /location \^~ \/api\/memos\/ \{/);
+  assert.match(nginxSource, /location \^~ \/api\/memos\/ \{[\s\S]*proxy_pass http:\/\/governor-api:8096;/);
 });
