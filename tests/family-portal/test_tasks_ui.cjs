@@ -12,8 +12,9 @@ test("task due-today label compares against real today, not selected date", () =
 
 test("agenda calendar and tasks share Family GDDZiN Brain source pills", () => {
   assert.match(appSource, /function renderItemPills\(item\) \{/);
-  assert.match(appSource, /renderCollectionPill\(item\)/);
-  assert.match(appSource, /isBrainManagedItem\(item\) \? renderAutomationPill\("brain"\) : ""/);
+  assert.match(appSource, /const brainManaged = isBrainManagedItem\(item\);/);
+  assert.match(appSource, /const collectionPill = brainManaged && collectionPillForItem\(item\)\.owner === "zin" \? "" : renderCollectionPill\(item\);/);
+  assert.match(appSource, /brainManaged \? renderAutomationPill\("brain"\) : ""/);
   assert.match(appSource, /function isBrainManagedItem\(item\) \{/);
   assert.match(appSource, /if \(isGeneratedCalendarEvent\(item\)\) return true;/);
   assert.match(appSource, /return isRecurringTask\(item\);/);

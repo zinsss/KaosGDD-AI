@@ -706,9 +706,11 @@ function isBrainManagedItem(item) {
 }
 
 function renderItemPills(item) {
+  const brainManaged = isBrainManagedItem(item);
+  const collectionPill = brainManaged && collectionPillForItem(item).owner === "zin" ? "" : renderCollectionPill(item);
   return [
-    renderCollectionPill(item),
-    isBrainManagedItem(item) ? renderAutomationPill("brain") : "",
+    collectionPill,
+    brainManaged ? renderAutomationPill("brain") : "",
   ].join("");
 }
 
