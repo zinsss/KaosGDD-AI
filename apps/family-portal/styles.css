@@ -3374,8 +3374,8 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 }
 
 .familyTextPresetTabs.isTextTabs {
-  gap: 14px;
-  padding-inline: 2px 10px;
+  gap: 24px;
+  padding-inline: 4px 18px;
 }
 
 .familyTextPresetManageActions {
