@@ -4648,7 +4648,7 @@ function taskMeta(task, parsed, done) {
   if (done && task.completed) return uiText("task.completedTime", "Done {time}", { time: parseDateTime(task.completed).time });
   const parts = [];
   if (task.due) {
-    const dueDate = task.due === state.selectedDate
+    const dueDate = task.due === ymd(new Date())
       ? uiText("task.dueToday", "due today")
       : uiText("task.dueDate", "due {date}", { date: task.due });
     parts.push(task.dueTime ? `${dueDate} ${task.dueTime}` : dueDate);
