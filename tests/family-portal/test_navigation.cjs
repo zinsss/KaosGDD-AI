@@ -46,7 +46,7 @@ test("unknown personal routes safely select Agenda", () => {
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=303"');
+  const styleIndex = index.indexOf('href="/styles.css?v=304"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=5"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
   const faxIndex = index.indexOf('src="/fax.js?v=2"');
@@ -104,4 +104,11 @@ test("main desktop navigation renders an open list while preserving the mobile p
   assert.match(styles, /@media \(min-width: 1180px\) \{[\s\S]*\.app\[data-profile="main"\] \.view \{[\s\S]*padding-top: 0;[\s\S]*padding-bottom: 40px;/);
   assert.match(styles, /@media \(min-width: 1180px\) \{[\s\S]*\.app\[data-profile="main"\]\[data-route="memos"\] \.view \{[\s\S]*padding-top: 0;[\s\S]*padding-bottom: 40px;/);
   assert.match(styles, /\.app\[data-profile="main"\] \.topAddWrap \{\n    position: absolute;\n    top: 16px;\n    right: 16px;/);
+});
+
+test("family mobile navigation stays on one horizontal row", () => {
+  const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
+
+  assert.match(styles, /@media \(max-width: 1179px\) \{[\s\S]*\.app\[data-profile="family"\] \.topNav \{[\s\S]*display: flex;[\s\S]*flex-wrap: nowrap;[\s\S]*overflow-x: auto;/);
+  assert.match(styles, /\.app\[data-profile="family"\] \.topNav a \{[\s\S]*flex: 0 0 auto;/);
 });
