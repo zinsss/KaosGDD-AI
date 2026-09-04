@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-const { counts, filterItems, normalizeDetail, normalizeMessage, normalizeMode, normalizePage } = require("../../apps/family-portal/mail.js");
+const { counts, filterItems, mailboxMatchesTarget, normalizeDetail, normalizeMessage, normalizeMode, normalizePage } = require("../../apps/family-portal/mail.js");
 
 test("normalizes Naver mail headers for the portal", () => {
   const message = normalizeMessage({
@@ -64,13 +64,14 @@ test("normalizes full mail detail payloads", () => {
 test("filters scoped mail rows by board tab", () => {
   const page = normalizePage({
     messages: [
-      { mailbox: "영덕군보건소", uid: 1, subject: "보건소", attachmentCount: 1 },
+      { mailbox: "각종공문/영덕군보건소", uid: 1, subject: "보건소", attachmentCount: 1 },
       { mailbox: "세무사", uid: 2, subject: "세무사", unread: true },
     ],
   });
 
   assert.equal(normalizeMode("bad"), "unread");
   assert.deepEqual(counts(page.items), { all: 2, yeongdeok: 1, tax: 1, attachments: 1, unread: 1 });
+  assert.equal(mailboxMatchesTarget("각종공문/영덕군보건소", "영덕군보건소"), true);
   assert.equal(filterItems(page.items, "yeongdeok")[0].subject, "보건소");
   assert.equal(filterItems(page.items, "tax")[0].subject, "세무사");
   assert.equal(filterItems(page.items, "unread")[0].mailbox, "세무사");

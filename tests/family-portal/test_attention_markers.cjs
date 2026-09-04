@@ -9,7 +9,8 @@ const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/st
 test("main shell derives quiet attention markers from existing read-only state", () => {
   assert.match(appSource, /attention: \{\n    checked: false,\n    loading: false,/);
   assert.match(appSource, /function mainAttentionMarkers\(\) \{/);
-  assert.match(appSource, /state\.mail\.unreadItems\.length > 0/);
+  assert.match(appSource, /mailApi\.filterItems\(state\.mail\.items, "yeongdeok"\)\.length \+ mailApi\.filterItems\(state\.mail\.items, "tax"\)\.length/);
+  assert.doesNotMatch(appSource, /state\.mail\.unreadItems\.length > 0/);
   assert.match(appSource, /state\.documents\.inboxItems\.some\(\(item\) => item\.status === "failed"\)/);
   assert.match(appSource, /Number\(state\.fax\.attention\?\.failed \|\| 0\) > 0/);
   assert.match(appSource, /function systemStatusIsCritical\(\) \{/);
@@ -23,7 +24,7 @@ test("main shell shows markers in mobile dropdown and desktop open list", () => 
 
 test("main shell refreshes attention once from existing protected endpoints", () => {
   assert.match(appSource, /async function loadMainAttention\(\{ force = false \} = \{\}\) \{/);
-  assert.match(appSource, /loadUnreadMail\(\{ force \}\)/);
+  assert.match(appSource, /loadMail\(\{ force \}\)/);
   assert.match(appSource, /loadDocumentInbox\(\{ force \}\)/);
   assert.match(appSource, /loadFax\(\{ force \}\)/);
   assert.match(appSource, /loadSystemStatus\(\{ force \}\)/);

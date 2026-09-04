@@ -5208,8 +5208,12 @@ function mainAttentionMarkers() {
     markers[route] = mergeSeverity(markers[route] || "", severity);
   };
 
-  if (state.mail.unreadError) add("mail", "critical");
-  else if (state.mail.unreadItems.length > 0) add("mail", "attention");
+  const mailApi = window.KAOS_PORTAL_MAIL;
+  const watchedMailCount = mailApi
+    ? mailApi.filterItems(state.mail.items, "yeongdeok").length + mailApi.filterItems(state.mail.items, "tax").length
+    : state.mail.items.length;
+  if (state.mail.error) add("mail", "critical");
+  else if (watchedMailCount > 0) add("mail", "attention");
 
   if (state.documents.inboxError) add("documents", "critical");
   if (state.documents.inboxItems.some((item) => item.status === "failed")) add("documents", "critical");
@@ -5254,7 +5258,7 @@ async function loadMainAttention({ force = false } = {}) {
   state.attention.loading = true;
   refreshMainAttentionShell();
   await Promise.allSettled([
-    loadUnreadMail({ force }),
+    loadMail({ force }),
     loadDocumentInbox({ force }),
     loadFax({ force }),
     loadSystemStatus({ force }),

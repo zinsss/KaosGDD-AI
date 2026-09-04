@@ -58,12 +58,24 @@
     return modes.includes(mode) ? mode : "unread";
   }
 
+  function mailboxMatchesTarget(mailboxValue, targetValue) {
+    const mailbox = clean(mailboxValue, 160);
+    const target = clean(targetValue, 160);
+    if (!mailbox || !target) return false;
+    if (mailbox === target) return true;
+    return mailbox
+      .split(/[\\/]/)
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .includes(target);
+  }
+
   function filterItems(items, modeValue) {
     const mode = normalizeMode(modeValue);
     const source = Array.isArray(items) ? items : [];
     if (mode === "unread") return Object.freeze(source.filter((item) => item.unread));
-    if (mode === "yeongdeok") return Object.freeze(source.filter((item) => item.mailbox === "영덕군보건소"));
-    if (mode === "tax") return Object.freeze(source.filter((item) => item.mailbox === "세무사"));
+    if (mode === "yeongdeok") return Object.freeze(source.filter((item) => mailboxMatchesTarget(item.mailbox, "영덕군보건소")));
+    if (mode === "tax") return Object.freeze(source.filter((item) => mailboxMatchesTarget(item.mailbox, "세무사")));
     return Object.freeze(source.slice());
   }
 
@@ -71,8 +83,8 @@
     const source = Array.isArray(items) ? items : [];
     return Object.freeze({
       all: source.length,
-      yeongdeok: source.filter((item) => item.mailbox === "영덕군보건소").length,
-      tax: source.filter((item) => item.mailbox === "세무사").length,
+      yeongdeok: source.filter((item) => mailboxMatchesTarget(item.mailbox, "영덕군보건소")).length,
+      tax: source.filter((item) => mailboxMatchesTarget(item.mailbox, "세무사")).length,
       attachments: source.filter((item) => item.attachmentCount > 0).length,
       unread: source.filter((item) => item.unread).length,
     });
@@ -96,6 +108,7 @@
   return Object.freeze({
     counts,
     filterItems,
+    mailboxMatchesTarget,
     modeLabels,
     modes,
     normalizeAttachment,
