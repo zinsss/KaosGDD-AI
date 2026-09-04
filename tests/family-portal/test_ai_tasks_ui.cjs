@@ -5,6 +5,7 @@ const test = require("node:test");
 
 const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
 const navSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/navigation.js"), "utf8");
+const stylesSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
 const nginxSource = fs.readFileSync(path.join(__dirname, "../../deploy/h3-backend/family-portal/nginx.conf"), "utf8");
 
 test("main PWA exposes AI Tasks as a first-class read/confirm workflow", () => {
@@ -16,7 +17,12 @@ test("main PWA exposes AI Tasks as a first-class read/confirm workflow", () => {
 
 test("AI Tasks official document memo flow previews before saving to Memos", () => {
   assert.match(appSource, /data-ai-task-unified/);
-  assert.match(appSource, /Prompt-only searches official sources\. Add PDF, URL, or text to work from a source\./);
+  assert.match(appSource, /Prompt-only searches official sources\. Add PDF or open Details for URL\/source text\./);
+  assert.match(appSource, /<details class="aiTaskSourceDetails">/);
+  assert.match(appSource, /<summary><span>DETAILS<\/span><small>URL \/ source text<\/small><\/summary>/);
+  assert.match(stylesSource, /\.aiTaskSourceDetails summary/);
+  assert.match(stylesSource, /content: "\[ "/);
+  assert.match(stylesSource, /content: " \]"/);
   assert.match(appSource, /async function previewUnifiedAiTask\(form\)/);
   assert.match(appSource, /if \(hasSourcePdf \|\| sourceUrl \|\| sourceText\) \{/);
   assert.match(appSource, /await previewOfficialDocMemo\(form\)/);

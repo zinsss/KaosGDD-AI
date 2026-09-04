@@ -9042,7 +9042,7 @@ function renderAiTasks() {
         <header class="archiveIndexHeader">
           <div>
             <h3>AI TASK</h3>
-            <p class="archiveStatusMessage">Prompt-only searches official sources. Add PDF, URL, or text to work from a source.</p>
+            <p class="archiveStatusMessage">Prompt-only searches official sources. Add PDF or open Details for URL/source text.</p>
           </div>
           <button class="archiveAction" type="button" data-ai-tasks-refresh ${aiTasks.loading ? "disabled" : ""}>↻</button>
         </header>
@@ -9054,14 +9054,19 @@ function renderAiTasks() {
           <span>PDF</span>
           <input name="sourcePdf" type="file" accept="application/pdf,.pdf" />
         </label>
-        <label class="archiveCommandLine">
-          <span>URL</span>
-          <input name="sourceUrl" type="url" inputmode="url" autocomplete="url" placeholder="optional official source URL" value="${escapeHtml(aiTasks.sourceUrl)}" />
-        </label>
-        <label class="archiveCommandLine aiTaskSourceText">
-          <span>TEXT</span>
-          <textarea name="sourceText" rows="4" placeholder="optional pasted source text">${escapeHtml(aiTasks.sourceText)}</textarea>
-        </label>
+        <details class="aiTaskSourceDetails">
+          <summary><span>DETAILS</span><small>URL / source text</small></summary>
+          <div class="aiTaskSourceDetailsBody">
+            <label class="archiveCommandLine">
+              <span>URL</span>
+              <input name="sourceUrl" type="url" inputmode="url" autocomplete="url" placeholder="optional official source URL" value="${escapeHtml(aiTasks.sourceUrl)}" />
+            </label>
+            <label class="archiveCommandLine aiTaskSourceText">
+              <span>TEXT</span>
+              <textarea name="sourceText" rows="4" placeholder="optional pasted source text">${escapeHtml(aiTasks.sourceText)}</textarea>
+            </label>
+          </div>
+        </details>
         ${
           aiTasks.error
             ? `<div class="archiveError" role="alert"><p>${escapeHtml(aiTasks.error)}</p></div>`
