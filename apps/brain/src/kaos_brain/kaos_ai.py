@@ -34,6 +34,9 @@ class KaosAIPlanner(Protocol):
     async def summarize_official_web_task(self, request: Mapping[str, Any]) -> dict[str, Any]:
         """Return a summary/reasoning result for Governor-fetched official sources."""
 
+    async def preview_web_task(self, request: Mapping[str, Any]) -> dict[str, Any]:
+        """Return a broad web-search AI Task result."""
+
     async def second_look(self, request: Mapping[str, Any]) -> dict[str, Any]:
         """Return a temporary medical image second-look result."""
 
@@ -65,6 +68,9 @@ class DisabledKaosAIPlanner:
         raise KaosAIError("kaosai_disabled")
 
     async def summarize_official_web_task(self, request: Mapping[str, Any]) -> dict[str, Any]:
+        raise KaosAIError("kaosai_disabled")
+
+    async def preview_web_task(self, request: Mapping[str, Any]) -> dict[str, Any]:
         raise KaosAIError("kaosai_disabled")
 
     async def second_look(self, request: Mapping[str, Any]) -> dict[str, Any]:
@@ -114,6 +120,12 @@ class OpenClawKaosAIPlanner:
             f"{KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT}\n\n{_render_official_web_summary_request(request)}"
         )
         return parse_official_web_summary_response(raw, request)
+
+    async def preview_web_task(self, request: Mapping[str, Any]) -> dict[str, Any]:
+        if not self.config.enabled:
+            raise KaosAIError("kaosai_disabled")
+        raw = await self._complete_message(f"{KAOSAI_GENERAL_WEB_TASK_SYSTEM_PROMPT}\n\n{_render_general_web_task_request(request)}")
+        return parse_general_web_task_response(raw, request, model=self.config.model or "default")
 
     async def second_look(self, request: Mapping[str, Any]) -> dict[str, Any]:
         if not self.config.enabled:
@@ -308,6 +320,26 @@ Rules:
 - Do not infer hidden DICOM metadata.
 - Do not suggest that PACS, Orthanc, or medical records were modified."""
 
+KAOSAI_GENERAL_WEB_TASK_SYSTEM_PROMPT = """You are KaosBrain-OpenAI completing a read-only KaosGDD AI Task.
+Use web search for broad supplemental context when useful.
+Prefer official/public-authority sources for policy, medicine, law, school, government, and finance topics.
+Do not claim anything was saved, written, sent, or applied.
+Answer in Korean unless the user clearly asks otherwise.
+
+Return exactly one JSON object and no markdown:
+{
+  "title": "short Korean title",
+  "content": "practical answer with source-bounded reasoning",
+  "sources": [{"title": "source title", "url": "https://..."}]
+}
+
+Rules:
+- Include only sources you actually used or inspected.
+- Use at most 10 sources.
+- If the web search is only supplemental to official sources, say so in content.
+- If sources conflict, say what conflicts and which source seems most authoritative.
+- If sources are insufficient, say what is missing instead of guessing."""
+
 
 def parse_kaosai_plan_response(raw: str) -> dict[str, Any]:
     text = raw.strip()
@@ -485,6 +517,42 @@ def parse_official_web_summary_response(raw: str, request: Mapping[str, Any]) ->
         "sources": sources,
         "checkedAt": checked_at,
         "model": str(payload.get("model") or "kaosbrain-openai").strip()[:80],
+    }
+
+
+def parse_general_web_task_response(raw: str, request: Mapping[str, Any], *, model: str) -> dict[str, Any]:
+    text = raw.strip()
+    if text.startswith("```"):
+        text = _strip_fence(text)
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise KaosAIError("invalid_general_web_task_json") from exc
+    if not isinstance(payload, Mapping):
+        raise KaosAIError("general_web_task_must_be_object")
+    title = " ".join(str(payload.get("title") or "").split())
+    content = str(payload.get("content") or "").strip()
+    if not title:
+        raise KaosAIError("general_web_task_title_required")
+    if not content:
+        raise KaosAIError("general_web_task_content_required")
+    sources = []
+    for source in payload.get("sources") or []:
+        if not isinstance(source, Mapping):
+            continue
+        url = str(source.get("url") or "").strip()
+        if not url.startswith(("https://", "http://")):
+            continue
+        sources.append({"title": " ".join(str(source.get("title") or url).split())[:200], "url": url[:800]})
+        if len(sources) >= 10:
+            break
+    checked_at = str(request.get("checkedAt") or datetime.now().date().isoformat()).strip()[:40]
+    return {
+        "title": title[:160],
+        "content": content[:12000],
+        "sources": sources,
+        "checkedAt": checked_at,
+        "model": model,
     }
 
 
@@ -845,6 +913,17 @@ def _render_official_web_summary_request(request: Mapping[str, Any]) -> str:
                 "language": str(plan.get("language") or "ko"),
             },
             "sources": sources,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+
+
+def _render_general_web_task_request(request: Mapping[str, Any]) -> str:
+    return json.dumps(
+        {
+            "prompt": str(request.get("prompt") or "")[:1600],
+            "checkedAt": str(request.get("checkedAt") or ""),
         },
         ensure_ascii=False,
         sort_keys=True,

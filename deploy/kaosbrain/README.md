@@ -143,7 +143,7 @@ The Brain route returns a memo draft only. The PWA still requires `SAVE MEMO`
 before anything is written to Memos, then Governor marks the AI Task archived
 record as applied.
 
-For general AI Tasks with broad OpenAI API web search, Governor can call:
+For general AI Tasks with broad web search, Governor can call:
 
 ```text
 AI_TASKS_WEB_BRAIN_URL=http://<kaosbrain-tailscale-ip>:8099/internal/ai-tasks/web/preview
@@ -155,7 +155,29 @@ If `AI_TASKS_WEB_BRAIN_URL` is blank and `AI_TASKS_BRAIN_URL` points at the
 official-doc memo route above, Governor derives `/internal/ai-tasks/web/preview`
 automatically. Web AI Tasks are read-only: KaosBrain returns an archived result
 with sources, and the PWA offers optional copy/save-to-Memos actions only after
-the preview exists.
+the preview exists. If `KAOSBRAIN_OPENAI_API_KEY_FILE` is unset, this route
+falls back to KaosBrain-OpenAI through OpenClaw/OAuth, provided OpenClaw has web
+search enabled:
+
+```json
+{
+  "tools": {
+    "web": {
+      "search": {
+        "enabled": true,
+        "provider": "codex",
+        "openaiCodex": {
+          "enabled": true,
+          "mode": "live"
+        }
+      },
+      "fetch": {
+        "enabled": true
+      }
+    }
+  }
+}
+```
 
 For the default official-health web-search pipeline, Governor derives and calls
 two additional KaosBrain-OpenAI/OpenClaw endpoints from the same base URL:

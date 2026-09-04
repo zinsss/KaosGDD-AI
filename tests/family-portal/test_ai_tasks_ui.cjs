@@ -60,7 +60,8 @@ test("AI Tasks official document memo flow previews before saving to Memos", () 
 
 test("AI Tasks preview errors use actionable messages", () => {
   assert.match(appSource, /function aiTaskErrorMessage\(code\)/);
-  assert.match(appSource, /kaosbrain_web_search_not_configured: "KaosBrain web search is not configured with an OpenAI API key\."/);
+  assert.match(appSource, /kaosbrain_web_search_not_configured: "KaosBrain web search is not configured\."/);
+  assert.match(appSource, /kaosbrain_web_search_unavailable: "KaosBrain OpenClaw web search is unavailable\."/);
   assert.match(appSource, /web_task_openai_rate_limited: "OpenAI web search is rate-limited right now\."/);
   assert.match(appSource, /ai_task_archive_write_failed: "AI draft was made, but Governor could not write the AI Task archive\."/);
   assert.match(appSource, /ai_task_source_fetch_failed: "Could not fetch the source URL\. Try a specific article page or paste the source text\."/);

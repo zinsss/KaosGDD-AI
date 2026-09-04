@@ -37,6 +37,16 @@ def validate_web_task_request(body: Mapping[str, Any]) -> str:
 class BrainWebTaskServer:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
+        self.kaosai = OpenClawKaosAIPlanner(
+            KaosAIConfig(
+                enabled=settings.kaosai_enabled,
+                provider=settings.kaosai_provider,
+                base_url=settings.kaosai_base_url,
+                model=settings.kaosai_model,
+                api_token=settings.kaosai_api_token,
+                timeout_seconds=settings.kaosai_timeout_seconds,
+            )
+        )
 
     async def preview(self, request: "web.Request") -> "web.Response":
         from aiohttp import web
@@ -48,8 +58,6 @@ class BrainWebTaskServer:
         )
         if not _authorized(request, token):
             return web.json_response({"ok": False, "error": "kaosbrain_ai_task_unauthorized"}, status=401)
-        if not self.settings.openai_api_key:
-            return web.json_response({"ok": False, "error": "kaosbrain_web_search_not_configured"}, status=503)
         try:
             body = await request.json()
         except ValueError:
@@ -59,16 +67,29 @@ class BrainWebTaskServer:
         error = validate_web_task_request(body)
         if error:
             return web.json_response({"ok": False, "error": error}, status=400)
+        if self.settings.openai_api_key:
+            try:
+                result = await openai_web_task(
+                    str(body.get("prompt") or ""),
+                    api_key=self.settings.openai_api_key,
+                    model=self.settings.web_task_model,
+                    timeout_seconds=self.settings.web_task_timeout_seconds,
+                )
+            except WebTaskError as exc:
+                return web.json_response({"ok": False, "error": exc.code}, status=502)
+            return web.json_response({"ok": True, "source": "openai-web-search", "result": result})
+        if not self.settings.kaosai_enabled:
+            return web.json_response({"ok": False, "error": "kaosbrain_web_search_not_configured"}, status=503)
         try:
-            result = await openai_web_task(
-                str(body.get("prompt") or ""),
-                api_key=self.settings.openai_api_key,
-                model=self.settings.web_task_model,
-                timeout_seconds=self.settings.web_task_timeout_seconds,
+            result = await self.kaosai.preview_web_task(
+                {
+                    "prompt": str(body.get("prompt") or ""),
+                    "checkedAt": datetime.now(UTC).date().isoformat(),
+                }
             )
-        except WebTaskError as exc:
-            return web.json_response({"ok": False, "error": exc.code}, status=502)
-        return web.json_response({"ok": True, "source": "openai-web-search", "result": result})
+        except KaosAIError as exc:
+            return web.json_response({"ok": False, "error": "kaosbrain_web_search_unavailable", "detail": str(exc)}, status=502)
+        return web.json_response({"ok": True, "source": "openclaw-web-search", "result": result})
 
 
 async def openai_web_task(
