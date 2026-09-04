@@ -190,6 +190,53 @@ class GovernorAITaskTests(unittest.TestCase):
             self.assertEqual(records[0].source["type"], "official_web_search")
             self.assertEqual(records[0].source["plan"]["query"], "인플루엔자 접종 계획")
 
+    def test_start_ai_task_returns_running_record_before_worker_finishes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            archive = AITaskArchive(Path(temporary_directory) / "ai-tasks.json")
+            payload = api.start_ai_task_payload(
+                {"prompt": "공식 자료 찾아서 요약"},
+                archive,
+                start_worker=False,
+                urlopen=fake_web_brain_urlopen,
+            )
+
+            self.assertEqual(payload["task"]["status"], "running")  # type: ignore[index]
+            self.assertEqual(archive.list_records()[0].status, "running")
+
+            with (
+                patch.object(api, "AI_TASKS_BRAIN_URL", "http://brain.internal:8099/internal/ai-tasks/official-doc-memo/preview"),
+                patch.object(api, "AI_TASKS_WEB_BRAIN_URL", ""),
+                patch.object(api, "AI_TASKS_BRAIN_TOKEN", "secret"),
+            ):
+                api.run_ai_task_worker(
+                    payload["task"]["id"],  # type: ignore[index]
+                    {"prompt": "공식 자료 찾아서 요약"},
+                    source_task=False,
+                    archive=archive,
+                    urlopen=fake_web_brain_urlopen,
+                )
+
+            record = archive.list_records()[0]
+            self.assertEqual(record.status, "previewed")
+            self.assertEqual(record.result["title"], "공식 자료 요약")
+
+    def test_ai_task_worker_archives_failure_status(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            archive = AITaskArchive(Path(temporary_directory) / "ai-tasks.json")
+            record = archive.add_running(kind="official_doc_memo", prompt="요약", source={"type": "text"})
+
+            api.run_ai_task_worker(
+                record.task_id,
+                {"prompt": "요약", "sourceText": "공식 문서"},
+                source_task=True,
+                archive=archive,
+                urlopen=fake_brain_urlopen,
+            )
+
+            failed = archive.list_records()[0]
+            self.assertEqual(failed.status, "failed")
+            self.assertEqual(failed.error, "ai_task_brain_not_configured")
+
     def test_hira_insurance_criteria_search_expands_almogran_to_ingredient(self) -> None:
         def fake_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
             body = request.data.decode("utf-8") if getattr(request, "data", None) else ""
@@ -220,6 +267,50 @@ class GovernorAITaskTests(unittest.TestCase):
         self.assertEqual(candidates[0].title, "편두통 치료제")
         self.assertIn("InsuAdtCrtrPopup.do", candidates[0].url)
         self.assertIn("mtgHmeDd=20240901", candidates[0].url)
+
+    def test_medicine_benefit_queries_prioritize_hira_without_ai_preference(self) -> None:
+        def fake_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
+            body = request.data.decode("utf-8") if getattr(request, "data", None) else ""
+            if request.full_url.startswith("https://health.kr/"):
+                return FakeHTTPResponse("<html></html>", "text/html; charset=utf-8")
+            if request.full_url.startswith("https://www.hira.or.kr/rc/insu/insuadtcrtr/InsuAdtCrtrList.do"):
+                if "Almotriptan" not in body:
+                    return FakeHTTPResponse("<html><body>검색된 내용이 없습니다.</body></html>", "text/html; charset=utf-8")
+                return FakeHTTPResponse(
+                    """<html><body>
+                    <a href="#none" onclick="viewInsuAdtCrtr(1, '20240901', '3', '0001', '1'); return false;"
+                       title="편두통 치료제 새창으로 열기">편두통 치료제</a>
+                    </body></html>""",
+                    "text/html; charset=utf-8",
+                )
+            return FakeHTTPResponse("<html></html>", "text/html; charset=utf-8")
+
+        candidates = official_health_search_candidates("알모그란정 급여기준", urlopen=fake_urlopen)
+
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].source, "건강보험심사평가원 보험인정기준")
+
+    def test_mfds_drug_portal_search_adapter_returns_candidates(self) -> None:
+        def fake_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
+            if request.full_url.startswith("https://health.kr/"):
+                return FakeHTTPResponse("<html></html>", "text/html; charset=utf-8")
+            if request.full_url.startswith("https://www.hira.or.kr/"):
+                return FakeHTTPResponse("<html><body>검색된 내용이 없습니다.</body></html>", "text/html; charset=utf-8")
+            if request.full_url.startswith("https://nedrug.mfds.go.kr/searchDrug?"):
+                return FakeHTTPResponse(
+                    '<html><body><a href="/pbp/CCBBB01/getItemDetail?itemSeq=200100001">알모그란정 제품정보</a></body></html>',
+                    "text/html; charset=utf-8",
+                )
+            return FakeHTTPResponse("<html></html>", "text/html; charset=utf-8")
+
+        candidates = official_health_search_candidates(
+            "알모그란정 제품정보",
+            preferred_domains=["nedrug.mfds.go.kr"],
+            urlopen=fake_urlopen,
+        )
+
+        self.assertEqual(candidates[0].host, "nedrug.mfds.go.kr")
+        self.assertEqual(candidates[0].source, "의약품통합정보시스템")
 
     def test_health_kr_drug_dictionary_expands_brand_for_hira_search(self) -> None:
         def fake_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]

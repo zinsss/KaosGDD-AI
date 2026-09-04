@@ -49,7 +49,11 @@ OFFICIAL_HEALTH_SITES: tuple[OfficialSearchSite, ...] = (
     OfficialSearchSite("예방접종도우미", ("nip.kdca.go.kr",)),
     OfficialSearchSite("국가건강정보포털", ("health.kdca.go.kr",)),
     OfficialSearchSite("식품안전나라", ("foodsafetykorea.go.kr", "www.foodsafetykorea.go.kr")),
-    OfficialSearchSite("의약품통합정보시스템", ("nedrug.mfds.go.kr",)),
+    OfficialSearchSite(
+        "의약품통합정보시스템",
+        ("nedrug.mfds.go.kr",),
+        "https://nedrug.mfds.go.kr/searchDrug?sort=&sortOrder=false&searchYn=true&page=1&searchDivision=detail&itemName={query}",
+    ),
     OfficialSearchSite("의료기기정보포털", ("udiportal.mfds.go.kr",)),
     OfficialSearchSite("식품의약품안전평가원", ("nifds.go.kr", "www.nifds.go.kr")),
     OfficialSearchSite("한국의약품안전관리원", ("drugsafe.or.kr", "www.drugsafe.or.kr")),
@@ -126,6 +130,8 @@ def official_health_search_candidates(
     health_kr_queries, health_kr_candidates = _health_kr_drug_queries_and_candidates(queries, urlopen=urlopen)
     queries = _expanded_queries(_unique_queries([*queries, *health_kr_queries]))
     preferred = _preferred_hosts(preferred_domains)
+    if _looks_like_medicine_benefit_query(queries):
+        preferred.update({"hira.or.kr", "www.hira.or.kr"})
     sites = _ordered_sites(preferred)
     candidates: list[OfficialSearchCandidate] = list(health_kr_candidates)
     hira_candidates = _hira_insurance_criteria_candidates(queries, preferred=preferred, urlopen=urlopen)
@@ -193,6 +199,13 @@ def _preferred_hosts(values: Iterable[str]) -> set[str]:
         if is_allowed_official_health_host(host):
             hosts.add(host)
     return hosts
+
+
+def _looks_like_medicine_benefit_query(queries: Iterable[str]) -> bool:
+    text = " ".join(str(query or "") for query in queries).casefold()
+    benefit_words = ("급여기준", "요양급여", "보험인정", "본인부담", "투여조건", "삭감", "약제급여", "급여목록")
+    medicine_words = ("정", "캡슐", "시럽", "주사", "경구", "mg", "성분", "약제", "투여", "almotriptan", "choline", "triptan")
+    return any(word in text for word in benefit_words) and any(word.casefold() in text for word in medicine_words)
 
 
 def _ordered_sites(preferred: set[str]) -> list[OfficialSearchSite]:

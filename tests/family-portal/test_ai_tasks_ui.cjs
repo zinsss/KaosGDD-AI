@@ -23,10 +23,15 @@ test("AI Tasks official document memo flow previews before saving to Memos", () 
   assert.match(stylesSource, /\.aiTaskSourceDetails summary/);
   assert.match(stylesSource, /content: "\[ "/);
   assert.match(stylesSource, /content: " \]"/);
+  assert.match(appSource, /async function startUnifiedAiTask\(form\)/);
+  assert.match(appSource, /\/api\/ai-tasks\/run/);
+  assert.match(appSource, /scheduleAiTasksPoll\(1200\)/);
+  assert.match(appSource, /AI TASK RUNNING/);
+  assert.match(appSource, /AI TASK FAILED/);
+  assert.match(appSource, /renderAiTaskPlan\(sourceInfo\.plan\)/);
+  assert.match(appSource, /renderAiTaskSources\(webResult\.sources\)/);
   assert.match(appSource, /async function previewUnifiedAiTask\(form\)/);
-  assert.match(appSource, /if \(hasSourcePdf \|\| sourceUrl \|\| sourceText\) \{/);
-  assert.match(appSource, /await previewOfficialDocMemo\(form\)/);
-  assert.match(appSource, /await previewWebAiTask\(form\)/);
+  assert.match(appSource, /await startUnifiedAiTask\(form\)/);
   assert.match(appSource, /\/api\/ai-tasks\/web\/preview/);
   assert.match(appSource, /AI TASK RESULT/);
   assert.match(appSource, /data-ai-task-open/);

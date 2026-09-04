@@ -5,10 +5,12 @@ from datetime import UTC, datetime
 import json
 from pathlib import Path
 import secrets
+import threading
 from typing import Mapping
 
 
 DEFAULT_AI_TASK_ARCHIVE_PATH = Path("/data/ai-tasks/archive.json")
+_ARCHIVE_LOCK = threading.Lock()
 
 
 class AITaskError(RuntimeError):
@@ -81,6 +83,34 @@ class AITaskArchive:
         self._write(records)
         return record
 
+    def add_running(
+        self,
+        *,
+        kind: str,
+        prompt: str,
+        source: Mapping[str, object],
+        provider: str = "kaosbrain-openai",
+    ) -> AITaskRecord:
+        now = _now()
+        record = AITaskRecord(
+            task_id=f"ait-{now.replace('-', '').replace(':', '').replace('Z', '')}-{secrets.token_hex(3)}",
+            kind=_clean_token(kind) or "web",
+            status="running",
+            prompt=_clean_text(prompt, 1200),
+            source={str(key): value for key, value in source.items()},
+            memo={},
+            provider=_clean_text(provider, 80),
+            created_at=now,
+            updated_at=now,
+            result={},
+            error="",
+        )
+        with _ARCHIVE_LOCK:
+            records = [item for item in self._read_unlocked() if item.task_id != record.task_id]
+            records.append(record)
+            self._write_unlocked(records)
+        return record
+
     def add_result(
         self,
         *,
@@ -111,38 +141,100 @@ class AITaskArchive:
         self._write(records)
         return record
 
+    def finish_preview(
+        self,
+        task_id: str,
+        *,
+        source: Mapping[str, object],
+        memo: Mapping[str, object],
+        provider: str = "kaosbrain-openai",
+    ) -> AITaskRecord:
+        return self._replace(
+            task_id,
+            status="previewed",
+            source={str(key): value for key, value in source.items()},
+            memo={str(key): value for key, value in memo.items()},
+            provider=_clean_text(provider, 80),
+            result={},
+            error="",
+        )
+
+    def finish_result(
+        self,
+        task_id: str,
+        *,
+        source: Mapping[str, object],
+        result: Mapping[str, object],
+        provider: str = "kaosbrain-openai",
+    ) -> AITaskRecord:
+        title = _clean_text(result.get("title"), 160) or "AI Task"
+        content = str(result.get("content") or "").strip()
+        return self._replace(
+            task_id,
+            status="previewed",
+            source={str(key): value for key, value in source.items()},
+            memo={"title": title, "content": content},
+            provider=_clean_text(provider, 80),
+            result={str(key): value for key, value in result.items()},
+            error="",
+        )
+
+    def fail(self, task_id: str, *, error: str) -> AITaskRecord:
+        return self._replace(task_id, status="failed", error=_clean_token(error) or "ai_task_failed")
+
     def complete(self, task_id: str, *, memo_name: str = "") -> AITaskRecord:
         normalized_id = str(task_id or "").strip()
         if not normalized_id:
             raise AITaskError("ai_task_id_required")
-        records = self._read()
-        updated: AITaskRecord | None = None
-        now = _now()
-        next_records: list[AITaskRecord] = []
-        for record in records:
-            if record.task_id != normalized_id:
-                next_records.append(record)
-                continue
-            updated = AITaskRecord(
-                task_id=record.task_id,
-                kind=record.kind,
-                status="applied",
-                prompt=record.prompt,
-                source=record.source,
-                memo=record.memo,
-                provider=record.provider,
-                created_at=record.created_at,
-                updated_at=now,
-                result={"memoName": _clean_text(memo_name, 160)},
-                error="",
-            )
-            next_records.append(updated)
-        if updated is None:
-            raise AITaskError("ai_task_not_found")
-        self._write(next_records)
-        return updated
+        return self._replace(normalized_id, status="applied", result={"memoName": _clean_text(memo_name, 160)}, error="")
+
+    def _replace(
+        self,
+        task_id: str,
+        *,
+        status: str | None = None,
+        source: Mapping[str, object] | None = None,
+        memo: Mapping[str, object] | None = None,
+        provider: str | None = None,
+        result: Mapping[str, object] | None = None,
+        error: str | None = None,
+    ) -> AITaskRecord:
+        normalized_id = str(task_id or "").strip()
+        if not normalized_id:
+            raise AITaskError("ai_task_id_required")
+        with _ARCHIVE_LOCK:
+            records = self._read_unlocked()
+            updated: AITaskRecord | None = None
+            now = _now()
+            next_records: list[AITaskRecord] = []
+            for record in records:
+                if record.task_id != normalized_id:
+                    next_records.append(record)
+                    continue
+                updated = AITaskRecord(
+                    task_id=record.task_id,
+                    kind=record.kind,
+                    status=_clean_token(status) if status is not None else record.status,
+                    prompt=record.prompt,
+                    source={str(key): value for key, value in (source if source is not None else record.source).items()},
+                    memo={str(key): value for key, value in (memo if memo is not None else record.memo).items()},
+                    provider=_clean_text(provider, 80) if provider is not None else record.provider,
+                    created_at=record.created_at,
+                    updated_at=now,
+                    result={str(key): value for key, value in (result if result is not None else record.result or {}).items()},
+                    error=_clean_text(error, 200) if error is not None else record.error,
+                )
+                next_records.append(updated)
+            if updated is None:
+                raise AITaskError("ai_task_not_found")
+            self._write_unlocked(next_records)
+            return updated
 
     def _read(self) -> list[AITaskRecord]:
+        with _ARCHIVE_LOCK:
+            return self._read_unlocked()
+
+    def _read_unlocked(self) -> list[AITaskRecord]:
         try:
             payload = json.loads(self.path.read_text(encoding="utf-8"))
         except FileNotFoundError:
@@ -157,6 +249,10 @@ class AITaskArchive:
         return [record for item in raw_records if (record := _record_from_json(item))]
 
     def _write(self, records: list[AITaskRecord]) -> None:
+        with _ARCHIVE_LOCK:
+            self._write_unlocked(records)
+
+    def _write_unlocked(self, records: list[AITaskRecord]) -> None:
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             payload = {
@@ -185,7 +281,7 @@ def _record_from_json(value: object) -> AITaskRecord | None:
     return AITaskRecord(
         task_id=task_id,
         kind=kind,
-        status=status if status in {"previewed", "applied", "failed"} else "previewed",
+        status=status if status in {"running", "previewed", "applied", "failed"} else "previewed",
         prompt=_clean_text(value.get("prompt"), 1200),
         source={str(key): item for key, item in source.items()},
         memo={str(key): item for key, item in memo.items()},

@@ -17,6 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import uuid
 import hashlib
+import threading
 import ipaddress
 from html.parser import HTMLParser
 
@@ -641,15 +642,57 @@ def complete_ai_task_payload(
     return {"ok": True, "applied": True, "task": record.as_dict()}
 
 
-def preview_official_doc_memo_payload(
-    payload: dict[str, object],
-    archive: AITaskArchive | None = None,
-    *,
-    urlopen=urllib.request.urlopen,
-) -> dict[str, object]:
+def _ai_task_prompt(payload: dict[str, object], *, web: bool = False) -> str:
     prompt = " ".join(str(payload.get("prompt") or "").split())
     if not prompt:
-        raise AITaskError("ai_task_prompt_required")
+        raise AITaskError("web_task_prompt_required" if web else "ai_task_prompt_required")
+    if web and len(prompt) > 1600:
+        raise AITaskError("web_task_prompt_too_long")
+    return prompt
+
+
+def _payload_has_ai_task_source(payload: dict[str, object]) -> bool:
+    pdf = payload.get("_sourcePdf")
+    return bool(str(payload.get("sourceUrl") or "").strip() or str(payload.get("sourceText") or "").strip() or pdf)
+
+
+def _ai_task_running_source(payload: dict[str, object], *, source_task: bool) -> dict[str, object]:
+    checked_at = datetime.now(UTC).date().isoformat()
+    if not source_task:
+        return {"type": "official_web_search", "checkedAt": checked_at}
+    source_url = str(payload.get("sourceUrl") or "").strip()
+    source_title = " ".join(str(payload.get("sourceTitle") or "").split())[:200]
+    pdf = payload.get("_sourcePdf")
+    if isinstance(pdf, tuple) and len(pdf) == 2:
+        filename = Path(str(pdf[0] or "")).name[:200]
+        return {"type": "pdf", "title": source_title or filename, "filename": filename, "checkedAt": checked_at}
+    if str(payload.get("sourceText") or "").strip():
+        return {"type": "text", "title": source_title or "Pasted official text", "url": source_url, "checkedAt": checked_at}
+    return {"type": "url", "title": source_title or source_url, "url": source_url, "checkedAt": checked_at}
+
+
+def _payload_with_extracted_pdf_source(payload: dict[str, object]) -> dict[str, object]:
+    pdf = payload.get("_sourcePdf")
+    if not isinstance(pdf, tuple) or len(pdf) != 2:
+        return payload
+    filename, content = pdf
+    if not filename and not content:
+        return payload
+    text = extract_official_memo_pdf_text(str(filename or ""), bytes(content or b""))
+    next_payload = {key: value for key, value in payload.items() if key != "_sourcePdf"}
+    next_payload["sourceText"] = text
+    next_payload["sourceType"] = "pdf"
+    next_payload["sourceTitle"] = next_payload.get("sourceTitle") or Path(str(filename or "")).name[:200]
+    next_payload["sourceFilename"] = Path(str(filename or "")).name[:200]
+    return next_payload
+
+
+def _official_doc_memo_result(
+    prompt: str,
+    payload: dict[str, object],
+    *,
+    urlopen=urllib.request.urlopen,
+) -> tuple[dict[str, object], dict[str, object]]:
     source = official_memo_source_payload(payload, urlopen=urlopen)
     request = {
         "prompt": prompt,
@@ -657,26 +700,14 @@ def preview_official_doc_memo_payload(
         "source": source,
     }
     memo = call_ai_task_brain(request, urlopen=urlopen)
-    record = (archive or ai_task_archive()).add_preview(
-        kind="official_doc_memo",
-        prompt=prompt,
-        source={key: value for key, value in source.items() if key != "text"},
-        memo=memo,
-    )
-    return {"ok": True, "task": record.as_dict(), "memo": memo}
+    return {key: value for key, value in source.items() if key != "text"}, memo
 
 
-def preview_web_ai_task_payload(
-    payload: dict[str, object],
-    archive: AITaskArchive | None = None,
+def _web_ai_task_result(
+    prompt: str,
     *,
     urlopen=urllib.request.urlopen,
-) -> dict[str, object]:
-    prompt = " ".join(str(payload.get("prompt") or "").split())
-    if not prompt:
-        raise AITaskError("web_task_prompt_required")
-    if len(prompt) > 1600:
-        raise AITaskError("web_task_prompt_too_long")
+) -> tuple[dict[str, object], dict[str, object]]:
     request = {
         "prompt": prompt,
         "checkedAt": datetime.now(UTC).date().isoformat(),
@@ -698,18 +729,105 @@ def preview_web_ai_task_payload(
         call_ai_task_official_web_brain("summarize", summary_request, urlopen=urlopen),
         request=summary_request,
     )
+    return {
+        "type": "official_web_search",
+        "checkedAt": result.get("checkedAt") or request["checkedAt"],
+        "plan": plan,
+        "sources": result.get("sources") if isinstance(result.get("sources"), list) else [],
+    }, result
+
+
+def preview_official_doc_memo_payload(
+    payload: dict[str, object],
+    archive: AITaskArchive | None = None,
+    *,
+    urlopen=urllib.request.urlopen,
+) -> dict[str, object]:
+    prompt = _ai_task_prompt(payload)
+    source, memo = _official_doc_memo_result(prompt, payload, urlopen=urlopen)
+    record = (archive or ai_task_archive()).add_preview(
+        kind="official_doc_memo",
+        prompt=prompt,
+        source=source,
+        memo=memo,
+    )
+    return {"ok": True, "task": record.as_dict(), "memo": memo}
+
+
+def preview_web_ai_task_payload(
+    payload: dict[str, object],
+    archive: AITaskArchive | None = None,
+    *,
+    urlopen=urllib.request.urlopen,
+) -> dict[str, object]:
+    prompt = _ai_task_prompt(payload, web=True)
+    source, result = _web_ai_task_result(prompt, urlopen=urlopen)
     record = (archive or ai_task_archive()).add_result(
         kind="web",
         prompt=prompt,
-        source={
-            "type": "official_web_search",
-            "checkedAt": result.get("checkedAt") or request["checkedAt"],
-            "plan": plan,
-            "sources": result.get("sources") if isinstance(result.get("sources"), list) else [],
-        },
+        source=source,
         result=result,
     )
     return {"ok": True, "task": record.as_dict(), "result": result}
+
+
+def run_ai_task_worker(
+    task_id: str,
+    payload: dict[str, object],
+    *,
+    source_task: bool,
+    archive: AITaskArchive | None = None,
+    urlopen=urllib.request.urlopen,
+) -> None:
+    active_archive = archive or ai_task_archive()
+    try:
+        if source_task:
+            next_payload = _payload_with_extracted_pdf_source(payload)
+            prompt = _ai_task_prompt(next_payload)
+            source, memo = _official_doc_memo_result(prompt, next_payload, urlopen=urlopen)
+            active_archive.finish_preview(task_id, source=source, memo=memo)
+        else:
+            prompt = _ai_task_prompt(payload, web=True)
+            source, result = _web_ai_task_result(prompt, urlopen=urlopen)
+            active_archive.finish_result(task_id, source=source, result=result)
+    except AITaskError as exc:
+        active_archive.fail(task_id, error=exc.code)
+    except Exception as exc:
+        print(f"AI task worker failed: {type(exc).__name__}", flush=True)
+        try:
+            active_archive.fail(task_id, error="ai_task_background_failed")
+        except AITaskError:
+            pass
+
+
+def start_ai_task_payload(
+    payload: dict[str, object],
+    archive: AITaskArchive | None = None,
+    *,
+    start_worker: bool = True,
+    urlopen=urllib.request.urlopen,
+) -> dict[str, object]:
+    source_task = _payload_has_ai_task_source(payload)
+    prompt = _ai_task_prompt(payload, web=not source_task)
+    active_archive = archive or ai_task_archive()
+    record = active_archive.add_running(
+        kind="official_doc_memo" if source_task else "web",
+        prompt=prompt,
+        source=_ai_task_running_source(payload, source_task=source_task),
+    )
+    if start_worker:
+        threading.Thread(
+            target=run_ai_task_worker,
+            kwargs={
+                "task_id": record.task_id,
+                "payload": payload,
+                "source_task": source_task,
+                "archive": active_archive,
+                "urlopen": urlopen,
+            },
+            daemon=True,
+        ).start()
+    return {"ok": True, "accepted": True, "task": record.as_dict()}
 
 
 def _clean_official_web_plan(plan: dict[str, object], *, prompt: str) -> dict[str, object]:
@@ -836,6 +954,29 @@ def preview_official_doc_memo_request_payload(
     else:
         payload["sourceText"] = fields.get("sourceText") or ""
     return preview_official_doc_memo_payload(payload, archive, urlopen=urlopen)
+
+
+def start_ai_task_request_payload(
+    handler: BaseHTTPRequestHandler,
+    archive: AITaskArchive | None = None,
+    *,
+    start_worker: bool = True,
+    urlopen=urllib.request.urlopen,
+) -> dict[str, object]:
+    content_type = handler.headers.get("Content-Type") or ""
+    if "multipart/form-data" not in content_type.lower():
+        return start_ai_task_payload(json_request(handler), archive, start_worker=start_worker, urlopen=urlopen)
+    fields, files = multipart_form_request(handler, max_bytes=OFFICIAL_MEMO_MAX_PDF_BYTES + MAX_MULTIPART_OVERHEAD_BYTES)
+    payload: dict[str, object] = {
+        "prompt": fields.get("prompt") or "",
+        "sourceUrl": fields.get("sourceUrl") or "",
+        "sourceTitle": fields.get("sourceTitle") or "",
+        "sourceText": fields.get("sourceText") or "",
+    }
+    filename, content = files.get("sourcePdf") or files.get("pdf") or files.get("file") or ("", b"")
+    if filename or content:
+        payload["_sourcePdf"] = (Path(filename).name[:200], content)
+    return start_ai_task_payload(payload, archive, start_worker=start_worker, urlopen=urlopen)
 
 
 def official_memo_source_payload(
@@ -2789,6 +2930,17 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 print(f"Paperless upload failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "paperless_upload_failed"})
+            return
+        if parsed.path == "/api/ai-tasks/run":
+            try:
+                require_main_access(self.headers)
+                json_response(self, 202, start_ai_task_request_payload(self))
+            except (ValueError, AITaskError, DocumentIntakeError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, (AITaskError, memos_relay.MemosRelayError)) else str(exc)
+                json_response(self, ai_task_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"AI task start failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "ai_task_start_failed"})
             return
         if parsed.path == "/api/ai-tasks/official-doc-memo/preview":
             try:

@@ -99,6 +99,7 @@ let rounyPointerDrag = null;
 let suppressRounyGridClick = false;
 let topAddLongPressTimer = null;
 let suppressTopAddClick = false;
+let aiTaskPollTimer = null;
 let rounyRemoteLoadPromise = null;
 let rounyRemoteSavePromise = null;
 let rounyRemoteSavePending = false;
@@ -214,6 +215,7 @@ const state = {
     checked: false,
     loading: false,
     previewing: false,
+    polling: false,
     applying: false,
     error: "",
     mode: "web",
@@ -2208,6 +2210,26 @@ function normalizeAiTask(item) {
   };
 }
 
+function aiTasksHaveRunningItems(items = state.aiTasks.items) {
+  return Array.isArray(items) && items.some((item) => String(item.status || "") === "running");
+}
+
+function scheduleAiTasksPoll(delay = 3500) {
+  if (portalProfile() !== "main") return;
+  if (aiTaskPollTimer) window.clearTimeout(aiTaskPollTimer);
+  state.aiTasks.polling = true;
+  aiTaskPollTimer = window.setTimeout(async () => {
+    aiTaskPollTimer = null;
+    await loadAiTasks({ force: true, silent: true });
+    if (aiTasksHaveRunningItems()) {
+      scheduleAiTasksPoll();
+      return;
+    }
+    state.aiTasks.polling = false;
+    if (getRoute() === "ai-tasks") render();
+  }, delay);
+}
+
 function aiTaskPreviewFromRecord(item) {
   if (!item || typeof item !== "object") return null;
   return {
@@ -2232,7 +2254,7 @@ async function loadAiTasks(options = {}) {
   if (state.aiTasks.loading) return;
   if (state.aiTasks.checked && !options.force) return;
   state.aiTasks.loading = true;
-  if (getRoute() === "ai-tasks") render();
+  if (getRoute() === "ai-tasks" && !options.silent) render();
   try {
     const response = await fetch("/api/ai-tasks?limit=50", {
       headers: { Accept: "application/json" },
@@ -2240,13 +2262,18 @@ async function loadAiTasks(options = {}) {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    const items = Array.isArray(payload.items) ? payload.items.map(normalizeAiTask).filter((item) => item.id) : [];
+    const selectedId = String(state.aiTasks.selectedId || "");
+    const selected = selectedId ? items.find((item) => item.id === selectedId) || null : null;
     state.aiTasks = {
       ...state.aiTasks,
       checked: true,
       loading: false,
       error: "",
-      items: Array.isArray(payload.items) ? payload.items.map(normalizeAiTask).filter((item) => item.id) : [],
+      items,
+      preview: selected ? aiTaskPreviewFromRecord(selected) : state.aiTasks.preview,
     };
+    if (aiTasksHaveRunningItems(items)) scheduleAiTasksPoll();
   } catch (error) {
     state.aiTasks = {
       ...state.aiTasks,
@@ -2257,6 +2284,68 @@ async function loadAiTasks(options = {}) {
     };
   }
   if (getRoute() === "ai-tasks") render();
+}
+
+async function startUnifiedAiTask(form) {
+  if (state.aiTasks.previewing) return;
+  const formData = new FormData(form);
+  const prompt = String(formData.get("prompt") || "").trim();
+  const sourceUrl = String(formData.get("sourceUrl") || "").trim();
+  const sourceText = String(formData.get("sourceText") || "").trim();
+  const sourcePdf = formData.get("sourcePdf");
+  const hasSourcePdf = sourcePdf instanceof File && sourcePdf.size > 0;
+  state.aiTasks = {
+    ...state.aiTasks,
+    prompt,
+    sourceUrl,
+    sourceText,
+    selectedId: "",
+    previewing: true,
+    polling: false,
+    error: "",
+    preview: null,
+  };
+  render();
+  try {
+    const requestOptions = hasSourcePdf
+      ? {
+          method: "POST",
+          headers: { Accept: "application/json" },
+          body: formData,
+        }
+      : {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ prompt, sourceUrl, sourceText }),
+        };
+    const response = await fetch("/api/ai-tasks/run", requestOptions);
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    const started = normalizeAiTask(payload.task || {});
+    state.aiTasks = {
+      ...state.aiTasks,
+      previewing: false,
+      polling: true,
+      selectedId: started.id,
+      preview: aiTaskPreviewFromRecord(started),
+      checked: false,
+      error: "",
+    };
+    await loadAiTasks({ force: true });
+    if (started.id) scheduleAiTasksPoll(1200);
+  } catch (error) {
+    state.aiTasks = {
+      ...state.aiTasks,
+      previewing: false,
+      polling: false,
+      error: aiTaskErrorMessage(error.message || "ai_task_start_failed"),
+      preview: null,
+    };
+    render();
+  }
 }
 
 async function previewOfficialDocMemo(form) {
@@ -2369,16 +2458,7 @@ async function previewWebAiTask(form) {
 }
 
 async function previewUnifiedAiTask(form) {
-  const formData = new FormData(form);
-  const sourceUrl = String(formData.get("sourceUrl") || "").trim();
-  const sourceText = String(formData.get("sourceText") || "").trim();
-  const sourcePdf = formData.get("sourcePdf");
-  const hasSourcePdf = sourcePdf instanceof File && sourcePdf.size > 0;
-  if (hasSourcePdf || sourceUrl || sourceText) {
-    await previewOfficialDocMemo(form);
-    return;
-  }
-  await previewWebAiTask(form);
+  await startUnifiedAiTask(form);
 }
 
 function aiTaskErrorMessage(code) {
@@ -2428,6 +2508,8 @@ function aiTaskErrorMessage(code) {
     ai_task_brain_missing_memo: "KaosBrain did not return a memo draft.",
     ai_task_brain_invalid_memo: "KaosBrain returned an incomplete memo draft.",
     ai_task_archive_write_failed: "AI draft was made, but Governor could not write the AI Task archive.",
+    ai_task_start_failed: "Could not start the AI Task.",
+    ai_task_background_failed: "AI Task stopped before finishing.",
     kaosbrain_openai_disabled: "KaosBrain-OpenAI is disabled.",
     kaosbrain_official_memo_unavailable: "KaosBrain could not draft this memo.",
     kaosbrain_official_web_plan_unavailable: "KaosBrain could not make an official-source search plan.",
@@ -2552,6 +2634,81 @@ function closeAiTaskArchive() {
   };
   render();
   if (taskId) document.querySelector(`[data-ai-task-open="${cssIdentifier(taskId)}"]`)?.focus();
+}
+
+function aiTaskSourceHost(url) {
+  try {
+    return new URL(String(url || "")).hostname;
+  } catch (_error) {
+    return "";
+  }
+}
+
+function renderAiTaskPlan(plan) {
+  if (!plan || typeof plan !== "object") return "";
+  const alternates = Array.isArray(plan.alternateQueries) ? plan.alternateQueries.join(" // ") : "";
+  const domains = Array.isArray(plan.preferredDomains) ? plan.preferredDomains.join(" // ") : "";
+  return `
+    <dl class="archiveMetadata aiTaskPlan">
+      ${archiveMeta("Query", plan.query || "")}
+      ${archiveMeta("Also", alternates)}
+      ${archiveMeta("Domains", domains)}
+      ${archiveMeta("Task", plan.task || "")}
+    </dl>
+  `;
+}
+
+function renderAiTaskSources(sources) {
+  if (!Array.isArray(sources) || !sources.length) return "";
+  return `
+    <details class="aiTaskSources" open>
+      <summary><span>SOURCES</span><small>${sources.length}</small></summary>
+      <ol>
+        ${sources
+          .map((source) => {
+            const title = String(source?.title || source?.url || "source");
+            const url = String(source?.url || "#");
+            const host = aiTaskSourceHost(url);
+            return `
+              <li>
+                <a class="archiveInlineLink" href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(title)}</a>
+                ${host ? `<small>${escapeHtml(host)}</small>` : ""}
+              </li>
+            `;
+          })
+          .join("")}
+      </ol>
+    </details>
+  `;
+}
+
+function renderAiTaskStatePanel(preview) {
+  const status = String(preview?.status || "");
+  if (status !== "running" && status !== "failed") return "";
+  const isRunning = status === "running";
+  return `
+    <section class="archiveDetail aiTaskPreview aiTaskStatePanel" aria-label="AI task ${escapeHtml(status)}">
+      <header class="archiveDetailHeader">
+        <div>
+          <p>${isRunning ? "AI TASK RUNNING" : "AI TASK FAILED"}</p>
+          <h3>${escapeHtml(preview?.title || preview?.prompt || "AI Task")}</h3>
+        </div>
+        <div class="archiveActions">
+          ${preview?.archived ? `<button class="archiveAction" type="button" data-ai-task-close>BACK</button>` : ""}
+          <button class="archiveAction" type="button" data-ai-tasks-refresh>↻</button>
+        </div>
+      </header>
+      <dl class="archiveMetadata">
+        ${archiveMeta("Status", status)}
+        ${archiveMeta("Started", preview?.createdAt || "")}
+        ${archiveMeta("Updated", preview?.updatedAt || "")}
+        ${archiveMeta("Source", preview?.source?.type || "")}
+      </dl>
+      <div class="${isRunning ? "archiveNotice" : "archiveError"}" data-ai-task-detail role="status" tabindex="0">
+        <p>${isRunning ? "Governor is searching/fetching sources and waiting for KaosBrain. This card will refresh automatically." : aiTaskErrorMessage(preview?.error || "ai_task_background_failed")}</p>
+      </div>
+    </section>
+  `;
 }
 
 function memoNameId(name) {
@@ -9036,6 +9193,7 @@ function renderAiTasks() {
   const isArchivedPreview = Boolean(preview?.archived);
   const isAppliedPreview = String(preview?.status || "") === "applied";
   const canSavePreview = Boolean(preview && !isAppliedPreview && String(preview.taskId || "").trim() && aiTaskMemoContentFromPreview(preview));
+  const statePanel = renderAiTaskStatePanel(preview);
   return `
     <section class="archiveTerminal" data-archive-kind="ai-tasks" aria-label="AI Tasks">
       <form class="archiveIndex aiTaskComposer" data-ai-task-unified>
@@ -9073,12 +9231,14 @@ function renderAiTasks() {
             : ""
         }
         <div class="archiveActions">
-          <button class="archiveAction isActive" type="submit" ${aiTasks.previewing ? "disabled" : ""}>${aiTasks.previewing ? "WORKING" : "RUN"}</button>
+          <button class="archiveAction isActive" type="submit" ${aiTasks.previewing ? "disabled" : ""}>${aiTasks.previewing ? "STARTING" : "RUN"}</button>
           <button class="archiveAction" type="button" data-ai-task-clear>CLEAR</button>
         </div>
       </form>
       ${
-        preview?.kind === "web"
+        statePanel
+          ? statePanel
+          : preview?.kind === "web"
           ? `
             <section class="archiveDetail aiTaskPreview" aria-label="AI task result">
               <header class="archiveDetailHeader">
@@ -9104,24 +9264,12 @@ function renderAiTasks() {
                 ${archiveMeta("Model", webResult.model)}
                 ${archiveMeta("Memo", result.memoName || "")}
               </dl>
+              ${renderAiTaskPlan(sourceInfo.plan)}
               <div class="archiveOcrRegion" data-ai-task-detail role="region" aria-label="AI task result" tabindex="0">
                 <p>RESULT</p>
                 <pre>${escapeHtml(webResult.content)}</pre>
               </div>
-              ${
-                webResult.sources.length
-                  ? `
-                    <div class="aiTaskSources">
-                      <p>SOURCES</p>
-                      <ol>
-                        ${webResult.sources
-                          .map((source) => `<li><a class="archiveInlineLink" href="${escapeHtml(source.url || "#")}" target="_blank" rel="noreferrer">${escapeHtml(source.title || source.url || "source")}</a></li>`)
-                          .join("")}
-                      </ol>
-                    </div>
-                  `
-                  : ""
-              }
+              ${renderAiTaskSources(webResult.sources)}
             </section>
           `
           : preview

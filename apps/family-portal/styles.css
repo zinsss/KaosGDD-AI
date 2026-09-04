@@ -6920,14 +6920,31 @@ h3 {
   display: grid;
   gap: 8px;
   min-width: 0;
+  border: 1px solid var(--archive-line);
+  padding: 10px 12px;
 }
 
-.app[data-profile="main"] .aiTaskSources p {
+.app[data-profile="main"] .aiTaskSources summary {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 1ch;
+  width: max-content;
+  max-width: 100%;
+  cursor: pointer;
+  list-style: none;
   margin: 0;
   color: var(--archive-cyan);
   font-size: 0.72rem;
   font-weight: 850;
   text-transform: uppercase;
+}
+
+.app[data-profile="main"] .aiTaskSources summary::-webkit-details-marker {
+  display: none;
+}
+
+.app[data-profile="main"] .aiTaskSources summary small {
+  color: var(--archive-muted);
 }
 
 .app[data-profile="main"] .aiTaskSources ol {
@@ -6937,6 +6954,33 @@ h3 {
   padding-left: 1.2rem;
   color: var(--archive-muted);
   font-size: 0.78rem;
+}
+
+.app[data-profile="main"] .aiTaskSources li small {
+  display: block;
+  margin-top: 2px;
+  color: var(--archive-muted);
+  font-size: 0.68rem;
+}
+
+.app[data-profile="main"] .aiTaskPlan {
+  border: 1px dashed rgba(136, 192, 208, 0.45);
+  padding: 10px 12px;
+}
+
+.app[data-profile="main"] .aiTaskStatePanel {
+  border-color: rgba(235, 203, 139, 0.62);
+}
+
+.app[data-profile="main"] .archiveNotice {
+  border: 1px solid rgba(235, 203, 139, 0.58);
+  padding: 12px;
+  color: var(--archive-amber);
+  font: 0.82rem/1.5 "Sarasa Gothic Mono", ui-monospace, monospace;
+}
+
+.app[data-profile="main"] .archiveNotice p {
+  margin: 0;
 }
 
 .app[data-profile="main"] .archiveRecordId {
