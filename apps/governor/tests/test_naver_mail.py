@@ -212,6 +212,43 @@ class NaverMailTests(unittest.TestCase):
         self.assertTrue(status["lastScanAt"])
         self.assertEqual(status["mailboxCount"], 3)
         self.assertEqual(status["owner"], "discord")
+        self.assertEqual(status["pendingCount"], 0)
+
+    def test_pending_count_can_be_scoped_to_target_folder_names(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            state_path = Path(tmp) / "state.json"
+            poller = NaverMailPoller(target_config(state_path))
+            poller.save_state(
+                {
+                    "mailboxes": {
+                        "INBOX": {
+                            "displayName": "INBOX",
+                            "uidValidity": "9",
+                            "lastUid": 1,
+                            "pending": {"1": {}},
+                        },
+                        encode_modified_utf7("각종공문/영덕군보건소"): {
+                            "displayName": "각종공문/영덕군보건소",
+                            "uidValidity": "11",
+                            "lastUid": 2,
+                            "pending": {"2": {}, "3": {}},
+                        },
+                        encode_modified_utf7("세무사"): {
+                            "displayName": "세무사",
+                            "uidValidity": "12",
+                            "lastUid": 4,
+                            "pending": {"4": {}},
+                        },
+                    },
+                    "runtime": {},
+                }
+            )
+
+            target_pending = poller.pending_count(folders=("영덕군보건소", "세무사"))
+            all_pending = poller.pending_count()
+
+        self.assertEqual(target_pending, 3)
+        self.assertEqual(all_pending, 4)
 
     def test_list_messages_reads_configured_mailboxes_by_date(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

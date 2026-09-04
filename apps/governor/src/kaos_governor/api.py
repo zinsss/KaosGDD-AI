@@ -1893,6 +1893,29 @@ def mail_messages_payload(
     }
 
 
+def mail_attention_payload(
+    query_string: str,
+    poller: NaverMailPoller | None = None,
+) -> dict[str, object]:
+    params = urllib.parse.parse_qs(query_string, keep_blank_values=True)
+    folders = _mail_query_folders(params)
+    active_poller = poller or naver_mail_poller()
+    status = active_poller.status()
+    ok = bool(status.get("ok"))
+    last_error = str(status.get("lastError") or "")
+    return {
+        "ok": ok,
+        "pendingCount": active_poller.pending_count(folders=folders),
+        "folders": list(folders or status.get("folders") or []),
+        "mailboxCount": status.get("mailboxCount", 0),
+        "lastScanAt": status.get("lastScanAt", ""),
+        "lastError": last_error,
+        "error": "" if ok else last_error or "mail_attention_unavailable",
+        "enabled": status.get("enabled", False),
+        "configured": status.get("configured", False),
+    }
+
+
 def _mail_unread_received_at(received_epoch: float) -> str:
     if received_epoch <= 0:
         return "(Unknown)"
@@ -2711,6 +2734,17 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 print(f"AI task archive browse failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "ai_task_archive_unavailable"})
+            return
+        if parsed.path == "/api/mail/attention":
+            try:
+                require_main_access(self.headers)
+                json_response(self, 200, mail_attention_payload(parsed.query))
+            except (ValueError, NaverMailError, MailOrganizerError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, memos_relay.MemosRelayError) else str(exc)
+                json_response(self, mail_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Mail attention failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "mail_attention_unavailable"})
             return
         if parsed.path == "/api/mail/messages":
             try:

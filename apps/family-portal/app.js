@@ -387,6 +387,13 @@ const state = {
     checked: false,
     loading: false,
     error: "",
+    attention: {
+      checked: false,
+      loading: false,
+      error: "",
+      pendingCount: 0,
+      lastScanAt: "",
+    },
     mode: "unread",
     items: [],
     unreadItems: [],
@@ -3222,6 +3229,43 @@ async function loadMail(options = {}) {
   if (getRoute() === "mail") render();
 }
 
+async function loadMailAttention(options = {}) {
+  if (portalProfile() !== "main") return;
+  if (state.mail.attention.loading) return;
+  if (state.mail.attention.checked && !options.force) return;
+  state.mail.attention = {
+    ...state.mail.attention,
+    loading: true,
+    error: "",
+  };
+  try {
+    const params = new URLSearchParams();
+    PERSONAL_MAIL_FOLDERS.forEach((folder) => params.append("folder", folder));
+    const response = await fetch(`/api/mail/attention?${params.toString()}`, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    state.mail.attention = {
+      checked: true,
+      loading: false,
+      error: "",
+      pendingCount: Math.max(0, Number(payload.pendingCount) || 0),
+      lastScanAt: String(payload.lastScanAt || ""),
+    };
+  } catch (error) {
+    state.mail.attention = {
+      ...state.mail.attention,
+      checked: true,
+      loading: false,
+      error: error.message || "Mail attention is unavailable",
+      pendingCount: 0,
+    };
+  }
+  refreshMainAttentionShell();
+}
+
 function refreshMail() {
   if (state.mail.mode === "unread") {
     state.mail.unreadChecked = false;
@@ -5223,12 +5267,8 @@ function mainAttentionMarkers() {
     markers[route] = mergeSeverity(markers[route] || "", severity);
   };
 
-  const mailApi = window.KAOS_PORTAL_MAIL;
-  const watchedMailCount = mailApi
-    ? mailApi.filterItems(state.mail.items, "yeongdeok").length + mailApi.filterItems(state.mail.items, "tax").length
-    : state.mail.items.length;
-  if (state.mail.error) add("mail", "critical");
-  else if (watchedMailCount > 0) add("mail", "attention");
+  if (state.mail.error || state.mail.attention.error) add("mail", "critical");
+  else if (Number(state.mail.attention.pendingCount || 0) > 0) add("mail", "attention");
 
   if (state.documents.inboxError) add("documents", "critical");
   if (state.documents.inboxItems.some((item) => item.status === "failed")) add("documents", "critical");
@@ -5273,7 +5313,7 @@ async function loadMainAttention({ force = false } = {}) {
   state.attention.loading = true;
   refreshMainAttentionShell();
   await Promise.allSettled([
-    loadMail({ force }),
+    loadMailAttention({ force }),
     loadDocumentInbox({ force }),
     loadFax({ force }),
     loadSystemStatus({ force }),

@@ -34,6 +34,22 @@ class FakeMailPoller:
             ],
         }
 
+    def status(self) -> dict[str, object]:
+        self.calls.append("status")
+        return {
+            "ok": True,
+            "folders": ["INBOX", "세무사", "영덕군보건소"],
+            "mailboxCount": 3,
+            "lastScanAt": "2026-09-04T06:52:29Z",
+            "lastError": "",
+            "enabled": True,
+            "configured": True,
+        }
+
+    def pending_count(self, *, folders: tuple[str, ...] | None = None) -> int:
+        self.calls.append(("pending_count", folders))
+        return 2 if folders == ("영덕군보건소", "세무사") else 3
+
     def get_message(self, *, mailbox: str, uid: int) -> MailMessage:
         self.calls.append((mailbox, uid))
         return MailMessage(
@@ -134,6 +150,17 @@ class MailApiTests(unittest.TestCase):
 
         self.assertEqual(poller.calls, [(25, ("영덕군보건소", "세무사"))])
         self.assertTrue(payload["ok"])
+
+    def test_attention_payload_counts_pending_mail_for_requested_folders_only(self) -> None:
+        poller = FakeMailPoller()
+
+        payload = api.mail_attention_payload("folder=영덕군보건소&folder=세무사", poller)  # type: ignore[arg-type]
+
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["pendingCount"], 2)
+        self.assertEqual(payload["folders"], ["영덕군보건소", "세무사"])
+        self.assertEqual(payload["mailboxCount"], 3)
+        self.assertEqual(poller.calls, ["status", ("pending_count", ("영덕군보건소", "세무사"))])
 
     def test_limit_is_strictly_bounded(self) -> None:
         for query in ("limit=0", "limit=101", "limit=nope"):
@@ -269,6 +296,22 @@ class MailApiTests(unittest.TestCase):
 
         self.assertEqual(handler.status, 200)
         browse.assert_called_once_with("limit=5")
+
+    def test_attention_handler_returns_pending_count_after_personal_access(self) -> None:
+        handler = CaptureHandler(
+            "/api/mail/attention?folder=영덕군보건소&folder=세무사",
+            {"Host": "kaosgdd.net", "Cf-Access-Jwt-Assertion": "verified-by-test"},
+        )
+
+        with (
+            patch.object(api.memos_relay, "verify_cloudflare_access", return_value=("personal", "zin@example.com")),
+            patch.object(api, "mail_attention_payload", return_value={"ok": True, "pendingCount": 1}) as attention,
+        ):
+            handler.do_GET()
+
+        self.assertEqual(handler.status, 200)
+        self.assertEqual(json.loads(handler.wfile.getvalue())["pendingCount"], 1)
+        attention.assert_called_once_with("folder=영덕군보건소&folder=세무사")
 
     def test_detail_handler_returns_message_after_personal_access(self) -> None:
         handler = CaptureHandler(

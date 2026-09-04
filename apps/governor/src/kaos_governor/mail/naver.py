@@ -243,6 +243,16 @@ def _mailbox_matches_root(display_name: str, root: str, delimiter: str) -> bool:
     return root in [part for part in display_name.split(delimiter) if part]
 
 
+def _stored_mailbox_matches_filter(raw_name: str, display_name: str, target: str) -> bool:
+    candidates = {display_name, decode_modified_utf7(raw_name)}
+    for candidate in candidates:
+        if candidate == target:
+            return True
+        if target in [part.strip() for part in re.split(r"[\\/]", candidate) if part.strip()]:
+            return True
+    return False
+
+
 def format_sender(value: object) -> str:
     raw = " ".join(str(value or "").replace("\r", " ").replace("\n", " ").split())
     formatted: list[str] = []
@@ -364,7 +374,8 @@ class NaverMailPoller:
 
     def status(self) -> dict[str, object]:
         runtime = self.runtime
-        persisted = self.load_state().get("runtime")
+        state = self.load_state()
+        persisted = state.get("runtime")
         persisted = persisted if isinstance(persisted, dict) else {}
         started = runtime.started or bool(persisted.get("started"))
         last_scan_at = runtime.last_scan_at or str(persisted.get("lastScanAt") or "")
@@ -372,6 +383,7 @@ class NaverMailPoller:
         last_error = runtime.last_error or str(persisted.get("lastError") or "")
         archived_count = max(runtime.archived_count, int(persisted.get("archivedCount") or 0))
         mailbox_count = runtime.mailbox_count or int(persisted.get("mailboxCount") or 0)
+        pending_count = self.pending_count(state=state)
         return {
             "ok": (not self.config.enabled) or (self.config.configured and not last_error),
             "enabled": self.config.enabled,
@@ -386,7 +398,26 @@ class NaverMailPoller:
             "lastError": last_error,
             "archivedCount": archived_count,
             "mailboxCount": mailbox_count,
+            "pendingCount": pending_count,
         }
+
+    def pending_count(self, *, folders: tuple[str, ...] | None = None, state: dict[str, object] | None = None) -> int:
+        payload = state or self.load_state()
+        mailboxes = payload.get("mailboxes")
+        if not isinstance(mailboxes, dict):
+            return 0
+        targets = tuple(folder.strip() for folder in (folders or ()) if folder.strip())
+        total = 0
+        for raw_name, value in mailboxes.items():
+            if not isinstance(value, dict):
+                continue
+            display_name = str(value.get("displayName") or decode_modified_utf7(str(raw_name)))
+            if targets and not any(_stored_mailbox_matches_filter(str(raw_name), display_name, target) for target in targets):
+                continue
+            pending = value.get("pending")
+            if isinstance(pending, dict):
+                total += len(pending)
+        return total
 
     def _save_runtime(self, state: dict[str, object]) -> None:
         runtime = self.runtime
