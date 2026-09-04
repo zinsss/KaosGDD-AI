@@ -60,6 +60,7 @@ test("preset text manager supports category and text-tab editing", () => {
 test("family preset text assets include styles, translations, and cache-busted bundles", () => {
   assert.match(styles, /\.familyTextPresetCategoryGrid \{/);
   assert.match(styles, /\.familyTextPresetTabs \{/);
+  assert.match(styles, /\.familyTextPresetTabs\.isTextTabs \{[\s\S]*gap: 14px;[\s\S]*padding-inline: 2px 10px;/);
   assert.match(styles, /\.familyTextPresetEditor \{/);
   assert.match(styles, /\.familyTextPresetEditor textarea \{/);
   assert.match(translations, /"route\.textPresets": "문구"/);
@@ -67,7 +68,7 @@ test("family preset text assets include styles, translations, and cache-busted b
   assert.match(translations, /"textPresets\.shared":/);
   assert.match(translations, /"textPresets\.localFallback":/);
   assert.match(translations, /"textPresets\.copyRandom": "랜덤 복사"/);
-  assert.match(indexSource, /href="\/styles\.css\?v=306"/);
+  assert.match(indexSource, /href="\/styles\.css\?v=307"/);
   assert.match(indexSource, /src="\/translations\.js\?v=181"/);
   assert.match(indexSource, /src="\/app\.js\?v=311"/);
 });
