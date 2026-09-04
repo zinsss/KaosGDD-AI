@@ -433,6 +433,59 @@ class GovernorAITaskTests(unittest.TestCase):
         self.assertEqual(plan["task"], "treatment_options")
         self.assertEqual(plan["preferredDomains"], ["pubmed.ncbi.nlm.nih.gov", "cks.nice.org.uk"])
 
+    def test_treatment_option_prompt_upgrades_summary_plan(self) -> None:
+        plan = api._clean_official_web_plan(  # pylint: disable=protected-access
+            {
+                "query": "BPPV 치료 옵션",
+                "alternateQueries": ["benign paroxysmal positional vertigo treatment guideline"],
+                "preferredDomains": ["pubmed.ncbi.nlm.nih.gov"],
+                "task": "summary",
+                "language": "ko",
+            },
+            prompt="BPPV 치료 옵션",
+        )
+
+        self.assertEqual(plan["task"], "treatment_options")
+
+    def test_pubmed_fetch_uses_eutils_abstract_instead_of_cookie_page(self) -> None:
+        urls: list[str] = []
+
+        def fake_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
+            urls.append(request.full_url)
+            if request.full_url.startswith("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?"):
+                return FakeHTTPResponse(
+                    """<?xml version="1.0" encoding="UTF-8"?>
+                    <PubmedArticleSet><PubmedArticle><MedlineCitation><Article>
+                      <Journal><Title>Journal of Vestibular Care</Title><JournalIssue><PubDate><Year>2026</Year></PubDate></JournalIssue></Journal>
+                      <ArticleTitle>Benign paroxysmal positional vertigo: effective diagnosis and treatment</ArticleTitle>
+                      <PublicationTypeList><PublicationType>Review</PublicationType></PublicationTypeList>
+                      <Abstract>
+                        <AbstractText>Canalith repositioning is an effective treatment option for posterior canal BPPV.</AbstractText>
+                        <AbstractText Label="Diagnosis">Dix-Hallpike testing supports diagnosis when typical nystagmus is present.</AbstractText>
+                      </Abstract>
+                    </Article></MedlineCitation></PubmedArticle></PubmedArticleSet>""",
+                    "application/xml; charset=utf-8",
+                )
+            if request.full_url == "https://pubmed.ncbi.nlm.nih.gov/36319052/":
+                return FakeHTTPResponse(
+                    "<html><body>Cookies must be enabled</body></html>",
+                    "text/html; charset=utf-8",
+                )
+            raise AssertionError(request.full_url)
+
+        source = api.fetch_official_source(
+            "https://pubmed.ncbi.nlm.nih.gov/36319052/",
+            title="BPPV treatment",
+            require_allowed_health_host=True,
+            urlopen=fake_urlopen,
+        )
+
+        self.assertEqual(source["type"], "pubmed")
+        self.assertIn("Canalith repositioning", source["text"])
+        self.assertIn("Dix-Hallpike", source["text"])
+        self.assertNotIn("Cookies must be enabled", source["text"])
+        self.assertTrue(urls[0].startswith("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?"))
+
     def test_health_kr_drug_dictionary_expands_brand_for_hira_search(self) -> None:
         def fake_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
             if request.full_url == "https://health.kr/searchDrug/search_total_result.asp":

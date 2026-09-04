@@ -73,6 +73,7 @@ OFFICIAL_HEALTH_SITES: tuple[OfficialSearchSite, ...] = (
     OfficialSearchSite("한국장기조직기증원", ("koda1458.kr", "www.koda1458.kr")),
     OfficialSearchSite("의료기관평가인증원", ("koiha.kr", "www.koiha.kr")),
     OfficialSearchSite("PubMed", ("pubmed.ncbi.nlm.nih.gov",), "https://pubmed.ncbi.nlm.nih.gov/?term={query}"),
+    OfficialSearchSite("AAO-HNS Guidelines", ("entnet.org", "www.entnet.org"), "https://www.entnet.org/?s={query}"),
     OfficialSearchSite("NIH NINDS", ("ninds.nih.gov", "www.ninds.nih.gov"), "https://www.ninds.nih.gov/search?search={query}"),
     OfficialSearchSite("NICE CKS", ("cks.nice.org.uk",), "https://cks.nice.org.uk/search/?q={query}"),
     OfficialSearchSite("American Academy of Sleep Medicine", ("aasm.org", "www.aasm.org"), "https://aasm.org/?s={query}"),
@@ -116,6 +117,10 @@ def allowed_official_health_hosts() -> list[str]:
     return sorted(OFFICIAL_HEALTH_ALLOWED_HOSTS)
 
 
+def looks_like_treatment_options_query(query: str, alternate_queries: Iterable[str] = ()) -> bool:
+    return _looks_like_treatment_options_query([query, *alternate_queries])
+
+
 def is_allowed_official_health_host(host: str) -> bool:
     normalized = host.lower().rstrip(".")
     return any(normalized == allowed or normalized.endswith(f".{allowed}") for allowed in OFFICIAL_HEALTH_ALLOWED_HOSTS)
@@ -147,6 +152,7 @@ def official_health_search_candidates(
                 "mentalhealth.go.kr",
                 "www.mentalhealth.go.kr",
                 "pubmed.ncbi.nlm.nih.gov",
+                "www.entnet.org",
                 "cks.nice.org.uk",
                 "www.ninds.nih.gov",
             }
@@ -157,19 +163,27 @@ def official_health_search_candidates(
     if hira_candidates and any(host in preferred for host in ("hira.or.kr", "www.hira.or.kr")):
         return _ranked_unique_candidates(hira_candidates)[:limit]
     candidates.extend(hira_candidates)
-    for site in sites:
+    for index, site in enumerate(sites):
         if not site.search_url:
             continue
+        site_count = 0
+        site_limit = max(4, min(MAX_CANDIDATES_PER_SEARCH, limit))
+        per_query_limit = max(2, site_limit // 2)
         for search_query in queries[:2]:
+            query_count = 0
             page_url = site.search_url.format(query=urllib.parse.quote(search_query))
             for link in _search_page_links(page_url, urlopen=urlopen):
                 candidate = _candidate_from_link(link, site=site, queries=queries, preferred=preferred)
                 if candidate:
                     candidates.append(candidate)
-                if len(candidates) >= limit * 5:
+                    site_count += 1
+                    query_count += 1
+                if site_count >= site_limit or query_count >= per_query_limit:
                     break
-            if len(candidates) >= limit * 5:
+            if site_count >= site_limit:
                 break
+        if len(candidates) >= limit * 5 and not _has_remaining_preferred_site(sites[index + 1 :], preferred):
+            break
     return _ranked_unique_candidates(candidates)[:limit]
 
 
@@ -201,6 +215,9 @@ def _expanded_queries(queries: list[str]) -> list[str]:
         "프로바트립탄": ("Frovatriptan", "편두통 치료제"),
         "미가드": ("Frovatriptan", "편두통 치료제"),
         "수벡스": ("Sumatriptan Naproxen", "편두통 치료제"),
+        "bppv": ("benign paroxysmal positional vertigo", "BPPV treatment guideline", "이석증", "양성돌발체위현훈"),
+        "이석증": ("BPPV", "benign paroxysmal positional vertigo", "양성돌발체위현훈"),
+        "양성돌발체위현훈": ("BPPV", "benign paroxysmal positional vertigo", "이석증"),
     }
     for needle, replacements in aliases.items():
         if needle in joined:
@@ -282,6 +299,10 @@ def _looks_like_treatment_options_query(queries: Iterable[str]) -> bool:
 def _ordered_sites(preferred: set[str]) -> list[OfficialSearchSite]:
     with_search = [site for site in OFFICIAL_HEALTH_SITES if site.search_url]
     return sorted(with_search, key=lambda site: 0 if any(host in preferred for host in site.hosts) else 1)
+
+
+def _has_remaining_preferred_site(sites: Iterable[OfficialSearchSite], preferred: set[str]) -> bool:
+    return any(any(host in preferred for host in site.hosts) for site in sites)
 
 
 def _hira_insurance_criteria_candidates(
@@ -613,6 +634,13 @@ def _candidate_from_link(
 
 def _looks_like_noise_url(url: str) -> bool:
     lowered = url.lower()
+    if lowered.rstrip("/") in {
+        "https://pubmed.ncbi.nlm.nih.gov",
+        "http://pubmed.ncbi.nlm.nih.gov",
+        "https://www.entnet.org",
+        "http://www.entnet.org",
+    }:
+        return True
     noise = (
         "javascript:",
         "/login",
@@ -623,11 +651,16 @@ def _looks_like_noise_url(url: str) -> bool:
         "/account/",
         "/advanced",
         "/clipboard",
+        "/events/",
+        "/help/",
+        "/join-us/",
         "/myncbi",
         "/search.do",
         "/search/",
         "/search.es",
         "/menu.es",
+        "entnet.org/?s=",
+        "saml_user_login",
         "pubmed.ncbi.nlm.nih.gov/?term=",
         "aasm.org/?s=",
         "facebook.com",
@@ -652,9 +685,11 @@ def _looks_like_noise_title(title: str) -> bool:
         "skip to content",
         "main content",
         "account settings",
+        "annual meeting",
         "advanced",
         "clipboard",
         "dashboard",
+        "user guide",
         "통합검색",
         "로그인",
         "회원가입",
@@ -690,15 +725,27 @@ def _candidate_score(title: str, url: str, queries: list[str]) -> int:
         score += 4
     if any(kind in text for kind in ("치료", "management", "treatment", "guideline", "practice guideline", "clinical practice", "diagnosis", "진료지침", "권고")):
         score += 5
-    if any(kind in text for kind in ("clinical practice guideline", "american academy", "aasm", "practice guideline summary", "nice cks", "nih")):
+    if any(kind in text for kind in ("clinical practice guideline", "american academy", "aasm", "aao-hns", "entnet", "practice guideline summary", "nice cks", "nih")):
         score += 8
     if "american academy of sleep medicine" in text:
         score += 12
+    if "american academy of otolaryngology" in text or "head and neck surgery" in text:
+        score += 12
+    if text.startswith("clinical practice guideline") or " clinical practice guideline:" in text:
+        score += 16
+    if "effective diagnosis and treatment" in text or "guideline of diagnosis and treatment" in text:
+        score += 8
     if "plain language summary" in text:
         score += 4
+    if "guideline adherence" in text or "barriers and facilitators" in text:
+        score -= 10
+    if "characteristics of assessment and treatment" in text:
+        score -= 8
+    if "observational study" in text or "atypical" in text:
+        score -= 6
     if "poor effect" in text:
         score -= 10
-    if any(host in text for host in ("pubmed.ncbi.nlm.nih.gov", "cks.nice.org.uk", "ninds.nih.gov", "health.kdca.go.kr", "mentalhealth.go.kr")):
+    if any(host in text for host in ("pubmed.ncbi.nlm.nih.gov", "entnet.org", "cks.nice.org.uk", "ninds.nih.gov", "health.kdca.go.kr", "mentalhealth.go.kr")):
         score += 2
     return score
 

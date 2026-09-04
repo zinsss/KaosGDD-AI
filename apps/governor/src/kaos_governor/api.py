@@ -8,6 +8,7 @@ import socket
 import urllib.error
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 from dataclasses import replace
 from datetime import UTC, datetime
 from email.parser import BytesParser
@@ -38,6 +39,7 @@ from kaos_governor.memos import relay as memos_relay
 from kaos_governor.official_search import (
     allowed_official_health_hosts,
     is_allowed_official_health_host,
+    looks_like_treatment_options_query,
     official_health_search_candidates,
 )
 from kaos_governor.tasks import PostgresRecurringTaskStore, RecurringTaskDefinition, RecurringTaskError, RecurringTaskService, validate_payload
@@ -890,6 +892,8 @@ def _clean_official_web_plan(plan: dict[str, object], *, prompt: str) -> dict[st
     task = str(plan.get("task") or "summary").strip().lower()
     if task not in {"summary", "list", "explain", "compare", "treatment_options"}:
         task = "summary"
+    if task == "summary" and looks_like_treatment_options_query(query, alternate_queries):
+        task = "treatment_options"
     language = str(plan.get("language") or "ko").strip().lower()
     if language not in {"ko", "en"}:
         language = "ko"
@@ -1094,6 +1098,10 @@ def fetch_official_source(
         raise AITaskError("ai_task_source_url_blocked")
     if require_allowed_health_host and not is_allowed_official_health_host(host):
         raise AITaskError("ai_task_source_host_not_allowed")
+    if host == "pubmed.ncbi.nlm.nih.gov":
+        pubmed_source = _fetch_pubmed_eutils_source(parsed, title=title, urlopen=urlopen)
+        if pubmed_source:
+            return pubmed_source
     request = urllib.request.Request(
         urllib.parse.urlunsplit(parsed),
         headers={
@@ -1134,6 +1142,14 @@ def fetch_official_source(
     if not text.strip():
         raise AITaskError("ai_task_source_empty")
     normalized_text = " ".join(text.split())
+    if host == "pubmed.ncbi.nlm.nih.gov" and (
+        "Cookies must be enabled" in normalized_text or "Clipboard, Search History" in normalized_text
+    ):
+        raise AITaskError("ai_task_source_empty")
+    if host.endswith("entnet.org") and (
+        normalized_text.startswith("You searched for ") or "Submit site search" in normalized_text[:400]
+    ):
+        raise AITaskError("ai_task_source_empty")
     if (title == "알림메세지" and "존재 하지 않습니다" in normalized_text) or "게시물이 존재하지 않습니다" in normalized_text:
         raise AITaskError("ai_task_source_not_found")
     return {
@@ -1143,6 +1159,92 @@ def fetch_official_source(
         "host": host,
         "text": text[:OFFICIAL_MEMO_MAX_SOURCE_CHARS],
     }
+
+
+def _fetch_pubmed_eutils_source(
+    parsed: urllib.parse.SplitResult,
+    *,
+    title: str = "",
+    urlopen=urllib.request.urlopen,
+) -> dict[str, object] | None:
+    pmid_match = re.match(r"^/(\d{6,12})/?$", parsed.path or "")
+    if not pmid_match:
+        return None
+    pmid = pmid_match.group(1)
+    url = urllib.parse.urlunsplit(parsed)
+    eutils_url = (
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?"
+        + urllib.parse.urlencode({"db": "pubmed", "id": pmid, "retmode": "xml"})
+    )
+    request = urllib.request.Request(
+        eutils_url,
+        headers={
+            "Accept": "application/xml, text/xml;q=0.9",
+            "User-Agent": "KaosGovernor/ai-tasks pubmed-eutils",
+        },
+    )
+    try:
+        with urlopen(request, timeout=OFFICIAL_MEMO_FETCH_TIMEOUT_SECONDS) as response:
+            raw = response.read(1_000_000)
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError):
+        return None
+    try:
+        root = ET.fromstring(raw)
+    except ET.ParseError:
+        return None
+    article_title = " ".join("".join(root.findtext(".//ArticleTitle") or "").split())
+    journal = " ".join("".join(root.findtext(".//Journal/Title") or "").split())
+    pub_date = _pubmed_publication_date(root)
+    article_types = [
+        " ".join("".join(item.itertext()).split())
+        for item in root.findall(".//PublicationTypeList/PublicationType")
+        if " ".join("".join(item.itertext()).split())
+    ]
+    abstract_parts: list[str] = []
+    for node in root.findall(".//Abstract/AbstractText"):
+        body = " ".join("".join(node.itertext()).split())
+        if not body:
+            continue
+        label = str(node.attrib.get("Label") or "").strip()
+        abstract_parts.append(f"{label}: {body}" if label else body)
+    mesh_terms = [
+        " ".join("".join(node.findtext("DescriptorName") or "").split())
+        for node in root.findall(".//MeshHeading")
+        if " ".join("".join(node.findtext("DescriptorName") or "").split())
+    ][:12]
+    if not abstract_parts:
+        return None
+    parts = [
+        article_title,
+        f"PMID: {pmid}",
+        f"Journal: {journal}" if journal else "",
+        f"Publication date: {pub_date}" if pub_date else "",
+        f"Publication type: {', '.join(article_types[:6])}" if article_types else "",
+        "Abstract:",
+        *abstract_parts,
+        f"MeSH terms: {', '.join(mesh_terms)}" if mesh_terms else "",
+    ]
+    text = "\n".join(part for part in parts if part)
+    return {
+        "type": "pubmed",
+        "title": title or article_title or f"PubMed PMID {pmid}",
+        "url": url,
+        "host": "pubmed.ncbi.nlm.nih.gov",
+        "text": text[:OFFICIAL_MEMO_MAX_SOURCE_CHARS],
+    }
+
+
+def _pubmed_publication_date(root: ET.Element) -> str:
+    pub_date = root.find(".//JournalIssue/PubDate")
+    if pub_date is None:
+        pub_date = root.find(".//ArticleDate")
+    if pub_date is None:
+        return ""
+    year = " ".join("".join(pub_date.findtext("Year") or "").split())
+    month = " ".join("".join(pub_date.findtext("Month") or "").split())
+    day = " ".join("".join(pub_date.findtext("Day") or "").split())
+    medline = " ".join("".join(pub_date.findtext("MedlineDate") or "").split())
+    return " ".join(part for part in (year, month, day) if part) or medline
 
 
 def _decode_http_text(raw: bytes, content_type: str) -> str:

@@ -306,6 +306,7 @@ public search pages:
 - `hira.or.kr`
 - `mentalhealth.go.kr`
 - `pubmed.ncbi.nlm.nih.gov`
+- `entnet.org`
 - `ninds.nih.gov`
 - `cks.nice.org.uk`
 - `aasm.org`
@@ -324,6 +325,13 @@ product-name search and drug detail JSON to discover brand names, English/Korean
 ingredient names, MFDS classification codes, and practical category hints, then
 use those terms to search HIRA. If HIRA candidates are found for a HIRA-preferred
 benefit query, the summary source set is narrowed back to HIRA criteria.
+
+PubMed is also handled as a special case for treatment-option prompts. Public
+PubMed article pages may return a cookie wall to a server-side fetch, so Governor
+derives the PMID from the PubMed URL and fetches article metadata/abstract text
+through NCBI E-utilities before sending excerpts to KaosBrain-OpenAI. PubMed
+records without usable abstracts are skipped instead of being summarized from a
+title-only cookie page.
 
 For HIRA medicine-benefit searches, KaosBrain-OpenAI should also produce a
 source-bounded `차트 기재 추천` section. The recommendation is not an EMR write
