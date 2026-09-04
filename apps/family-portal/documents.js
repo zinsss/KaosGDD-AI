@@ -26,11 +26,13 @@
     const page = positiveInteger(source.page, 1);
     const pageSize = positiveInteger(source.pageSize, 20);
     const query = String(source.query || "");
+    const selectedTags = normalizeTagNames(source.selectedTags);
     const resultCount = Math.max(0, Number(source.resultCount) || 0);
     const totalCount = Math.max(0, Number(source.totalCount) || 0);
-    const visibleCount = query ? resultCount : totalCount;
+    const visibleCount = query || selectedTags.length ? resultCount : totalCount;
     return Object.freeze({
       query,
+      selectedTags: Object.freeze(selectedTags),
       items: Object.freeze((Array.isArray(source.items) ? source.items : []).map(normalizeItem).filter((item) => item.id)),
       resultCount,
       totalCount,
@@ -38,6 +40,25 @@
       pageSize,
       pageCount: Math.max(1, Math.ceil(visibleCount / pageSize)),
     });
+  }
+
+  function normalizeTagNames(value) {
+    const names = Array.isArray(value) ? value : [];
+    return names.map((tag) => String(tag || "").trim().replace(/^#/, "")).filter(Boolean);
+  }
+
+  function normalizeTags(payload) {
+    const source = payload && typeof payload === "object" ? payload : {};
+    const tags = (Array.isArray(source.items) ? source.items : [])
+      .map((tag) => {
+        const item = tag && typeof tag === "object" ? tag : {};
+        return {
+          id: positiveInteger(item.id, 0),
+          name: String(item.name || "").trim(),
+        };
+      })
+      .filter((tag) => tag.id && tag.name);
+    return Object.freeze({ items: Object.freeze(tags) });
   }
 
   function normalizeDocument(payload) {
@@ -91,5 +112,5 @@
     });
   }
 
-  return Object.freeze({ normalizeDocument, normalizeInbox, normalizeInboxItem, normalizeItem, normalizePage });
+  return Object.freeze({ normalizeDocument, normalizeInbox, normalizeInboxItem, normalizeItem, normalizePage, normalizeTags });
 });

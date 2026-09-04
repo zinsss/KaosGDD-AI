@@ -1390,12 +1390,26 @@ def paperless_page_payload(
     active_service = service or paperless_service()
     params = urllib.parse.parse_qs(query_string, keep_blank_values=True)
     query = " ".join((params.get("query") or [""])[0].split())
+    tag_names = paperless_query_tag_names(params)
+    tag_ids = paperless_query_tag_ids(active_service, tag_names)
     page_number = _paperless_query_int(params, "page", 1)
     limit = _paperless_query_int(params, "limit", 20)
+    if tag_names and not tag_ids:
+        total_page = active_service.list_page(limit=1, page=1)
+        return {
+            "ok": True,
+            "query": query,
+            "items": [],
+            "resultCount": 0,
+            "totalCount": total_page.total_count,
+            "page": page_number,
+            "pageSize": limit,
+            "selectedTags": list(tag_names),
+        }
     page = (
-        active_service.search_page(query, limit=limit, page=page_number)
+        active_service.search_page(query, limit=limit, page=page_number, tag_ids=tag_ids)
         if query
-        else active_service.list_page(limit=limit, page=page_number)
+        else active_service.list_page(limit=limit, page=page_number, tag_ids=tag_ids)
     )
     items: list[dict[str, object]] = []
     for result in page.results:
@@ -1410,7 +1424,15 @@ def paperless_page_payload(
         "totalCount": page.total_count,
         "page": page.page,
         "pageSize": page.page_size,
+        "selectedTags": list(tag_names),
     }
+
+
+def paperless_tags_payload(
+    service: PaperlessDocumentService | None = None,
+) -> dict[str, object]:
+    active_service = service or paperless_service()
+    return {"ok": True, "items": [tag.as_dict() for tag in active_service.list_tags()]}
 
 
 def paperless_document_payload(
@@ -1444,6 +1466,34 @@ def paperless_metadata_tags(payload: dict[str, object]) -> tuple[str, ...]:
         if tag and tag not in tags:
             tags.append(tag)
     return tuple(tags[:25])
+
+
+def paperless_query_tag_names(params: dict[str, list[str]]) -> tuple[str, ...]:
+    names: list[str] = []
+    for raw in [*(params.get("tag") or []), *(params.get("tags") or [])]:
+        for value in str(raw or "").replace(",", "\n").splitlines():
+            name = " ".join(value.strip().lstrip("#").split())
+            if name and name not in names:
+                names.append(name)
+            if len(names) >= 25:
+                return tuple(names)
+    return tuple(names)
+
+
+def paperless_query_tag_ids(service: PaperlessDocumentService, names: tuple[str, ...]) -> tuple[int, ...]:
+    if not names:
+        return ()
+    available = {tag.name.casefold(): tag.tag_id for tag in service.list_tags()}
+    tag_ids: list[int] = []
+    for name in names:
+        tag_id = available.get(name.casefold())
+        if tag_id and tag_id not in tag_ids:
+            tag_ids.append(tag_id)
+    return tuple(tag_ids)
+
+
+def paperless_tag_count(query_string: str) -> int:
+    return len(paperless_query_tag_names(urllib.parse.parse_qs(query_string, keep_blank_values=True)))
 
 
 def document_tag_ai_token() -> str:
@@ -2659,6 +2709,21 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 print(f"Paperless browse failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "paperless_request_failed"})
+            return
+        if parsed.path == "/api/paperless/tags":
+            try:
+                require_main_access(self.headers)
+                json_response(self, 200, paperless_tags_payload())
+            except (ValueError, DocumentIntakeError, memos_relay.MemosRelayError) as exc:
+                code = (
+                    exc.code
+                    if isinstance(exc, (DocumentIntakeError, memos_relay.MemosRelayError))
+                    else str(exc)
+                )
+                json_response(self, paperless_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Paperless tags failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "paperless_tags_unavailable"})
             return
         if parsed.path == "/api/paperless/inbox":
             try:

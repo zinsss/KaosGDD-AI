@@ -53,7 +53,19 @@ test("documents archive keeps inbox documents visible with review markers", () =
 
 test("documents archive loads inbox markers alongside the Paperless archive", () => {
   assert.match(appSource, /if \(route === "documents" && state\.documents\.mode !== "inbox"\) loadDocuments\(\);/);
+  assert.match(appSource, /if \(route === "documents" && portalProfile\(\) === "main"\) \{[\s\S]*loadDocumentTags\(\);[\s\S]*loadDocumentInbox\(\);[\s\S]*\}/);
   assert.match(appSource, /if \(portalProfile\(\) === "main"\) void loadMainAttention\(\);/);
+});
+
+test("documents archive supports multiple selected tag filters", () => {
+  assert.match(appSource, /async function loadDocumentTags/);
+  assert.match(appSource, /fetch\("\/api\/paperless\/tags"/);
+  assert.match(appSource, /\(state\.documents\.selectedTags \|\| \[\]\)\.forEach\(\(tag\) => params\.append\("tag", tag\)\);/);
+  assert.match(appSource, /data-document-tag/);
+  assert.match(appSource, /async function toggleDocumentTagFilter/);
+  assert.match(appSource, /data-documents-clear-tags/);
+  assert.match(styles, /\.app\[data-profile="main"\] \.archiveTagFilters \{/);
+  assert.match(styles, /\.app\[data-profile="main"\] \.archiveTagChip \{/);
 });
 
 test("documents upload and metadata editor use aligned label columns", () => {

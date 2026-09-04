@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-const { normalizeDocument, normalizeInbox, normalizePage } = require("../../apps/family-portal/documents.js");
+const { normalizeDocument, normalizeInbox, normalizePage, normalizeTags } = require("../../apps/family-portal/documents.js");
 
 test("normalizes Paperless browse pages for the portal", () => {
   const page = normalizePage({
@@ -20,7 +20,8 @@ test("normalizes Paperless browse pages for the portal", () => {
 });
 
 test("uses matching result count for search pagination", () => {
-  const page = normalizePage({ query: "fax", resultCount: 4, totalCount: 26, pageSize: 10 });
+  const page = normalizePage({ query: "fax", selectedTags: ["clinic"], resultCount: 4, totalCount: 26, pageSize: 10 });
+  assert.deepEqual(page.selectedTags, ["clinic"]);
   assert.equal(page.pageCount, 1);
 });
 
@@ -69,4 +70,20 @@ test("normalizes document inbox without applied records", () => {
   });
 
   assert.deepEqual(inbox.items.map((item) => item.id), ["doc-open"]);
+});
+
+test("normalizes Paperless tags for archive filters", () => {
+  const tags = normalizeTags({
+    items: [
+      { id: 7, name: "clinic" },
+      { id: "8", name: " 보험 " },
+      { id: 0, name: "missing-id" },
+      { id: 9, name: "" },
+    ],
+  });
+
+  assert.deepEqual(tags.items, [
+    { id: 7, name: "clinic" },
+    { id: 8, name: "보험" },
+  ]);
 });

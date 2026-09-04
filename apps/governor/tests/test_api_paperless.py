@@ -32,13 +32,13 @@ class FakePaperless:
         self.tasks: dict[str, PaperlessTask] = {}
         self.update_calls: list[tuple[object, str, tuple[str, ...]]] = []
 
-    def list_page(self, *, limit: int, page: int) -> PaperlessSearchPage:
-        self.calls.append(("list", limit, page))
+    def list_page(self, *, limit: int, page: int, tag_ids=()) -> PaperlessSearchPage:
+        self.calls.append(("list", limit, page, tuple(tag_ids)))
         result = PaperlessSearchResult(42, "Clinic form", "2026-08-30", "form.pdf", "Hospital")
         return PaperlessSearchPage("", (result,), 26, 26, page, limit)
 
-    def search_page(self, query: object, *, limit: int, page: int) -> PaperlessSearchPage:
-        self.calls.append(("search", query, limit, page))
+    def search_page(self, query: object, *, limit: int, page: int, tag_ids=()) -> PaperlessSearchPage:
+        self.calls.append(("search", query, limit, page, tuple(tag_ids)))
         result = PaperlessSearchResult(7, "Fax report", "2026-08-29", "fax.pdf")
         return PaperlessSearchPage(str(query), (result,), 1, 26, page, limit)
 
@@ -104,7 +104,7 @@ class PaperlessApiTests(unittest.TestCase):
 
         payload = api.paperless_page_payload("page=2&limit=20", service)  # type: ignore[arg-type]
 
-        self.assertEqual(service.calls, [("list", 20, 2)])
+        self.assertEqual(service.calls, [("list", 20, 2, ())])
         self.assertEqual(payload["totalCount"], 26)
         self.assertEqual(payload["items"][0]["id"], 42)  # type: ignore[index]
         self.assertEqual(
@@ -117,9 +117,35 @@ class PaperlessApiTests(unittest.TestCase):
 
         payload = api.paperless_page_payload("query=Fax+report&page=3&limit=10", service)  # type: ignore[arg-type]
 
-        self.assertEqual(service.calls, [("search", "Fax report", 10, 3)])
+        self.assertEqual(service.calls, [("search", "Fax report", 10, 3, ())])
         self.assertEqual(payload["query"], "Fax report")
         self.assertEqual(payload["resultCount"], 1)
+
+    def test_search_filters_by_multiple_existing_tags(self) -> None:
+        service = FakePaperless()
+
+        payload = api.paperless_page_payload("query=Fax+report&tag=clinic&tag=%EB%B3%B4%ED%97%98&page=1&limit=10", service)  # type: ignore[arg-type]
+
+        self.assertEqual(service.calls, [("tags",), ("search", "Fax report", 10, 1, (7, 9))])
+        self.assertEqual(payload["selectedTags"], ["clinic", "보험"])
+
+    def test_missing_tag_filter_returns_no_matches_without_browsing_everything(self) -> None:
+        service = FakePaperless()
+
+        payload = api.paperless_page_payload("tag=missing&page=1&limit=10", service)  # type: ignore[arg-type]
+
+        self.assertEqual(service.calls, [("tags",), ("list", 1, 1, ())])
+        self.assertEqual(payload["items"], [])
+        self.assertEqual(payload["resultCount"], 0)
+        self.assertEqual(payload["totalCount"], 26)
+
+    def test_tags_payload_lists_existing_paperless_tags(self) -> None:
+        service = FakePaperless()
+
+        payload = api.paperless_tags_payload(service)  # type: ignore[arg-type]
+
+        self.assertEqual(service.calls, [("tags",)])
+        self.assertEqual(payload["items"], [{"id": 7, "name": "clinic"}, {"id": 8, "name": "receipt"}, {"id": 9, "name": "보험"}])
 
     def test_document_detail_includes_ocr_content_and_link(self) -> None:
         service = FakePaperless()

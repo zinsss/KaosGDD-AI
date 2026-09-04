@@ -350,6 +350,11 @@ const state = {
     error: "",
     query: "",
     appliedQuery: "",
+    selectedTags: [],
+    tagOptions: [],
+    tagsChecked: false,
+    tagsLoading: false,
+    tagsError: "",
     page: 1,
     pageSize: 20,
     pageCount: 1,
@@ -3026,6 +3031,7 @@ async function loadDocuments(options = {}) {
       limit: String(state.documents.pageSize),
     });
     if (state.documents.appliedQuery) params.set("query", state.documents.appliedQuery);
+    (state.documents.selectedTags || []).forEach((tag) => params.append("tag", tag));
     const response = await fetch(`/api/paperless/documents?${params.toString()}`, {
       headers: { Accept: "application/json" },
       cache: "no-store",
@@ -3040,6 +3046,7 @@ async function loadDocuments(options = {}) {
       error: "",
       appliedQuery: page.query,
       query: page.query,
+      selectedTags: page.selectedTags || state.documents.selectedTags,
       page: page.page,
       pageSize: page.pageSize,
       pageCount: page.pageCount,
@@ -3057,6 +3064,42 @@ async function loadDocuments(options = {}) {
     };
   }
   refreshMainAttentionShell();
+  if (getRoute() === "documents") render();
+}
+
+async function loadDocumentTags(options = {}) {
+  if (portalProfile() !== "main") return;
+  if (state.documents.tagsLoading) return;
+  if (state.documents.tagsChecked && !options.force) return;
+  state.documents.tagsLoading = true;
+  state.documents.tagsError = "";
+  if (getRoute() === "documents") render();
+  try {
+    const response = await fetch("/api/paperless/tags", {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    const tags = window.KAOS_PORTAL_DOCUMENTS.normalizeTags(payload).items;
+    const available = new Set(tags.map((tag) => tag.name));
+    state.documents = {
+      ...state.documents,
+      tagsChecked: true,
+      tagsLoading: false,
+      tagsError: "",
+      tagOptions: tags,
+      selectedTags: (state.documents.selectedTags || []).filter((tag) => available.has(tag)),
+    };
+  } catch (error) {
+    state.documents = {
+      ...state.documents,
+      tagsChecked: true,
+      tagsLoading: false,
+      tagsError: error.message || "Document tags are unavailable",
+      tagOptions: [],
+    };
+  }
   if (getRoute() === "documents") render();
 }
 
@@ -3478,6 +3521,35 @@ async function searchDocuments(query) {
   await loadDocuments({ force: true });
 }
 
+async function toggleDocumentTagFilter(name) {
+  const tagName = String(name || "").trim();
+  if (!tagName) return;
+  const selected = state.documents.selectedTags || [];
+  const selectedKey = tagName.toLowerCase();
+  state.documents.selectedTags = selected.some((tag) => tag.toLowerCase() === selectedKey)
+    ? selected.filter((tag) => tag.toLowerCase() !== selectedKey)
+    : [...selected, tagName].slice(0, 25);
+  state.documents.page = 1;
+  state.documents.checked = false;
+  state.documents.selected = null;
+  state.documents.selectedInboxId = "";
+  state.documents.detailError = "";
+  render();
+  await loadDocuments({ force: true });
+}
+
+async function clearDocumentTagFilters() {
+  if (!(state.documents.selectedTags || []).length) return;
+  state.documents.selectedTags = [];
+  state.documents.page = 1;
+  state.documents.checked = false;
+  state.documents.selected = null;
+  state.documents.selectedInboxId = "";
+  state.documents.detailError = "";
+  render();
+  await loadDocuments({ force: true });
+}
+
 function closeDocumentDetail() {
   const selectedId = state.documents.selectedId;
   state.documents.selectedId = "";
@@ -3699,6 +3771,7 @@ async function applyDocumentMetadata() {
     ));
     state.documents.checked = false;
     refreshMainAttentionShell();
+    await loadDocumentInbox({ force: true });
     await loadDocuments({ force: true });
   } catch (error) {
     state.documents.metadataReview = {
@@ -7678,9 +7751,30 @@ function renderDocuments() {
       `;
     })
     .join("");
-  const summary = documents.appliedQuery
-    ? `${documents.resultCount} MATCHES // ${documents.totalCount} DOCUMENTS`
+  const activeTags = documents.selectedTags || [];
+  const hasFilters = Boolean(documents.appliedQuery || activeTags.length);
+  const filterLabel = [
+    documents.appliedQuery ? `${documents.resultCount} MATCHES` : "",
+    activeTags.length ? `TAGS ${activeTags.map((tag) => `#${tag}`).join(" ")}` : "",
+  ].filter(Boolean).join(" // ");
+  const summary = hasFilters
+    ? `${filterLabel} // ${documents.totalCount} DOCUMENTS`
     : `${documents.totalCount} DOCUMENTS`;
+  const tagFilters = documents.tagsLoading
+    ? `<p class="archiveStatusMessage archiveTagStatus">LOADING TAGS</p>`
+    : documents.tagsError
+      ? `<p class="archiveStatusMessage archiveTagStatus">${escapeHtml(documents.tagsError)}</p>`
+      : documents.tagOptions.length
+        ? `
+          <div class="archiveTagFilters" aria-label="Document tag filters">
+            ${documents.tagOptions.map((tag) => {
+              const active = activeTags.some((name) => name.toLowerCase() === tag.name.toLowerCase());
+              return `<button class="archiveTagChip ${active ? "isActive" : ""}" type="button" data-document-tag="${escapeHtml(tag.name)}" aria-pressed="${active}">#${escapeHtml(tag.name)}</button>`;
+            }).join("")}
+            ${activeTags.length ? `<button class="archiveAction archiveClearTags" type="button" data-documents-clear-tags>CLEAR TAGS</button>` : ""}
+          </div>
+        `
+        : "";
   const selected = documents.selected;
   const selectedReviewRecord = selected ? inboxRecordByDocumentId.get(String(selected.id)) || null : null;
   const hasDetail = documents.detailLoading || documents.detailError || selected;
@@ -7798,6 +7892,7 @@ function renderDocuments() {
       <button class="archiveAction archiveTopAction" type="button" data-documents-refresh aria-label="Refresh documents" title="Refresh documents" ${documents.loading ? "disabled" : ""}>↻</button>
       <button class="srOnly" type="submit">Search</button>
     </form>
+    ${tagFilters}
     <div class="archiveWorkspace ${hasDetail ? "hasDetail" : ""}">
       <section class="archiveIndex" aria-labelledby="documentsIndexTitle" aria-busy="${documents.loading}">
         <header class="archiveIndexHeader">
@@ -10905,6 +11000,10 @@ function render() {
     window.setTimeout(() => document.querySelector('[data-create-supply] input[name="title"]')?.focus(), 0);
   }
   if (route === "memos" && portalProfile() === "main") loadMemos();
+  if (route === "documents" && portalProfile() === "main") {
+    loadDocumentTags();
+    loadDocumentInbox();
+  }
   if (route === "documents" && state.documents.mode !== "inbox") loadDocuments();
   if (route === "documents" && state.documents.mode === "inbox") loadDocumentInbox();
   if (route === "fax") loadFax();
@@ -11199,6 +11298,17 @@ document.addEventListener("click", async (event) => {
 
   if (event.target.closest("[data-documents-clear]")) {
     await searchDocuments("");
+    return;
+  }
+
+  const documentTag = event.target.closest("[data-document-tag]");
+  if (documentTag) {
+    await toggleDocumentTagFilter(documentTag.dataset.documentTag || "");
+    return;
+  }
+
+  if (event.target.closest("[data-documents-clear-tags]")) {
+    await clearDocumentTagFilters();
     return;
   }
 
@@ -12275,6 +12385,7 @@ document.addEventListener("submit", async (event) => {
       state.documents.upload = { saving: false, error: "" };
       state.documents.mode = "inbox";
       state.documents.selectedInboxId = String(payload.item?.id || "");
+      state.documents.checked = false;
       state.documents.inboxChecked = false;
       window.location.hash = "#/documents";
     } catch (error) {

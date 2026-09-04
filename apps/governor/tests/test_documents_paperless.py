@@ -161,6 +161,22 @@ class PaperlessDocumentServiceTests(unittest.TestCase):
         self.assertEqual(len(page.results), 2)
         self.assertEqual(service.status()["lastResultCount"], 13)
 
+    def test_search_page_filters_by_all_tag_ids(self) -> None:
+        urlopen = mock.Mock(
+            side_effect=[
+                FakeResponse(body=b'{"count":3,"results":[{"id":42,"title":"Tagged","created":"2026-08-13"}]}'),
+                FakeResponse(body=b'{"count":213,"results":[]}'),
+            ]
+        )
+        service = PaperlessDocumentService(self.config(), urlopen=urlopen)
+
+        page = service.search_page("clinic", limit=25, tag_ids=(7, 8, 7))
+
+        request = urlopen.call_args_list[0].args[0]
+        self.assertIn("query=clinic", request.full_url)
+        self.assertIn("tags__id__all=7%2C8", request.full_url)
+        self.assertEqual(page.result_count, 3)
+
     def test_list_page_browses_recent_documents_without_query(self) -> None:
         urlopen = mock.Mock(
             return_value=FakeResponse(

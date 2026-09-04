@@ -284,7 +284,13 @@ class PaperlessDocumentService:
             },
         }
 
-    def list_page(self, *, limit: int = 25, page: int = 1) -> PaperlessSearchPage:
+    def list_page(
+        self,
+        *,
+        limit: int = 25,
+        page: int = 1,
+        tag_ids: Sequence[int] = (),
+    ) -> PaperlessSearchPage:
         if not self.config.enabled:
             raise DocumentIntakeError("paperless_not_configured")
         if limit <= 0 or limit > 25:
@@ -292,9 +298,18 @@ class PaperlessDocumentService:
         if page <= 0:
             raise DocumentIntakeError("paperless_page_invalid")
         try:
-            payload = self._request_documents({"page_size": str(limit), "page": str(page), "ordering": "-created"})
+            query = {"page_size": str(limit), "page": str(page), "ordering": "-created"}
+            clean_tag_ids = normalize_tag_ids(tag_ids)
+            if clean_tag_ids:
+                query["tags__id__all"] = ",".join(str(value) for value in clean_tag_ids)
+            payload = self._request_documents(query)
             results = tuple(paperless_search_result(item) for item in decode_results_payload(payload))[:limit]
-            total_count = result_count_from_payload(payload, len(results))
+            result_count = result_count_from_payload(payload, len(results))
+            if clean_tag_ids:
+                total_payload = self._request_documents({"page_size": "1"})
+                total_count = result_count_from_payload(total_payload, 0)
+            else:
+                total_count = result_count
         except urllib.error.HTTPError as exc:
             self.last_error = f"paperless_http_{exc.code}"
             raise DocumentIntakeError(self.last_error) from exc
@@ -302,11 +317,18 @@ class PaperlessDocumentService:
             self.last_error = "paperless_request_failed"
             raise DocumentIntakeError(self.last_error) from exc
         self.last_search_at = _now()
-        self.last_result_count = total_count
+        self.last_result_count = result_count
         self.last_error = ""
-        return PaperlessSearchPage("", results, total_count, total_count, page, limit)
+        return PaperlessSearchPage("", results, result_count, total_count, page, limit)
 
-    def search_page(self, query: object, *, limit: int = 5, page: int = 1) -> PaperlessSearchPage:
+    def search_page(
+        self,
+        query: object,
+        *,
+        limit: int = 5,
+        page: int = 1,
+        tag_ids: Sequence[int] = (),
+    ) -> PaperlessSearchPage:
         if not self.config.enabled:
             raise DocumentIntakeError("paperless_not_configured")
         normalized = normalize_search_query(query)
@@ -317,7 +339,11 @@ class PaperlessDocumentService:
         if page <= 0:
             raise DocumentIntakeError("paperless_page_invalid")
         try:
-            payload = self._request_documents({"query": normalized, "page_size": str(limit), "page": str(page), "ordering": "-created"})
+            request_query = {"query": normalized, "page_size": str(limit), "page": str(page), "ordering": "-created"}
+            clean_tag_ids = normalize_tag_ids(tag_ids)
+            if clean_tag_ids:
+                request_query["tags__id__all"] = ",".join(str(value) for value in clean_tag_ids)
+            payload = self._request_documents(request_query)
             results = tuple(paperless_search_result(item) for item in decode_results_payload(payload))[:limit]
             result_count = result_count_from_payload(payload, len(results))
             total_payload = self._request_documents({"page_size": "1"})
@@ -609,6 +635,20 @@ def normalize_document_id(value: object) -> int:
     if document_id <= 0:
         raise DocumentIntakeError("paperless_document_id_invalid")
     return document_id
+
+
+def normalize_tag_ids(values: Sequence[int]) -> tuple[int, ...]:
+    tag_ids: list[int] = []
+    for value in values:
+        try:
+            tag_id = int(value)
+        except (TypeError, ValueError):
+            continue
+        if tag_id > 0 and tag_id not in tag_ids:
+            tag_ids.append(tag_id)
+        if len(tag_ids) >= 25:
+            break
+    return tuple(tag_ids)
 
 
 def optional_positive_int(value: object) -> int:

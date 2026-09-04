@@ -6556,6 +6556,46 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   color: var(--archive-amber);
 }
 
+.app[data-profile="main"] .archiveTagFilters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  margin-top: -4px;
+}
+
+.app[data-profile="main"] .archiveTagStatus {
+  margin: -4px 0 0;
+  color: var(--archive-muted);
+  font-size: 0.72rem;
+}
+
+.app[data-profile="main"] .archiveTagChip {
+  min-height: 32px;
+  border: 1px solid var(--archive-line);
+  border-radius: 999px;
+  background: rgba(67, 76, 94, 0.34);
+  color: var(--archive-muted);
+  padding: 0 12px;
+  font: 850 0.78rem/1 "Sarasa Gothic Mono", ui-monospace, monospace;
+  cursor: pointer;
+}
+
+.app[data-profile="main"] .archiveTagChip:hover,
+.app[data-profile="main"] .archiveTagChip.isActive {
+  border-color: var(--main-tab-active-border);
+  color: var(--main-tab-active-text);
+}
+
+.app[data-profile="main"] .archiveTagChip.isActive {
+  background: var(--main-tab-active-bg);
+}
+
+.app[data-profile="main"] .archiveClearTags {
+  margin-left: 2px;
+}
+
 .app[data-profile="main"] .archiveCommandActions,
 .app[data-profile="main"] .archiveActions {
   display: flex;
@@ -6720,6 +6760,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 .app[data-profile="main"] .archiveAction:focus-visible,
 .app[data-profile="main"] .archiveSourceLink:focus-visible,
 .app[data-profile="main"] .archiveInlineLink:focus-visible,
+.app[data-profile="main"] .archiveTagChip:focus-visible,
 .app[data-profile="main"] .archiveRecordButton:focus-visible,
 .app[data-profile="main"] .archiveDetail:focus-visible,
 .app[data-profile="main"] .archiveOcrRegion:focus-visible {
