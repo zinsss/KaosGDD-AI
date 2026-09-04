@@ -5860,19 +5860,48 @@ function tempRange(item) {
   return `${item.minTemp}-${item.maxTemp}`;
 }
 
+function kaosWeatherIconsReady() {
+  return document.documentElement.classList.contains("kaosWeatherIconsReady");
+}
+
+function weatherIconGlyph(codePoint, fallback) {
+  return kaosWeatherIconsReady() ? String.fromCodePoint(codePoint) : fallback;
+}
+
+function loadKaosWeatherIcons() {
+  if (!document.fonts?.load) return;
+  const root = document.documentElement;
+  if (root.classList.contains("kaosWeatherIconsReady")) return;
+  const start = () => {
+    document.fonts
+      .load('16px "Kaos Weather Icons"', String.fromCodePoint(0xe30d))
+      .then((fonts) => {
+        if (!fonts?.length) return;
+        root.classList.add("kaosWeatherIconsReady");
+        render();
+      })
+      .catch(() => null);
+  };
+  if (typeof window.requestIdleCallback === "function") {
+    window.requestIdleCallback(start, { timeout: 2500 });
+    return;
+  }
+  window.setTimeout(start, 0);
+}
+
 function weatherGlyph(weather) {
   const raw = String(weather?.glyph || weather?.condition || "").toLowerCase();
   const condition = String(weather?.condition || "").toLowerCase();
   const value = `${raw} ${condition}`;
-  if (value.includes("thunder") || value.includes("storm") || value.includes("⛈")) return "\ue31d";
-  if (value.includes("snow") || value.includes("sleet") || value.includes("❄")) return "\ue31a";
-  if (value.includes("rain") || value.includes("shower") || value.includes("drizzle") || value.includes("🌧") || value.includes("☔")) return "\ue318";
-  if (value.includes("cloud") || value.includes("overcast") || value.includes("☁")) return "\ue312";
-  if (value.includes("part") || value.includes("few") || value.includes("🌤") || value.includes("⛅")) return "\ue302";
-  if (value.includes("night") || value.includes("moon") || value.includes("🌙")) return "\ue32b";
-  if (value.includes("fog") || value.includes("mist") || value.includes("haze")) return "\ue313";
-  if (value.includes("sun") || value.includes("clear") || value.includes("☀")) return "\ue30d";
-  return raw ? "\ue371" : "";
+  if (value.includes("thunder") || value.includes("storm") || value.includes("⛈")) return weatherIconGlyph(0xe31d, "⛈️");
+  if (value.includes("snow") || value.includes("sleet") || value.includes("❄")) return weatherIconGlyph(0xe31a, "❄️");
+  if (value.includes("rain") || value.includes("shower") || value.includes("drizzle") || value.includes("🌧") || value.includes("☔")) return weatherIconGlyph(0xe318, "🌧️");
+  if (value.includes("cloud") || value.includes("overcast") || value.includes("☁")) return weatherIconGlyph(0xe312, "☁️");
+  if (value.includes("part") || value.includes("few") || value.includes("🌤") || value.includes("⛅")) return weatherIconGlyph(0xe302, "🌤️");
+  if (value.includes("night") || value.includes("moon") || value.includes("🌙")) return weatherIconGlyph(0xe32b, "🌙");
+  if (value.includes("fog") || value.includes("mist") || value.includes("haze")) return weatherIconGlyph(0xe313, "🌫️");
+  if (value.includes("sun") || value.includes("clear") || value.includes("☀")) return weatherIconGlyph(0xe30d, "☀️");
+  return raw ? weatherIconGlyph(0xe371, "◇") : "";
 }
 
 function isPastDate(dateValue) {
@@ -6030,7 +6059,7 @@ function renderCurrentLocationWeatherButton(dateValue) {
       data-current-location-weather="${escapeHtml(dateValue)}"
       aria-label="${escapeHtml(label)}"
       title="${escapeHtml(label)}"
-    >&#xe248;</button>
+    >⌖</button>
   `;
 }
 
@@ -6146,7 +6175,7 @@ function renderFamilyAgendaMixedRow(item) {
     `;
     return `
       <li class="familyAgendaMixedRow isEvent ${timeLabel ? "hasTime" : "isTimeless"} ${holidayClass}">
-        <span class="familyAgendaEntryControl familyAgendaEventMarker" role="img" aria-label="${escapeHtml(eventLabel)}" title="${escapeHtml(eventLabel)}">&#xEAB0;</span>
+        <span class="familyAgendaEntryControl familyAgendaEventMarker" role="img" aria-label="${escapeHtml(eventLabel)}" title="${escapeHtml(eventLabel)}">•</span>
         ${timeLabel ? `<time class="familyAgendaMixedTime">${escapeHtml(timeLabel)}</time>` : ""}
         ${event.systemManaged
           ? `<span class="familyAgendaMixedLink isReadOnly">${content}</span>`
@@ -12867,4 +12896,5 @@ if (isAgendaSuppliesEmbed()) {
   render();
 }
 
+loadKaosWeatherIcons();
 loadRemoteCalendar();

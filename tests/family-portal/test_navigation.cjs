@@ -46,18 +46,33 @@ test("unknown personal routes safely select Agenda", () => {
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=301"');
+  const styleIndex = index.indexOf('href="/styles.css?v=302"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=5"');
   const documentsIndex = index.indexOf('src="/documents.js?v=6"');
   const faxIndex = index.indexOf('src="/fax.js?v=2"');
   const mailIndex = index.indexOf('src="/mail.js?v=7"');
-  const applicationIndex = index.indexOf('src="/app.js?v=306"');
+  const applicationIndex = index.indexOf('src="/app.js?v=307"');
   assert.ok(styleIndex >= 0);
   assert.ok(navigationIndex >= 0);
   assert.ok(documentsIndex > navigationIndex);
   assert.ok(faxIndex > documentsIndex);
   assert.ok(mailIndex > faxIndex);
   assert.ok(applicationIndex > mailIndex);
+});
+
+test("weather icon font is lazy-loaded after emoji fallback render", () => {
+  const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
+  const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
+  const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
+
+  assert.doesNotMatch(index, /preload" href="\/fonts\/KaosWeatherIcons\.woff2/);
+  assert.match(appSource, /function loadKaosWeatherIcons\(\) \{/);
+  assert.match(appSource, /document\.fonts\s*\.\s*load\('16px "Kaos Weather Icons"', String\.fromCodePoint\(0xe30d\)\)/);
+  assert.match(appSource, /root\.classList\.add\("kaosWeatherIconsReady"\);/);
+  assert.match(appSource, /return weatherIconGlyph\(0xe30d, "☀️"\);/);
+  assert.match(styles, /--weather-icon-font:/);
+  assert.match(styles, /html\.kaosWeatherIconsReady \.dayWeatherGlyph/);
+  assert.doesNotMatch(styles, /Symbols Nerd Font|Nerd Font Symbols/);
 });
 
 test("kaosgdd.net defaults to KaosGDD branding before family host override", () => {
