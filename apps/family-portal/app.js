@@ -7457,6 +7457,10 @@ function renderDocuments() {
   const selectedInbox = inboxActive
     ? documents.inboxItems.find((item) => item.id === documents.selectedInboxId) || null
     : null;
+  const inboxRecordByDocumentId = documents.inboxItems.reduce((records, item) => {
+    if (item.documentId) records.set(String(item.documentId), item);
+    return records;
+  }, new Map());
   const inboxRows = documents.inboxItems
     .map((item) => {
       const date = archiveDateParts(item.submittedAt);
@@ -7481,12 +7485,14 @@ function renderDocuments() {
     .map((item) => {
       const title = item.title || `Document ${item.id}`;
       const date = archiveDateParts(item.created);
+      const reviewRecord = inboxRecordByDocumentId.get(String(item.id));
+      const reviewLabel = reviewRecord?.status === "failed" ? "FAILED" : reviewRecord ? "REVIEW" : "";
       return `
         <li class="archiveRecord ${String(documents.selectedId) === String(item.id) ? "isSelected" : ""}">
           <button class="archiveRecordButton" type="button" data-paperless-open="${escapeHtml(item.id)}" aria-current="${String(documents.selectedId) === String(item.id) ? "true" : "false"}">
             <span class="archiveRecordId">#${escapeHtml(item.id)}</span>
             <time class="archiveRecordDate" datetime="${escapeHtml(date.raw)}">${escapeHtml(date.label)}</time>
-            <strong class="archiveRecordTitle">${escapeHtml(title)}</strong>
+            <strong class="archiveRecordTitle">${escapeHtml(title)}${reviewLabel ? `<span class="archiveReviewMarker">${escapeHtml(reviewLabel)}</span>` : ""}</strong>
           </button>
           ${item.url ? `<a class="archiveSourceLink" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" aria-label="Open ${escapeHtml(title)} in Paperless" title="Open in Paperless">SRC</a>` : `<span class="archiveSourceLink isDisabled">--</span>`}
         </li>
@@ -7497,6 +7503,7 @@ function renderDocuments() {
     ? `${documents.resultCount} MATCHES // ${documents.totalCount} DOCUMENTS`
     : `${documents.totalCount} DOCUMENTS`;
   const selected = documents.selected;
+  const selectedReviewRecord = selected ? inboxRecordByDocumentId.get(String(selected.id)) || null : null;
   const hasDetail = documents.detailLoading || documents.detailError || selected;
   const detail = documents.detailLoading
     ? `
@@ -7539,11 +7546,12 @@ function renderDocuments() {
               ${archiveMeta("Created", selected.created ? formatDocumentDate(selected.created) : "")}
               ${archiveMeta("File", selected.filename || "unknown")}
               ${archiveMeta("Tags", selected.tags?.length ? selected.tags.map((tag) => `#${tag}`).join(" ") : "none")}
+              ${selectedReviewRecord ? archiveMeta("Inbox", selectedReviewRecord.statusLabel || "REVIEW") : ""}
             </dl>
             <div class="archiveActions">
               ${selected.url ? `<a class="archiveAction" href="${escapeHtml(selected.url)}" target="_blank" rel="noopener noreferrer">OPEN PAPERLESS</a>` : ""}
             </div>
-            ${renderDocumentMetadataReview({ documentId: selected.id, title: selected.title, tags: selected.tags })}
+            ${renderDocumentMetadataReview({ documentId: selected.id, recordId: selectedReviewRecord?.id || "", title: selected.title, tags: selected.tags })}
             <div class="archiveOcrRegion" role="region" aria-label="OCR text" tabindex="0">
               <p>OCR TEXT</p>
               <pre>${escapeHtml(selected.content || "No recognized text.")}</pre>

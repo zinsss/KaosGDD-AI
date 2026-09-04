@@ -7025,6 +7025,16 @@ h3 {
   white-space: nowrap;
 }
 
+.app[data-profile="main"] .archiveReviewMarker {
+  display: inline-block;
+  margin-left: 0.75ch;
+  color: var(--archive-amber);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  vertical-align: 0.08em;
+}
+
 .app[data-profile="main"] .archiveRecordStatus {
   display: none;
   grid-area: status;

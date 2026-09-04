@@ -21,7 +21,7 @@ test("documents metadata review previews before confirmed apply", () => {
   assert.match(appSource, /data-document-metadata-review/);
   assert.match(appSource, /function renderDocumentMetadataReview/);
   assert.match(appSource, /archiveMeta\("Tags", selected\.tags\?\.length/);
-  assert.match(appSource, /renderDocumentMetadataReview\(\{ documentId: selected\.id, title: selected\.title, tags: selected\.tags \}\)/);
+  assert.match(appSource, /renderDocumentMetadataReview\(\{ documentId: selected\.id, recordId: selectedReviewRecord\?\.id \|\| "", title: selected\.title, tags: selected\.tags \}\)/);
   assert.match(appSource, /metadata\/proposal/);
   assert.match(appSource, /data-document-ai-tags/);
   assert.match(appSource, /metadata\/tag-suggestions/);
@@ -39,6 +39,21 @@ test("documents metadata review previews before confirmed apply", () => {
   assert.match(appSource, /state\.documents\.inboxChecked = false;/);
   assert.match(appSource, /state\.documents\.mode = "archive";/);
   assert.match(appSource, /state\.documents\.selectedInboxId = "";/);
+});
+
+test("documents archive keeps inbox documents visible with review markers", () => {
+  assert.match(appSource, /const inboxRecordByDocumentId = documents\.inboxItems\.reduce/);
+  assert.match(appSource, /const reviewRecord = inboxRecordByDocumentId\.get\(String\(item\.id\)\);/);
+  assert.match(appSource, /class="archiveReviewMarker"/);
+  assert.match(appSource, /const selectedReviewRecord = selected \? inboxRecordByDocumentId\.get\(String\(selected\.id\)\) \|\| null : null;/);
+  assert.match(appSource, /archiveMeta\("Inbox", selectedReviewRecord\.statusLabel \|\| "REVIEW"\)/);
+  assert.match(appSource, /renderDocumentMetadataReview\(\{ documentId: selected\.id, recordId: selectedReviewRecord\?\.id \|\| "", title: selected\.title, tags: selected\.tags \}\)/);
+  assert.match(styles, /\.app\[data-profile="main"\] \.archiveReviewMarker \{/);
+});
+
+test("documents archive loads inbox markers alongside the Paperless archive", () => {
+  assert.match(appSource, /if \(route === "documents" && state\.documents\.mode !== "inbox"\) loadDocuments\(\);/);
+  assert.match(appSource, /if \(portalProfile\(\) === "main"\) void loadMainAttention\(\);/);
 });
 
 test("documents upload and metadata editor use aligned label columns", () => {
