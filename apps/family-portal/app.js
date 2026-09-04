@@ -6040,10 +6040,15 @@ function renderWeatherParts(dayparts) {
         Evening: uiText("weather.evening", "Evening"),
         Night: uiText("weather.night", "Night"),
       }[label];
+      const glyph = weatherGlyph(part);
+      const range = tempRange(part);
       return `
         <div class="weatherPart">
           <span class="weatherPartLabel">${escapeHtml(localizedLabel)}</span>
-          <span class="weatherPartValue">${escapeHtml([weatherGlyph(part), tempRange(part)].filter(Boolean).join(" "))}</span>
+          <span class="weatherPartValue">
+            ${glyph ? `<span class="weatherPartGlyph">${escapeHtml(glyph)}</span>` : ""}
+            ${range ? `<span class="weatherPartTemperature">${escapeHtml(range)}</span>` : ""}
+          </span>
         </div>
       `;
     })

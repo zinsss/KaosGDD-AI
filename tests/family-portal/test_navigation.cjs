@@ -46,12 +46,12 @@ test("unknown personal routes safely select Agenda", () => {
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=305"');
+  const styleIndex = index.indexOf('href="/styles.css?v=306"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=5"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
   const faxIndex = index.indexOf('src="/fax.js?v=2"');
   const mailIndex = index.indexOf('src="/mail.js?v=7"');
-  const applicationIndex = index.indexOf('src="/app.js?v=310"');
+  const applicationIndex = index.indexOf('src="/app.js?v=311"');
   assert.ok(styleIndex >= 0);
   assert.ok(navigationIndex >= 0);
   assert.ok(documentsIndex > navigationIndex);
@@ -73,6 +73,25 @@ test("weather icon font is lazy-loaded after emoji fallback render", () => {
   assert.match(styles, /--weather-icon-font:/);
   assert.match(styles, /html\.kaosWeatherIconsReady \.dayWeatherGlyph/);
   assert.doesNotMatch(styles, /Symbols Nerd Font|Nerd Font Symbols/);
+});
+
+test("weather detail rows keep icon font away from temperature text", () => {
+  const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
+  const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
+
+  assert.match(appSource, /class="weatherPartGlyph"/);
+  assert.match(appSource, /class="weatherPartTemperature"/);
+  assert.match(styles, /\.weatherPartGlyph \{[\s\S]*font-family: var\(--weather-icon-font\);/);
+  assert.match(styles, /\.weatherPartTemperature \{[\s\S]*font-family: "Sarasa Gothic Mono"/);
+  const valueBlock = styles.match(/\.weatherPartValue \{[^}]*\}/)?.[0] || "";
+  assert.doesNotMatch(valueBlock, /font-family: var\(--weather-icon-font\);/);
+});
+
+test("current location weather control is symbol-only", () => {
+  const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
+
+  assert.match(styles, /\.currentLocationWeatherButton \{[\s\S]*border: 0;[\s\S]*background: transparent;/);
+  assert.match(styles, /\.currentLocationWeatherButton:hover \{[\s\S]*color: var\(--nord13\);/);
 });
 
 test("kaosgdd.net defaults to KaosGDD branding before family host override", () => {

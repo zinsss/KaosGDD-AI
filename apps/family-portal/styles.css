@@ -2592,18 +2592,38 @@ h3 {
 }
 
 .weatherPartValue {
+  display: inline-grid;
+  grid-template-columns: 1.1em auto;
+  gap: 7px;
+  align-items: center;
+  justify-content: end;
+  color: var(--text);
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.weatherPartGlyph {
   color: var(--text);
   font-family: var(--weather-icon-font);
   font-size: 0.92rem;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.weatherPartTemperature {
+  color: var(--text);
+  font-family: "Sarasa Gothic Mono", ui-monospace, monospace;
+  font-size: 0.92rem;
   font-weight: 850;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+  line-height: 1;
 }
 
 .weatherPopupTrigger {
   cursor: pointer;
   transition:
     background-color 140ms ease,
+    color 140ms ease,
     outline-color 140ms ease;
 }
 
@@ -2625,12 +2645,12 @@ h3 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   padding: 0;
-  border: 1px solid var(--line-strong);
+  border: 0;
   border-radius: 50%;
-  background: var(--surface);
+  background: transparent;
   color: var(--nord8);
   font-family: "Sarasa Gothic Mono", ui-monospace, monospace;
   font-size: 1.05rem;
@@ -2646,7 +2666,7 @@ h3 {
 }
 
 .currentLocationWeatherButton:hover {
-  background: var(--raised);
+  color: var(--nord13);
 }
 
 .currentLocationWeatherButton:focus-visible {
@@ -2790,7 +2810,7 @@ html.kaosWeatherIconsReady .dayWeatherGlyph,
 html.kaosWeatherIconsReady .selectedWeatherCompact strong,
 html.kaosWeatherIconsReady .selectedWeatherGlyph,
 html.kaosWeatherIconsReady .overviewWeatherGlyph,
-html.kaosWeatherIconsReady .weatherPartValue,
+html.kaosWeatherIconsReady .weatherPartGlyph,
 html.kaosWeatherIconsReady .weatherLocationGlyph {
   font-family: "Kaos Weather Icons", var(--weather-icon-font);
 }
