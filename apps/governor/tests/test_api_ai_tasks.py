@@ -95,6 +95,25 @@ def fake_web_brain_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
     raise AssertionError(request.full_url)
 
 
+def fake_general_web_brain_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
+    assert request.full_url == "http://brain.internal:8099/internal/ai-tasks/web/preview"
+    assert request.headers["Authorization"] == "Bearer secret"
+    body = json.loads(request.data.decode("utf-8"))
+    assert body["prompt"] == "공식 결과를 바탕으로 일반 웹도 확인"
+    return FakeHTTPResponse(
+        {
+            "ok": True,
+            "result": {
+                "title": "일반 웹 보조 맥락",
+                "content": "일반 웹에서 확인한 보조 내용입니다.",
+                "sources": [{"title": "Supplemental", "url": "https://example.com/context"}],
+                "checkedAt": body["checkedAt"],
+                "model": "kaosbrain-openai-web",
+            },
+        }
+    )
+
+
 class GovernorAITaskTests(unittest.TestCase):
     def test_archive_write_errors_are_reported_as_ai_task_errors(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -189,6 +208,29 @@ class GovernorAITaskTests(unittest.TestCase):
             self.assertEqual(records[0].status, "previewed")
             self.assertEqual(records[0].source["type"], "official_web_search")
             self.assertEqual(records[0].source["plan"]["query"], "인플루엔자 접종 계획")
+
+    def test_preview_general_web_ai_task_uses_general_brain_search(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            archive = AITaskArchive(Path(temporary_directory) / "ai-tasks.json")
+            with (
+                patch.object(api, "AI_TASKS_BRAIN_URL", "http://brain.internal:8099/internal/ai-tasks/official-doc-memo/preview"),
+                patch.object(api, "AI_TASKS_WEB_BRAIN_URL", ""),
+                patch.object(api, "AI_TASKS_BRAIN_TOKEN", "secret"),
+            ):
+                payload = api.preview_general_web_ai_task_payload(
+                    {"prompt": "공식 결과를 바탕으로 일반 웹도 확인"},
+                    archive,
+                    urlopen=fake_general_web_brain_urlopen,
+                )
+
+            self.assertTrue(payload["ok"])
+            self.assertEqual(payload["result"]["title"], "일반 웹 보조 맥락")  # type: ignore[index]
+            records = archive.list_records()
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0].kind, "general_web")
+            self.assertEqual(records[0].status, "previewed")
+            self.assertEqual(records[0].source["type"], "general_web_search")
+            self.assertEqual(records[0].source["sources"][0]["url"], "https://example.com/context")
 
     def test_start_ai_task_returns_running_record_before_worker_finishes(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

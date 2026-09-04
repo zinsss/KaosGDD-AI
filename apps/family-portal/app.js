@@ -2457,6 +2457,99 @@ async function previewWebAiTask(form) {
   }
 }
 
+function aiTaskIsResultPreview(preview) {
+  return preview?.kind === "web" || preview?.kind === "general_web";
+}
+
+function aiTaskIsOfficialWebPreview(preview) {
+  const sourceInfo = preview?.source && typeof preview.source === "object" ? preview.source : {};
+  return preview?.kind === "web" && String(sourceInfo.type || "") === "official_web_search";
+}
+
+function aiTaskGeneralWebPrompt(preview) {
+  if (!preview) return "";
+  const result = preview.result && typeof preview.result === "object" ? preview.result : {};
+  const sourceInfo = preview.source && typeof preview.source === "object" ? preview.source : {};
+  const sources = Array.isArray(result.sources)
+    ? result.sources
+    : Array.isArray(sourceInfo.sources)
+      ? sourceInfo.sources
+      : [];
+  const sourceLines = sources
+    .map((source) => {
+      if (!source || typeof source !== "object") return "";
+      const title = String(source.title || source.url || "").trim();
+      const url = String(source.url || "").trim();
+      return url ? `- ${title || url}: ${url}` : "";
+    })
+    .filter(Boolean)
+    .slice(0, 8)
+    .join("\n");
+  const officialContent = String(result.content || preview.memo?.content || "").trim().slice(0, 5000);
+  const originalPrompt = String(preview.prompt || state.aiTasks.prompt || "").trim();
+  return [
+    "다음 KaosGDD 공식/허용목록 검색 결과를 기준점으로 삼아, 일반 웹에서 추가 맥락을 찾아줘.",
+    "일반 웹 결과는 보조 정보로만 표시하고 공식 자료를 대체하지 않는다고 명확히 표시해줘.",
+    "답변에는 확인한 출처 링크 목록을 반드시 포함해줘.",
+    originalPrompt ? `원래 요청:\n${originalPrompt}` : "",
+    officialContent ? `공식/허용목록 결과:\n${officialContent}` : "",
+    sourceLines ? `공식/허용목록 출처:\n${sourceLines}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n")
+    .slice(0, 9000);
+}
+
+async function searchGeneralWebForAiTask() {
+  if (state.aiTasks.previewing) return;
+  const preview = state.aiTasks.preview;
+  if (!aiTaskIsOfficialWebPreview(preview)) return;
+  const prompt = aiTaskGeneralWebPrompt(preview);
+  if (!prompt) return;
+  state.aiTasks = {
+    ...state.aiTasks,
+    previewing: true,
+    error: "",
+  };
+  render();
+  try {
+    const response = await fetch("/api/ai-tasks/general-web/preview", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ prompt }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    const task = normalizeAiTask(payload.task || {});
+    state.aiTasks = {
+      ...state.aiTasks,
+      previewing: false,
+      selectedId: task.id,
+      preview: aiTaskPreviewFromRecord(task) || {
+        kind: "general_web",
+        taskId: task.id,
+        prompt,
+        status: "previewed",
+        source: { type: "general_web_search" },
+        result: payload.result || {},
+      },
+      checked: false,
+      error: "",
+    };
+    await loadAiTasks({ force: true });
+  } catch (error) {
+    state.aiTasks = {
+      ...state.aiTasks,
+      previewing: false,
+      error: aiTaskErrorMessage(error.message || "ai_task_general_web_preview_failed"),
+    };
+    render();
+  }
+}
+
 async function previewUnifiedAiTask(form) {
   await startUnifiedAiTask(form);
 }
@@ -2487,6 +2580,7 @@ function aiTaskErrorMessage(code) {
     web_task_openai_empty: "OpenAI web search returned no readable answer.",
     web_task_openai_unauthorized: "OpenAI API key for web search was rejected.",
     web_task_openai_rate_limited: "OpenAI web search is rate-limited right now.",
+    ai_task_general_web_preview_failed: "Could not run supplemental general web search.",
     ai_task_source_required: "URL or pasted official source text is required.",
     ai_task_source_url_invalid: "That source URL is invalid.",
     ai_task_source_url_blocked: "That source URL is blocked for safety.",
@@ -2587,7 +2681,7 @@ function aiTaskMemoContentFromPreview(preview) {
       return `- ${sourceTitle}: ${sourceUrl}`;
     })
     .filter(Boolean);
-  if (preview?.kind !== "web" || !sourceLines.length) return content;
+  if (!aiTaskIsResultPreview(preview) || !sourceLines.length) return content;
   const checkedAt = String(payload.checkedAt || previewSource.checkedAt || "").trim();
   return [
     content.startsWith("#") ? content : `# ${title}\n\n${content}`,
@@ -9211,6 +9305,9 @@ function renderAiTasks() {
   const isArchivedPreview = Boolean(preview?.archived);
   const isAppliedPreview = String(preview?.status || "") === "applied";
   const canSavePreview = Boolean(preview && !isAppliedPreview && String(preview.taskId || "").trim() && aiTaskMemoContentFromPreview(preview));
+  const isResultPreview = aiTaskIsResultPreview(preview);
+  const isGeneralWebPreview = preview?.kind === "general_web" || String(sourceInfo.type || "") === "general_web_search";
+  const canSearchGeneralWeb = aiTaskIsOfficialWebPreview(preview);
   const statePanel = renderAiTaskStatePanel(preview);
   return `
     <section class="archiveTerminal" data-archive-kind="ai-tasks" aria-label="AI Tasks">
@@ -9256,16 +9353,21 @@ function renderAiTasks() {
       ${
         statePanel
           ? statePanel
-          : preview?.kind === "web"
+          : isResultPreview
           ? `
             <section class="archiveDetail aiTaskPreview" aria-label="AI task result">
               <header class="archiveDetailHeader">
                 <div>
-                  <p>${isArchivedPreview ? "AI TASK ARCHIVE" : "AI TASK RESULT"}</p>
+                  <p>${isGeneralWebPreview ? "GENERAL WEB CONTEXT" : isArchivedPreview ? "AI TASK ARCHIVE" : "AI TASK RESULT"}</p>
                   <h3>${escapeHtml(webResult.title)}</h3>
                 </div>
                 <div class="archiveActions">
                   ${isArchivedPreview ? `<button class="archiveAction" type="button" data-ai-task-close>BACK</button>` : ""}
+                  ${
+                    canSearchGeneralWeb
+                      ? `<button class="archiveAction" type="button" data-ai-task-general-web ${aiTasks.previewing ? "disabled" : ""}>${aiTasks.previewing ? "SEARCHING" : "SEARCH WEB"}</button>`
+                      : ""
+                  }
                   <button class="archiveAction" type="button" data-ai-task-copy>copy</button>
                   ${
                     canSavePreview
@@ -9282,6 +9384,11 @@ function renderAiTasks() {
                 ${archiveMeta("Model", webResult.model)}
                 ${archiveMeta("Memo", result.memoName || "")}
               </dl>
+              ${
+                isGeneralWebPreview
+                  ? `<div class="archiveNotice"><p>Supplemental web context. Verify important decisions against official sources.</p></div>`
+                  : ""
+              }
               ${renderAiTaskPlan(sourceInfo.plan)}
               <div class="archiveOcrRegion" data-ai-task-detail role="region" aria-label="AI task result" tabindex="0">
                 <p>RESULT</p>
@@ -12002,6 +12109,12 @@ document.addEventListener("click", async (event) => {
   if (event.target.closest("[data-ai-task-copy]")) {
     event.preventDefault();
     await copyAiTaskResult();
+    return;
+  }
+
+  if (event.target.closest("[data-ai-task-general-web]")) {
+    event.preventDefault();
+    await searchGeneralWebForAiTask();
     return;
   }
 

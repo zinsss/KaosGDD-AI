@@ -737,6 +737,23 @@ def _web_ai_task_result(
     }, result
 
 
+def _general_web_ai_task_result(
+    prompt: str,
+    *,
+    urlopen=urllib.request.urlopen,
+) -> tuple[dict[str, object], dict[str, object]]:
+    request = {
+        "prompt": prompt,
+        "checkedAt": datetime.now(UTC).date().isoformat(),
+    }
+    result = call_ai_task_web_brain(request, urlopen=urlopen)
+    return {
+        "type": "general_web_search",
+        "checkedAt": result.get("checkedAt") or request["checkedAt"],
+        "sources": result.get("sources") if isinstance(result.get("sources"), list) else [],
+    }, result
+
+
 def preview_official_doc_memo_payload(
     payload: dict[str, object],
     archive: AITaskArchive | None = None,
@@ -764,6 +781,23 @@ def preview_web_ai_task_payload(
     source, result = _web_ai_task_result(prompt, urlopen=urlopen)
     record = (archive or ai_task_archive()).add_result(
         kind="web",
+        prompt=prompt,
+        source=source,
+        result=result,
+    )
+    return {"ok": True, "task": record.as_dict(), "result": result}
+
+
+def preview_general_web_ai_task_payload(
+    payload: dict[str, object],
+    archive: AITaskArchive | None = None,
+    *,
+    urlopen=urllib.request.urlopen,
+) -> dict[str, object]:
+    prompt = _ai_task_prompt(payload, web=True)
+    source, result = _general_web_ai_task_result(prompt, urlopen=urlopen)
+    record = (archive or ai_task_archive()).add_result(
+        kind="general_web",
         prompt=prompt,
         source=source,
         result=result,
@@ -2963,6 +2997,17 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 print(f"Web AI task preview failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "ai_task_web_preview_failed"})
+            return
+        if parsed.path == "/api/ai-tasks/general-web/preview":
+            try:
+                require_main_access(self.headers)
+                json_response(self, 200, preview_general_web_ai_task_payload(json_request(self)))
+            except (ValueError, AITaskError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, (AITaskError, memos_relay.MemosRelayError)) else str(exc)
+                json_response(self, ai_task_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"General web AI task preview failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "ai_task_general_web_preview_failed"})
             return
         completed_ai_task_id = ai_task_complete_id(parsed.path)
         if completed_ai_task_id:
