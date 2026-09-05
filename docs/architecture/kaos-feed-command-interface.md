@@ -279,7 +279,9 @@ prefer:
 
 1. Korean official/public health pages for patient-facing baseline information.
 2. Domestic medicine/regulatory/insurance sources when drugs, 허가사항, or 급여 are
-   relevant.
+   relevant. For treatment-option prompts, HIRA 급여기준 is searched as a
+   Korea-specific applicability layer when criteria are available, but it does
+   not replace guideline/treatment sources.
 3. Guideline-grade international sources when Korean public sources are thin or
    outdated, such as PubMed/NCBI, NIH/NINDS, NICE CKS, AAFP, and professional
    society guideline pages.
@@ -294,15 +296,16 @@ The result should separate:
 - evaluation/tests to consider
 - medication/procedure options
 - referral or urgent-caution points
-- Korea-specific 허가/급여 확인 필요점 when applicable
+- Korea-specific 허가/급여 확인 필요점 when applicable, including a distinct
+  `한국 급여기준 확인` section when HIRA criteria were fetched
 - source list and checked date
 
 The PWA should label this as a discussion/reference summary. It must not present
 the answer as a patient-specific diagnosis, medication order, dosage instruction,
 or substitute for clinician judgment.
 
-Initial searchable source adapters target the main national sites that have
-public search pages:
+Initial searchable/fetchable source adapters target the main national sites and
+trigger-routed specialty hosts:
 
 - `mohw.go.kr`
 - `kdca.go.kr`
@@ -340,13 +343,18 @@ public search pages:
 - `kspid.or.kr`
 - `kapard.or.kr`
 
-HIRA is handled as a special case for medicine benefit questions. Governor uses
-the HIRA 보험인정기준 POST search endpoint instead of the generic site search,
-then links directly to the matching 보험인정기준 detail popup. Korean brand-name
-queries may be expanded to ingredient/class terms before searching, because
-HIRA often indexes current criteria by ingredient or therapeutic class rather
-than by product name. Current examples include `알모그란/알모트립탄 ->
-Almotriptan/편두통 치료제` and `글리아티린 -> Choline alfoscerate/콜린알포세레이트`.
+HIRA is handled as a special case for medicine benefit questions and as a
+secondary applicability check for treatment-option questions. Governor uses the
+HIRA 보험인정기준 POST search endpoint instead of the generic site search, then
+links directly to the matching 보험인정기준 detail popup. For direct
+medicine-benefit prompts, HIRA matches are primary. For treatment-option
+prompts, HIRA matches are added alongside guideline/treatment sources so the
+answer can separate clinical options from Korea-specific reimbursement
+conditions. Korean brand-name queries may be expanded to ingredient/class terms
+before searching, because HIRA often indexes current criteria by ingredient or
+therapeutic class rather than by product name. Current examples include
+`알모그란/알모트립탄 -> Almotriptan/편두통 치료제` and `글리아티린 -> Choline
+alfoscerate/콜린알포세레이트`.
 
 약학정보원 `health.kr` is allowed as a medicine dictionary helper, not as the
 final authority for insurance-benefit decisions. Governor can read its

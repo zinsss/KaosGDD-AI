@@ -202,6 +202,7 @@ class WebTaskValidationTests(unittest.TestCase):
         self.assertIn("treatment options/guidelines", KAOSAI_OFFICIAL_WEB_PLAN_SYSTEM_PROMPT)
         self.assertIn("For `treatment_options` tasks", KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
         self.assertIn("abstract-supported clinical points", KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
+        self.assertIn("한국 급여기준 확인", KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
         self.assertIn("not a personal diagnosis or treatment order", KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
         self.assertIn("www.aafp.org", KAOSAI_OFFICIAL_WEB_PLAN_SYSTEM_PROMPT)
         self.assertIn("headache.or.kr", KAOSAI_OFFICIAL_WEB_PLAN_SYSTEM_PROMPT)

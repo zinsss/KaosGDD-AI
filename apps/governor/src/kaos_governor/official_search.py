@@ -277,12 +277,24 @@ def official_health_search_candidates(
         candidates.extend(specialty_candidates)
         if not explicit_preferred or any(host in explicit_preferred for host in ("aafp.org", "www.aafp.org")):
             candidates.extend(_aafp_sitemap_candidates(queries, preferred=preferred, urlopen=urlopen))
+    hira_preferred = preferred | {"hira.or.kr", "www.hira.or.kr"} if treatment_query else preferred
+    hira_queries = queries
+    if treatment_query and not medicine_benefit_query:
+        benefit_queries = _unique_queries([*_treatment_benefit_queries(raw_queries), *_treatment_benefit_queries(queries)])
+        hira_queries = _unique_queries([*benefit_queries, *queries])
     hira_candidates = (
-        _hira_insurance_criteria_candidates(queries, preferred=preferred, urlopen=urlopen)
-        if medicine_benefit_query or any(host in preferred for host in ("hira.or.kr", "www.hira.or.kr"))
+        _hira_insurance_criteria_candidates(hira_queries, preferred=hira_preferred, urlopen=urlopen)
+        if medicine_benefit_query
+        or treatment_query
+        or any(host in preferred for host in ("hira.or.kr", "www.hira.or.kr"))
         else []
     )
-    if hira_candidates and any(host in preferred for host in ("hira.or.kr", "www.hira.or.kr")):
+    if treatment_query and not medicine_benefit_query:
+        hira_candidates = _filter_treatment_benefit_candidates(hira_candidates, raw_queries)
+    hira_primary = medicine_benefit_query or (
+        any(host in explicit_preferred for host in ("hira.or.kr", "www.hira.or.kr")) and not treatment_query
+    )
+    if hira_candidates and hira_primary:
         return _ranked_unique_candidates(hira_candidates)[:limit]
     candidates.extend(hira_candidates)
     if drug_lookup_query and not medicine_benefit_query and not treatment_query:
@@ -398,6 +410,93 @@ def _treatment_query_variants(queries: Iterable[str]) -> list[str]:
                 f"{base} management guideline",
             ))
     return variants
+
+
+def _treatment_benefit_queries(queries: Iterable[str]) -> list[str]:
+    variants: list[str] = []
+    query_list = list(queries)[:6]
+    for query in query_list[:4]:
+        base = re.sub(
+            r"(치료\s*옵션|치료옵션|치료\s*방법|치료방법|치료법|치료|처치|관리|진료지침|가이드라인|권고|options?|treatments?|therap(?:y|ies)|management|guidelines?|clinical practice)",
+            " ",
+            str(query or ""),
+            flags=re.I,
+        )
+        base = " ".join(base.replace("/", " ").replace(",", " ").split()).strip(" -·")
+        if len(base) < 2:
+            continue
+        if re.search(r"[가-힣]", base):
+            variants.extend((f"{base} 급여기준", f"{base} 요양급여기준", f"{base} 보험인정기준"))
+        if re.search(r"[A-Za-z]", base):
+            variants.extend((f"{base} reimbursement criteria", f"{base} insurance coverage criteria"))
+    for token in _meaningful_treatment_context_tokens(query_list)[:4]:
+        if "치료" in token or "예방" in token:
+            continue
+        if re.search(r"[가-힣]", token):
+            variants.extend((f"{token} 치료제", f"{token} 급여기준", f"{token} 요양급여기준", f"{token} 보험인정기준"))
+        elif re.search(r"[A-Za-z]", token) and len(token) > 3:
+            variants.extend((f"{token} reimbursement criteria", f"{token} insurance coverage criteria"))
+    return variants
+
+
+def _filter_treatment_benefit_candidates(
+    candidates: Iterable[OfficialSearchCandidate], queries: Iterable[str]
+) -> list[OfficialSearchCandidate]:
+    tokens = _meaningful_treatment_context_tokens(queries)
+    if not tokens:
+        return []
+    filtered: list[OfficialSearchCandidate] = []
+    for candidate in candidates:
+        text = f"{candidate.title} {urllib.parse.unquote(candidate.url)}".casefold()
+        if any(token in text for token in tokens):
+            filtered.append(candidate)
+    return filtered
+
+
+def _meaningful_treatment_context_tokens(queries: Iterable[str]) -> list[str]:
+    ignored = {
+        "option",
+        "options",
+        "treatment",
+        "treatments",
+        "therapy",
+        "therapies",
+        "management",
+        "guideline",
+        "guidelines",
+        "clinical",
+        "practice",
+        "criteria",
+        "coverage",
+        "insurance",
+        "reimbursement",
+        "syndrome",
+        "disease",
+        "치료",
+        "치료제",
+        "옵션",
+        "방법",
+        "처치",
+        "관리",
+        "진료지침",
+        "가이드라인",
+        "권고",
+        "급여",
+        "급여기준",
+        "요양급여기준",
+        "보험인정기준",
+        "기준",
+        "질환",
+        "증후군",
+        "경구제",
+        "주사제",
+    }
+    tokens: list[str] = []
+    for query in queries:
+        for token in re.findall(r"[0-9A-Za-z가-힣]{2,}", str(query or "").casefold()):
+            if token not in ignored:
+                tokens.append(token)
+    return list(dict.fromkeys(tokens))
 
 
 def _preferred_hosts(values: Iterable[str]) -> set[str]:
@@ -625,7 +724,7 @@ def _korean_specialty_treatment_candidates(
         for search_query in search_terms:
             page_url = site.search_url.format(query=urllib.parse.quote(search_query))
             for link in _search_page_links(page_url, urlopen=urlopen):
-                if "{query}" not in site.search_url and not _looks_like_specialty_source_link(link, queries):
+                if not _looks_like_specialty_source_link(link, queries):
                     continue
                 candidate = _candidate_from_link(link, site=site, queries=queries, preferred=preferred)
                 if candidate:
@@ -658,12 +757,15 @@ def _static_specialty_page_candidate(
 
 def _looks_like_specialty_source_link(link: dict[str, str], queries: list[str]) -> bool:
     text = f"{link.get('title') or ''} {urllib.parse.unquote(link.get('url') or '')}".casefold()
-    if any(term in text for term in ("진료지침", "치료", "가이드라인", "권고", "자료", "guideline", "treatment")):
+    context_tokens = _meaningful_treatment_context_tokens(queries)
+    has_context = any(token in text for token in context_tokens)
+    high_signal_terms = ("진료지침", "치료", "가이드라인", "권고", "guideline", "treatment", "clinical practice")
+    if any(term in text for term in high_signal_terms):
         return True
-    tokens: list[str] = []
-    for query in queries:
-        tokens.extend(re.findall(r"[0-9A-Za-z가-힣]{2,}", query.casefold()))
-    return any(token in text for token in dict.fromkeys(tokens))
+    generic_source_terms = ("자료", "지침", "지침서", "교육", "education", "guidebook")
+    if any(term in text for term in generic_source_terms):
+        return has_context
+    return has_context
 
 
 def _matching_korean_specialty_sites(queries: list[str]) -> list[OfficialSearchSite]:
@@ -746,6 +848,8 @@ def _aafp_topic_match_score(title: str, url: str, queries: list[str]) -> int:
         "therapy",
         "therapies",
         "management",
+        "syndrome",
+        "disease",
         "guideline",
         "guidelines",
         "clinical",
@@ -1070,6 +1174,9 @@ def _looks_like_noise_title(title: str) -> bool:
         "전체메뉴로 이동",
         "보건복지부 자료실",
         "기초연금",
+        "교육자료",
+        "위원회 자료실",
+        "전공의 수련지침서",
     }
 
 

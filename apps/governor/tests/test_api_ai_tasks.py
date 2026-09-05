@@ -588,6 +588,41 @@ class GovernorAITaskTests(unittest.TestCase):
         self.assertIn("restless legs syndrome treatment guideline", searched_terms)
         self.assertEqual(candidates[0].url, "https://pubmed.ncbi.nlm.nih.gov/39324694/")
 
+    def test_treatment_option_queries_ignore_irrelevant_specialty_menu_links(self) -> None:
+        urls: list[str] = []
+
+        def fake_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
+            urls.append(request.full_url)
+            if request.full_url == "https://www.aafp.org/sitemap.xml":
+                return FakeHTTPResponse("<urlset></urlset>", "application/xml; charset=utf-8")
+            if request.full_url.startswith("https://new.neuro.or.kr/search/"):
+                return FakeHTTPResponse(
+                    """<html><body>
+                    <a href="/about/history.php">학회 연혁</a>
+                    <a href="/about/rule.php">학회 회칙</a>
+                    <a href="/about/committee.php">위원회</a>
+                    </body></html>""",
+                    "text/html; charset=utf-8",
+                )
+            if request.full_url.startswith("https://www.hira.or.kr/"):
+                return FakeHTTPResponse("<html><body>검색된 내용이 없습니다.</body></html>", "text/html; charset=utf-8")
+            if request.full_url.startswith("https://pubmed.ncbi.nlm.nih.gov/"):
+                parsed = urllib.parse.urlsplit(request.full_url)
+                term = urllib.parse.unquote(urllib.parse.parse_qs(parsed.query).get("term", [""])[0])
+                if term == "restless legs syndrome treatment guideline":
+                    return FakeHTTPResponse(
+                        '<html><body><a href="/39324694/">Restless legs syndrome treatment clinical practice guideline</a></body></html>',
+                        "text/html; charset=utf-8",
+                    )
+            return FakeHTTPResponse("<html><body>검색된 내용이 없습니다.</body></html>", "text/html; charset=utf-8")
+
+        candidates = official_health_search_candidates("하지불안증후군 치료 옵션", urlopen=fake_urlopen)
+
+        self.assertTrue(any(url.startswith("https://new.neuro.or.kr/search/") for url in urls))
+        self.assertTrue(any(url.startswith("https://pubmed.ncbi.nlm.nih.gov/?term=") for url in urls))
+        self.assertEqual(candidates[0].url, "https://pubmed.ncbi.nlm.nih.gov/39324694/")
+        self.assertFalse(any("학회 연혁" in candidate.title or "학회 회칙" in candidate.title for candidate in candidates))
+
     def test_treatment_option_queries_search_trusted_guideline_sources(self) -> None:
         urls: list[str] = []
 
@@ -678,6 +713,40 @@ class GovernorAITaskTests(unittest.TestCase):
         self.assertEqual(candidates[0].host, "www.headache.or.kr")
         self.assertEqual(candidates[0].source, "대한두통학회")
         self.assertIn("편두통 예방치료", candidates[0].title)
+
+    def test_treatment_options_include_korean_benefit_criteria_when_available(self) -> None:
+        urls: list[str] = []
+
+        def fake_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
+            urls.append(request.full_url)
+            body = request.data.decode("utf-8") if getattr(request, "data", None) else ""
+            if request.full_url == "https://www.aafp.org/sitemap.xml":
+                return FakeHTTPResponse("<urlset></urlset>", "application/xml; charset=utf-8")
+            if request.full_url == "https://www.headache.or.kr/bbs/board.php?bo_table=3_5_1_1":
+                return FakeHTTPResponse(
+                    '<html><body><a href="/bbs/board.php?bo_table=3_5_1_1&wr_id=4">편두통 예방치료 약제 진료지침2021</a></body></html>',
+                    "text/html; charset=utf-8",
+                )
+            if request.full_url.startswith("https://www.hira.or.kr/rc/insu/insuadtcrtr/InsuAdtCrtrList.do"):
+                search_word = urllib.parse.parse_qs(body).get("searchKeyword", [""])[0]
+                if search_word not in {"편두통 치료제", "편두통 급여기준", "편두통 요양급여기준", "편두통 보험인정기준"}:
+                    return FakeHTTPResponse("<html><body>검색된 내용이 없습니다.</body></html>", "text/html; charset=utf-8")
+                return FakeHTTPResponse(
+                    """<html><body>
+                    <a href="#none" onclick="viewInsuAdtCrtr(1, '20240901', '3', '0001', '1'); return false;"
+                       title="편두통 치료제 새창으로 열기">편두통 치료제</a>
+                    </body></html>""",
+                    "text/html; charset=utf-8",
+                )
+            if request.full_url.startswith("https://pubmed.ncbi.nlm.nih.gov/"):
+                raise AssertionError("PubMed should not be queried after Korean specialty matches")
+            return FakeHTTPResponse("<html><body>검색된 내용이 없습니다.</body></html>", "text/html; charset=utf-8")
+
+        candidates = official_health_search_candidates("편두통 예방치료 옵션", urlopen=fake_urlopen)
+
+        self.assertTrue(any(url.startswith("https://www.hira.or.kr/rc/insu/insuadtcrtr/InsuAdtCrtrList.do") for url in urls))
+        self.assertEqual(candidates[0].source, "대한두통학회")
+        self.assertTrue(any(candidate.source == "건강보험심사평가원 보험인정기준" for candidate in candidates))
 
     def test_pediatric_asthma_queries_search_korean_pediatric_allergy_guidelines(self) -> None:
         urls: list[str] = []
