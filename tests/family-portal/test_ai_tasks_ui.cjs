@@ -30,6 +30,10 @@ test("AI Tasks official document memo flow previews before saving to Memos", () 
   assert.match(appSource, /AI TASK FAILED/);
   assert.match(appSource, /renderAiTaskPlan\(sourceInfo\.plan\)/);
   assert.match(appSource, /renderAiTaskSources\(webResult\.sources\)/);
+  assert.match(appSource, /function renderAiTaskTextbookSources\(sources\)/);
+  assert.match(appSource, /TEXTBOOK BACKGROUND/);
+  assert.match(appSource, /renderAiTaskTextbookSources\(webResult\.textbookSources\)/);
+  assert.match(appSource, /renderAiTaskTextbookSources\(textbookSources\)/);
   assert.match(appSource, /function aiTaskIsOfficialWebPreview\(preview\)/);
   assert.match(appSource, /String\(sourceInfo\.type \|\| ""\) === "official_web_search"/);
   assert.match(appSource, /data-ai-task-general-web/);

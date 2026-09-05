@@ -2803,6 +2803,34 @@ function renderAiTaskSources(sources) {
   `;
 }
 
+function renderAiTaskTextbookSources(sources) {
+  if (!Array.isArray(sources) || !sources.length) return "";
+  return `
+    <details class="aiTaskSources aiTaskTextbookSources" open>
+      <summary><span>TEXTBOOK BACKGROUND</span><small>${sources.length}</small></summary>
+      <ol>
+        ${sources
+          .map((source) => {
+            const title = String(source?.citation || source?.title || "textbook source");
+            const book = String(source?.book || "");
+            const edition = String(source?.edition || "");
+            const page = source?.page ? `p. ${source.page}` : "";
+            const excerpt = String(source?.excerpt || "").trim();
+            const meta = [book, edition, page].filter(Boolean).join(" // ");
+            return `
+              <li>
+                <strong>${escapeHtml(title)}</strong>
+                ${meta ? `<small>${escapeHtml(meta)}</small>` : ""}
+                ${excerpt ? `<pre>${escapeHtml(excerpt)}</pre>` : ""}
+              </li>
+            `;
+          })
+          .join("")}
+      </ol>
+    </details>
+  `;
+}
+
 function renderAiTaskStatePanel(preview) {
   const status = String(preview?.status || "");
   if (status !== "running" && status !== "failed") return "";
@@ -2813,6 +2841,11 @@ function renderAiTaskStatePanel(preview) {
     ? result.sources
     : Array.isArray(sourceInfo.sources)
       ? sourceInfo.sources
+      : [];
+  const textbookSources = Array.isArray(result.textbookSources)
+    ? result.textbookSources
+    : Array.isArray(sourceInfo.textbookSources)
+      ? sourceInfo.textbookSources
       : [];
   const resultContent = String(result.content || "").trim();
   const canCopy = Boolean(resultContent);
@@ -2843,6 +2876,7 @@ function renderAiTaskStatePanel(preview) {
       ${renderAiTaskPlan(sourceInfo.plan)}
       ${resultContent ? `<div class="archiveOcrRegion" role="region" aria-label="AI task partial result"><p>PARTIAL RESULT</p><pre>${escapeHtml(resultContent)}</pre></div>` : ""}
       ${renderAiTaskSources(resultSources)}
+      ${renderAiTaskTextbookSources(textbookSources)}
     </section>
   `;
 }
@@ -9495,12 +9529,18 @@ function renderAiTasks() {
     : Array.isArray(sourceInfo.sources)
       ? sourceInfo.sources
       : [];
+  const textbookSources = Array.isArray(result.textbookSources)
+    ? result.textbookSources
+    : Array.isArray(sourceInfo.textbookSources)
+      ? sourceInfo.textbookSources
+      : [];
   const webResult = {
     title: String(result.title || memo.title || preview?.title || "AI Task"),
     content: String(result.content || memo.content || ""),
     checkedAt: String(result.checkedAt || sourceInfo.checkedAt || ""),
     model: String(result.model || preview?.provider || ""),
     sources: resultSources,
+    textbookSources,
   };
   const isArchivedPreview = Boolean(preview?.archived);
   const isAppliedPreview = String(preview?.status || "") === "applied";
@@ -9595,6 +9635,7 @@ function renderAiTasks() {
                 <pre>${escapeHtml(webResult.content)}</pre>
               </div>
               ${renderAiTaskSources(webResult.sources)}
+              ${renderAiTaskTextbookSources(webResult.textbookSources)}
             </section>
           `
           : preview

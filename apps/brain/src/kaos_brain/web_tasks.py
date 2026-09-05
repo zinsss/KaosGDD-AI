@@ -286,7 +286,9 @@ class BrainOfficialWebTaskServer:
         error = validate_web_task_request(body)
         if error:
             return web.json_response({"ok": False, "error": error}, status=400)
-        if not isinstance(body.get("sources"), list) or not body.get("sources"):
+        if (not isinstance(body.get("sources"), list) or not body.get("sources")) and (
+            not isinstance(body.get("textbookSources"), list) or not body.get("textbookSources")
+        ):
             return web.json_response({"ok": False, "error": "official_web_sources_required"}, status=400)
         try:
             result = await self.kaosai.summarize_official_web_task(body)

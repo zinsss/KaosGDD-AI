@@ -3,6 +3,7 @@ from __future__ import annotations
 from io import BytesIO
 import json
 from pathlib import Path
+import sqlite3
 import tempfile
 import unittest
 import urllib.error
@@ -12,6 +13,7 @@ from unittest.mock import patch
 from kaos_governor import api
 from kaos_governor.ai_tasks import AITaskArchive, AITaskError
 from kaos_governor.official_search import allowed_official_health_hosts, official_health_search_candidates
+from kaos_governor.textbook_search import search_textbook_sources
 
 
 class FakeHTTPResponse:
@@ -210,6 +212,98 @@ class GovernorAITaskTests(unittest.TestCase):
             self.assertEqual(records[0].status, "previewed")
             self.assertEqual(records[0].source["type"], "official_web_search")
             self.assertEqual(records[0].source["plan"]["query"], "인플루엔자 접종 계획")
+
+    def test_textbook_search_expands_korean_condition_aliases(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            index_path = Path(temporary_directory) / "harrison-test.sqlite"
+            conn = sqlite3.connect(index_path)
+            try:
+                conn.execute("CREATE TABLE pages (id INTEGER PRIMARY KEY, page INTEGER NOT NULL, text TEXT NOT NULL)")
+                conn.execute("CREATE VIRTUAL TABLE pages_fts USING fts5(text)")
+                text = "Restless legs syndrome is discussed here with clinical evaluation and treatment options."
+                conn.execute("INSERT INTO pages (id, page, text) VALUES (1, 123, ?)", (text,))
+                conn.execute("INSERT INTO pages_fts (rowid, text) VALUES (1, ?)", (text,))
+                conn.commit()
+            finally:
+                conn.close()
+
+            sources = search_textbook_sources("하지불안증후군 치료 옵션", index_path=index_path)
+
+        self.assertEqual(sources[0]["citation"], "Harrison 22e, p. 123")
+        self.assertIn("Restless legs syndrome", sources[0]["excerpt"])
+
+    def test_web_ai_task_sends_textbook_background_to_brain(self) -> None:
+        textbook_source = {
+            "title": "Harrison p. 123",
+            "book": "Harrison's Principles of Internal Medicine",
+            "edition": "22e",
+            "page": 123,
+            "citation": "Harrison 22e, p. 123",
+            "excerpt": "Restless legs syndrome background.",
+        }
+
+        def fake_textbook_web_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
+            if request.full_url == "http://brain.internal:8099/internal/ai-tasks/official-web/plan":
+                return FakeHTTPResponse(
+                    {
+                        "ok": True,
+                        "plan": {
+                            "query": "하지불안증후군 치료 옵션",
+                            "alternateQueries": ["restless legs syndrome treatment guideline"],
+                            "preferredDomains": ["pubmed.ncbi.nlm.nih.gov"],
+                            "task": "treatment_options",
+                            "language": "ko",
+                        },
+                    }
+                )
+            if request.full_url.startswith("https://health.kr/"):
+                return FakeHTTPResponse("<html></html>", "text/html; charset=utf-8")
+            if request.full_url.startswith("https://pubmed.ncbi.nlm.nih.gov/"):
+                return FakeHTTPResponse(
+                    '<html><body><a href="/39324694/">Restless legs syndrome treatment guideline</a></body></html>',
+                    "text/html; charset=utf-8",
+                )
+            if request.full_url == "https://pubmed.ncbi.nlm.nih.gov/39324694/":
+                return FakeHTTPResponse("<html><body>Restless legs syndrome guideline abstract.</body></html>", "text/html; charset=utf-8")
+            if request.full_url.startswith("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?"):
+                return FakeHTTPResponse(
+                    "<PubmedArticleSet><PubmedArticle><MedlineCitation><Article><ArticleTitle>Restless legs syndrome treatment guideline</ArticleTitle><Abstract><AbstractText>Guideline abstract.</AbstractText></Abstract></Article></MedlineCitation></PubmedArticle></PubmedArticleSet>",
+                    "text/xml; charset=utf-8",
+                )
+            if request.full_url == "http://brain.internal:8099/internal/ai-tasks/official-web/summarize":
+                body = json.loads(request.data.decode("utf-8"))
+                self.assertEqual(body["textbookSources"][0]["citation"], "Harrison 22e, p. 123")
+                return FakeHTTPResponse(
+                    {
+                        "ok": True,
+                        "result": {
+                            "title": "치료 옵션 요약",
+                            "content": "요약",
+                            "sources": [{"title": "PubMed", "url": "https://pubmed.ncbi.nlm.nih.gov/39324694/"}],
+                            "checkedAt": body["checkedAt"],
+                            "model": "kaosbrain-openai",
+                        },
+                    }
+                )
+            raise AssertionError(request.full_url)
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            archive = AITaskArchive(Path(temporary_directory) / "ai-tasks.json")
+            with (
+                patch.object(api, "AI_TASKS_BRAIN_URL", "http://brain.internal:8099/internal/ai-tasks/official-doc-memo/preview"),
+                patch.object(api, "AI_TASKS_WEB_BRAIN_URL", ""),
+                patch.object(api, "AI_TASKS_BRAIN_TOKEN", "secret"),
+                patch.object(api, "search_textbook_sources", return_value=[textbook_source]),
+            ):
+                payload = api.preview_web_ai_task_payload(
+                    {"prompt": "하지불안증후군 치료 옵션"},
+                    archive,
+                    urlopen=fake_textbook_web_urlopen,
+                )
+
+            self.assertTrue(payload["ok"])
+            self.assertEqual(archive.list_records()[0].source["textbookSources"][0]["citation"], "Harrison 22e, p. 123")
+            self.assertEqual(payload["task"]["source"]["textbookSources"][0]["citation"], "Harrison 22e, p. 123")  # type: ignore[index]
 
     def test_preview_general_web_ai_task_uses_general_brain_search(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

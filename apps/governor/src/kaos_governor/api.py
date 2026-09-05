@@ -43,6 +43,7 @@ from kaos_governor.official_search import (
     official_health_search_candidates,
 )
 from kaos_governor.tasks import PostgresRecurringTaskStore, RecurringTaskDefinition, RecurringTaskError, RecurringTaskService, validate_payload
+from kaos_governor.textbook_search import search_textbook_sources
 from kaos_governor.system_updates import SystemUpdatesError, read_system_updates
 
 
@@ -720,12 +721,14 @@ def _web_ai_task_result(
     }
     plan = _clean_official_web_plan(call_ai_task_official_web_brain("plan", plan_request, urlopen=urlopen), prompt=prompt)
     source_payloads = fetch_official_web_sources(plan, urlopen=urlopen)
-    if not source_payloads:
+    textbook_sources = search_textbook_sources(prompt, plan)
+    if not source_payloads and not textbook_sources:
         raise AITaskError("ai_task_official_web_sources_not_found")
     summary_request = {
         **request,
         "plan": plan,
         "sources": source_payloads,
+        "textbookSources": textbook_sources,
     }
     result = _clean_official_web_result(
         call_ai_task_official_web_brain("summarize", summary_request, urlopen=urlopen),
@@ -736,6 +739,7 @@ def _web_ai_task_result(
         "checkedAt": result.get("checkedAt") or request["checkedAt"],
         "plan": plan,
         "sources": result.get("sources") if isinstance(result.get("sources"), list) else [],
+        "textbookSources": textbook_sources,
     }, result
 
 
@@ -775,27 +779,37 @@ def _official_web_failure_result(
     *,
     plan: dict[str, object] | None = None,
     source_payloads: list[dict[str, object]] | None = None,
+    textbook_sources: list[dict[str, object]] | None = None,
     checked_at: str = "",
 ) -> dict[str, object]:
     sources = _ai_task_source_summaries(source_payloads or [])
-    if not sources:
+    textbook_sources = list(textbook_sources or [])
+    if not sources and not textbook_sources:
         return {}
     plan_query = str((plan or {}).get("query") or prompt).strip()
     lines = [
         f"KaosBrain summary failed: {error}",
         "",
-        "Governor did find readable allowed/trusted sources. Use the links below, adjust the prompt, or run supplemental SEARCH WEB from this card.",
+        "Governor did find readable source material. Use the references below, adjust the prompt, or run supplemental SEARCH WEB from this card.",
     ]
     if plan_query:
         lines.extend(["", f"Search query: {plan_query}"])
-    lines.append("")
-    lines.append("Sources found:")
-    for index, source in enumerate(sources, start=1):
-        lines.append(f"{index}. {source['title']} — {source['url']}")
+    if sources:
+        lines.append("")
+        lines.append("Official/current sources found:")
+        for index, source in enumerate(sources, start=1):
+            lines.append(f"{index}. {source['title']} — {source['url']}")
+    if textbook_sources:
+        lines.append("")
+        lines.append("Textbook background found:")
+        for index, source in enumerate(textbook_sources[:5], start=1):
+            citation = str(source.get("citation") or source.get("title") or "Harrison").strip()
+            lines.append(f"{index}. {citation}")
     return {
         "title": "Official sources found; summary failed",
         "content": "\n".join(lines),
         "sources": sources,
+        "textbookSources": textbook_sources[:5],
         "checkedAt": checked_at or datetime.now(UTC).date().isoformat(),
         "model": "kaosgovernor-source-fallback",
     }
@@ -905,12 +919,15 @@ def run_ai_task_worker(
             }
             source_payloads = fetch_official_web_sources(plan, urlopen=urlopen)
             partial_source["sources"] = _ai_task_source_summaries(source_payloads)
-            if not source_payloads:
+            textbook_sources = search_textbook_sources(prompt, plan)
+            partial_source["textbookSources"] = textbook_sources
+            if not source_payloads and not textbook_sources:
                 raise AITaskError("ai_task_official_web_sources_not_found")
             summary_request = {
                 **request,
                 "plan": plan,
                 "sources": source_payloads,
+                "textbookSources": textbook_sources,
             }
             try:
                 result = _clean_official_web_result(
@@ -923,6 +940,7 @@ def run_ai_task_worker(
                     exc.code,
                     plan=plan,
                     source_payloads=source_payloads,
+                    textbook_sources=textbook_sources,
                     checked_at=request["checkedAt"],
                 )
                 raise
@@ -931,6 +949,7 @@ def run_ai_task_worker(
                 "checkedAt": result.get("checkedAt") or request["checkedAt"],
                 "plan": plan,
                 "sources": result.get("sources") if isinstance(result.get("sources"), list) else [],
+                "textbookSources": textbook_sources,
             }
             if not source["sources"]:
                 source["sources"] = _ai_task_source_summaries(source_payloads)
@@ -953,6 +972,7 @@ def run_ai_task_worker(
                 prompt,
                 "ai_task_background_failed",
                 source_payloads=(partial_source or {}).get("sources") if isinstance((partial_source or {}).get("sources"), list) else [],
+                textbook_sources=(partial_source or {}).get("textbookSources") if isinstance((partial_source or {}).get("textbookSources"), list) else [],
             )
             fail_kwargs = {"source": partial_source} if partial_source is not None else {}
             if partial_result:

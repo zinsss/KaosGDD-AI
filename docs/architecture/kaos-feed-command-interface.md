@@ -352,13 +352,14 @@ This is deliberately not broad web browsing. The model does not choose arbitrary
 URLs and Governor rejects fetched pages outside the allowlist. Public-health
 documents should always stay preview-before-save.
 
-### Indexed PDF textbook source tier plan
+### Indexed PDF textbook source tier
 
-Server-side medical textbook PDFs can become an AI Task source tier after the web
-source workflow is stable. They should be indexed locally rather than uploaded in
-full on every prompt.
+Server-side medical textbook PDFs can be an AI Task source tier. They are indexed
+locally rather than uploaded in full on every prompt. The first implemented
+source is Harrison's Principles of Internal Medicine, 22e, stored as a read-only
+SQLite FTS index for Governor.
 
-Planned pipeline:
+Pipeline:
 
 ```text
 PDF folder on H3/H4
@@ -374,6 +375,14 @@ AI Task prompt
 result archive
   stores source citations as filename + page/section + hash, not full copied text
 ```
+
+Runtime defaults:
+
+- H3 bind-mounts `${KAOS_ROOT}/reference/textbooks` into Governor as
+  `/data/textbooks:ro`.
+- `AI_TASK_TEXTBOOK_INDEX_PATH` defaults to
+  `/data/textbooks/harrison/index/harrison22.index.sqlite`.
+- `AI_TASK_TEXTBOOK_SEARCH_ENABLED=false` disables the local textbook tier.
 
 Source priority:
 

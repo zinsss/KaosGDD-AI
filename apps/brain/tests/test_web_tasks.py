@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 import unittest
 from importlib.util import find_spec
 
 from kaos_brain.kaos_ai import (
     KAOSAI_OFFICIAL_WEB_PLAN_SYSTEM_PROMPT,
     KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT,
+    _render_official_web_summary_request,
     parse_general_web_task_response,
     parse_official_web_plan_response,
     parse_official_web_summary_response,
@@ -165,6 +167,31 @@ class WebTaskValidationTests(unittest.TestCase):
         self.assertEqual(result["checkedAt"], "2026-09-04")
         self.assertEqual(result["sources"], [{"title": "Source", "url": "https://example.com"}])
 
+    def test_official_web_summary_request_includes_textbook_background_separately(self) -> None:
+        rendered = _render_official_web_summary_request(
+            {
+                "prompt": "하지불안증후군 치료 옵션",
+                "checkedAt": "2026-09-05",
+                "plan": {"query": "restless legs syndrome treatment guideline", "task": "treatment_options"},
+                "sources": [{"title": "PubMed", "url": "https://pubmed.ncbi.nlm.nih.gov/39324694/", "excerpt": "Guideline abstract"}],
+                "textbookSources": [
+                    {
+                        "title": "Harrison p. 123",
+                        "book": "Harrison's Principles of Internal Medicine",
+                        "edition": "22e",
+                        "page": 123,
+                        "citation": "Harrison 22e, p. 123",
+                        "excerpt": "Restless legs syndrome background.",
+                    }
+                ],
+            }
+        )
+        payload = json.loads(rendered)
+
+        self.assertEqual(payload["textbookSources"][0]["sourceTier"], "textbook_background")
+        self.assertEqual(payload["textbookSources"][0]["citation"], "Harrison 22e, p. 123")
+        self.assertEqual(payload["sources"][0]["title"], "PubMed")
+
     def test_official_web_summary_prompt_requests_chart_note_guidance_for_benefits(self) -> None:
         self.assertIn("차트 기재 추천", KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
         self.assertIn("급여기준", KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
@@ -176,6 +203,8 @@ class WebTaskValidationTests(unittest.TestCase):
         self.assertIn("For `treatment_options` tasks", KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
         self.assertIn("abstract-supported clinical points", KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
         self.assertIn("not a personal diagnosis or treatment order", KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
+        self.assertIn("textbookSources", KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
+        self.assertIn("textbook background", KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
 
 
 if __name__ == "__main__":

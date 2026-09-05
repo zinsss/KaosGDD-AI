@@ -291,6 +291,7 @@ Rules:
 - This is read-only. Do not claim anything was saved, sent, applied, or modified.
 - Use Korean unless the request is clearly English.
 - Use only the provided sources and excerpts. If the sources are insufficient, say what is missing.
+- Treat `textbookSources` as background clinical context only. Separate it from current official/guideline sources, cite it as textbook background, and let current official/guideline/policy sources override textbook excerpts when they differ.
 - Prefer practical output: answer first, then key points, dates/eligibility/actions, and source notes.
 - For `treatment_options` tasks, organize by non-drug measures, evaluation/tests, medication/procedure options, when to refer/urgent cautions, and Korea-specific 허가/급여 확인 필요점 when relevant. If a source is PubMed abstract/metadata rather than full text, use the abstract-supported clinical points instead of dismissing it as title-only. Make clear this is a source-bounded clinical reference for discussion with a clinician, not a personal diagnosis or treatment order.
 - For Korean medicine insurance/benefit criteria questions such as 급여기준, 요양급여, 본인부담, 투여조건, or 삭감, include a separate `차트 기재 추천` section when the fetched sources support it. Give copyable Korean chart-note examples and a short checklist of source-supported clinical facts to document, such as diagnosis, symptom/severity, eligibility criteria met, dose/quantity/interval, and follow-up plan. Do not invent patient facts; mark placeholders clearly.
@@ -903,6 +904,23 @@ def _render_official_web_summary_request(request: Mapping[str, Any]) -> str:
         )
         if len(sources) >= 6:
             break
+    textbook_sources = []
+    for source in request.get("textbookSources") or []:
+        if not isinstance(source, Mapping):
+            continue
+        textbook_sources.append(
+            {
+                "title": str(source.get("title") or "")[:200],
+                "book": str(source.get("book") or "")[:160],
+                "edition": str(source.get("edition") or "")[:40],
+                "page": source.get("page"),
+                "citation": str(source.get("citation") or "")[:160],
+                "excerpt": str(source.get("excerpt") or "")[:4000],
+                "sourceTier": "textbook_background",
+            }
+        )
+        if len(textbook_sources) >= 3:
+            break
     return json.dumps(
         {
             "prompt": str(request.get("prompt") or "")[:1600],
@@ -915,6 +933,7 @@ def _render_official_web_summary_request(request: Mapping[str, Any]) -> str:
                 "language": str(plan.get("language") or "ko"),
             },
             "sources": sources,
+            "textbookSources": textbook_sources,
         },
         ensure_ascii=False,
         sort_keys=True,

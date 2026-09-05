@@ -7049,6 +7049,15 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   font-size: 0.68rem;
 }
 
+.app[data-profile="main"] .aiTaskSources li pre {
+  max-height: 14rem;
+  margin: 6px 0 0;
+  overflow: auto;
+  color: var(--archive-muted);
+  font: 0.74rem/1.55 "Sarasa Gothic Mono", ui-monospace, monospace;
+  white-space: pre-wrap;
+}
+
 .app[data-profile="main"] .aiTaskPlan {
   border: 1px dashed rgba(136, 192, 208, 0.45);
   padding: 10px 12px;
