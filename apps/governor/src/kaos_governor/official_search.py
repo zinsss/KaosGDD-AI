@@ -82,7 +82,108 @@ OFFICIAL_HEALTH_SITES: tuple[OfficialSearchSite, ...] = (
 )
 
 
-OFFICIAL_HEALTH_ALLOWED_HOSTS = frozenset(host for site in OFFICIAL_HEALTH_SITES for host in site.hosts)
+
+
+KOREAN_SPECIALTY_TREATMENT_SOURCES: tuple[tuple[tuple[str, ...], tuple[OfficialSearchSite, ...]], ...] = (
+    (
+        ("진료지침", "가이드라인", "치료", "치료법", "치료 옵션", "치료옵션", "권고", "guideline", "treatment"),
+        (
+            OfficialSearchSite("NECA 임상진료지침 Library", ("neca-cms.egentouch.com",)),
+            OfficialSearchSite("대한의학회 임상진료지침 정보센터", ("guideline.or.kr", "www.guideline.or.kr", "komgi.kr", "www.komgi.kr")),
+        ),
+    ),
+    (
+        ("암", "종양", "항암", "cancer", "oncology"),
+        (OfficialSearchSite("국가암정보센터", ("cancer.go.kr", "www.cancer.go.kr"), "https://www.cancer.go.kr/lay1/program/S1T674C675/search/search.do?keyword={query}"),),
+    ),
+    (
+        ("희귀", "산정특례", "rare"),
+        (OfficialSearchSite("질병관리청 희귀질환 헬프라인", ("helpline.kdca.go.kr",), "https://helpline.kdca.go.kr/cdchelp/ph/rdiz/selectRdizInfList.do?menu=A0100&searchWrd={query}"),),
+    ),
+    (
+        ("응급", "응급처치", "emergency", "first aid"),
+        (OfficialSearchSite("응급의료포털 E-Gen", ("e-gen.or.kr", "www.e-gen.or.kr"), "https://www.e-gen.or.kr/search/search.do?searchWrd={query}"),),
+    ),
+    (
+        ("재활", "장애", "rehab", "rehabilitation"),
+        (OfficialSearchSite("국립재활원 장애인 건강·재활 정보포털", ("nrc.go.kr", "www.nrc.go.kr"), "https://www.nrc.go.kr/portal/board/portalList.do?menu_cd=01_01&searchWrd={query}"),),
+    ),
+    (
+        ("고혈압", "혈압", "심부전", "부정맥", "심혈관", "협심증", "심근경색", "hypertension", "heart failure", "arrhythmia"),
+        (
+            OfficialSearchSite("대한고혈압학회", ("koreanhypertension.org", "www.koreanhypertension.org"), "https://www.koreanhypertension.org/reference/guide"),
+            OfficialSearchSite("대한심장학회", ("circulation.or.kr", "www.circulation.or.kr", "m.circulation.or.kr"), "https://m.circulation.or.kr/bbs/?code=guide"),
+        ),
+    ),
+    (
+        ("당뇨", "혈당", "diabetes"),
+        (OfficialSearchSite("대한당뇨병학회", ("diabetes.or.kr", "www.diabetes.or.kr", "kdaguideline.com", "www.kdaguideline.com"), "https://www.diabetes.or.kr/bbs/?code=guide&keyfield=all&keyword={query}"),),
+    ),
+    (
+        ("콩팥", "신장", "투석", "ckd", "kidney", "renal", "dialysis"),
+        (OfficialSearchSite("대한신장학회", ("ksn.or.kr", "www.ksn.or.kr"), "https://ksn.or.kr/bbs/?code=guideline_k"),),
+    ),
+    (
+        ("간", "간염", "간경변", "지방간", "masld", "hepatitis", "cirrhosis"),
+        (OfficialSearchSite("대한간학회", ("kasl.org", "www.kasl.org"), "https://www.kasl.org/bbs/index.html?code=guide"),),
+    ),
+    (
+        ("천식", "copd", "결핵", "폐렴", "호흡", "폐", "asthma", "tuberculosis", "pneumonia"),
+        (OfficialSearchSite("대한결핵및호흡기학회", ("lungkorea.org", "www.lungkorea.org"), "https://www.lungkorea.org/bbs/?code=guide&keyfield=all&keyword={query}"),),
+    ),
+    (
+        ("감염", "항생제", "hiv", "코로나", "인플루엔자", "마이코플라스마", "infection", "antibiotic", "influenza"),
+        (
+            OfficialSearchSite("대한감염학회", ("ksid.or.kr", "www.ksid.or.kr"), "https://www.ksid.or.kr/rang_board/list.html?code=ncov_guide_do&key=subject&keyword={query}"),
+            OfficialSearchSite("대한항균요법학회", ("ksat.or.kr", "www.ksat.or.kr"), "https://www.ksat.or.kr/medical/sub01.html"),
+        ),
+    ),
+    (
+        ("이석증", "어지럼", "현훈", "메니에르", "이명", "난청", "전정", "bppv", "vertigo", "dizziness", "tinnitus", "hearing"),
+        (
+            OfficialSearchSite("대한평형의학회", ("vertigo.or.kr", "www.vertigo.or.kr"), "https://www.vertigo.or.kr/"),
+            OfficialSearchSite("대한이비인후과학회", ("korl.or.kr", "www.korl.or.kr")),
+        ),
+    ),
+    (
+        ("신경", "뇌전증", "파킨슨", "치매", "하지불안", "수면", "neurology", "seizure", "epilepsy", "parkinson", "dementia", "restless"),
+        (
+            OfficialSearchSite("대한신경과학회", ("neuro.or.kr", "www.neuro.or.kr", "new.neuro.or.kr", "renew.neuro.or.kr"), "https://new.neuro.or.kr/search/?keyword={query}"),
+            OfficialSearchSite("대한신경과학회지", ("jkna.org", "www.jkna.org"), "https://www.jkna.org/search.php?where=aview&id=10.17340&code=0033JKNA&vmode=PUBREADER&kwd={query}"),
+        ),
+    ),
+    (
+        ("두통", "편두통", "군발두통", "migraine", "headache", "cluster headache"),
+        (OfficialSearchSite("대한두통학회", ("headache.or.kr", "www.headache.or.kr"), "https://www.headache.or.kr/bbs/board.php?bo_table=3_5_1_1"),),
+    ),
+    (
+        ("뇌졸중", "뇌경색", "tia", "stroke"),
+        (OfficialSearchSite("대한뇌졸중학회", ("stroke.or.kr", "www.stroke.or.kr"), "https://www.stroke.or.kr/guidelines/history.php?key=title&keyword={query}"),),
+    ),
+    (
+        ("소아", "영유아", "청소년", "아동", "pediatric", "child", "children", "adolescent"),
+        (
+            OfficialSearchSite("대한소아청소년과학회", ("pediatrics.or.kr", "www.pediatrics.or.kr", "pediatrics.m2comm.co.kr")),
+            OfficialSearchSite("대한소아감염학회", ("kspid.or.kr", "www.kspid.or.kr")),
+        ),
+    ),
+    (
+        ("소아감염", "소아 감염", "소아 코로나", "소아 마이코플라스마", "pediatric infection"),
+        (OfficialSearchSite("대한소아감염학회", ("kspid.or.kr", "www.kspid.or.kr")),),
+    ),
+    (
+        ("소아 천식", "소아알레르기", "아토피", "알레르기", "pediatric asthma", "allergy", "atopy"),
+        (OfficialSearchSite("대한소아알레르기호흡기학회", ("kapard.or.kr", "www.kapard.or.kr"), "https://www.kapard.or.kr/community/guide.php"),),
+    ),
+)
+
+KOREAN_SPECIALTY_TREATMENT_SITES: tuple[OfficialSearchSite, ...] = tuple(
+    dict.fromkeys(site for _triggers, sites in KOREAN_SPECIALTY_TREATMENT_SOURCES for site in sites)
+)
+
+OFFICIAL_HEALTH_ALLOWED_HOSTS = frozenset(
+    host for site in (*OFFICIAL_HEALTH_SITES, *KOREAN_SPECIALTY_TREATMENT_SITES) for host in site.hosts
+)
 
 
 class SearchLinkParser(HTMLParser):
@@ -136,18 +237,23 @@ def official_health_search_candidates(
     limit: int = 8,
     urlopen: Callable = urllib.request.urlopen,
 ) -> list[OfficialSearchCandidate]:
-    queries = _expanded_queries(_unique_queries([query, *alternate_queries]))
-    if not queries:
+    raw_queries = _unique_queries([query, *alternate_queries])
+    if not raw_queries:
         return []
+    treatment_query = _looks_like_treatment_options_query(raw_queries)
+    queries = _expanded_queries(raw_queries)
     health_kr_queries: list[str] = []
     health_kr_candidates: list[OfficialSearchCandidate] = []
     if _looks_like_drug_lookup_query(queries):
         health_kr_queries, health_kr_candidates = _health_kr_drug_queries_and_candidates(queries, urlopen=urlopen)
     queries = _expanded_queries(_unique_queries([*queries, *health_kr_queries]))
-    preferred = _preferred_hosts(preferred_domains)
-    if _looks_like_medicine_benefit_query(queries):
+    drug_lookup_query = _looks_like_drug_lookup_query(queries)
+    explicit_preferred = _preferred_hosts(preferred_domains)
+    preferred = set(explicit_preferred)
+    medicine_benefit_query = _looks_like_medicine_benefit_query(queries)
+    if medicine_benefit_query:
         preferred.update({"hira.or.kr", "www.hira.or.kr"})
-    if _looks_like_treatment_options_query(queries):
+    if treatment_query and not explicit_preferred:
         preferred.update(
             {
                 "health.kdca.go.kr",
@@ -160,15 +266,49 @@ def official_health_search_candidates(
                 "www.aafp.org",
             }
         )
-    treatment_query = _looks_like_treatment_options_query(queries)
+        preferred.update(_korean_specialty_preferred_hosts(queries))
     sites = _ordered_sites(preferred)
     candidates: list[OfficialSearchCandidate] = list(health_kr_candidates)
+    specialty_candidates: list[OfficialSearchCandidate] = []
     if treatment_query:
-        candidates.extend(_aafp_sitemap_candidates(queries, preferred=preferred, urlopen=urlopen))
-    hira_candidates = _hira_insurance_criteria_candidates(queries, preferred=preferred, urlopen=urlopen)
+        specialty_candidates = _korean_specialty_treatment_candidates(
+            queries, preferred=preferred, explicit_preferred=explicit_preferred, urlopen=urlopen
+        )
+        candidates.extend(specialty_candidates)
+        if not explicit_preferred or any(host in explicit_preferred for host in ("aafp.org", "www.aafp.org")):
+            candidates.extend(_aafp_sitemap_candidates(queries, preferred=preferred, urlopen=urlopen))
+    hira_candidates = (
+        _hira_insurance_criteria_candidates(queries, preferred=preferred, urlopen=urlopen)
+        if medicine_benefit_query or any(host in preferred for host in ("hira.or.kr", "www.hira.or.kr"))
+        else []
+    )
     if hira_candidates and any(host in preferred for host in ("hira.or.kr", "www.hira.or.kr")):
         return _ranked_unique_candidates(hira_candidates)[:limit]
     candidates.extend(hira_candidates)
+    if drug_lookup_query and not medicine_benefit_query and not treatment_query:
+        drug_information_sites = [
+            site
+            for site in OFFICIAL_HEALTH_SITES
+            if site.search_url
+            and any(host in {"nedrug.mfds.go.kr", "mfds.go.kr", "www.mfds.go.kr"} for host in site.hosts)
+        ]
+        drug_preferred = preferred | {"health.kr", "www.health.kr", "nedrug.mfds.go.kr", "mfds.go.kr", "www.mfds.go.kr"}
+        for site in _sort_sites_by_preference(drug_information_sites, drug_preferred):
+            site_count = 0
+            for search_query in queries[:3]:
+                page_url = site.search_url.format(query=urllib.parse.quote(search_query))
+                for link in _search_page_links(page_url, urlopen=urlopen):
+                    candidate = _candidate_from_link(link, site=site, queries=queries, preferred=drug_preferred)
+                    if candidate:
+                        candidates.append(candidate)
+                        site_count += 1
+                    if site_count >= 4:
+                        break
+                if site_count >= 4:
+                    break
+        return _ranked_unique_candidates(candidates)[:limit]
+    if treatment_query and specialty_candidates:
+        return _ranked_unique_candidates(candidates)[:limit]
     for index, site in enumerate(sites):
         if not site.search_url:
             continue
@@ -333,7 +473,11 @@ def _looks_like_treatment_options_query(queries: Iterable[str]) -> bool:
 
 def _ordered_sites(preferred: set[str]) -> list[OfficialSearchSite]:
     with_search = [site for site in OFFICIAL_HEALTH_SITES if site.search_url]
-    return sorted(with_search, key=lambda site: 0 if any(host in preferred for host in site.hosts) else 1)
+    return _sort_sites_by_preference(with_search, preferred)
+
+
+def _sort_sites_by_preference(sites: Iterable[OfficialSearchSite], preferred: set[str]) -> list[OfficialSearchSite]:
+    return sorted(sites, key=lambda site: 0 if any(host in preferred for host in site.hosts) else 1)
 
 
 def _has_remaining_preferred_site(sites: Iterable[OfficialSearchSite], preferred: set[str]) -> bool:
@@ -450,6 +594,85 @@ def _health_kr_drug_queries_and_candidates(
             if discovered_queries:
                 break
     return _unique_queries(discovered_queries), _ranked_unique_candidates(candidates)[:MAX_CANDIDATES_PER_SEARCH]
+
+
+def _korean_specialty_preferred_hosts(queries: list[str]) -> set[str]:
+    hosts: set[str] = set()
+    for site in _matching_korean_specialty_sites(queries):
+        hosts.update(site.hosts)
+    return hosts
+
+
+def _korean_specialty_treatment_candidates(
+    queries: list[str],
+    *,
+    preferred: set[str],
+    explicit_preferred: set[str],
+    urlopen: Callable = urllib.request.urlopen,
+) -> list[OfficialSearchCandidate]:
+    candidates: list[OfficialSearchCandidate] = []
+    for site in _matching_korean_specialty_sites(queries):
+        if explicit_preferred and not any(host in explicit_preferred for host in site.hosts):
+            continue
+        if not site.search_url:
+            continue
+        static_page_candidate = _static_specialty_page_candidate(site, queries, preferred)
+        if static_page_candidate:
+            candidates.append(static_page_candidate)
+        site_count = 0
+        site_limit = 4
+        search_terms = queries[:1] if "{query}" not in site.search_url else queries[:4]
+        for search_query in search_terms:
+            page_url = site.search_url.format(query=urllib.parse.quote(search_query))
+            for link in _search_page_links(page_url, urlopen=urlopen):
+                if "{query}" not in site.search_url and not _looks_like_specialty_source_link(link, queries):
+                    continue
+                candidate = _candidate_from_link(link, site=site, queries=queries, preferred=preferred)
+                if candidate:
+                    candidates.append(candidate)
+                    site_count += 1
+                if site_count >= site_limit:
+                    break
+            if site_count >= site_limit:
+                break
+    return _ranked_unique_candidates(candidates)[:MAX_CANDIDATES_PER_SEARCH]
+
+
+def _static_specialty_page_candidate(
+    site: OfficialSearchSite, queries: list[str], preferred: set[str]
+) -> OfficialSearchCandidate | None:
+    if "{query}" in site.search_url:
+        return None
+    parsed = urllib.parse.urlsplit(site.search_url)
+    if parsed.scheme not in {"https", "http"} or not parsed.hostname:
+        return None
+    host = parsed.hostname.lower().rstrip(".")
+    if not is_allowed_official_health_host(host):
+        return None
+    title = f"{site.name} 진료지침/자료"
+    score = _candidate_score(title, site.search_url, queries) + 12
+    if any(host == item or host.endswith(f".{item}") for item in preferred):
+        score += 8
+    return OfficialSearchCandidate(title=title, url=site.search_url, host=host, score=score, source=site.name)
+
+
+def _looks_like_specialty_source_link(link: dict[str, str], queries: list[str]) -> bool:
+    text = f"{link.get('title') or ''} {urllib.parse.unquote(link.get('url') or '')}".casefold()
+    if any(term in text for term in ("진료지침", "치료", "가이드라인", "권고", "자료", "guideline", "treatment")):
+        return True
+    tokens: list[str] = []
+    for query in queries:
+        tokens.extend(re.findall(r"[0-9A-Za-z가-힣]{2,}", query.casefold()))
+    return any(token in text for token in dict.fromkeys(tokens))
+
+
+def _matching_korean_specialty_sites(queries: list[str]) -> list[OfficialSearchSite]:
+    text = " ".join(str(query or "") for query in queries).casefold()
+    sites: list[OfficialSearchSite] = []
+    for triggers, group_sites in KOREAN_SPECIALTY_TREATMENT_SOURCES:
+        if any(trigger.casefold() in text for trigger in triggers):
+            sites.extend(group_sites)
+    return list(dict.fromkeys(sites))
 
 
 def _aafp_sitemap_candidates(
@@ -768,6 +991,10 @@ def _looks_like_noise_url(url: str) -> bool:
         "http://www.entnet.org",
         "https://www.aafp.org",
         "http://www.aafp.org",
+        "https://www.korl.or.kr",
+        "http://www.korl.or.kr",
+        "https://www.pediatrics.or.kr",
+        "http://www.pediatrics.or.kr",
     }:
         return True
     noise = (
@@ -780,6 +1007,7 @@ def _looks_like_noise_url(url: str) -> bool:
         "/account/",
         "/advanced",
         "/clipboard",
+        "/disclaimer",
         "/events/",
         "/help/",
         "/join-us/",
@@ -789,6 +1017,7 @@ def _looks_like_noise_url(url: str) -> bool:
         "/search.es",
         "/menu.es",
         "entnet.org/?s=",
+        "/quality-practice/reg-ent",
         "saml_user_login",
         "pubmed.ncbi.nlm.nih.gov/?term=",
         "aasm.org/?s=",
@@ -803,12 +1032,25 @@ def _looks_like_noise_url(url: str) -> bool:
 
 def _looks_like_noise_title(title: str) -> bool:
     normalized = " ".join(str(title or "").split()).casefold()
+    if re.fullmatch(r"(?:www\.)?[a-z0-9.-]+\.[a-z]{2,}/?", normalized):
+        return True
     return normalized in {
         "본문 바로가기",
         "본문으로 바로가기",
         "본문바로가기",
         "메뉴 바로가기",
         "메뉴바로가기",
+        "주메뉴 바로가기",
+        "주메뉴바로가기",
+        "전체메뉴보기",
+        "모바일 메뉴열기",
+        "학회소개",
+        "학회연혁",
+        "학회 회칙 및 규정",
+        "인사말",
+        "미션&비전",
+        "eng",
+        "skip to contents",
         "skip to main page content",
         "skip to main content",
         "skip to content",
@@ -854,7 +1096,24 @@ def _candidate_score(title: str, url: str, queries: list[str]) -> int:
         score += 4
     if any(kind in text for kind in ("치료", "management", "treatment", "guideline", "practice guideline", "clinical practice", "diagnosis", "진료지침", "권고")):
         score += 5
-    if any(kind in text for kind in ("clinical practice guideline", "american academy", "american family physician", "aafp", "aasm", "aao-hns", "entnet", "practice guideline summary", "nice cks", "nih")):
+    if any(
+        kind in text
+        for kind in (
+            "clinical practice guideline",
+            "american academy",
+            "american family physician",
+            "aafp",
+            "aasm",
+            "aao-hns",
+            "entnet",
+            "practice guideline summary",
+            "nice cks",
+            "nih",
+            "대한",
+            "학회",
+            "임상진료지침",
+        )
+    ):
         score += 8
     if "american family physician" in text or "aafp" in text:
         score += 10
@@ -876,7 +1135,41 @@ def _candidate_score(title: str, url: str, queries: list[str]) -> int:
         score -= 6
     if "poor effect" in text:
         score -= 10
-    if any(host in text for host in ("pubmed.ncbi.nlm.nih.gov", "entnet.org", "cks.nice.org.uk", "ninds.nih.gov", "aafp.org", "health.kdca.go.kr", "mentalhealth.go.kr")):
+    if any(
+        host in text
+        for host in (
+            "pubmed.ncbi.nlm.nih.gov",
+            "entnet.org",
+            "cks.nice.org.uk",
+            "ninds.nih.gov",
+            "aafp.org",
+            "health.kdca.go.kr",
+            "mentalhealth.go.kr",
+            "guideline.or.kr",
+            "neca-cms.egentouch.com",
+            "cancer.go.kr",
+            "helpline.kdca.go.kr",
+            "e-gen.or.kr",
+            "nrc.go.kr",
+            "koreanhypertension.org",
+            "circulation.or.kr",
+            "diabetes.or.kr",
+            "ksn.or.kr",
+            "kasl.org",
+            "lungkorea.org",
+            "ksid.or.kr",
+            "ksat.or.kr",
+            "vertigo.or.kr",
+            "korl.or.kr",
+            "neuro.or.kr",
+            "jkna.org",
+            "headache.or.kr",
+            "stroke.or.kr",
+            "pediatrics.or.kr",
+            "kspid.or.kr",
+            "kapard.or.kr",
+        )
+    ):
         score += 2
     return score
 

@@ -283,6 +283,10 @@ prefer:
 3. Guideline-grade international sources when Korean public sources are thin or
    outdated, such as PubMed/NCBI, NIH/NINDS, NICE CKS, AAFP, and professional
    society guideline pages.
+4. Korean specialty-society guideline pages when the prompt clearly points to a
+   field, such as headache, stroke, diabetes, hypertension/cardiology,
+   nephrology, hepatology, respiratory/infectious disease, ENT/vertigo, or
+   pediatric allergy/infection.
 
 The result should separate:
 
@@ -311,6 +315,30 @@ public search pages:
 - `cks.nice.org.uk`
 - `aasm.org`
 - `aafp.org`
+- `neca-cms.egentouch.com`
+- `guideline.or.kr`
+- `komgi.kr`
+- `cancer.go.kr`
+- `helpline.kdca.go.kr`
+- `e-gen.or.kr`
+- `nrc.go.kr`
+- `koreanhypertension.org`
+- `circulation.or.kr`
+- `diabetes.or.kr`
+- `ksn.or.kr`
+- `kasl.org`
+- `lungkorea.org`
+- `ksid.or.kr`
+- `ksat.or.kr`
+- `vertigo.or.kr`
+- `korl.or.kr`
+- `neuro.or.kr`
+- `jkna.org`
+- `headache.or.kr`
+- `stroke.or.kr`
+- `pediatrics.or.kr`
+- `kspid.or.kr`
+- `kapard.or.kr`
 
 HIRA is handled as a special case for medicine benefit questions. Governor uses
 the HIRA 보험인정기준 POST search endpoint instead of the generic site search,
@@ -347,7 +375,10 @@ agency domains such as `nhis.or.kr`, `longtermcare.or.kr`,
 `nedrug.mfds.go.kr`, `nip.kdca.go.kr`, `health.kdca.go.kr`, `nih.go.kr`,
 `nmc.or.kr`, `ncc.re.kr`, `neca.re.kr`, `khealth.or.kr`, `khidi.or.kr`,
 `kohi.or.kr`, `k-his.or.kr`, `k-medi.or.kr`, `kuksiwon.or.kr`,
-`koda1458.kr`, and `koiha.kr`.
+`koda1458.kr`, and `koiha.kr`. Korean guideline and specialty-society domains
+are trigger-routed rather than searched for every prompt, so they improve
+condition-specific treatment answers without turning AI Tasks into broad or
+slow arbitrary web browsing.
 
 This is deliberately not broad web browsing. The model does not choose arbitrary
 URLs and Governor rejects fetched pages outside the allowlist. Public-health

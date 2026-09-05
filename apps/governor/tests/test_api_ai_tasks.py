@@ -650,6 +650,61 @@ class GovernorAITaskTests(unittest.TestCase):
         self.assertEqual(candidates[0].source, "American Family Physician")
         self.assertEqual(candidates[0].url, "https://www.aafp.org/afp/topics/asthma")
 
+    def test_korean_specialty_guideline_sources_can_short_circuit_treatment_search(self) -> None:
+        urls: list[str] = []
+
+        def fake_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
+            urls.append(request.full_url)
+            if request.full_url == "https://www.aafp.org/sitemap.xml":
+                return FakeHTTPResponse("<urlset></urlset>", "application/xml; charset=utf-8")
+            if request.full_url == "https://www.headache.or.kr/bbs/board.php?bo_table=3_5_1_1":
+                return FakeHTTPResponse(
+                    """<html><body>
+                    <a href="/bbs/board.php?bo_table=3_5_1_1&wr_id=4">편두통 예방치료 약제 진료지침2021</a>
+                    <a href="/bbs/board.php?bo_table=3_5_1_1&wr_id=5">군발두통치료 진료지침</a>
+                    </body></html>""",
+                    "text/html; charset=utf-8",
+                )
+            if request.full_url.startswith("https://health.kr/"):
+                raise AssertionError("health.kr should not be queried for generic disease treatment options")
+            if request.full_url.startswith("https://pubmed.ncbi.nlm.nih.gov/"):
+                raise AssertionError("PubMed should not be queried after Korean specialty matches")
+            return FakeHTTPResponse("<html><body>검색된 내용이 없습니다.</body></html>", "text/html; charset=utf-8")
+
+        candidates = official_health_search_candidates("편두통 예방치료 옵션", urlopen=fake_urlopen)
+
+        self.assertIn("headache.or.kr", allowed_official_health_hosts())
+        self.assertIn("https://www.headache.or.kr/bbs/board.php?bo_table=3_5_1_1", urls)
+        self.assertEqual(candidates[0].host, "www.headache.or.kr")
+        self.assertEqual(candidates[0].source, "대한두통학회")
+        self.assertIn("편두통 예방치료", candidates[0].title)
+
+    def test_pediatric_asthma_queries_search_korean_pediatric_allergy_guidelines(self) -> None:
+        urls: list[str] = []
+
+        def fake_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
+            urls.append(request.full_url)
+            if request.full_url == "https://www.aafp.org/sitemap.xml":
+                return FakeHTTPResponse("<urlset></urlset>", "application/xml; charset=utf-8")
+            if request.full_url == "https://www.kapard.or.kr/community/guide.php":
+                return FakeHTTPResponse(
+                    """<html><body>
+                    <a href="/community/guide.php?mode=view&number=6882">한국 천식 진료 지침 요약본</a>
+                    </body></html>""",
+                    "text/html; charset=utf-8",
+                )
+            if request.full_url.startswith("https://health.kr/"):
+                raise AssertionError("health.kr should not be queried for generic disease treatment options")
+            return FakeHTTPResponse("<html><body>검색된 내용이 없습니다.</body></html>", "text/html; charset=utf-8")
+
+        candidates = official_health_search_candidates("소아 천식 치료 지침", urlopen=fake_urlopen)
+
+        self.assertIn("kapard.or.kr", allowed_official_health_hosts())
+        self.assertIn("https://www.kapard.or.kr/community/guide.php", urls)
+        self.assertEqual(candidates[0].host, "www.kapard.or.kr")
+        self.assertEqual(candidates[0].source, "대한소아알레르기호흡기학회")
+        self.assertTrue(any(candidate.host == "www.kapard.or.kr" and "천식" in candidate.title for candidate in candidates))
+
     def test_treatment_options_task_survives_governor_plan_cleanup(self) -> None:
         plan = api._clean_official_web_plan(  # pylint: disable=protected-access
             {
