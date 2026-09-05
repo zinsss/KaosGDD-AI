@@ -42,6 +42,7 @@ const familyRoutes = {
   service: uiText("route.services", "Utils"),
   rouny: uiText("route.rouny", "Rouny"),
   memos: uiText("route.memos", "Memos"),
+  "ai-tasks": "AI Tasks",
   "text-presets": uiText("route.textPresets", "Preset Text"),
   ledger: uiText("route.ledger", "Ledger"),
   settings: uiText("route.settings", "Settings"),
@@ -149,6 +150,7 @@ const profileConfigs = {
       { route: "rouny", label: uiText("route.rouny", "Rouny") },
       { route: "memos", label: uiText("route.memos", "Memos") },
       { route: "text-presets", label: uiText("route.textPresets", "문구") },
+      { route: "ai-tasks", label: "AI" },
       { route: "ledger", label: uiText("route.ledger", "Ledger") },
       { route: "settings", label: uiText("route.settings", "Settings") },
     ],
@@ -223,6 +225,7 @@ const state = {
     prompt: "",
     sourceUrl: "",
     sourceText: "",
+    korean: portalProfile() === "family",
     preview: null,
     items: [],
   },
@@ -2276,7 +2279,7 @@ function aiTaskPreviewFromRecord(item) {
 }
 
 async function loadAiTasks(options = {}) {
-  if (portalProfile() !== "main") return;
+  if (!aiTasksEnabledForProfile()) return;
   if (state.aiTasks.loading) return;
   if (state.aiTasks.checked && !options.force) return;
   state.aiTasks.loading = true;
@@ -2321,11 +2324,15 @@ async function startUnifiedAiTask(form) {
   const sourceText = String(formData.get("sourceText") || "").trim();
   const sourcePdf = formData.get("sourcePdf");
   const hasSourcePdf = sourcePdf instanceof File && sourcePdf.size > 0;
+  const korean = formData.get("outputKorean") === "on";
+  if (korean) formData.set("outputLanguage", "ko");
+  else formData.delete("outputLanguage");
   state.aiTasks = {
     ...state.aiTasks,
     prompt,
     sourceUrl,
     sourceText,
+    korean,
     selectedId: "",
     previewing: true,
     polling: false,
@@ -2348,7 +2355,7 @@ async function startUnifiedAiTask(form) {
             "Content-Type": "application/json",
           },
           credentials: "same-origin",
-          body: JSON.stringify({ prompt, sourceUrl, sourceText }),
+          body: JSON.stringify({ prompt, sourceUrl, sourceText, outputLanguage: korean ? "ko" : "" }),
         };
     const response = await fetch("/api/ai-tasks/run", requestOptions);
     const payload = await response.json().catch(() => ({}));
@@ -2385,11 +2392,15 @@ async function previewOfficialDocMemo(form) {
   const sourceText = String(formData.get("sourceText") || "").trim();
   const sourcePdf = formData.get("sourcePdf");
   const hasSourcePdf = sourcePdf instanceof File && sourcePdf.size > 0;
+  const korean = formData.get("outputKorean") === "on";
+  if (korean) formData.set("outputLanguage", "ko");
+  else formData.delete("outputLanguage");
   state.aiTasks = {
     ...state.aiTasks,
     prompt,
     sourceUrl,
     sourceText,
+    korean,
     selectedId: "",
     previewing: true,
     error: "",
@@ -2411,7 +2422,7 @@ async function previewOfficialDocMemo(form) {
             "Content-Type": "application/json",
           },
           credentials: "same-origin",
-          body: JSON.stringify({ prompt, sourceUrl, sourceText }),
+          body: JSON.stringify({ prompt, sourceUrl, sourceText, outputLanguage: korean ? "ko" : "" }),
         };
     const response = await fetch("/api/ai-tasks/official-doc-memo/preview", {
       ...requestOptions,
@@ -2444,10 +2455,12 @@ async function previewWebAiTask(form) {
   if (state.aiTasks.previewing) return;
   const formData = new FormData(form);
   const prompt = String(formData.get("prompt") || "").trim();
+  const korean = formData.get("outputKorean") === "on";
   state.aiTasks = {
     ...state.aiTasks,
     mode: "web",
     prompt,
+    korean,
     selectedId: "",
     previewing: true,
     error: "",
@@ -2462,7 +2475,7 @@ async function previewWebAiTask(form) {
         "Content-Type": "application/json",
       },
       credentials: "same-origin",
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({ prompt, outputLanguage: korean ? "ko" : "" }),
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
@@ -2538,6 +2551,7 @@ async function searchGeneralWebForAiTask() {
   if (!aiTaskIsOfficialWebPreview(preview)) return;
   const prompt = aiTaskGeneralWebPrompt(preview);
   if (!prompt) return;
+  const korean = Boolean(state.aiTasks.korean);
   state.aiTasks = {
     ...state.aiTasks,
     previewing: true,
@@ -2552,7 +2566,7 @@ async function searchGeneralWebForAiTask() {
         "Content-Type": "application/json",
       },
       credentials: "same-origin",
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({ prompt, outputLanguage: korean ? "ko" : "" }),
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
@@ -2654,7 +2668,8 @@ function aiTaskErrorMessage(code) {
     kaosbrain_official_web_summary_unavailable: "KaosBrain could not summarize the official sources.",
     kaosbrain_ai_task_unauthorized: "KaosBrain rejected the AI Task token.",
     cloudflare_access_required: "Cloudflare login is required.",
-    main_profile_required: "AI Tasks are only available on kaosgdd.net.",
+    main_profile_required: "This AI Tasks route is not available for this profile.",
+    ai_task_profile_required: "AI Tasks are only available on kaosgdd.net and family.kaosgdd.net.",
   };
   return messages[normalized] || normalized || "AI Task preview failed";
 }
@@ -4941,7 +4956,7 @@ function getRoute() {
   const route = raw.split("?", 1)[0];
   if (!routes[route]) return profileConfig().defaultRoute;
   if (portalProfile() === "family" && route === "services") return profileConfig().defaultRoute;
-  if (portalProfile() === "family" && ["supplies", "documents", "add-document", "fax", "mail", "ai-tasks", "add-ai-task"].includes(route)) return profileConfig().defaultRoute;
+  if (portalProfile() === "family" && ["supplies", "documents", "add-document", "fax", "mail", "add-ai-task"].includes(route)) return profileConfig().defaultRoute;
   if (portalProfile() === "main" && (route === "rouny" || route === "caregiver" || route === "text-presets" || route === "ledger")) return profileConfig().defaultRoute;
   return route;
 }
@@ -5428,6 +5443,10 @@ function mainAttentionSeverity() {
 function mainMenuLabelWithAttention(item) {
   const marker = mainAttentionMarkers()[item.route];
   return `${item.label}${marker ? " •" : ""}`;
+}
+
+function aiTasksEnabledForProfile() {
+  return portalProfile() === "main" || portalProfile() === "family";
 }
 
 function renderMainMenuAttentionDot(route) {
@@ -9584,6 +9603,10 @@ function renderAiTasks() {
         <label class="archiveCommandLine">
           <span>PDF</span>
           <input name="sourcePdf" type="file" accept="application/pdf,.pdf" />
+        </label>
+        <label class="archiveInlineToggle aiTaskLanguageToggle">
+          <input name="outputKorean" type="checkbox" ${aiTasks.korean ? "checked" : ""} />
+          <span>한국어</span>
         </label>
         <details class="aiTaskSourceDetails">
           <summary><span>DETAILS</span><small>URL / source text</small></summary>

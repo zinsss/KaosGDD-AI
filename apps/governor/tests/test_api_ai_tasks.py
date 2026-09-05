@@ -133,6 +133,17 @@ def fake_hwpx_bytes(text: str = "첨부 급여기준 세부 내용") -> bytes:
 
 
 class GovernorAITaskTests(unittest.TestCase):
+    def test_ai_task_access_allows_family_profile(self) -> None:
+        with patch.object(api.memos_relay, "verify_cloudflare_access", return_value=("family", "wife@example.com")):
+            self.assertEqual(api.require_ai_task_access({}), "wife@example.com")
+
+        with patch.object(api.memos_relay, "verify_cloudflare_access", return_value=("personal", "zin@example.com")):
+            self.assertEqual(api.require_ai_task_access({}), "zin@example.com")
+
+        with patch.object(api.memos_relay, "verify_cloudflare_access", return_value=("supplies", "bot@example.com")):
+            with self.assertRaisesRegex(ValueError, "ai_task_profile_required"):
+                api.require_ai_task_access({})
+
     def test_archive_write_errors_are_reported_as_ai_task_errors(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             archive = AITaskArchive(Path(temporary_directory) / "ai-tasks.json")
@@ -226,6 +237,65 @@ class GovernorAITaskTests(unittest.TestCase):
             self.assertEqual(records[0].status, "previewed")
             self.assertEqual(records[0].source["type"], "official_web_search")
             self.assertEqual(records[0].source["plan"]["query"], "인플루엔자 접종 계획")
+
+    def test_web_ai_task_output_language_forces_korean_plan(self) -> None:
+        summary_requests: list[dict[str, object]] = []
+
+        def fake_language_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
+            body = json.loads(request.data.decode("utf-8"))
+            if request.full_url == "http://brain.internal:8099/internal/ai-tasks/official-web/plan":
+                self.assertEqual(body["outputLanguage"], "ko")
+                return FakeHTTPResponse(
+                    {
+                        "ok": True,
+                        "plan": {
+                            "query": "autism spectrum disorder treatment guideline",
+                            "alternateQueries": [],
+                            "preferredDomains": ["pubmed.ncbi.nlm.nih.gov"],
+                            "task": "treatment_options",
+                            "language": "en",
+                        },
+                    }
+                )
+            if request.full_url == "http://brain.internal:8099/internal/ai-tasks/official-web/summarize":
+                summary_requests.append(body)
+                return FakeHTTPResponse(
+                    {
+                        "ok": True,
+                        "result": {
+                            "title": "자폐 스펙트럼 장애 치료 옵션",
+                            "content": "한국어 요약",
+                            "sources": [{"title": "Guideline", "url": "https://pubmed.ncbi.nlm.nih.gov/example"}],
+                            "checkedAt": body["checkedAt"],
+                            "model": "kaosbrain-openai",
+                        },
+                    }
+                )
+            raise AssertionError(request.full_url)
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            archive = AITaskArchive(Path(temporary_directory) / "ai-tasks.json")
+            with (
+                patch.object(api, "AI_TASKS_BRAIN_URL", "http://brain.internal:8099/internal/ai-tasks/official-doc-memo/preview"),
+                patch.object(api, "AI_TASKS_WEB_BRAIN_URL", ""),
+                patch.object(api, "AI_TASKS_BRAIN_TOKEN", "secret"),
+                patch.object(
+                    api,
+                    "fetch_official_web_sources",
+                    return_value=[{"title": "Guideline", "url": "https://pubmed.ncbi.nlm.nih.gov/example", "text": "Autism care guidance."}],
+                ),
+                patch.object(api, "search_textbook_sources", return_value=[]),
+            ):
+                payload = api.preview_web_ai_task_payload(
+                    {"prompt": "autistic spectrum disorder", "outputLanguage": "ko"},
+                    archive,
+                    urlopen=fake_language_urlopen,
+                )
+
+            self.assertTrue(payload["ok"])
+            self.assertEqual(archive.list_records()[0].source["plan"]["language"], "ko")
+        self.assertEqual(summary_requests[0]["outputLanguage"], "ko")
+        self.assertEqual(summary_requests[0]["plan"]["language"], "ko")
 
     def test_textbook_search_expands_korean_condition_aliases(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

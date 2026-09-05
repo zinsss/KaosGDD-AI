@@ -4796,9 +4796,9 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 
 .app[data-profile="main"] .panel,
 .app[data-profile="main"] .memosWorkspace,
-.app[data-profile="main"] .archiveCommand,
-.app[data-profile="main"] .archiveIndex,
-.app[data-profile="main"] .archiveDetail,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveCommand,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveIndex,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveDetail,
 .app[data-profile="main"] .serviceRow,
 .app[data-profile="main"] .settingsPolicyNote,
 .app[data-profile="main"] .settingsStatusPanel,
@@ -4811,8 +4811,8 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 }
 
 .app[data-profile="main"] .panelHeader,
-.app[data-profile="main"] .archiveIndexHeader,
-.app[data-profile="main"] .archiveDetailHeader {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveIndexHeader,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveDetailHeader {
   align-items: center;
   min-height: 56px;
   padding: 12px 14px;
@@ -4823,8 +4823,8 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 }
 
 .app[data-profile="main"] .panelHeader h2,
-.app[data-profile="main"] .archiveIndexHeader h3,
-.app[data-profile="main"] .archiveDetailHeader h3 {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveIndexHeader h3,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveDetailHeader h3 {
   color: var(--text);
   font-size: 1rem;
   line-height: 1.2;
@@ -4833,8 +4833,8 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 .app[data-profile="main"] .collectionRail,
 .app[data-profile="main"] .taskFilters,
 .app[data-profile="main"] .segmentedTabs,
-.app[data-profile="main"] .archiveTerminal,
-.app[data-profile="main"] .archiveWorkspace,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveTerminal,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveWorkspace,
 .app[data-profile="main"] .servicesGrid,
 .app[data-profile="main"] .settingsRecurringStatusList {
   gap: 12px;
@@ -4847,11 +4847,11 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 .app[data-profile="main"] .openButton,
 .app[data-profile="main"] .primaryButton,
 .app[data-profile="main"] .dangerButton,
-.app[data-profile="main"] .archiveAction,
-.app[data-profile="main"] .archiveSourceLink,
-.app[data-profile="main"] .archiveSearchBox,
-.app[data-profile="main"] .archiveCommandLine input,
-.app[data-profile="main"] .archiveCommandLine textarea,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveAction,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveSourceLink,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveSearchBox,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveCommandLine input,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveCommandLine textarea,
 .app[data-profile="main"] .embedSwitcher,
 .app[data-profile="main"] .composer input,
 .app[data-profile="main"] .composer select,
@@ -4872,8 +4872,8 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 .app[data-profile="main"] .openButton,
 .app[data-profile="main"] .primaryButton,
 .app[data-profile="main"] .dangerButton,
-.app[data-profile="main"] .archiveAction,
-.app[data-profile="main"] .archiveSourceLink {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveAction,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveSourceLink {
   padding: 0 12px;
 }
 
@@ -6377,7 +6377,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   }
 }
 
-.app[data-profile="main"] .archiveTerminal {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveTerminal {
   --archive-bg: rgba(37, 43, 54, 0.96);
   --archive-surface: rgba(46, 52, 64, 0.86);
   --archive-raised: rgba(59, 66, 82, 0.72);
@@ -6397,11 +6397,11 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   font-family: "Sarasa Gothic Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
-.app[data-profile="main"] .archiveModeTabs {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveModeTabs {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.app[data-profile="main"] .archiveModeTabs button {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveModeTabs button {
   min-height: 44px;
   border-color: var(--archive-line);
   background: rgba(67, 76, 94, 0.34);
@@ -6410,22 +6410,22 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   text-transform: uppercase;
 }
 
-.app[data-profile="main"] .archiveModeTabs button.isActive {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveModeTabs button.isActive {
   border-color: var(--main-tab-active-border);
   background: var(--main-tab-active-bg);
   color: var(--main-tab-active-text);
 }
 
-.app[data-profile="main"] .archiveMasthead,
-.app[data-profile="main"] .archiveCommand,
-.app[data-profile="main"] .archiveIndex,
-.app[data-profile="main"] .archiveDetail {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveMasthead,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveCommand,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveIndex,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveDetail {
   border: 1px solid var(--archive-line);
   background: var(--archive-bg);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
-.app[data-profile="main"] .archiveMasthead {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveMasthead {
   display: flex;
   align-items: start;
   justify-content: space-between;
@@ -6433,9 +6433,9 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   padding: 14px;
 }
 
-.app[data-profile="main"] .archiveNodeLabel,
-.app[data-profile="main"] .archiveDetailHeader p,
-.app[data-profile="main"] .archiveOcrRegion p {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveNodeLabel,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveDetailHeader p,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveOcrRegion p {
   margin: 0;
   color: var(--archive-cyan);
   font-size: 0.72rem;
@@ -6445,7 +6445,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   text-transform: uppercase;
 }
 
-.app[data-profile="main"] .archiveTitle {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveTitle {
   margin: 3px 0 0;
   color: var(--archive-amber);
   font-size: 1.18rem;
@@ -6453,7 +6453,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   letter-spacing: 0;
 }
 
-.app[data-profile="main"] .archiveLinkState {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveLinkState {
   flex: 0 0 auto;
   min-width: 74px;
   margin: 0;
@@ -6466,21 +6466,21 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   text-align: center;
 }
 
-.app[data-profile="main"] .archiveLinkState.isPending {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveLinkState.isPending {
   color: var(--archive-amber);
 }
 
-.app[data-profile="main"] .archiveLinkState.isError {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveLinkState.isError {
   color: var(--archive-error);
 }
 
-.app[data-profile="main"] .archiveCommand {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveCommand {
   display: grid;
   gap: 10px;
   padding: 10px;
 }
 
-.app[data-profile="main"] .archiveSearchBar {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveSearchBar {
   grid-template-columns: minmax(0, 1fr) 44px;
   align-items: center;
   gap: 10px;
@@ -6497,7 +6497,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   justify-content: space-between;
 }
 
-.app[data-profile="main"] .archiveCommandLine {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveCommandLine {
   display: grid;
   grid-template-columns: 5.25ch minmax(0, 1fr);
   align-items: center;
@@ -6508,12 +6508,12 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   font-weight: 850;
 }
 
-.app[data-profile="main"] .archiveCommandLine > span {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveCommandLine > span {
   min-width: 0;
 }
 
-.app[data-profile="main"] .archiveCommandLine input,
-.app[data-profile="main"] .archiveCommandLine textarea {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveCommandLine input,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveCommandLine textarea {
   width: 100%;
   min-width: 0;
   min-height: 44px;
@@ -6526,18 +6526,18 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   font: 16px/1.35 "Sarasa Gothic Mono", ui-monospace, monospace;
 }
 
-.app[data-profile="main"] .archiveCommandLine textarea {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveCommandLine textarea {
   resize: vertical;
   white-space: pre-wrap;
 }
 
-.app[data-profile="main"] .archiveCommandLine input[type="file"] {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveCommandLine input[type="file"] {
   display: grid;
   align-items: center;
   padding-top: 9px;
 }
 
-.app[data-profile="main"] .archiveSearchBox {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveSearchBox {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -6550,13 +6550,13 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   padding: 0 10px;
 }
 
-.app[data-profile="main"] .archiveSearchIcon {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveSearchIcon {
   color: var(--archive-muted);
   font-size: 1.1rem;
   line-height: 1;
 }
 
-.app[data-profile="main"] .archiveSearchBox input {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveSearchBox input {
   width: 100%;
   min-width: 0;
   min-height: 42px;
@@ -6568,11 +6568,11 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   font: 16px/1.35 "Sarasa Gothic Mono", ui-monospace, monospace;
 }
 
-.app[data-profile="main"] .archiveSearchBox input:focus {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveSearchBox input:focus {
   box-shadow: none;
 }
 
-.app[data-profile="main"] .archiveSearchClear {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveSearchClear {
   display: grid;
   place-items: center;
   width: 32px;
@@ -6584,11 +6584,11 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   font: 850 1.1rem/1 "Sarasa Gothic Mono", ui-monospace, monospace;
 }
 
-.app[data-profile="main"] .archiveSearchClear:hover {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveSearchClear:hover {
   color: var(--archive-amber);
 }
 
-.app[data-profile="main"] .archiveTagFilters {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveTagFilters {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -6597,13 +6597,13 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   margin-top: -4px;
 }
 
-.app[data-profile="main"] .archiveTagStatus {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveTagStatus {
   margin: -4px 0 0;
   color: var(--archive-muted);
   font-size: 0.72rem;
 }
 
-.app[data-profile="main"] .archiveTagChip {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveTagChip {
   min-height: 32px;
   border: 1px solid var(--archive-line);
   border-radius: 999px;
@@ -6614,29 +6614,29 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   cursor: pointer;
 }
 
-.app[data-profile="main"] .archiveTagChip:hover,
-.app[data-profile="main"] .archiveTagChip.isActive {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveTagChip:hover,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveTagChip.isActive {
   border-color: var(--main-tab-active-border);
   color: var(--main-tab-active-text);
 }
 
-.app[data-profile="main"] .archiveTagChip.isActive {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveTagChip.isActive {
   background: var(--main-tab-active-bg);
 }
 
-.app[data-profile="main"] .archiveClearTags {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveClearTags {
   margin-left: 2px;
 }
 
-.app[data-profile="main"] .archiveCommandActions,
-.app[data-profile="main"] .archiveActions {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveCommandActions,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveActions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.app[data-profile="main"] .archiveAction,
-.app[data-profile="main"] .archiveSourceLink {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveAction,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveSourceLink {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -6654,19 +6654,19 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   cursor: pointer;
 }
 
-.app[data-profile="main"] .archiveAction::before,
-.app[data-profile="main"] .archiveSourceLink::before {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveAction::before,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveSourceLink::before {
   content: "[";
   color: currentColor;
 }
 
-.app[data-profile="main"] .archiveAction::after,
-.app[data-profile="main"] .archiveSourceLink::after {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveAction::after,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveSourceLink::after {
   content: "]";
   color: currentColor;
 }
 
-.app[data-profile="main"] .archiveCommandActions .archiveAction {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveCommandActions .archiveAction {
   min-height: 44px;
   border: 1px solid var(--archive-line);
   background: rgba(67, 76, 94, 0.34);
@@ -6674,8 +6674,8 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   padding: 0 10px;
 }
 
-.app[data-profile="main"] .archiveCommandActions .archiveAction::before,
-.app[data-profile="main"] .archiveCommandActions .archiveAction::after {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveCommandActions .archiveAction::before,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveCommandActions .archiveAction::after {
   content: none;
 }
 
@@ -6730,7 +6730,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   font-weight: 950;
 }
 
-.app[data-profile="main"] .archiveRefreshAction {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveRefreshAction {
   flex: 0 0 auto;
   width: auto;
   min-width: 32px;
@@ -6738,7 +6738,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   font-size: 1.05rem;
 }
 
-.app[data-profile="main"] .archiveTopAction {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveTopAction {
   width: auto;
   height: auto;
   min-width: 32px;
@@ -6747,73 +6747,73 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   font-size: 1.05rem;
 }
 
-.app[data-profile="main"] .archiveAction:hover,
-.app[data-profile="main"] .archiveSourceLink:hover,
-.app[data-profile="main"] .archiveRecordButton:hover .archiveRecordTitle {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveAction:hover,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveSourceLink:hover,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveRecordButton:hover .archiveRecordTitle {
   color: var(--archive-amber);
   font-weight: 950;
 }
 
-.app[data-profile="main"] .archiveCommandActions .archiveAction:hover {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveCommandActions .archiveAction:hover {
   border-color: var(--archive-line-strong);
   color: var(--archive-amber);
 }
 
-.app[data-profile="main"] .archiveInlineLink {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveInlineLink {
   color: var(--archive-cyan);
   text-decoration: none;
 }
 
-.app[data-profile="main"] .archiveInlineLink:hover {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveInlineLink:hover {
   color: var(--archive-amber);
 }
 
-.app[data-profile="main"] .archiveAction:disabled,
-.app[data-profile="main"] .archiveAction.isDisabled,
-.app[data-profile="main"] .archiveSourceLink.isDisabled {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveAction:disabled,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveAction.isDisabled,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveSourceLink.isDisabled {
   color: rgba(216, 222, 233, 0.42);
   cursor: default;
 }
 
-.app[data-profile="main"] .archiveAction.isActive {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveAction.isActive {
   border-color: var(--main-tab-active-border);
   background: var(--main-tab-active-bg);
   color: var(--main-tab-active-text);
 }
 
-.app[data-profile="main"] .archiveActions .archiveAction.isActive,
-.app[data-profile="main"] .archiveUnreadApplyBar .archiveAction.isActive {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveActions .archiveAction.isActive,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveUnreadApplyBar .archiveAction.isActive {
   border-color: transparent;
   background: transparent;
   color: var(--archive-amber);
 }
 
-.app[data-profile="main"] .archiveCommandLine input:focus-visible,
-.app[data-profile="main"] .archiveAction:focus-visible,
-.app[data-profile="main"] .archiveSourceLink:focus-visible,
-.app[data-profile="main"] .archiveInlineLink:focus-visible,
-.app[data-profile="main"] .archiveTagChip:focus-visible,
-.app[data-profile="main"] .archiveRecordButton:focus-visible,
-.app[data-profile="main"] .archiveDetail:focus-visible,
-.app[data-profile="main"] .archiveOcrRegion:focus-visible {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveCommandLine input:focus-visible,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveAction:focus-visible,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveSourceLink:focus-visible,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveInlineLink:focus-visible,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveTagChip:focus-visible,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveRecordButton:focus-visible,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveDetail:focus-visible,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveOcrRegion:focus-visible {
   outline: 2px solid var(--archive-amber);
   outline-offset: 2px;
 }
 
-.app[data-profile="main"] .archiveWorkspace {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveWorkspace {
   display: grid;
   gap: 12px;
   min-width: 0;
 }
 
-.app[data-profile="main"] .archiveIndex,
-.app[data-profile="main"] .archiveDetail {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveIndex,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveDetail {
   min-width: 0;
   padding: 12px;
 }
 
-.app[data-profile="main"] .archiveIndexHeader,
-.app[data-profile="main"] .archiveDetailHeader {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveIndexHeader,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveDetailHeader {
   display: flex;
   align-items: start;
   justify-content: space-between;
@@ -6822,8 +6822,8 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   margin-bottom: 10px;
 }
 
-.app[data-profile="main"] .archiveIndexHeader h3,
-.app[data-profile="main"] .archiveDetailHeader h3 {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveIndexHeader h3,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveDetailHeader h3 {
   margin: 0;
   color: var(--archive-text);
   font-size: 1rem;
@@ -6832,7 +6832,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   overflow-wrap: anywhere;
 }
 
-.app[data-profile="main"] .archiveStatusMessage {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveStatusMessage {
   margin: 0;
   color: var(--archive-muted);
   font-size: 0.76rem;
@@ -6840,11 +6840,11 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   line-height: 1.45;
 }
 
-.app[data-profile="main"] .archiveColumnHeader {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveColumnHeader {
   display: none;
 }
 
-.app[data-profile="main"] .archiveRecordList {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveRecordList {
   display: grid;
   gap: 1px;
   margin: 0;
@@ -6854,22 +6854,22 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   border: 1px solid var(--archive-line);
 }
 
-.app[data-profile="main"] .archiveRecord {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveRecord {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 48px;
   min-width: 0;
   background: var(--archive-surface);
 }
 
-.app[data-profile="main"] .archiveRecord.hasUnreadActions {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveRecord.hasUnreadActions {
   grid-template-columns: minmax(0, 1fr) 74px;
 }
 
-.app[data-profile="main"] .archiveRecord.isSelected {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveRecord.isSelected {
   background: rgba(235, 203, 139, 0.08);
 }
 
-.app[data-profile="main"] .archiveRecordButton {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveRecordButton {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
   grid-template-areas:
@@ -6887,37 +6887,37 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   cursor: pointer;
 }
 
-.app[data-profile="main"] .archiveRecordStatic {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveRecordStatic {
   cursor: default;
 }
 
-.app[data-profile="main"] .archiveUploadPanel .archiveIndex {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveUploadPanel .archiveIndex {
   display: grid;
   gap: 12px;
 }
 
-.app[data-profile="main"] .archiveMetadataReview {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveMetadataReview {
   display: grid;
   gap: 8px;
   margin: 0 0 12px;
 }
 
-.app[data-profile="main"] .archiveUploadGrid {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveUploadGrid {
   display: grid;
   gap: 10px;
 }
 
-.app[data-profile="main"] .aiTaskComposer {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskComposer {
   display: grid;
   gap: 12px;
 }
 
-.app[data-profile="main"] .aiTaskSourceDetails {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskSourceDetails {
   display: grid;
   gap: 10px;
 }
 
-.app[data-profile="main"] .aiTaskSourceDetails summary {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskSourceDetails summary {
   display: inline-flex;
   align-items: baseline;
   gap: 1ch;
@@ -6930,44 +6930,44 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   text-transform: uppercase;
 }
 
-.app[data-profile="main"] .aiTaskSourceDetails summary::-webkit-details-marker {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskSourceDetails summary::-webkit-details-marker {
   display: none;
 }
 
-.app[data-profile="main"] .aiTaskSourceDetails summary::before {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskSourceDetails summary::before {
   content: "[ ";
   color: var(--archive-amber);
 }
 
-.app[data-profile="main"] .aiTaskSourceDetails summary::after {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskSourceDetails summary::after {
   content: " ]";
   color: var(--archive-amber);
 }
 
-.app[data-profile="main"] .aiTaskSourceDetails summary:hover {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskSourceDetails summary:hover {
   color: var(--archive-text);
   font-weight: 950;
 }
 
-.app[data-profile="main"] .aiTaskSourceDetails summary small {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskSourceDetails summary small {
   color: var(--archive-muted);
   font-size: 0.78rem;
   font-weight: 700;
   text-transform: none;
 }
 
-.app[data-profile="main"] .aiTaskSourceDetailsBody {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskSourceDetailsBody {
   display: grid;
   gap: 10px;
 }
 
-.app[data-profile="main"] .archiveTabs {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveTabs {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
-.app[data-profile="main"] .archiveTab {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveTab {
   min-width: 0;
   min-height: 44px;
   border: 1px solid var(--archive-line);
@@ -6980,29 +6980,50 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   text-transform: uppercase;
 }
 
-.app[data-profile="main"] .archiveTab.isActive {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveTab.isActive {
   border-color: var(--main-tab-active-border);
   background: var(--main-tab-active-bg);
   color: var(--main-tab-active-text);
 }
 
-.app[data-profile="main"] .archiveTab:hover,
-.app[data-profile="main"] .archiveTab:focus-visible {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveTab:hover,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveTab:focus-visible {
   color: var(--archive-amber);
   font-weight: 950;
 }
 
-.app[data-profile="main"] .aiTaskPrompt,
-.app[data-profile="main"] .aiTaskSourceText {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskPrompt,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskSourceText {
   align-items: start;
 }
 
-.app[data-profile="main"] .aiTaskPreview {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveInlineToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: max-content;
+  max-width: 100%;
+  color: var(--archive-muted);
+  font: 850 0.82rem/1.2 "Sarasa Gothic Mono", ui-monospace, monospace;
+  text-transform: uppercase;
+}
+
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveInlineToggle input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--archive-cyan);
+}
+
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveInlineToggle span {
+  color: var(--archive-amber);
+}
+
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskPreview {
   display: grid;
   gap: 12px;
 }
 
-.app[data-profile="main"] .aiTaskSources {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskSources {
   display: grid;
   gap: 8px;
   min-width: 0;
@@ -7010,7 +7031,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   padding: 10px 12px;
 }
 
-.app[data-profile="main"] .aiTaskSources summary {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskSources summary {
   display: inline-flex;
   align-items: baseline;
   gap: 1ch;
@@ -7025,15 +7046,15 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   text-transform: uppercase;
 }
 
-.app[data-profile="main"] .aiTaskSources summary::-webkit-details-marker {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskSources summary::-webkit-details-marker {
   display: none;
 }
 
-.app[data-profile="main"] .aiTaskSources summary small {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskSources summary small {
   color: var(--archive-muted);
 }
 
-.app[data-profile="main"] .aiTaskSources ol {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskSources ol {
   display: grid;
   gap: 6px;
   margin: 0;
@@ -7042,14 +7063,14 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   font-size: 0.78rem;
 }
 
-.app[data-profile="main"] .aiTaskSources li small {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskSources li small {
   display: block;
   margin-top: 2px;
   color: var(--archive-muted);
   font-size: 0.68rem;
 }
 
-.app[data-profile="main"] .aiTaskSources li pre {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskSources li pre {
   max-height: 14rem;
   margin: 6px 0 0;
   overflow: auto;
@@ -7058,27 +7079,27 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   white-space: pre-wrap;
 }
 
-.app[data-profile="main"] .aiTaskPlan {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskPlan {
   border: 1px dashed rgba(136, 192, 208, 0.45);
   padding: 10px 12px;
 }
 
-.app[data-profile="main"] .aiTaskStatePanel {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskStatePanel {
   border-color: rgba(235, 203, 139, 0.62);
 }
 
-.app[data-profile="main"] .archiveNotice {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveNotice {
   border: 1px solid rgba(235, 203, 139, 0.58);
   padding: 12px;
   color: var(--archive-amber);
   font: 0.82rem/1.5 "Sarasa Gothic Mono", ui-monospace, monospace;
 }
 
-.app[data-profile="main"] .archiveNotice p {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveNotice p {
   margin: 0;
 }
 
-.app[data-profile="main"] .archiveRecordId {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveRecordId {
   grid-area: id;
   min-width: 0;
   color: var(--archive-cyan);
@@ -7089,7 +7110,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   white-space: nowrap;
 }
 
-.app[data-profile="main"] .archiveRecordDate {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveRecordDate {
   grid-area: date;
   justify-self: end;
   min-width: 0;
@@ -7100,7 +7121,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   white-space: nowrap;
 }
 
-.app[data-profile="main"] .archiveRecordCorrespondent {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveRecordCorrespondent {
   display: none;
   grid-area: from;
   color: var(--archive-muted);
@@ -7110,7 +7131,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   white-space: nowrap;
 }
 
-.app[data-profile="main"] .archiveRecordTitle {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveRecordTitle {
   grid-area: title;
   color: var(--archive-text);
   font-size: 0.9rem;
@@ -7120,7 +7141,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   white-space: nowrap;
 }
 
-.app[data-profile="main"] .archiveReviewMarker {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveReviewMarker {
   display: inline-block;
   margin-left: 0.75ch;
   color: var(--archive-amber);
@@ -7130,7 +7151,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   vertical-align: 0.08em;
 }
 
-.app[data-profile="main"] .archiveRecordStatus {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveRecordStatus {
   display: none;
   grid-area: status;
   color: var(--archive-amber);
@@ -7138,15 +7159,15 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   font-weight: 850;
 }
 
-.app[data-profile="main"] .archiveRecordStatus.isOk {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveRecordStatus.isOk {
   color: var(--archive-ok);
 }
 
-.app[data-profile="main"] .archiveRecordStatus.isError {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveRecordStatus.isError {
   color: var(--archive-error);
 }
 
-.app[data-profile="main"] .archiveSourceLink {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveSourceLink {
   min-width: 48px;
   min-height: 100%;
   padding: 0 3px;
@@ -7154,7 +7175,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   background: transparent;
 }
 
-.app[data-profile="main"] .archiveUnreadActions {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveUnreadActions {
   display: grid;
   align-content: center;
   gap: 5px;
@@ -7166,7 +7187,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   background: rgba(37, 43, 54, 0.82);
 }
 
-.app[data-profile="main"] .archiveUnreadActions label {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveUnreadActions label {
   display: grid;
   grid-template-columns: 14px minmax(0, 1fr);
   align-items: center;
@@ -7178,18 +7199,18 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   letter-spacing: 0.06em;
 }
 
-.app[data-profile="main"] .archiveUnreadActions label.isSelected {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveUnreadActions label.isSelected {
   color: var(--archive-amber);
 }
 
-.app[data-profile="main"] .archiveUnreadActions input {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveUnreadActions input {
   width: 14px;
   height: 14px;
   margin: 0;
   accent-color: var(--archive-cyan);
 }
 
-.app[data-profile="main"] .archiveUnreadApplyBar {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveUnreadApplyBar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(96px, 0.34fr);
   gap: 10px;
@@ -7197,7 +7218,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   margin-top: 10px;
 }
 
-.app[data-profile="main"] .archiveUnreadApplyBar p {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveUnreadApplyBar p {
   margin: 0;
   color: var(--archive-muted);
   font-size: 0.72rem;
@@ -7205,7 +7226,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   letter-spacing: 0.05em;
 }
 
-.app[data-profile="main"] .archivePager {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archivePager {
   display: grid;
   grid-template-columns: 54px minmax(0, 1fr) 54px;
   align-items: center;
@@ -7217,14 +7238,14 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   text-align: center;
 }
 
-.app[data-profile="main"] .archiveError {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveError {
   display: grid;
   gap: 10px;
   color: var(--archive-error);
 }
 
-.app[data-profile="main"] .archiveIndex > .archiveStatusMessage,
-.app[data-profile="main"] .archiveIndex > .archiveError {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveIndex > .archiveStatusMessage,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveIndex > .archiveError {
   min-height: 58px;
   margin-top: 1px;
   padding: 12px;
@@ -7232,17 +7253,17 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   background: var(--archive-surface);
 }
 
-.app[data-profile="main"] .archiveIndex > .archiveStatusMessage {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveIndex > .archiveStatusMessage {
   display: grid;
   align-items: center;
 }
 
-.app[data-profile="main"] .archiveError p {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveError p {
   margin: 0;
   overflow-wrap: anywhere;
 }
 
-.app[data-profile="main"] .archiveMetadata {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveMetadata {
   display: grid;
   gap: 1px;
   margin: 0 0 12px;
@@ -7250,7 +7271,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   border: 1px solid var(--archive-line);
 }
 
-.app[data-profile="main"] .archiveMetadata div {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveMetadata div {
   display: grid;
   grid-template-columns: minmax(96px, 0.38fr) minmax(0, 1fr);
   gap: 8px;
@@ -7258,33 +7279,33 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   background: var(--archive-raised);
 }
 
-.app[data-profile="main"] .archiveMetadata dt,
-.app[data-profile="main"] .archiveMetadata dd {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveMetadata dt,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveMetadata dd {
   min-width: 0;
   margin: 0;
   font-size: 0.76rem;
   line-height: 1.45;
 }
 
-.app[data-profile="main"] .archiveMetadata dt {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveMetadata dt {
   color: var(--archive-cyan);
   font-weight: 850;
   text-transform: uppercase;
 }
 
-.app[data-profile="main"] .archiveMetadata dd {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveMetadata dd {
   color: var(--archive-text);
   overflow-wrap: anywhere;
 }
 
-.app[data-profile="main"] .archiveOcrRegion {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveOcrRegion {
   display: grid;
   gap: 8px;
   min-width: 0;
   margin-top: 12px;
 }
 
-.app[data-profile="main"] .archiveOcrRegion pre {
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveOcrRegion pre {
   max-height: none;
   margin: 0;
   padding: 12px;
@@ -7298,29 +7319,29 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 }
 
 @media (max-width: 1179px) {
-  .app[data-profile="main"] .archiveWorkspace.hasDetail .archiveIndex {
+  .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveWorkspace.hasDetail .archiveIndex {
     display: none;
   }
 }
 
 @media (min-width: 1180px) {
-  .app[data-profile="main"] .archiveTerminal {
+  .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveTerminal {
     gap: 14px;
   }
 
-  .app[data-profile="main"] .archiveCommand {
+  .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveCommand {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
   }
 
-  .app[data-profile="main"] .archiveWorkspace.hasDetail {
+  .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveWorkspace.hasDetail {
     display: grid;
     grid-template-columns: minmax(0, 1.28fr) minmax(340px, 0.72fr);
     align-items: start;
     gap: 12px;
   }
 
-  .app[data-profile="main"] .archiveColumnHeader {
+  .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveColumnHeader {
     display: grid;
     grid-template-columns: 12ch 18ch minmax(0, 1fr) 48px;
     gap: 10px;
@@ -7329,7 +7350,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
     font-weight: 850;
   }
 
-  .app[data-profile="main"] .archiveColumnHeader span {
+  .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveColumnHeader span {
     font-size: 0.68rem;
   }
 
@@ -7342,25 +7363,25 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
     grid-template-columns: 12ch 18ch minmax(0, 1fr) 48px;
   }
 
-  .app[data-profile="main"] .archiveRecordButton {
+  .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveRecordButton {
     grid-template-columns: 12ch 18ch minmax(0, 1fr);
     grid-template-areas: "id date title";
     min-height: 58px;
     align-items: center;
   }
 
-  .app[data-profile="main"] .archiveRecordDate {
+  .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveRecordDate {
     justify-self: start;
   }
 
-  .app[data-profile="main"] .archiveDetail {
+  .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveDetail {
     position: sticky;
     top: 0;
     max-height: calc(100dvh - 32px);
     overflow: auto;
   }
 
-  .app[data-profile="main"] .archiveOcrRegion pre {
+  .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveOcrRegion pre {
     max-height: 52dvh;
     overflow: auto;
   }

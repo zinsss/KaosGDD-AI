@@ -7,6 +7,8 @@ from importlib.util import find_spec
 from kaos_brain.kaos_ai import (
     KAOSAI_OFFICIAL_WEB_PLAN_SYSTEM_PROMPT,
     KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT,
+    _render_general_web_task_request,
+    _render_official_web_plan_request,
     _render_official_web_summary_request,
     parse_general_web_task_response,
     parse_official_web_plan_response,
@@ -147,6 +149,38 @@ class WebTaskValidationTests(unittest.TestCase):
         self.assertEqual(plan["task"], "treatment_options")
         self.assertEqual(plan["preferredDomains"], ["pubmed.ncbi.nlm.nih.gov", "cks.nice.org.uk"])
 
+    def test_output_language_forces_korean_plan_even_with_english_prompt(self) -> None:
+        plan = parse_official_web_plan_response(
+            '{"query":"autism spectrum disorder treatment guideline","alternateQueries":[],"preferredDomains":["pubmed.ncbi.nlm.nih.gov"],"task":"treatment_options","language":"en"}',
+            {"prompt": "autistic spectrum disorder", "outputLanguage": "ko"},
+        )
+
+        self.assertEqual(plan["language"], "ko")
+
+    def test_ai_task_renderers_include_output_language(self) -> None:
+        plan_payload = json.loads(
+            _render_official_web_plan_request(
+                {
+                    "prompt": "autistic spectrum disorder",
+                    "checkedAt": "2026-09-05",
+                    "outputLanguage": "ko",
+                    "allowedDomains": ["pubmed.ncbi.nlm.nih.gov"],
+                }
+            )
+        )
+        general_payload = json.loads(
+            _render_general_web_task_request(
+                {
+                    "prompt": "autistic spectrum disorder",
+                    "checkedAt": "2026-09-05",
+                    "outputLanguage": "ko",
+                }
+            )
+        )
+
+        self.assertEqual(plan_payload["outputLanguage"], "ko")
+        self.assertEqual(general_payload["outputLanguage"], "ko")
+
     def test_parses_official_web_summary_response(self) -> None:
         result = parse_official_web_summary_response(
             '{"title":"요약","content":"본문","sources":[{"title":"KDCA","url":"https://www.kdca.go.kr/notice"}],"checkedAt":"2026-09-03","model":"default"}',
@@ -196,6 +230,7 @@ class WebTaskValidationTests(unittest.TestCase):
         self.assertIn("차트 기재 추천", KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
         self.assertIn("급여기준", KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
         self.assertIn("Do not invent patient facts", KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
+        self.assertIn('"outputLanguage":"ko"', KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
 
     def test_official_web_prompts_support_treatment_options(self) -> None:
         self.assertIn("treatment_options", KAOSAI_OFFICIAL_WEB_PLAN_SYSTEM_PROMPT)
@@ -209,6 +244,7 @@ class WebTaskValidationTests(unittest.TestCase):
         self.assertIn("kapard.or.kr", KAOSAI_OFFICIAL_WEB_PLAN_SYSTEM_PROMPT)
         self.assertIn("textbookSources", KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
         self.assertIn("textbook background", KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
+        self.assertIn('"outputLanguage":"ko"', KAOSAI_OFFICIAL_WEB_PLAN_SYSTEM_PROMPT)
 
 
 if __name__ == "__main__":

@@ -168,6 +168,13 @@ def require_main_access(headers) -> str:
     return email
 
 
+def require_ai_task_access(headers) -> str:
+    profile, email = memos_relay.verify_cloudflare_access(headers)
+    if profile not in {"personal", "family"}:
+        raise ValueError("ai_task_profile_required")
+    return email
+
+
 def request_actor(headers) -> str:
     return ledger.actor_name(
         headers.get("Cf-Access-Authenticated-User-Email")
@@ -770,7 +777,7 @@ def ai_task_status_for_error(exc: Exception) -> int:
     if isinstance(exc, memos_relay.MemosRelayError):
         return exc.status
     code = exc.code if isinstance(exc, AITaskError) else str(exc)
-    if code in {"main_profile_required", "ai_task_not_found"}:
+    if code in {"main_profile_required", "ai_task_profile_required", "ai_task_not_found"}:
         return 404
     if code in {
         "invalid_body_length",
@@ -858,19 +865,30 @@ def _payload_has_ai_task_source(payload: dict[str, object]) -> bool:
     return bool(str(payload.get("sourceUrl") or "").strip() or str(payload.get("sourceText") or "").strip() or pdf)
 
 
+def _ai_task_output_language(payload: Mapping[str, object]) -> str:
+    value = str(payload.get("outputLanguage") or payload.get("language") or "").strip().lower()
+    if value in {"ko", "korean", "한국어"} or payload.get("outputKorean") is True:
+        return "ko"
+    if value in {"en", "english"}:
+        return "en"
+    return ""
+
+
 def _ai_task_running_source(payload: dict[str, object], *, source_task: bool) -> dict[str, object]:
     checked_at = datetime.now(UTC).date().isoformat()
+    output_language = _ai_task_output_language(payload)
+    language_hint = {"outputLanguage": output_language} if output_language else {}
     if not source_task:
-        return {"type": "official_web_search", "checkedAt": checked_at}
+        return {"type": "official_web_search", "checkedAt": checked_at, **language_hint}
     source_url = str(payload.get("sourceUrl") or "").strip()
     source_title = " ".join(str(payload.get("sourceTitle") or "").split())[:200]
     pdf = payload.get("_sourcePdf")
     if isinstance(pdf, tuple) and len(pdf) == 2:
         filename = Path(str(pdf[0] or "")).name[:200]
-        return {"type": "pdf", "title": source_title or filename, "filename": filename, "checkedAt": checked_at}
+        return {"type": "pdf", "title": source_title or filename, "filename": filename, "checkedAt": checked_at, **language_hint}
     if str(payload.get("sourceText") or "").strip():
-        return {"type": "text", "title": source_title or "Pasted official text", "url": source_url, "checkedAt": checked_at}
-    return {"type": "url", "title": source_title or source_url, "url": source_url, "checkedAt": checked_at}
+        return {"type": "text", "title": source_title or "Pasted official text", "url": source_url, "checkedAt": checked_at, **language_hint}
+    return {"type": "url", "title": source_title or source_url, "url": source_url, "checkedAt": checked_at, **language_hint}
 
 
 def _payload_with_extracted_pdf_source(payload: dict[str, object]) -> dict[str, object]:
@@ -901,6 +919,9 @@ def _official_doc_memo_result(
         "checkedAt": datetime.now(UTC).date().isoformat(),
         "source": source,
     }
+    output_language = _ai_task_output_language(payload)
+    if output_language:
+        request["outputLanguage"] = output_language
     memo = call_ai_task_brain(request, urlopen=urlopen)
     return {key: value for key, value in source.items() if key != "text"}, memo
 
@@ -908,17 +929,24 @@ def _official_doc_memo_result(
 def _web_ai_task_result(
     prompt: str,
     *,
+    output_language: str = "",
     urlopen=urllib.request.urlopen,
 ) -> tuple[dict[str, object], dict[str, object]]:
     request = {
         "prompt": prompt,
         "checkedAt": datetime.now(UTC).date().isoformat(),
     }
+    if output_language:
+        request["outputLanguage"] = output_language
     plan_request = {
         **request,
         "allowedDomains": allowed_official_health_hosts(),
     }
-    plan = _clean_official_web_plan(call_ai_task_official_web_brain("plan", plan_request, urlopen=urlopen), prompt=prompt)
+    plan = _clean_official_web_plan(
+        call_ai_task_official_web_brain("plan", plan_request, urlopen=urlopen),
+        prompt=prompt,
+        output_language=output_language,
+    )
     source_payloads = fetch_official_web_sources(plan, urlopen=urlopen)
     textbook_sources = search_textbook_sources(prompt, plan)
     if not source_payloads and not textbook_sources:
@@ -945,12 +973,15 @@ def _web_ai_task_result(
 def _general_web_ai_task_result(
     prompt: str,
     *,
+    output_language: str = "",
     urlopen=urllib.request.urlopen,
 ) -> tuple[dict[str, object], dict[str, object]]:
     request = {
         "prompt": prompt,
         "checkedAt": datetime.now(UTC).date().isoformat(),
     }
+    if output_language:
+        request["outputLanguage"] = output_language
     result = call_ai_task_web_brain(request, urlopen=urlopen)
     return {
         "type": "general_web_search",
@@ -1038,7 +1069,7 @@ def preview_web_ai_task_payload(
     urlopen=urllib.request.urlopen,
 ) -> dict[str, object]:
     prompt = _ai_task_prompt(payload, web=True)
-    source, result = _web_ai_task_result(prompt, urlopen=urlopen)
+    source, result = _web_ai_task_result(prompt, output_language=_ai_task_output_language(payload), urlopen=urlopen)
     record = (archive or ai_task_archive()).add_result(
         kind="web",
         prompt=prompt,
@@ -1055,9 +1086,10 @@ def preview_general_web_ai_task_payload(
     urlopen=urllib.request.urlopen,
 ) -> dict[str, object]:
     prompt = _ai_task_prompt(payload, web=True)
+    output_language = _ai_task_output_language(payload)
     active_archive = archive or ai_task_archive()
     try:
-        source, result = _general_web_ai_task_result(prompt, urlopen=urlopen)
+        source, result = _general_web_ai_task_result(prompt, output_language=output_language, urlopen=urlopen)
     except AITaskError as exc:
         record = active_archive.add_running(
             kind="general_web",
@@ -1102,6 +1134,9 @@ def run_ai_task_worker(
                 "prompt": prompt,
                 "checkedAt": datetime.now(UTC).date().isoformat(),
             }
+            output_language = _ai_task_output_language(payload)
+            if output_language:
+                request["outputLanguage"] = output_language
             plan_request = {
                 **request,
                 "allowedDomains": allowed_official_health_hosts(),
@@ -1109,6 +1144,7 @@ def run_ai_task_worker(
             plan = _clean_official_web_plan(
                 call_ai_task_official_web_brain("plan", plan_request, urlopen=urlopen),
                 prompt=prompt,
+                output_language=output_language,
             )
             partial_source = {
                 "type": "official_web_search",
@@ -1211,7 +1247,7 @@ def start_ai_task_payload(
     return {"ok": True, "accepted": True, "task": record.as_dict()}
 
 
-def _clean_official_web_plan(plan: dict[str, object], *, prompt: str) -> dict[str, object]:
+def _clean_official_web_plan(plan: dict[str, object], *, prompt: str, output_language: str = "") -> dict[str, object]:
     query = " ".join(str(plan.get("query") or prompt).split())[:200]
     if not query:
         raise AITaskError("ai_task_official_web_query_required")
@@ -1229,6 +1265,8 @@ def _clean_official_web_plan(plan: dict[str, object], *, prompt: str) -> dict[st
     language = str(plan.get("language") or "ko").strip().lower()
     if language not in {"ko", "en"}:
         language = "ko"
+    if output_language in {"ko", "en"}:
+        language = output_language
     return {
         "query": query,
         "alternateQueries": alternate_queries,
@@ -1326,6 +1364,7 @@ def preview_official_doc_memo_request_payload(
         "prompt": fields.get("prompt") or "",
         "sourceUrl": fields.get("sourceUrl") or "",
         "sourceTitle": fields.get("sourceTitle") or "",
+        "outputLanguage": fields.get("outputLanguage") or "",
     }
     filename, content = files.get("sourcePdf") or files.get("pdf") or files.get("file") or ("", b"")
     if filename or content:
@@ -1355,6 +1394,7 @@ def start_ai_task_request_payload(
         "sourceUrl": fields.get("sourceUrl") or "",
         "sourceTitle": fields.get("sourceTitle") or "",
         "sourceText": fields.get("sourceText") or "",
+        "outputLanguage": fields.get("outputLanguage") or "",
     }
     filename, content = files.get("sourcePdf") or files.get("pdf") or files.get("file") or ("", b"")
     if filename or content:
@@ -3309,7 +3349,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/ai-tasks":
             try:
-                require_main_access(self.headers)
+                require_ai_task_access(self.headers)
                 json_response(self, 200, list_ai_tasks_payload(parsed.query))
             except (ValueError, AITaskError, memos_relay.MemosRelayError) as exc:
                 code = exc.code if isinstance(exc, (AITaskError, memos_relay.MemosRelayError)) else str(exc)
@@ -3584,7 +3624,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/ai-tasks/run":
             try:
-                require_main_access(self.headers)
+                require_ai_task_access(self.headers)
                 json_response(self, 202, start_ai_task_request_payload(self))
             except (ValueError, AITaskError, DocumentIntakeError, memos_relay.MemosRelayError) as exc:
                 code = exc.code if isinstance(exc, (AITaskError, memos_relay.MemosRelayError)) else str(exc)
@@ -3595,7 +3635,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/ai-tasks/official-doc-memo/preview":
             try:
-                require_main_access(self.headers)
+                require_ai_task_access(self.headers)
                 json_response(self, 200, preview_official_doc_memo_request_payload(self))
             except (ValueError, AITaskError, DocumentIntakeError, memos_relay.MemosRelayError) as exc:
                 code = exc.code if isinstance(exc, (AITaskError, memos_relay.MemosRelayError)) else str(exc)
@@ -3606,7 +3646,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/ai-tasks/web/preview":
             try:
-                require_main_access(self.headers)
+                require_ai_task_access(self.headers)
                 json_response(self, 200, preview_web_ai_task_payload(json_request(self)))
             except (ValueError, AITaskError, memos_relay.MemosRelayError) as exc:
                 code = exc.code if isinstance(exc, (AITaskError, memos_relay.MemosRelayError)) else str(exc)
@@ -3617,7 +3657,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/ai-tasks/general-web/preview":
             try:
-                require_main_access(self.headers)
+                require_ai_task_access(self.headers)
                 json_response(self, 200, preview_general_web_ai_task_payload(json_request(self)))
             except (ValueError, AITaskError, memos_relay.MemosRelayError) as exc:
                 code = exc.code if isinstance(exc, (AITaskError, memos_relay.MemosRelayError)) else str(exc)
@@ -3629,7 +3669,7 @@ class Handler(BaseHTTPRequestHandler):
         completed_ai_task_id = ai_task_complete_id(parsed.path)
         if completed_ai_task_id:
             try:
-                require_main_access(self.headers)
+                require_ai_task_access(self.headers)
                 json_response(self, 200, complete_ai_task_payload(completed_ai_task_id, json_request(self)))
             except (ValueError, AITaskError, memos_relay.MemosRelayError) as exc:
                 code = exc.code if isinstance(exc, (AITaskError, memos_relay.MemosRelayError)) else str(exc)

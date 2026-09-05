@@ -258,6 +258,7 @@ Allowed schema:
 
 Rules:
 - This is preview only. Do not write, save, call tools, or claim anything was created.
+- If the request JSON has `"outputLanguage":"ko"`, write the title/content in Korean even when the prompt or source title is English.
 - Use Korean unless the source/request is clearly English.
 - Summarize only facts supported by sourceText. If the source does not state something, say so plainly.
 - Prefer a practical memo format: short overview, key points, dates/eligibility/actions, and source/check date.
@@ -273,6 +274,7 @@ Allowed schema:
 
 Rules:
 - You cannot browse or fetch sources. Governor will search only its allowlisted Korean health/public domains.
+- If the request JSON has `"outputLanguage":"ko"`, set `"language":"ko"` even when the prompt is English.
 - Convert the user prompt into short Korean search queries suitable for government/public health search pages.
 - Keep query factual and compact; remove instructions like "summarize" when they do not help search.
 - Use preferredDomains only when the prompt implies a source family. Examples: drug coverage -> hira.or.kr/mohw.go.kr; infection/vaccine -> kdca.go.kr/ksid.or.kr/kspid.or.kr; food/drug/device safety -> mfds.go.kr; treatment options/guidelines -> health.kdca.go.kr/mentalhealth.go.kr/guideline.or.kr/www.aafp.org/pubmed.ncbi.nlm.nih.gov/cks.nice.org.uk/www.ninds.nih.gov; specialty Korean guidelines -> headache.or.kr/stroke.or.kr/lungkorea.org/diabetes.or.kr/ksn.or.kr/kasl.org/vertigo.or.kr/kapard.or.kr.
@@ -289,6 +291,7 @@ Allowed schema:
 
 Rules:
 - This is read-only. Do not claim anything was saved, sent, applied, or modified.
+- If the request JSON has `"outputLanguage":"ko"` or `plan.language` is `"ko"`, write the title/content in Korean even when the prompt or source text is English.
 - Use Korean unless the request is clearly English.
 - Use only the provided sources and excerpts. If the sources are insufficient, say what is missing.
 - Treat `textbookSources` as background clinical context only. Separate it from current official/guideline sources, cite it as textbook background, and let current official/guideline/policy sources override textbook excerpts when they differ.
@@ -327,6 +330,7 @@ KAOSAI_GENERAL_WEB_TASK_SYSTEM_PROMPT = """You are KaosBrain-OpenAI completing a
 Use web search for broad supplemental context when useful.
 Prefer official/public-authority sources for policy, medicine, law, school, government, and finance topics.
 Do not claim anything was saved, written, sent, or applied.
+If the request JSON has `"outputLanguage":"ko"`, answer in Korean even when the prompt is English.
 Answer in Korean unless the user clearly asks otherwise.
 
 Return exactly one JSON object and no markdown:
@@ -478,6 +482,9 @@ def parse_official_web_plan_response(raw: str, request: Mapping[str, Any]) -> di
     language = str(payload.get("language") or "ko").strip().lower()
     if language not in {"ko", "en"}:
         language = "ko"
+    requested_language = str(request.get("outputLanguage") or "").strip().lower()
+    if requested_language in {"ko", "en"}:
+        language = requested_language
     return {
         "query": query[:200],
         "alternateQueries": alternate_queries,
@@ -863,6 +870,7 @@ def _render_official_memo_request(request: Mapping[str, Any]) -> str:
         {
             "prompt": str(request.get("prompt") or "")[:1200],
             "checkedAt": str(request.get("checkedAt") or ""),
+            "outputLanguage": str(request.get("outputLanguage") or "")[:20],
             "source": {
                 "type": str(source.get("type") or ""),
                 "title": str(source.get("title") or "")[:200],
@@ -881,6 +889,7 @@ def _render_official_web_plan_request(request: Mapping[str, Any]) -> str:
         {
             "prompt": str(request.get("prompt") or "")[:1600],
             "checkedAt": str(request.get("checkedAt") or ""),
+            "outputLanguage": str(request.get("outputLanguage") or "")[:20],
             "allowedDomains": _string_list(allowed_domains, limit=80),
         },
         ensure_ascii=False,
@@ -925,6 +934,7 @@ def _render_official_web_summary_request(request: Mapping[str, Any]) -> str:
         {
             "prompt": str(request.get("prompt") or "")[:1600],
             "checkedAt": str(request.get("checkedAt") or ""),
+            "outputLanguage": str(request.get("outputLanguage") or "")[:20],
             "plan": {
                 "query": str(plan.get("query") or "")[:200],
                 "alternateQueries": _string_list(plan.get("alternateQueries"), limit=3),
@@ -945,6 +955,7 @@ def _render_general_web_task_request(request: Mapping[str, Any]) -> str:
         {
             "prompt": str(request.get("prompt") or "")[:1600],
             "checkedAt": str(request.get("checkedAt") or ""),
+            "outputLanguage": str(request.get("outputLanguage") or "")[:20],
         },
         ensure_ascii=False,
         sort_keys=True,
