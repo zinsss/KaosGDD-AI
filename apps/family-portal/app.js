@@ -2284,6 +2284,7 @@ async function loadAiTasks(options = {}) {
   try {
     const response = await fetch("/api/ai-tasks?limit=50", {
       headers: { Accept: "application/json" },
+      credentials: "same-origin",
       cache: "no-store",
     });
     const payload = await response.json().catch(() => ({}));
@@ -2305,7 +2306,7 @@ async function loadAiTasks(options = {}) {
       ...state.aiTasks,
       checked: true,
       loading: false,
-      error: error.message || "AI Tasks archive is unavailable",
+      error: aiTaskErrorMessage(aiTaskErrorCode(error, "ai_task_archive_unavailable")),
       items: [],
     };
   }
@@ -2337,6 +2338,7 @@ async function startUnifiedAiTask(form) {
       ? {
           method: "POST",
           headers: { Accept: "application/json" },
+          credentials: "same-origin",
           body: formData,
         }
       : {
@@ -2345,6 +2347,7 @@ async function startUnifiedAiTask(form) {
             Accept: "application/json",
             "Content-Type": "application/json",
           },
+          credentials: "same-origin",
           body: JSON.stringify({ prompt, sourceUrl, sourceText }),
         };
     const response = await fetch("/api/ai-tasks/run", requestOptions);
@@ -2367,7 +2370,7 @@ async function startUnifiedAiTask(form) {
       ...state.aiTasks,
       previewing: false,
       polling: false,
-      error: aiTaskErrorMessage(error.message || "ai_task_start_failed"),
+      error: aiTaskErrorMessage(aiTaskErrorCode(error, "ai_task_start_failed")),
       preview: null,
     };
     render();
@@ -2398,6 +2401,7 @@ async function previewOfficialDocMemo(form) {
       ? {
           method: "POST",
           headers: { Accept: "application/json" },
+          credentials: "same-origin",
           body: formData,
         }
       : {
@@ -2406,6 +2410,7 @@ async function previewOfficialDocMemo(form) {
             Accept: "application/json",
             "Content-Type": "application/json",
           },
+          credentials: "same-origin",
           body: JSON.stringify({ prompt, sourceUrl, sourceText }),
         };
     const response = await fetch("/api/ai-tasks/official-doc-memo/preview", {
@@ -2428,7 +2433,7 @@ async function previewOfficialDocMemo(form) {
     state.aiTasks = {
       ...state.aiTasks,
       previewing: false,
-      error: aiTaskErrorMessage(error.message || "ai_task_preview_failed"),
+      error: aiTaskErrorMessage(aiTaskErrorCode(error, "ai_task_preview_failed")),
       preview: null,
     };
     render();
@@ -2456,6 +2461,7 @@ async function previewWebAiTask(form) {
         Accept: "application/json",
         "Content-Type": "application/json",
       },
+      credentials: "same-origin",
       body: JSON.stringify({ prompt }),
     });
     const payload = await response.json().catch(() => ({}));
@@ -2476,7 +2482,7 @@ async function previewWebAiTask(form) {
     state.aiTasks = {
       ...state.aiTasks,
       previewing: false,
-      error: aiTaskErrorMessage(error.message || "ai_task_web_preview_failed"),
+      error: aiTaskErrorMessage(aiTaskErrorCode(error, "ai_task_web_preview_failed")),
       preview: null,
     };
     render();
@@ -2545,6 +2551,7 @@ async function searchGeneralWebForAiTask() {
         Accept: "application/json",
         "Content-Type": "application/json",
       },
+      credentials: "same-origin",
       body: JSON.stringify({ prompt }),
     });
     const payload = await response.json().catch(() => ({}));
@@ -2570,7 +2577,7 @@ async function searchGeneralWebForAiTask() {
     state.aiTasks = {
       ...state.aiTasks,
       previewing: false,
-      error: aiTaskErrorMessage(error.message || "ai_task_general_web_preview_failed"),
+      error: aiTaskErrorMessage(aiTaskErrorCode(error, "ai_task_general_web_preview_failed")),
     };
     render();
   }
@@ -2578,6 +2585,14 @@ async function searchGeneralWebForAiTask() {
 
 async function previewUnifiedAiTask(form) {
   await startUnifiedAiTask(form);
+}
+
+function aiTaskErrorCode(error, fallback) {
+  const message = String(error?.message || error || "").trim();
+  if (/^(Load failed|Failed to fetch)$/i.test(message) || /network\s*error/i.test(message)) {
+    return "ai_task_network_failed";
+  }
+  return message || fallback;
 }
 
 function aiTaskErrorMessage(code) {
@@ -2629,6 +2644,8 @@ function aiTaskErrorMessage(code) {
     ai_task_brain_missing_memo: "KaosBrain did not return a memo draft.",
     ai_task_brain_invalid_memo: "KaosBrain returned an incomplete memo draft.",
     ai_task_archive_write_failed: "AI draft was made, but Governor could not write the AI Task archive.",
+    ai_task_archive_unavailable: "AI Tasks archive is unavailable.",
+    ai_task_network_failed: "Network request did not reach Governor. Refresh or re-open Cloudflare Access, then retry.",
     ai_task_start_failed: "Could not start the AI Task.",
     ai_task_background_failed: "AI Task stopped before finishing.",
     kaosbrain_openai_disabled: "KaosBrain-OpenAI is disabled.",
@@ -2662,6 +2679,7 @@ async function saveAiTaskMemo() {
         Accept: "application/json",
         "Content-Type": "application/json",
       },
+      credentials: "same-origin",
       body: JSON.stringify({ confirmed: true, memoName }),
     });
     const payload = await response.json().catch(() => ({}));
