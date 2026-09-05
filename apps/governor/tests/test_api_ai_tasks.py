@@ -619,6 +619,37 @@ class GovernorAITaskTests(unittest.TestCase):
         self.assertEqual(candidates[0].host, "pubmed.ncbi.nlm.nih.gov")
         self.assertEqual(candidates[0].source, "PubMed")
 
+    def test_treatment_option_queries_include_aafp_sitemap_source(self) -> None:
+        urls: list[str] = []
+
+        def fake_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
+            urls.append(request.full_url)
+            if request.full_url == "https://www.aafp.org/sitemap.xml":
+                return FakeHTTPResponse(
+                    """<?xml version="1.0" encoding="UTF-8"?>
+                    <urlset>
+                      <url><loc>https://www.aafp.org/afp/topics/asthma</loc></url>
+                      <url><loc>https://www.aafp.org/tag/collection/fpe-topics/diabetes-type-2</loc></url>
+                      <url><loc>https://www.aafp.org/about/contact</loc></url>
+                    </urlset>""",
+                    "application/xml; charset=utf-8",
+                )
+            if request.full_url.startswith("https://health.kr/"):
+                raise AssertionError("health.kr should not be queried for generic disease treatment options")
+            return FakeHTTPResponse("<html><body>검색된 내용이 없습니다.</body></html>", "text/html; charset=utf-8")
+
+        candidates = official_health_search_candidates(
+            "asthma treatment options",
+            preferred_domains=["aafp.org"],
+            urlopen=fake_urlopen,
+        )
+
+        self.assertIn("www.aafp.org", allowed_official_health_hosts())
+        self.assertIn("https://www.aafp.org/sitemap.xml", urls)
+        self.assertEqual(candidates[0].host, "www.aafp.org")
+        self.assertEqual(candidates[0].source, "American Family Physician")
+        self.assertEqual(candidates[0].url, "https://www.aafp.org/afp/topics/asthma")
+
     def test_treatment_options_task_survives_governor_plan_cleanup(self) -> None:
         plan = api._clean_official_web_plan(  # pylint: disable=protected-access
             {

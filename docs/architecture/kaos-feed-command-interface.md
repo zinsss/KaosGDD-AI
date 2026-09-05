@@ -281,8 +281,8 @@ prefer:
 2. Domestic medicine/regulatory/insurance sources when drugs, 허가사항, or 급여 are
    relevant.
 3. Guideline-grade international sources when Korean public sources are thin or
-   outdated, such as PubMed/NCBI, NIH/NINDS, NICE CKS, and professional society
-   guideline pages.
+   outdated, such as PubMed/NCBI, NIH/NINDS, NICE CKS, AAFP, and professional
+   society guideline pages.
 
 The result should separate:
 
@@ -310,6 +310,7 @@ public search pages:
 - `ninds.nih.gov`
 - `cks.nice.org.uk`
 - `aasm.org`
+- `aafp.org`
 
 HIRA is handled as a special case for medicine benefit questions. Governor uses
 the HIRA 보험인정기준 POST search endpoint instead of the generic site search,

@@ -18,6 +18,7 @@ HEALTH_KR_SEARCH_PAGE_URL = "https://health.kr/searchDrug/search_total_result.as
 HEALTH_KR_DRUG_SEARCH_URL = "https://health.kr/searchDrug/ajax/ajax_commonSearch.asp"
 HEALTH_KR_DRUG_DETAIL_URL = "https://health.kr/searchDrug/ajax/ajax_result_drug.asp"
 HEALTH_KR_DRUG_PAGE_URL = "https://health.kr/searchDrug/result_drug.asp"
+AAFP_SITEMAP_URL = "https://www.aafp.org/sitemap.xml"
 
 
 @dataclass(frozen=True)
@@ -77,6 +78,7 @@ OFFICIAL_HEALTH_SITES: tuple[OfficialSearchSite, ...] = (
     OfficialSearchSite("NIH NINDS", ("ninds.nih.gov", "www.ninds.nih.gov"), "https://www.ninds.nih.gov/search?search={query}"),
     OfficialSearchSite("NICE CKS", ("cks.nice.org.uk",), "https://cks.nice.org.uk/search/?q={query}"),
     OfficialSearchSite("American Academy of Sleep Medicine", ("aasm.org", "www.aasm.org"), "https://aasm.org/?s={query}"),
+    OfficialSearchSite("American Family Physician", ("aafp.org", "www.aafp.org")),
 )
 
 
@@ -155,11 +157,14 @@ def official_health_search_candidates(
                 "www.entnet.org",
                 "cks.nice.org.uk",
                 "www.ninds.nih.gov",
+                "www.aafp.org",
             }
         )
     treatment_query = _looks_like_treatment_options_query(queries)
     sites = _ordered_sites(preferred)
     candidates: list[OfficialSearchCandidate] = list(health_kr_candidates)
+    if treatment_query:
+        candidates.extend(_aafp_sitemap_candidates(queries, preferred=preferred, urlopen=urlopen))
     hira_candidates = _hira_insurance_criteria_candidates(queries, preferred=preferred, urlopen=urlopen)
     if hira_candidates and any(host in preferred for host in ("hira.or.kr", "www.hira.or.kr")):
         return _ranked_unique_candidates(hira_candidates)[:limit]
@@ -447,6 +452,98 @@ def _health_kr_drug_queries_and_candidates(
     return _unique_queries(discovered_queries), _ranked_unique_candidates(candidates)[:MAX_CANDIDATES_PER_SEARCH]
 
 
+def _aafp_sitemap_candidates(
+    queries: list[str],
+    *,
+    preferred: set[str],
+    urlopen: Callable = urllib.request.urlopen,
+) -> list[OfficialSearchCandidate]:
+    request = urllib.request.Request(
+        AAFP_SITEMAP_URL,
+        headers={
+            "Accept": "application/xml, text/xml, text/plain;q=0.9",
+            "User-Agent": "KaosGovernor/official-search",
+        },
+    )
+    try:
+        with urlopen(request, timeout=7) as response:
+            text = _decode(response.read(MAX_SEARCH_PAGE_BYTES * 5), response.headers.get("Content-Type", ""))
+    except Exception:
+        return []
+    candidates: list[OfficialSearchCandidate] = []
+    for match in re.finditer(r"<loc>\s*(?P<url>https://www\.aafp\.org/[^<]+)\s*</loc>", text, flags=re.I):
+        url = html.unescape(match.group("url")).strip()
+        parsed = urllib.parse.urlsplit(url)
+        path = parsed.path.lower()
+        if not (
+            path.startswith("/afp/topics/")
+            or path.startswith("/tag/collection/fpe-topics/")
+            or path.startswith("/tag/subject/patient-care/")
+        ):
+            continue
+        title = _aafp_title_from_url(url)
+        topic_score = _aafp_topic_match_score(title, url, queries)
+        if topic_score <= 0:
+            continue
+        score = _candidate_score(title, url, queries) + 12 + topic_score
+        if any(host in preferred for host in ("aafp.org", "www.aafp.org")):
+            score += 18
+        if score <= 5:
+            continue
+        candidates.append(
+            OfficialSearchCandidate(
+                title=title[:200],
+                url=url[:800],
+                host="www.aafp.org",
+                score=score,
+                source="American Family Physician",
+            )
+        )
+        if len(candidates) >= MAX_CANDIDATES_PER_SEARCH:
+            break
+    return _ranked_unique_candidates(candidates)
+
+
+def _aafp_title_from_url(url: str) -> str:
+    path = urllib.parse.urlsplit(url).path.strip("/")
+    slug = path.rsplit("/", 1)[-1]
+    words = [word for word in re.split(r"[-_]+", slug) if word]
+    if not words:
+        return "American Family Physician"
+    return "American Family Physician: " + " ".join(word.upper() if word.lower() in {"copd", "hiv"} else word.capitalize() for word in words)
+
+
+def _aafp_topic_match_score(title: str, url: str, queries: list[str]) -> int:
+    haystack = f"{title} {urllib.parse.unquote(url)}".casefold()
+    ignored = {
+        "option",
+        "options",
+        "treatment",
+        "treatments",
+        "therapy",
+        "therapies",
+        "management",
+        "guideline",
+        "guidelines",
+        "clinical",
+        "practice",
+        "치료",
+        "옵션",
+        "방법",
+        "진료지침",
+        "가이드라인",
+        "관리",
+    }
+    tokens: list[str] = []
+    for query in queries:
+        for token in re.findall(r"[0-9A-Za-z가-힣]{2,}", query.casefold()):
+            if token not in ignored:
+                tokens.append(token)
+    unique_tokens = list(dict.fromkeys(tokens))
+    matches = [token for token in unique_tokens if token in haystack]
+    return len(matches) * 10
+
+
 def _health_kr_search_terms(query: str) -> list[str]:
     compact = " ".join(str(query or "").split())
     cleaned = re.sub(
@@ -669,6 +766,8 @@ def _looks_like_noise_url(url: str) -> bool:
         "http://pubmed.ncbi.nlm.nih.gov",
         "https://www.entnet.org",
         "http://www.entnet.org",
+        "https://www.aafp.org",
+        "http://www.aafp.org",
     }:
         return True
     noise = (
@@ -755,8 +854,10 @@ def _candidate_score(title: str, url: str, queries: list[str]) -> int:
         score += 4
     if any(kind in text for kind in ("치료", "management", "treatment", "guideline", "practice guideline", "clinical practice", "diagnosis", "진료지침", "권고")):
         score += 5
-    if any(kind in text for kind in ("clinical practice guideline", "american academy", "aasm", "aao-hns", "entnet", "practice guideline summary", "nice cks", "nih")):
+    if any(kind in text for kind in ("clinical practice guideline", "american academy", "american family physician", "aafp", "aasm", "aao-hns", "entnet", "practice guideline summary", "nice cks", "nih")):
         score += 8
+    if "american family physician" in text or "aafp" in text:
+        score += 10
     if "american academy of sleep medicine" in text:
         score += 12
     if "american academy of otolaryngology" in text or "head and neck surgery" in text:
@@ -775,7 +876,7 @@ def _candidate_score(title: str, url: str, queries: list[str]) -> int:
         score -= 6
     if "poor effect" in text:
         score -= 10
-    if any(host in text for host in ("pubmed.ncbi.nlm.nih.gov", "entnet.org", "cks.nice.org.uk", "ninds.nih.gov", "health.kdca.go.kr", "mentalhealth.go.kr")):
+    if any(host in text for host in ("pubmed.ncbi.nlm.nih.gov", "entnet.org", "cks.nice.org.uk", "ninds.nih.gov", "aafp.org", "health.kdca.go.kr", "mentalhealth.go.kr")):
         score += 2
     return score
 

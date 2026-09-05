@@ -203,6 +203,7 @@ class WebTaskValidationTests(unittest.TestCase):
         self.assertIn("For `treatment_options` tasks", KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
         self.assertIn("abstract-supported clinical points", KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
         self.assertIn("not a personal diagnosis or treatment order", KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
+        self.assertIn("www.aafp.org", KAOSAI_OFFICIAL_WEB_PLAN_SYSTEM_PROMPT)
         self.assertIn("textbookSources", KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
         self.assertIn("textbook background", KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT)
 
