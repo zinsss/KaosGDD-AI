@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import html
 import json
 import os
 import re
@@ -20,6 +21,7 @@ import uuid
 import hashlib
 import threading
 import ipaddress
+import zipfile
 from html.parser import HTMLParser
 
 from kaos_governor import ledger
@@ -67,6 +69,9 @@ AI_TASKS_BRAIN_TIMEOUT_SECONDS = float(os.environ.get("AI_TASKS_BRAIN_TIMEOUT_SE
 OFFICIAL_MEMO_FETCH_TIMEOUT_SECONDS = float(os.environ.get("OFFICIAL_MEMO_FETCH_TIMEOUT_SECONDS", "15") or "15")
 OFFICIAL_MEMO_MAX_SOURCE_CHARS = int(os.environ.get("OFFICIAL_MEMO_MAX_SOURCE_CHARS", "20000") or "20000")
 OFFICIAL_MEMO_MAX_PDF_BYTES = int(os.environ.get("OFFICIAL_MEMO_MAX_PDF_MB", "20") or "20") * 1024 * 1024
+OFFICIAL_MEMO_MAX_ATTACHMENT_BYTES = int(os.environ.get("OFFICIAL_MEMO_MAX_ATTACHMENT_MB", "20") or "20") * 1024 * 1024
+OFFICIAL_MEMO_MAX_ATTACHMENT_CHARS = int(os.environ.get("OFFICIAL_MEMO_MAX_ATTACHMENT_CHARS", "12000") or "12000")
+OFFICIAL_MEMO_MAX_ATTACHMENTS = int(os.environ.get("OFFICIAL_MEMO_MAX_ATTACHMENTS", "2") or "2")
 WEATHER_LOCATIONS = {
     "pohang": "포항",
     "daegu": "대구",
@@ -565,6 +570,200 @@ class OfficialSourceTextParser(HTMLParser):
     @property
     def text(self) -> str:
         return "\n".join(line.strip() for line in " ".join(self.parts).splitlines() if line.strip())
+
+
+class OfficialAttachmentLinkParser(HTMLParser):
+    def __init__(self, base_url: str) -> None:
+        super().__init__(convert_charrefs=True)
+        self.base_url = base_url
+        self.links: list[dict[str, str]] = []
+
+    def handle_starttag(self, tag: str, attrs) -> None:  # type: ignore[no-untyped-def]
+        if tag.lower() != "a":
+            return
+        values = {key.lower(): value or "" for key, value in attrs}
+        href = values.get("href", "").strip()
+        if not href:
+            return
+        parsed_href = urllib.parse.urlsplit(href)
+        path = urllib.parse.unquote(parsed_href.path or "").lower()
+        if not path.endswith((".pdf", ".hwpx", ".hwp", ".hml")):
+            return
+        filename = Path(urllib.parse.unquote(parsed_href.path)).name[:200]
+        self.links.append(
+            {
+                "url": urllib.parse.urljoin(self.base_url, href),
+                "filename": _safe_official_attachment_filename(filename),
+            }
+        )
+
+
+def _safe_official_attachment_filename(filename: str) -> str:
+    cleaned = " ".join(html.unescape(str(filename or "")).replace("\x00", "").split())
+    return Path(cleaned).name[:200]
+
+
+def _official_attachment_candidates(base_url: str, html_text: str) -> list[dict[str, str]]:
+    candidates: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    parsed = urllib.parse.urlsplit(base_url)
+    base_origin = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
+    for match in re.finditer(
+        r"Header\.(?:goDown1?|goDownNew)\(\s*(['\"])(?P<src>.*?)\1\s*,\s*(['\"])(?P<filename>.*?)\3",
+        html_text,
+        flags=re.S,
+    ):
+        src = html.unescape(match.group("src")).strip()
+        filename = _safe_official_attachment_filename(match.group("filename"))
+        if not src or not filename:
+            continue
+        lowered = filename.lower()
+        if not lowered.endswith((".pdf", ".hwpx", ".hwp", ".hml")):
+            continue
+        url = base_origin + "/download.do?" + urllib.parse.urlencode({"src": src, "fnm": filename})
+        key = (url, filename)
+        if key not in seen:
+            seen.add(key)
+            candidates.append({"url": url, "filename": filename})
+        if len(candidates) >= OFFICIAL_MEMO_MAX_ATTACHMENTS:
+            return candidates
+
+    parser = OfficialAttachmentLinkParser(base_url)
+    try:
+        parser.feed(html_text)
+    except Exception:
+        return candidates
+    for item in parser.links:
+        key = (item["url"], item["filename"])
+        if key in seen:
+            continue
+        seen.add(key)
+        candidates.append(item)
+        if len(candidates) >= OFFICIAL_MEMO_MAX_ATTACHMENTS:
+            break
+    return candidates
+
+
+def _extract_hwpx_text(filename: str, content: bytes) -> str:
+    if not content.startswith(b"PK"):
+        raise AITaskError("ai_task_source_unsupported_content_type")
+    parts: list[str] = []
+    total_uncompressed = 0
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            for info in archive.infolist():
+                name = info.filename.replace("\\", "/")
+                lowered = name.lower()
+                if info.is_dir():
+                    continue
+                if ".." in name.split("/"):
+                    continue
+                if not (
+                    lowered == "preview/prvtext.txt"
+                    or lowered.startswith("contents/")
+                    and lowered.endswith((".xml", ".txt"))
+                ):
+                    continue
+                total_uncompressed += max(0, int(info.file_size or 0))
+                if total_uncompressed > OFFICIAL_MEMO_MAX_ATTACHMENT_BYTES:
+                    raise AITaskError("ai_task_source_too_large")
+                raw = archive.read(info, pwd=None)
+                if lowered.endswith(".txt"):
+                    text = raw.decode("utf-8", errors="replace")
+                else:
+                    text = _xml_text_content(raw)
+                if text.strip():
+                    parts.append(text)
+                if sum(len(part) for part in parts) >= OFFICIAL_MEMO_MAX_ATTACHMENT_CHARS:
+                    break
+    except zipfile.BadZipFile as exc:
+        raise AITaskError("ai_task_source_unsupported_content_type") from exc
+    text = "\n".join(part.strip() for part in parts if part.strip())
+    if not text.strip():
+        raise AITaskError("ai_task_source_empty")
+    return text[:OFFICIAL_MEMO_MAX_ATTACHMENT_CHARS]
+
+
+def _xml_text_content(raw: bytes) -> str:
+    text = raw.decode("utf-8", errors="replace")
+    try:
+        root = ET.fromstring(text)
+        values = [" ".join(part.split()) for part in root.itertext() if " ".join(part.split())]
+        return "\n".join(values)
+    except ET.ParseError:
+        text = re.sub(r"<[^>]+>", " ", text)
+        return "\n".join(line.strip() for line in html.unescape(text).splitlines() if line.strip())
+
+
+def _extract_official_attachment_text(filename: str, content: bytes, content_type: str) -> str:
+    lowered_name = filename.lower()
+    lowered_type = content_type.lower()
+    if lowered_name.endswith(".pdf") or "pdf" in lowered_type or content.startswith(b"%PDF-"):
+        pdf_filename = filename if lowered_name.endswith(".pdf") else f"{filename}.pdf"
+        return extract_official_memo_pdf_text(pdf_filename, content)[:OFFICIAL_MEMO_MAX_ATTACHMENT_CHARS]
+    if lowered_name.endswith(".hwpx") or content.startswith(b"PK"):
+        return _extract_hwpx_text(filename, content)
+    if lowered_name.endswith(".hml") or "xml" in lowered_type:
+        return _xml_text_content(content)[:OFFICIAL_MEMO_MAX_ATTACHMENT_CHARS]
+    raise AITaskError("ai_task_source_unsupported_content_type")
+
+
+def _fetch_official_source_attachments(
+    base_url: str,
+    html_text: str,
+    *,
+    require_allowed_health_host: bool,
+    urlopen=urllib.request.urlopen,
+) -> list[dict[str, object]]:
+    attachments: list[dict[str, object]] = []
+    for item in _official_attachment_candidates(base_url, html_text):
+        url = item.get("url", "")
+        filename = _safe_official_attachment_filename(item.get("filename", ""))
+        if not url or not filename:
+            continue
+        parsed = urllib.parse.urlsplit(url)
+        host = (parsed.hostname or "").lower().rstrip(".")
+        if parsed.scheme not in {"https", "http"} or not host:
+            continue
+        if _blocked_fetch_host(host):
+            continue
+        if require_allowed_health_host and not is_allowed_official_health_host(host):
+            continue
+        request = urllib.request.Request(
+            urllib.parse.urlunsplit(parsed),
+            headers={
+                "Accept": "application/pdf, application/octet-stream;q=0.9, application/zip;q=0.8, text/xml;q=0.7, text/plain;q=0.6",
+                "Referer": base_url,
+                "User-Agent": "KaosGovernor/ai-tasks",
+            },
+        )
+        try:
+            with urlopen(request, timeout=OFFICIAL_MEMO_FETCH_TIMEOUT_SECONDS) as response:
+                content_type = response.headers.get("Content-Type", "")
+                content = response.read(OFFICIAL_MEMO_MAX_ATTACHMENT_BYTES + 1)
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError):
+            continue
+        if len(content) > OFFICIAL_MEMO_MAX_ATTACHMENT_BYTES:
+            continue
+        try:
+            text = _extract_official_attachment_text(filename, content, content_type)
+        except AITaskError:
+            continue
+        if not text.strip():
+            continue
+        attachments.append(
+            {
+                "filename": filename,
+                "url": urllib.parse.urlunsplit(parsed),
+                "host": host,
+                "contentType": content_type,
+                "textChars": len(text),
+                "text": text,
+            }
+        )
+        if len(attachments) >= OFFICIAL_MEMO_MAX_ATTACHMENTS:
+            break
+    return attachments
 
 
 def ai_task_status_for_error(exc: Exception) -> int:
@@ -1238,21 +1437,28 @@ def fetch_official_source(
     request = urllib.request.Request(
         urllib.parse.urlunsplit(parsed),
         headers={
-            "Accept": "text/html, text/plain;q=0.9, application/json;q=0.8, application/pdf;q=0.7",
+            "Accept": "text/html, text/plain;q=0.9, application/json;q=0.8, application/pdf;q=0.7, application/octet-stream;q=0.6",
             "User-Agent": "KaosGovernor/ai-tasks",
         },
     )
     try:
         with urlopen(request, timeout=OFFICIAL_MEMO_FETCH_TIMEOUT_SECONDS) as response:
             content_type = response.headers.get("Content-Type", "")
-            read_limit = OFFICIAL_MEMO_MAX_PDF_BYTES if "pdf" in content_type.lower() else 1_000_000
+            lowered_path = urllib.parse.unquote(parsed.path or "").lower()
+            attachment_like = lowered_path.endswith((".pdf", ".hwpx", ".hwp", ".hml"))
+            read_limit = OFFICIAL_MEMO_MAX_ATTACHMENT_BYTES if attachment_like or "pdf" in content_type.lower() else 1_000_000
             raw = response.read(read_limit + 1)
     except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError) as exc:
         raise AITaskError("ai_task_source_fetch_failed") from exc
     lower_type = content_type.lower()
-    if len(raw) > (OFFICIAL_MEMO_MAX_PDF_BYTES if "pdf" in lower_type else 1_000_000):
+    lowered_path = urllib.parse.unquote(parsed.path or "").lower()
+    attachment_like = lowered_path.endswith((".pdf", ".hwpx", ".hwp", ".hml"))
+    if len(raw) > (OFFICIAL_MEMO_MAX_ATTACHMENT_BYTES if attachment_like or "pdf" in lower_type else 1_000_000):
         raise AITaskError("ai_task_source_too_large")
-    if lower_type and not any(kind in lower_type for kind in ("text/html", "text/plain", "application/json", "application/pdf")):
+    if lower_type and not any(
+        kind in lower_type
+        for kind in ("text/html", "text/plain", "application/json", "application/pdf", "application/octet-stream", "application/zip", "text/xml")
+    ):
         raise AITaskError("ai_task_source_unsupported_content_type")
     if "pdf" in lower_type or raw.startswith(b"%PDF-"):
         filename = Path(urllib.parse.unquote(parsed.path)).name or "official-source.pdf"
@@ -1264,12 +1470,42 @@ def fetch_official_source(
             "host": host,
             "text": text[:OFFICIAL_MEMO_MAX_SOURCE_CHARS],
         }
+    if lowered_path.endswith(".hwp") and not lowered_path.endswith(".hwpx"):
+        raise AITaskError("ai_task_source_unsupported_content_type")
+    if lowered_path.endswith((".hwpx", ".hml")) or (raw.startswith(b"PK") and "html" not in lower_type):
+        filename = Path(urllib.parse.unquote(parsed.path)).name or "official-source.hwpx"
+        text = _extract_official_attachment_text(filename, raw, content_type)
+        return {
+            "type": "url_hwpx" if filename.lower().endswith(".hwpx") or raw.startswith(b"PK") else "url_hml",
+            "title": title or filename or host,
+            "url": urllib.parse.urlunsplit(parsed),
+            "host": host,
+            "filename": filename,
+            "text": text[:OFFICIAL_MEMO_MAX_SOURCE_CHARS],
+        }
     text = _decode_http_text(raw, content_type)
+    attachment_payloads: list[dict[str, object]] = []
     if "html" in lower_type or "<html" in text[:500].lower():
+        html_text = text
         parser = OfficialSourceTextParser()
-        parser.feed(text)
+        parser.feed(html_text)
         text = parser.text
         title = title or parser.title
+        attachments = _fetch_official_source_attachments(
+            urllib.parse.urlunsplit(parsed),
+            html_text,
+            require_allowed_health_host=require_allowed_health_host,
+            urlopen=urlopen,
+        )
+        if attachments:
+            attachment_sections = [
+                f"첨부파일: {item['filename']}\n{item['text']}"
+                for item in attachments
+                if str(item.get("text") or "").strip()
+            ]
+            if attachment_sections:
+                text = "\n\n".join([text[:OFFICIAL_MEMO_MAX_SOURCE_CHARS], *attachment_sections])
+            attachment_payloads = [{key: value for key, value in item.items() if key != "text"} for item in attachments]
     else:
         text = "\n".join(line.strip() for line in text.splitlines() if line.strip())
     if not text.strip():
@@ -1285,13 +1521,16 @@ def fetch_official_source(
         raise AITaskError("ai_task_source_empty")
     if (title == "알림메세지" and "존재 하지 않습니다" in normalized_text) or "게시물이 존재하지 않습니다" in normalized_text:
         raise AITaskError("ai_task_source_not_found")
-    return {
+    source_payload: dict[str, object] = {
         "type": "url",
         "title": title or host,
         "url": urllib.parse.urlunsplit(parsed),
         "host": host,
         "text": text[:OFFICIAL_MEMO_MAX_SOURCE_CHARS],
     }
+    if attachment_payloads:
+        source_payload["attachments"] = attachment_payloads
+    return source_payload
 
 
 def _fetch_pubmed_eutils_source(

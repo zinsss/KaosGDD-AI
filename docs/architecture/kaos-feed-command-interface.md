@@ -356,6 +356,15 @@ therapeutic class rather than by product name. Current examples include
 `알모그란/알모트립탄 -> Almotriptan/편두통 치료제` and `글리아티린 -> Choline
 alfoscerate/콜린알포세레이트`.
 
+When a HIRA 보험인정기준 detail page exposes `Header.goDown` / `Header.goDown1`
+attachments, Governor follows the allowlisted HIRA `/download.do` URL and
+extracts supported attachment text before sending sources to KaosBrain-OpenAI.
+This is important because newer 고시 pages often place the practical 기준 text in
+`.hwpx` attachments. The first supported attachment formats are text PDFs,
+`.hwpx` zip/XML documents, and `.hml` XML/text. Legacy binary `.hwp` files are
+detected but are not treated as reliable AI source text until a server-side HWP
+extractor is configured.
+
 약학정보원 `health.kr` is allowed as a medicine dictionary helper, not as the
 final authority for insurance-benefit decisions. Governor can read its
 product-name search and drug detail JSON to discover brand names, English/Korean

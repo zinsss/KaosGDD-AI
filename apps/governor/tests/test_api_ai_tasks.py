@@ -8,6 +8,7 @@ import tempfile
 import unittest
 import urllib.error
 import urllib.parse
+import zipfile
 from unittest.mock import patch
 
 from kaos_governor import api
@@ -17,7 +18,7 @@ from kaos_governor.textbook_search import search_textbook_sources
 
 
 class FakeHTTPResponse:
-    def __init__(self, payload: dict | str, content_type: str = "application/json") -> None:
+    def __init__(self, payload: dict | str | bytes, content_type: str = "application/json") -> None:
         self.payload = payload
         self.headers = {"Content-Type": content_type}
 
@@ -28,6 +29,8 @@ class FakeHTTPResponse:
         return None
 
     def read(self, *_args) -> bytes:
+        if isinstance(self.payload, bytes):
+            return self.payload
         if isinstance(self.payload, str):
             return self.payload.encode("utf-8")
         return json.dumps(self.payload, ensure_ascii=False).encode("utf-8")
@@ -116,6 +119,17 @@ def fake_general_web_brain_urlopen(request, timeout=0):  # type: ignore[no-untyp
             },
         }
     )
+
+
+def fake_hwpx_bytes(text: str = "첨부 급여기준 세부 내용") -> bytes:
+    output = BytesIO()
+    with zipfile.ZipFile(output, "w") as archive:
+        archive.writestr("mimetype", "application/hwp+zip")
+        archive.writestr(
+            "Contents/section0.xml",
+            f'<hp:section xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph"><hp:p>{text}</hp:p></hp:section>',
+        )
+    return output.getvalue()
 
 
 class GovernorAITaskTests(unittest.TestCase):
@@ -841,6 +855,46 @@ class GovernorAITaskTests(unittest.TestCase):
         self.assertIn("Dix-Hallpike", source["text"])
         self.assertNotIn("Cookies must be enabled", source["text"])
         self.assertTrue(urls[0].startswith("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?"))
+
+    def test_hira_source_fetch_reads_hwpx_attachment_text(self) -> None:
+        urls: list[str] = []
+        attachment_src = "/share/intranet/simsabank/paystd/2024/08/29/1/RV202408290438342"
+        attachment_filename = "고시 제2024-178호 편두통 치료제.hwpx"
+
+        def fake_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
+            urls.append(request.full_url)
+            if request.full_url.startswith("https://www.hira.or.kr/rc/insu/insuadtcrtr/InsuAdtCrtrPopup.do?"):
+                return FakeHTTPResponse(
+                    f"""
+                    <html><head><title>편두통 치료제</title></head><body>
+                      <div class="view">팝업 본문 급여기준 안내</div>
+                      <a href="#none" onclick="Header.goDown1('{attachment_src}','{attachment_filename}'); return false;">첨부파일 다운로드</a>
+                    </body></html>
+                    """,
+                    "text/html; charset=utf-8",
+                )
+            if request.full_url.startswith("https://www.hira.or.kr/download.do?"):
+                query = urllib.parse.parse_qs(urllib.parse.urlsplit(request.full_url).query)
+                self.assertEqual(query["src"], [attachment_src])
+                self.assertEqual(query["fnm"], [attachment_filename])
+                return FakeHTTPResponse(
+                    fake_hwpx_bytes("알모트립탄은 편두통 급성치료 급여기준 첨부 원문입니다."),
+                    "application/octet-stream",
+                )
+            raise AssertionError(request.full_url)
+
+        source = api.fetch_official_source(
+            "https://www.hira.or.kr/rc/insu/insuadtcrtr/InsuAdtCrtrPopup.do?mtgHmeDd=20240901&mtgMtrRegSno=0001&sno=3",
+            title="편두통 치료제",
+            require_allowed_health_host=True,
+            urlopen=fake_urlopen,
+        )
+
+        self.assertEqual(source["type"], "url")
+        self.assertIn("팝업 본문 급여기준 안내", source["text"])
+        self.assertIn("알모트립탄은 편두통 급성치료 급여기준 첨부 원문입니다.", source["text"])
+        self.assertEqual(source["attachments"][0]["filename"], attachment_filename)  # type: ignore[index]
+        self.assertTrue(any(url.startswith("https://www.hira.or.kr/download.do?") for url in urls))
 
     def test_health_kr_drug_dictionary_expands_brand_for_hira_search(self) -> None:
         def fake_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
