@@ -246,6 +246,79 @@ class GovernorAITaskTests(unittest.TestCase):
         self.assertEqual(sources[0]["citation"], "Harrison 22e, p. 123")
         self.assertIn("Restless legs syndrome", sources[0]["excerpt"])
 
+    def test_textbook_search_discovers_multiple_default_indexes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            harrison_index = root / "harrison" / "index" / "harrison22.index.sqlite"
+            kaplan_index = root / "kaplan_sadock_synopsis_12e" / "index" / "kaplan_sadock_synopsis_12e.index.sqlite"
+            harrison_index.parent.mkdir(parents=True)
+            kaplan_index.parent.mkdir(parents=True)
+            for index_path, page, text, metadata in (
+                (harrison_index, 10, "General medicine overview.", None),
+                (
+                    kaplan_index,
+                    222,
+                    "Bipolar disorder treatment includes mood stabilizers in psychiatric care.",
+                    {
+                        "book": "Kaplan & Sadock's Synopsis of Psychiatry",
+                        "edition": "12e",
+                        "citationLabel": "Kaplan & Sadock Synopsis 12e",
+                    },
+                ),
+            ):
+                conn = sqlite3.connect(index_path)
+                try:
+                    conn.execute("CREATE TABLE pages (id INTEGER PRIMARY KEY, page INTEGER NOT NULL, text TEXT NOT NULL)")
+                    conn.execute("CREATE VIRTUAL TABLE pages_fts USING fts5(text)")
+                    if metadata:
+                        conn.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+                        conn.executemany("INSERT INTO metadata (key, value) VALUES (?, ?)", metadata.items())
+                    conn.execute("INSERT INTO pages (id, page, text) VALUES (1, ?, ?)", (page, text))
+                    conn.execute("INSERT INTO pages_fts (rowid, text) VALUES (1, ?)", (text,))
+                    conn.commit()
+                finally:
+                    conn.close()
+
+            from kaos_governor import textbook_search
+
+            with (
+                patch.object(textbook_search, "DEFAULT_TEXTBOOK_INDEX_PATH", harrison_index),
+                patch.object(textbook_search, "DEFAULT_TEXTBOOK_INDEX_GLOB", str(root / "*" / "index" / "*.index.sqlite")),
+                patch.dict(textbook_search.os.environ, {"AI_TASK_TEXTBOOK_INDEX_PATH": str(harrison_index)}, clear=False),
+            ):
+                sources = search_textbook_sources("bipolar disorder treatment")
+
+        self.assertEqual(sources[0]["book"], "Kaplan & Sadock's Synopsis of Psychiatry")
+        self.assertEqual(sources[0]["citation"], "Kaplan & Sadock Synopsis 12e, p. 222")
+
+    def test_textbook_search_expands_korean_psychiatry_aliases(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            index_path = Path(temporary_directory) / "kaplan_sadock_synopsis_12e.index.sqlite"
+            conn = sqlite3.connect(index_path)
+            try:
+                conn.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+                conn.executemany(
+                    "INSERT INTO metadata (key, value) VALUES (?, ?)",
+                    {
+                        "book": "Kaplan & Sadock's Synopsis of Psychiatry",
+                        "edition": "12e",
+                        "citationLabel": "Kaplan & Sadock Synopsis 12e",
+                    }.items(),
+                )
+                conn.execute("CREATE TABLE pages (id INTEGER PRIMARY KEY, page INTEGER NOT NULL, text TEXT NOT NULL)")
+                conn.execute("CREATE VIRTUAL TABLE pages_fts USING fts5(text)")
+                text = "Schizophrenia treatment includes antipsychotic medication and psychosocial care."
+                conn.execute("INSERT INTO pages (id, page, text) VALUES (1, 321, ?)", (text,))
+                conn.execute("INSERT INTO pages_fts (rowid, text) VALUES (1, ?)", (text,))
+                conn.commit()
+            finally:
+                conn.close()
+
+            sources = search_textbook_sources("조현병 치료 옵션", index_path=index_path)
+
+        self.assertEqual(sources[0]["citation"], "Kaplan & Sadock Synopsis 12e, p. 321")
+        self.assertIn("Schizophrenia treatment", sources[0]["excerpt"])
+
     def test_web_ai_task_sends_textbook_background_to_brain(self) -> None:
         textbook_source = {
             "title": "Harrison p. 123",

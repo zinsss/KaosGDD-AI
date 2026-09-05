@@ -429,9 +429,14 @@ Runtime defaults:
 
 - H3 bind-mounts `${KAOS_ROOT}/reference/textbooks` into Governor as
   `/data/textbooks:ro`.
-- `AI_TASK_TEXTBOOK_INDEX_PATH` defaults to
-  `/data/textbooks/harrison/index/harrison22.index.sqlite`.
+- Governor discovers textbook indexes from
+  `/data/textbooks/*/index/*.index.sqlite`. The legacy
+  `AI_TASK_TEXTBOOK_INDEX_PATH` override still works; if it is left at the
+  default Harrison path, Governor also scans the multi-index glob.
 - `AI_TASK_TEXTBOOK_SEARCH_ENABLED=false` disables the local textbook tier.
+- Current local textbook tiers include Harrison internal medicine background and
+  Kaplan & Sadock psychiatry background when the operator has placed and indexed
+  the corresponding source PDFs on the server.
 
 Source priority:
 

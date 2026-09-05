@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import glob
 import os
 import re
 import sqlite3
@@ -8,6 +9,7 @@ from pathlib import Path
 
 
 DEFAULT_TEXTBOOK_INDEX_PATH = Path("/data/textbooks/harrison/index/harrison22.index.sqlite")
+DEFAULT_TEXTBOOK_INDEX_GLOB = "/data/textbooks/*/index/*.index.sqlite"
 MAX_TEXTBOOK_EXCERPT_CHARS = int(os.environ.get("AI_TASK_TEXTBOOK_EXCERPT_CHARS", "1800") or "1800")
 
 
@@ -15,11 +17,24 @@ def textbook_index_path() -> Path:
     return Path(os.environ.get("AI_TASK_TEXTBOOK_INDEX_PATH", str(DEFAULT_TEXTBOOK_INDEX_PATH))).expanduser()
 
 
+def textbook_index_paths(index_path: Path | None = None) -> list[Path]:
+    if index_path is not None:
+        return [index_path.expanduser()]
+    configured = os.environ.get("AI_TASK_TEXTBOOK_INDEX_PATH", "").strip()
+    if configured and Path(configured).expanduser() != DEFAULT_TEXTBOOK_INDEX_PATH:
+        return [Path(configured).expanduser()]
+    index_glob = os.environ.get("AI_TASK_TEXTBOOK_INDEX_GLOB", DEFAULT_TEXTBOOK_INDEX_GLOB).strip()
+    paths = [Path(path) for path in glob.glob(index_glob)] if index_glob else []
+    if DEFAULT_TEXTBOOK_INDEX_PATH.is_file() and DEFAULT_TEXTBOOK_INDEX_PATH not in paths:
+        paths.append(DEFAULT_TEXTBOOK_INDEX_PATH)
+    return sorted(path for path in paths if path.is_file())
+
+
 def textbook_search_enabled() -> bool:
     value = os.environ.get("AI_TASK_TEXTBOOK_SEARCH_ENABLED", "").strip().lower()
     if value in {"0", "false", "no", "off"}:
         return False
-    return textbook_index_path().is_file()
+    return bool(textbook_index_paths())
 
 
 def search_textbook_sources(
@@ -29,61 +44,153 @@ def search_textbook_sources(
     limit: int = 3,
     index_path: Path | None = None,
 ) -> list[dict[str, object]]:
-    path = index_path or textbook_index_path()
-    if limit <= 0 or not path.is_file():
+    paths = textbook_index_paths(index_path)
+    if limit <= 0 or not paths:
         return []
     queries = _textbook_queries(prompt, plan)
     if not queries:
         return []
+    ranking_context = " ".join([prompt, *queries]).casefold()
+    candidates: list[dict[str, object]] = []
+    seen_pages: set[tuple[str, int]] = set()
+    for path in paths:
+        metadata = _textbook_metadata(path)
+        book_priority = _textbook_book_priority(path, ranking_context)
+        try:
+            conn = sqlite3.connect(path)
+        except sqlite3.Error:
+            continue
+        try:
+            for query_index, query in enumerate(queries):
+                match = _fts_match_query(query)
+                if not match:
+                    continue
+                try:
+                    rows = conn.execute(
+                        """
+                        SELECT pages.page, pages.text, bm25(pages_fts) AS rank
+                        FROM pages_fts
+                        JOIN pages ON pages_fts.rowid = pages.id
+                        WHERE pages_fts MATCH ?
+                        ORDER BY rank
+                        LIMIT ?
+                        """,
+                        (match, max(limit * 2, 6)),
+                    ).fetchall()
+                except sqlite3.Error:
+                    continue
+                for page, text, rank in rows:
+                    page_number = int(page)
+                    page_key = (str(path), page_number)
+                    if page_key in seen_pages:
+                        continue
+                    excerpt = _textbook_excerpt(str(text or ""), query)
+                    if not excerpt:
+                        continue
+                    seen_pages.add(page_key)
+                    candidates.append(
+                        {
+                            "title": f"{metadata['title']} p. {page_number}",
+                            "book": metadata["book"],
+                            "edition": metadata["edition"],
+                            "source": path.name,
+                            "page": page_number,
+                            "citation": f"{metadata['citationLabel']}, p. {page_number}",
+                            "excerpt": excerpt,
+                            "_rank": float(rank or 0),
+                            "_queryIndex": query_index,
+                            "_bookPriority": book_priority,
+                        }
+                    )
+        finally:
+            conn.close()
     results: list[dict[str, object]] = []
-    seen_pages: set[int] = set()
+    for item in sorted(candidates, key=lambda value: (value["_queryIndex"], value["_bookPriority"], value["_rank"], str(value["citation"]))):
+        results.append({key: value for key, value in item.items() if not key.startswith("_")})
+        if len(results) >= limit:
+            return results
+    return results
+
+
+def _textbook_book_priority(path: Path, query_context: str) -> int:
+    psychiatry_terms = {
+        "schizophrenia",
+        "psychosis",
+        "bipolar",
+        "depressive disorder",
+        "major depression",
+        "panic disorder",
+        "anxiety disorder",
+        "obsessive compulsive",
+        "posttraumatic stress",
+        "attention deficit",
+        "autism spectrum",
+        "eating disorder",
+        "substance use disorder",
+        "조현병",
+        "정신증",
+        "양극성",
+        "조울증",
+        "우울증",
+        "공황",
+        "불안장애",
+        "강박",
+        "외상후",
+        "주의력결핍",
+        "자폐",
+        "섭식장애",
+        "물질사용",
+    }
+    if any(term in query_context for term in psychiatry_terms):
+        return 0 if "kaplan" in path.name.casefold() else 1
+    return 0
+
+
+def _textbook_metadata(path: Path) -> dict[str, str]:
+    defaults = {
+        "book": "Harrison's Principles of Internal Medicine",
+        "edition": "22e",
+        "citationLabel": "Harrison 22e",
+    }
+    if "kaplan" in path.name.casefold():
+        defaults = {
+            "book": "Kaplan & Sadock's Synopsis of Psychiatry",
+            "edition": "12e",
+            "citationLabel": "Kaplan & Sadock Synopsis 12e",
+        }
     try:
         conn = sqlite3.connect(path)
     except sqlite3.Error:
-        return []
-    try:
-        for query in queries:
-            match = _fts_match_query(query)
-            if not match:
-                continue
-            try:
-                rows = conn.execute(
-                    """
-                    SELECT pages.page, pages.text
-                    FROM pages_fts
-                    JOIN pages ON pages_fts.rowid = pages.id
-                    WHERE pages_fts MATCH ?
-                    ORDER BY bm25(pages_fts)
-                    LIMIT ?
-                    """,
-                    (match, max(limit * 2, 6)),
-                ).fetchall()
-            except sqlite3.Error:
-                continue
-            for page, text in rows:
-                page_number = int(page)
-                if page_number in seen_pages:
-                    continue
-                excerpt = _textbook_excerpt(str(text or ""), query)
-                if not excerpt:
-                    continue
-                seen_pages.add(page_number)
-                results.append(
-                    {
-                        "title": f"Harrison's Principles of Internal Medicine, 22e p. {page_number}",
-                        "book": "Harrison's Principles of Internal Medicine",
-                        "edition": "22e",
-                        "source": path.name,
-                        "page": page_number,
-                        "citation": f"Harrison 22e, p. {page_number}",
-                        "excerpt": excerpt,
-                    }
-                )
-                if len(results) >= limit:
-                    return results
-    finally:
-        conn.close()
-    return results
+        conn = None
+    if conn is not None:
+        try:
+            rows = conn.execute("SELECT key, value FROM metadata").fetchall()
+            for key, value in rows:
+                normalized_key = str(key)
+                if normalized_key in defaults and str(value or "").strip():
+                    defaults[normalized_key] = " ".join(str(value).split())[:160]
+        except sqlite3.Error:
+            pass
+        finally:
+            conn.close()
+    manifest_path = path.with_name(path.name.replace(".index.sqlite", ".index_manifest.json"))
+    if manifest_path.is_file():
+        try:
+            import json
+
+            payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+            for key in ("book", "edition", "citationLabel"):
+                value = payload.get(key) if isinstance(payload, dict) else ""
+                if str(value or "").strip():
+                    defaults[key] = " ".join(str(value).split())[:160]
+        except (OSError, ValueError):
+            pass
+    return {
+        "book": defaults["book"],
+        "edition": defaults["edition"],
+        "citationLabel": defaults["citationLabel"],
+        "title": f"{defaults['book']}, {defaults['edition']}",
+    }
 
 
 def _textbook_queries(prompt: str, plan: Mapping[str, object] | None = None) -> list[str]:
@@ -108,6 +215,22 @@ def _textbook_queries(prompt: str, plan: Mapping[str, object] | None = None) -> 
         "폐렴": ("pneumonia",),
         "천식": ("asthma",),
         "copd": ("chronic obstructive pulmonary disease",),
+        "조현병": ("schizophrenia", "psychosis"),
+        "정신증": ("psychosis",),
+        "양극성": ("bipolar disorder",),
+        "조울증": ("bipolar disorder",),
+        "우울증": ("depressive disorder", "major depression", "depression"),
+        "공황": ("panic disorder",),
+        "불안장애": ("anxiety disorder",),
+        "강박": ("obsessive compulsive disorder", "OCD"),
+        "외상후": ("posttraumatic stress disorder", "PTSD"),
+        "ptsd": ("posttraumatic stress disorder",),
+        "주의력결핍": ("attention deficit hyperactivity disorder", "ADHD"),
+        "adhd": ("attention deficit hyperactivity disorder",),
+        "자폐": ("autism spectrum disorder",),
+        "섭식장애": ("eating disorder",),
+        "알코올": ("alcohol use disorder",),
+        "물질사용": ("substance use disorder",),
     }
     for value in values:
         query = " ".join(str(value or "").split())
