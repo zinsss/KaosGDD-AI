@@ -24,7 +24,7 @@ test("main supplies route renders as an archive board instead of an inline compo
 
 test("family portal routes supplies api only to governor", () => {
   const suppliesBlock = nginxSource.match(/location \^~ \/api\/supplies \{[\s\S]*?\n    \}/)?.[0] || "";
-  assert.match(suppliesBlock, /proxy_pass http:\/\/governor-api:8096;/);
+  assert.match(suppliesBlock, /proxy_pass \$governor_api;/);
   assert.doesNotMatch(suppliesBlock, /return 404;/);
   assert.doesNotMatch(nginxSource, /kaosgovernor-legacy-api/);
 });

@@ -4964,7 +4964,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 }
 
 .app[data-profile="family"] .topNav {
-  grid-template-columns: repeat(7, auto);
+  grid-template-columns: repeat(9, auto);
 }
 
 @media (max-width: 1179px) {
@@ -7385,6 +7385,202 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
     max-height: 52dvh;
     overflow: auto;
   }
+}
+
+.app[data-profile="family"][data-route="ai-tasks"] .archiveTerminal {
+  --archive-bg: #fffaff;
+  --archive-surface: #f5eef8;
+  --archive-raised: #fbf5fd;
+  --archive-line: rgba(122, 96, 132, 0.18);
+  --archive-line-strong: rgba(188, 126, 170, 0.42);
+  --archive-text: #34283b;
+  --archive-muted: #6b5a75;
+  --archive-cyan: #7f6aa6;
+  --archive-amber: #9b5f8f;
+  --archive-ok: #5d8871;
+  --archive-error: #a74358;
+  color: var(--archive-text);
+  font-family: inherit;
+}
+
+.app[data-profile="family"][data-route="ai-tasks"] .archiveIndex,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveDetail,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveMasthead,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveCommand {
+  border-color: var(--archive-line);
+  border-radius: 14px;
+  background: var(--archive-bg);
+  box-shadow: none;
+}
+
+.app[data-profile="family"][data-route="ai-tasks"] .archiveIndexHeader,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveDetailHeader {
+  border-bottom: 1px solid rgba(122, 96, 132, 0.1);
+  padding-bottom: 12px;
+}
+
+.app[data-profile="family"][data-route="ai-tasks"] .archiveIndexHeader h3,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveDetailHeader h3,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveRecordTitle {
+  color: #34283b;
+  font-family: inherit;
+  font-weight: 700;
+}
+
+.app[data-profile="family"][data-route="ai-tasks"] .archiveStatusMessage,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveRecordDate,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveMetadata dd,
+.app[data-profile="family"][data-route="ai-tasks"] .aiTaskSources ol,
+.app[data-profile="family"][data-route="ai-tasks"] .aiTaskSources li small,
+.app[data-profile="family"][data-route="ai-tasks"] .aiTaskSources li pre {
+  color: var(--archive-muted);
+  font-family: inherit;
+}
+
+.app[data-profile="family"][data-route="ai-tasks"] .archiveCommandLine {
+  grid-template-columns: 4.5rem minmax(0, 1fr);
+  color: var(--archive-amber);
+  font-family: inherit;
+  font-weight: 700;
+}
+
+.app[data-profile="family"][data-route="ai-tasks"] .archiveCommandLine input,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveCommandLine textarea,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveSearchBox {
+  border-color: rgba(122, 96, 132, 0.2);
+  border-radius: 12px;
+  background: #f8f1fb;
+  color: var(--archive-text);
+  font-family: inherit;
+}
+
+.app[data-profile="family"][data-route="ai-tasks"] .archiveCommandLine input,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveCommandLine textarea,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveSearchBox input {
+  font-family: inherit;
+}
+
+.app[data-profile="family"][data-route="ai-tasks"] .archiveCommandLine input::placeholder,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveCommandLine textarea::placeholder,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveSearchBox input::placeholder {
+  color: #a693ad;
+}
+
+.app[data-profile="family"][data-route="ai-tasks"] .archiveInlineToggle {
+  color: var(--archive-muted);
+  font-family: inherit;
+  font-weight: 700;
+  text-transform: none;
+}
+
+.app[data-profile="family"][data-route="ai-tasks"] .archiveInlineToggle input {
+  accent-color: #b474a6;
+}
+
+.app[data-profile="family"][data-route="ai-tasks"] .aiTaskSourceDetails summary,
+.app[data-profile="family"][data-route="ai-tasks"] .aiTaskSources summary {
+  color: var(--archive-amber);
+  font-family: inherit;
+  font-weight: 700;
+  text-transform: none;
+}
+
+.app[data-profile="family"][data-route="ai-tasks"] .archiveAction,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveSourceLink {
+  min-height: 36px;
+  border: 1px solid rgba(151, 124, 184, 0.28);
+  border-radius: 12px;
+  background: rgba(231, 220, 244, 0.62);
+  color: #755b98;
+  padding: 0 12px;
+  font-family: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-transform: none;
+}
+
+.app[data-profile="family"][data-route="ai-tasks"] .archiveAction::before,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveAction::after,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveSourceLink::before,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveSourceLink::after {
+  content: none;
+}
+
+.app[data-profile="family"][data-route="ai-tasks"] .archiveActions .archiveAction.isActive,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveUnreadApplyBar .archiveAction.isActive,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveAction.isActive {
+  border-color: rgba(188, 126, 170, 0.5);
+  background: rgba(244, 199, 223, 0.42);
+  color: #8c4f83;
+}
+
+.app[data-profile="family"][data-route="ai-tasks"] .archiveAction:hover,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveSourceLink:hover,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveRecordButton:hover .archiveRecordTitle {
+  color: #8c4f83;
+  font-weight: 800;
+}
+
+.app[data-profile="family"][data-route="ai-tasks"] .archiveAction:disabled,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveAction.isDisabled,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveSourceLink.isDisabled {
+  border-color: rgba(122, 96, 132, 0.12);
+  background: rgba(238, 228, 244, 0.42);
+  color: #b6a7bd;
+}
+
+.app[data-profile="family"][data-route="ai-tasks"] .archiveRecordList {
+  gap: 8px;
+  border: 0;
+  background: transparent;
+}
+
+.app[data-profile="family"][data-route="ai-tasks"] .archiveRecord {
+  border: 1px solid rgba(122, 96, 132, 0.14);
+  border-radius: 12px;
+  background: var(--archive-surface);
+  overflow: hidden;
+}
+
+.app[data-profile="family"][data-route="ai-tasks"] .archiveRecord.isSelected {
+  border-color: rgba(188, 126, 170, 0.38);
+  background: rgba(244, 199, 223, 0.28);
+}
+
+.app[data-profile="family"][data-route="ai-tasks"] .archiveRecordId,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveDetailHeader p,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveOcrRegion p,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveMetadata dt {
+  color: var(--archive-cyan);
+  font-family: inherit;
+  font-weight: 700;
+  text-transform: none;
+}
+
+.app[data-profile="family"][data-route="ai-tasks"] .archiveIndex > .archiveStatusMessage,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveIndex > .archiveError,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveMetadata,
+.app[data-profile="family"][data-route="ai-tasks"] .aiTaskSources,
+.app[data-profile="family"][data-route="ai-tasks"] .aiTaskPlan,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveNotice,
+.app[data-profile="family"][data-route="ai-tasks"] .archiveOcrRegion pre {
+  border-color: rgba(122, 96, 132, 0.16);
+  border-radius: 12px;
+  background: var(--archive-raised);
+  color: var(--archive-text);
+  font-family: inherit;
+}
+
+.app[data-profile="family"][data-route="ai-tasks"] .archiveMetadata {
+  gap: 0;
+}
+
+.app[data-profile="family"][data-route="ai-tasks"] .archiveMetadata div {
+  background: transparent;
+}
+
+.app[data-profile="family"][data-route="ai-tasks"] .archiveNotice {
+  color: #8c4f83;
 }
 
 @media print {

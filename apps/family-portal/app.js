@@ -2681,7 +2681,10 @@ async function saveAiTaskMemo() {
   const content = aiTaskMemoContentFromPreview(preview);
   const taskId = String(preview?.taskId || "").trim();
   if (!content || !taskId) return;
-  if (!window.confirm(`Save this AI draft to Memos?\n\n${String(memo.title || "AI memo")}`)) return;
+  const confirmation = portalProfile() === "family"
+    ? `이 AI 초안을 메모에 저장할까요?\n\n${String(memo.title || "AI memo")}`
+    : `Save this AI draft to Memos?\n\n${String(memo.title || "AI memo")}`;
+  if (!window.confirm(confirmation)) return;
   state.aiTasks.applying = true;
   state.aiTasks.error = "";
   render();
@@ -2864,9 +2867,18 @@ function renderAiTaskTextbookSources(sources) {
   `;
 }
 
-function renderAiTaskStatePanel(preview) {
+function renderAiTaskStatePanel(preview, labels = null) {
   const status = String(preview?.status || "");
   if (status !== "running" && status !== "failed") return "";
+  const text = labels || {
+    running: "AI TASK RUNNING",
+    failed: "AI TASK FAILED",
+    back: "BACK",
+    searchWeb: "SEARCH WEB",
+    copy: "copy",
+    partialResult: "PARTIAL RESULT",
+    runningMessage: "Governor is searching/fetching sources and waiting for KaosBrain. This card will refresh automatically.",
+  };
   const isRunning = status === "running";
   const result = preview?.result && typeof preview.result === "object" ? preview.result : {};
   const sourceInfo = preview?.source && typeof preview.source === "object" ? preview.source : {};
@@ -2887,13 +2899,13 @@ function renderAiTaskStatePanel(preview) {
     <section class="archiveDetail aiTaskPreview aiTaskStatePanel" aria-label="AI task ${escapeHtml(status)}">
       <header class="archiveDetailHeader">
         <div>
-          <p>${isRunning ? "AI TASK RUNNING" : "AI TASK FAILED"}</p>
+          <p>${escapeHtml(isRunning ? text.running : text.failed)}</p>
           <h3>${escapeHtml(preview?.title || preview?.prompt || "AI Task")}</h3>
         </div>
         <div class="archiveActions">
-          ${preview?.archived ? `<button class="archiveAction" type="button" data-ai-task-close>BACK</button>` : ""}
-          ${canSearchGeneralWeb ? `<button class="archiveAction" type="button" data-ai-task-general-web>SEARCH WEB</button>` : ""}
-          ${canCopy ? `<button class="archiveAction" type="button" data-ai-task-copy>copy</button>` : ""}
+          ${preview?.archived ? `<button class="archiveAction" type="button" data-ai-task-close>${escapeHtml(text.back)}</button>` : ""}
+          ${canSearchGeneralWeb ? `<button class="archiveAction" type="button" data-ai-task-general-web>${escapeHtml(text.searchWeb)}</button>` : ""}
+          ${canCopy ? `<button class="archiveAction" type="button" data-ai-task-copy>${escapeHtml(text.copy)}</button>` : ""}
           <button class="archiveAction" type="button" data-ai-tasks-refresh>↻</button>
         </div>
       </header>
@@ -2904,10 +2916,10 @@ function renderAiTaskStatePanel(preview) {
         ${archiveMeta("Source", sourceInfo.type || "")}
       </dl>
       <div class="${isRunning ? "archiveNotice" : "archiveError"}" data-ai-task-detail role="status" tabindex="0">
-        <p>${isRunning ? "Governor is searching/fetching sources and waiting for KaosBrain. This card will refresh automatically." : aiTaskErrorMessage(preview?.error || "ai_task_background_failed")}</p>
+        <p>${isRunning ? escapeHtml(text.runningMessage) : escapeHtml(aiTaskErrorMessage(preview?.error || "ai_task_background_failed"))}</p>
       </div>
       ${renderAiTaskPlan(sourceInfo.plan)}
-      ${resultContent ? `<div class="archiveOcrRegion" role="region" aria-label="AI task partial result"><p>PARTIAL RESULT</p><pre>${escapeHtml(resultContent)}</pre></div>` : ""}
+      ${resultContent ? `<div class="archiveOcrRegion" role="region" aria-label="AI task partial result"><p>${escapeHtml(text.partialResult)}</p><pre>${escapeHtml(resultContent)}</pre></div>` : ""}
       ${renderAiTaskSources(resultSources)}
       ${renderAiTaskTextbookSources(textbookSources)}
     </section>
@@ -9541,6 +9553,72 @@ function renderLedger() {
 
 function renderAiTasks() {
   const aiTasks = state.aiTasks;
+  const familyAiTasks = portalProfile() === "family";
+  const labels = familyAiTasks
+    ? {
+        page: "AI 도움",
+        note: "질문만 입력하면 공식/의학 자료를 찾아 요약해요. PDF가 있으면 파일을 더할 수 있어요.",
+        prompt: "질문",
+        details: "자료 추가",
+        detailsHint: "URL / 원문",
+        sourceText: "원문",
+        running: "AI 작업 중",
+        failed: "AI 작업 실패",
+        result: "결과",
+        partialResult: "일부 결과",
+        generalWeb: "웹 참고자료",
+        archive: "AI 기록",
+        memoPreview: "메모 미리보기",
+        memoText: "메모 내용",
+        copy: "복사",
+        saveMemo: "메모 저장",
+        saving: "저장 중",
+        saved: "저장됨",
+        run: "실행",
+        starting: "시작 중",
+        clear: "지우기",
+        back: "뒤로",
+        searchWeb: "웹 검색",
+        searching: "검색 중",
+        count: (count) => `${count}개 기록`,
+        loading: "AI 기록을 불러오는 중",
+        standby: "AI 기록 대기",
+        empty: "아직 저장된 AI 기록이 없어요.",
+        reading: "AI 기록을 읽는 중...",
+        sourceNote: "추가 웹 참고자료입니다. 중요한 판단은 공식 자료로 다시 확인하세요.",
+      }
+    : {
+        page: "AI TASK",
+        note: "Prompt-only searches official sources. Add PDF or open Details for URL/source text.",
+        prompt: "PROMPT",
+        details: "DETAILS",
+        detailsHint: "URL / source text",
+        sourceText: "TEXT",
+        running: "AI TASK RUNNING",
+        failed: "AI TASK FAILED",
+        result: "RESULT",
+        partialResult: "PARTIAL RESULT",
+        generalWeb: "GENERAL WEB CONTEXT",
+        archive: "AI TASK ARCHIVE",
+        memoPreview: "MEMO PREVIEW",
+        memoText: "MEMO TEXT",
+        copy: "copy",
+        saveMemo: "SAVE MEMO",
+        saving: "SAVING",
+        saved: "SAVED",
+        run: "RUN",
+        starting: "STARTING",
+        clear: "CLEAR",
+        back: "BACK",
+        searchWeb: "SEARCH WEB",
+        searching: "SEARCHING",
+        count: (count) => `${count} TASKS`,
+        loading: "LOADING AI TASKS",
+        standby: "AI TASK BOARD STANDBY",
+        empty: "No AI tasks archived yet.",
+        reading: "Reading AI task archive...",
+        sourceNote: "Supplemental web context. Verify important decisions against official sources.",
+      };
   const selectedId = String(aiTasks.selectedId || "");
   const rows = aiTasks.items
     .map((item) => {
@@ -9585,19 +9663,24 @@ function renderAiTasks() {
   const isResultPreview = aiTaskIsResultPreview(preview);
   const isGeneralWebPreview = preview?.kind === "general_web" || String(sourceInfo.type || "") === "general_web_search";
   const canSearchGeneralWeb = aiTaskIsOfficialWebPreview(preview);
-  const statePanel = renderAiTaskStatePanel(preview);
+  const statePanel = renderAiTaskStatePanel(preview, {
+    ...labels,
+    runningMessage: familyAiTasks
+      ? "자료를 찾고 KaosBrain 답변을 기다리는 중이에요. 이 카드는 자동으로 새로고침됩니다."
+      : "Governor is searching/fetching sources and waiting for KaosBrain. This card will refresh automatically.",
+  });
   return `
-    <section class="archiveTerminal" data-archive-kind="ai-tasks" aria-label="AI Tasks">
+    <section class="archiveTerminal" data-archive-kind="ai-tasks" aria-label="${escapeHtml(familyAiTasks ? "Family AI Tasks" : "AI Tasks")}">
       <form class="archiveIndex aiTaskComposer" data-ai-task-unified>
         <header class="archiveIndexHeader">
           <div>
-            <h3>AI TASK</h3>
-            <p class="archiveStatusMessage">Prompt-only searches official sources. Add PDF or open Details for URL/source text.</p>
+            <h3>${escapeHtml(labels.page)}</h3>
+            <p class="archiveStatusMessage">${escapeHtml(labels.note)}</p>
           </div>
           <button class="archiveAction" type="button" data-ai-tasks-refresh ${aiTasks.loading ? "disabled" : ""}>↻</button>
         </header>
         <label class="archiveCommandLine aiTaskPrompt">
-          <span>PROMPT</span>
+          <span>${escapeHtml(labels.prompt)}</span>
           <textarea name="prompt" rows="4" placeholder="예: 알모그란정 급여기준과 차트 기재 추천">${escapeHtml(aiTasks.prompt)}</textarea>
         </label>
         <label class="archiveCommandLine">
@@ -9609,14 +9692,14 @@ function renderAiTasks() {
           <span>한국어</span>
         </label>
         <details class="aiTaskSourceDetails">
-          <summary><span>DETAILS</span><small>URL / source text</small></summary>
+          <summary><span>${escapeHtml(labels.details)}</span><small>${escapeHtml(labels.detailsHint)}</small></summary>
           <div class="aiTaskSourceDetailsBody">
             <label class="archiveCommandLine">
               <span>URL</span>
               <input name="sourceUrl" type="url" inputmode="url" autocomplete="url" placeholder="optional official source URL" value="${escapeHtml(aiTasks.sourceUrl)}" />
             </label>
             <label class="archiveCommandLine aiTaskSourceText">
-              <span>TEXT</span>
+              <span>${escapeHtml(labels.sourceText)}</span>
               <textarea name="sourceText" rows="4" placeholder="optional pasted source text">${escapeHtml(aiTasks.sourceText)}</textarea>
             </label>
           </div>
@@ -9627,8 +9710,8 @@ function renderAiTasks() {
             : ""
         }
         <div class="archiveActions">
-          <button class="archiveAction isActive" type="submit" ${aiTasks.previewing ? "disabled" : ""}>${aiTasks.previewing ? "STARTING" : "RUN"}</button>
-          <button class="archiveAction" type="button" data-ai-task-clear>CLEAR</button>
+          <button class="archiveAction isActive" type="submit" ${aiTasks.previewing ? "disabled" : ""}>${aiTasks.previewing ? escapeHtml(labels.starting) : escapeHtml(labels.run)}</button>
+          <button class="archiveAction" type="button" data-ai-task-clear>${escapeHtml(labels.clear)}</button>
         </div>
       </form>
       ${
@@ -9639,22 +9722,22 @@ function renderAiTasks() {
             <section class="archiveDetail aiTaskPreview" aria-label="AI task result">
               <header class="archiveDetailHeader">
                 <div>
-                  <p>${isGeneralWebPreview ? "GENERAL WEB CONTEXT" : isArchivedPreview ? "AI TASK ARCHIVE" : "AI TASK RESULT"}</p>
+                  <p>${escapeHtml(isGeneralWebPreview ? labels.generalWeb : isArchivedPreview ? labels.archive : labels.result)}</p>
                   <h3>${escapeHtml(webResult.title)}</h3>
                 </div>
                 <div class="archiveActions">
-                  ${isArchivedPreview ? `<button class="archiveAction" type="button" data-ai-task-close>BACK</button>` : ""}
+                  ${isArchivedPreview ? `<button class="archiveAction" type="button" data-ai-task-close>${escapeHtml(labels.back)}</button>` : ""}
                   ${
                     canSearchGeneralWeb
-                      ? `<button class="archiveAction" type="button" data-ai-task-general-web ${aiTasks.previewing ? "disabled" : ""}>${aiTasks.previewing ? "SEARCHING" : "SEARCH WEB"}</button>`
+                      ? `<button class="archiveAction" type="button" data-ai-task-general-web ${aiTasks.previewing ? "disabled" : ""}>${aiTasks.previewing ? escapeHtml(labels.searching) : escapeHtml(labels.searchWeb)}</button>`
                       : ""
                   }
-                  <button class="archiveAction" type="button" data-ai-task-copy>copy</button>
+                  <button class="archiveAction" type="button" data-ai-task-copy>${escapeHtml(labels.copy)}</button>
                   ${
                     canSavePreview
-                      ? `<button class="archiveAction isActive" type="button" data-ai-task-save-memo ${aiTasks.applying ? "disabled" : ""}>${aiTasks.applying ? "SAVING" : "SAVE MEMO"}</button>`
+                      ? `<button class="archiveAction isActive" type="button" data-ai-task-save-memo ${aiTasks.applying ? "disabled" : ""}>${aiTasks.applying ? escapeHtml(labels.saving) : escapeHtml(labels.saveMemo)}</button>`
                       : isAppliedPreview
-                        ? `<span class="archiveAction isDisabled">SAVED</span>`
+                        ? `<span class="archiveAction isDisabled">${escapeHtml(labels.saved)}</span>`
                         : ""
                   }
                 </div>
@@ -9667,12 +9750,12 @@ function renderAiTasks() {
               </dl>
               ${
                 isGeneralWebPreview
-                  ? `<div class="archiveNotice"><p>Supplemental web context. Verify important decisions against official sources.</p></div>`
+                  ? `<div class="archiveNotice"><p>${escapeHtml(labels.sourceNote)}</p></div>`
                   : ""
               }
               ${renderAiTaskPlan(sourceInfo.plan)}
               <div class="archiveOcrRegion" data-ai-task-detail role="region" aria-label="AI task result" tabindex="0">
-                <p>RESULT</p>
+                <p>${escapeHtml(labels.result)}</p>
                 <pre>${escapeHtml(webResult.content)}</pre>
               </div>
               ${renderAiTaskSources(webResult.sources)}
@@ -9684,17 +9767,17 @@ function renderAiTasks() {
             <section class="archiveDetail aiTaskPreview" aria-label="AI memo preview">
               <header class="archiveDetailHeader">
                 <div>
-                  <p>${isArchivedPreview ? "AI TASK ARCHIVE" : "MEMO PREVIEW"}</p>
+                  <p>${escapeHtml(isArchivedPreview ? labels.archive : labels.memoPreview)}</p>
                   <h3>${escapeHtml(memo.title || "AI memo")}</h3>
                 </div>
                 <div class="archiveActions">
-                  ${isArchivedPreview ? `<button class="archiveAction" type="button" data-ai-task-close>BACK</button>` : ""}
-                  <button class="archiveAction" type="button" data-ai-task-copy>copy</button>
+                  ${isArchivedPreview ? `<button class="archiveAction" type="button" data-ai-task-close>${escapeHtml(labels.back)}</button>` : ""}
+                  <button class="archiveAction" type="button" data-ai-task-copy>${escapeHtml(labels.copy)}</button>
                   ${
                     canSavePreview
-                      ? `<button class="archiveAction isActive" type="button" data-ai-task-save-memo ${aiTasks.applying ? "disabled" : ""}>${aiTasks.applying ? "SAVING" : "SAVE MEMO"}</button>`
+                      ? `<button class="archiveAction isActive" type="button" data-ai-task-save-memo ${aiTasks.applying ? "disabled" : ""}>${aiTasks.applying ? escapeHtml(labels.saving) : escapeHtml(labels.saveMemo)}</button>`
                       : isAppliedPreview
-                        ? `<span class="archiveAction isDisabled">SAVED</span>`
+                        ? `<span class="archiveAction isDisabled">${escapeHtml(labels.saved)}</span>`
                         : ""
                   }
                 </div>
@@ -9707,7 +9790,7 @@ function renderAiTasks() {
                 ${archiveMeta("Memo", result.memoName || "")}
               </dl>
               <div class="archiveOcrRegion" data-ai-task-detail role="region" aria-label="AI memo content" tabindex="0">
-                <p>MEMO TEXT</p>
+                <p>${escapeHtml(labels.memoText)}</p>
                 <pre>${escapeHtml(memo.content || "")}</pre>
               </div>
             </section>
@@ -9716,17 +9799,17 @@ function renderAiTasks() {
       }
       <section class="archiveIndex" aria-labelledby="aiTasksArchiveTitle" aria-busy="${aiTasks.loading}">
         <header class="archiveIndexHeader">
-          <h3 id="aiTasksArchiveTitle">AI TASK ARCHIVE</h3>
-          <p class="archiveStatusMessage" role="status" aria-live="polite">${aiTasks.checked && !aiTasks.error ? `${aiTasks.items.length} TASKS` : aiTasks.loading ? "LOADING AI TASKS" : "AI TASK BOARD STANDBY"}</p>
+          <h3 id="aiTasksArchiveTitle">${escapeHtml(labels.archive)}</h3>
+          <p class="archiveStatusMessage" role="status" aria-live="polite">${escapeHtml(aiTasks.checked && !aiTasks.error ? labels.count(aiTasks.items.length) : aiTasks.loading ? labels.loading : labels.standby)}</p>
         </header>
         <div class="archiveColumnHeader" aria-hidden="true">
           <span>NO.</span><span>DATE</span><span>TITLE</span>
         </div>
         ${
           aiTasks.loading && !aiTasks.checked
-            ? `<p class="archiveStatusMessage">Reading AI task archive...</p>`
+            ? `<p class="archiveStatusMessage">${escapeHtml(labels.reading)}</p>`
             : aiTasks.checked && !rows
-              ? `<p class="archiveStatusMessage">No AI tasks archived yet.</p>`
+              ? `<p class="archiveStatusMessage">${escapeHtml(labels.empty)}</p>`
               : rows
                 ? `<ol class="archiveRecordList">${rows}</ol>`
                 : ""

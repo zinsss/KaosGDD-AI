@@ -28,7 +28,8 @@ test("system status has a navigation-only brain channel link", () => {
 test("nginx proxies only the read-only system api namespace to governor api", () => {
   assert.match(nginxSource, /location \^~ \/api\/system\//);
   assert.match(nginxSource, /location = \/api\/settings\/status/);
-  assert.match(nginxSource, /proxy_pass http:\/\/governor-api:8096;/);
+  assert.match(nginxSource, /set \$governor_api http:\/\/governor-api:8096;/);
+  assert.match(nginxSource, /proxy_pass \$governor_api;/);
 });
 
 test("main settings renders a compact KaosGDD settings terminal", () => {

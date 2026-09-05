@@ -30,7 +30,8 @@ test("family preset text is a standalone server-backed route with cached categor
 
 test("family preset text API is proxied to calendar-adapter", () => {
   assert.match(familyPortalNginx, /location = \/api\/text-presets/);
-  assert.match(familyPortalNginx, /location = \/api\/text-presets[\s\S]*proxy_pass http:\/\/calendar-adapter:8091;/);
+  assert.match(familyPortalNginx, /set \$calendar_adapter http:\/\/calendar-adapter:8091;/);
+  assert.match(familyPortalNginx, /location = \/api\/text-presets[\s\S]*proxy_pass \$calendar_adapter;/);
   assert.match(deployHelper, /location = \/api\/text-presets/);
   assert.match(deployHelper, /family portal \/api\/text-presets must route to calendar-adapter/);
 });
@@ -69,7 +70,7 @@ test("family preset text assets include styles, translations, and cache-busted b
   assert.match(translations, /"textPresets\.shared":/);
   assert.match(translations, /"textPresets\.localFallback":/);
   assert.match(translations, /"textPresets\.copyRandom": "랜덤 복사"/);
-  assert.match(indexSource, /href="\/styles\.css\?v=309"/);
+  assert.match(indexSource, /href="\/styles\.css\?v=311"/);
   assert.match(indexSource, /src="\/translations\.js\?v=181"/);
-  assert.match(indexSource, /src="\/app\.js\?v=313"/);
+  assert.match(indexSource, /src="\/app\.js\?v=316"/);
 });

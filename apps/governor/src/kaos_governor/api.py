@@ -172,7 +172,7 @@ def require_ai_task_access(headers) -> str:
     profile, email = memos_relay.verify_cloudflare_access(headers)
     if profile not in {"personal", "family"}:
         raise ValueError("ai_task_profile_required")
-    return email
+    return profile
 
 
 def request_actor(headers) -> str:
@@ -503,9 +503,20 @@ def document_intake_store() -> DocumentIntakeStore:
     return DocumentIntakeStore(Path(os.environ.get("DOCUMENT_INTAKE_STATE_PATH", "/data/documents/intake.json")))
 
 
-@lru_cache(maxsize=1)
-def ai_task_archive() -> AITaskArchive:
-    return AITaskArchive(Path(os.environ.get("AI_TASKS_STATE_PATH", "/data/ai-tasks/archive.json")))
+def _ai_task_archive_path(profile: str = "personal") -> Path:
+    normalized = "family" if profile == "family" else "personal"
+    personal_path = Path(os.environ.get("AI_TASKS_STATE_PATH", "/data/ai-tasks/archive.json"))
+    if normalized != "family":
+        return personal_path
+    explicit_path = os.environ.get("AI_TASKS_FAMILY_STATE_PATH", "").strip()
+    if explicit_path:
+        return Path(explicit_path)
+    return personal_path.with_name(f"{personal_path.stem}.family{personal_path.suffix}")
+
+
+@lru_cache(maxsize=4)
+def ai_task_archive(profile: str = "personal") -> AITaskArchive:
+    return AITaskArchive(_ai_task_archive_path(profile))
 
 
 def paperless_status_for_error(exc: Exception) -> int:
@@ -3349,8 +3360,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/ai-tasks":
             try:
-                require_ai_task_access(self.headers)
-                json_response(self, 200, list_ai_tasks_payload(parsed.query))
+                profile = require_ai_task_access(self.headers)
+                json_response(self, 200, list_ai_tasks_payload(parsed.query, archive=ai_task_archive(profile)))
             except (ValueError, AITaskError, memos_relay.MemosRelayError) as exc:
                 code = exc.code if isinstance(exc, (AITaskError, memos_relay.MemosRelayError)) else str(exc)
                 json_response(self, ai_task_status_for_error(exc), {"ok": False, "error": code})
@@ -3624,8 +3635,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/ai-tasks/run":
             try:
-                require_ai_task_access(self.headers)
-                json_response(self, 202, start_ai_task_request_payload(self))
+                profile = require_ai_task_access(self.headers)
+                json_response(self, 202, start_ai_task_request_payload(self, ai_task_archive(profile)))
             except (ValueError, AITaskError, DocumentIntakeError, memos_relay.MemosRelayError) as exc:
                 code = exc.code if isinstance(exc, (AITaskError, memos_relay.MemosRelayError)) else str(exc)
                 json_response(self, ai_task_status_for_error(exc), {"ok": False, "error": code})
@@ -3635,8 +3646,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/ai-tasks/official-doc-memo/preview":
             try:
-                require_ai_task_access(self.headers)
-                json_response(self, 200, preview_official_doc_memo_request_payload(self))
+                profile = require_ai_task_access(self.headers)
+                json_response(self, 200, preview_official_doc_memo_request_payload(self, ai_task_archive(profile)))
             except (ValueError, AITaskError, DocumentIntakeError, memos_relay.MemosRelayError) as exc:
                 code = exc.code if isinstance(exc, (AITaskError, memos_relay.MemosRelayError)) else str(exc)
                 json_response(self, ai_task_status_for_error(exc), {"ok": False, "error": code})
@@ -3646,8 +3657,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/ai-tasks/web/preview":
             try:
-                require_ai_task_access(self.headers)
-                json_response(self, 200, preview_web_ai_task_payload(json_request(self)))
+                profile = require_ai_task_access(self.headers)
+                json_response(self, 200, preview_web_ai_task_payload(json_request(self), ai_task_archive(profile)))
             except (ValueError, AITaskError, memos_relay.MemosRelayError) as exc:
                 code = exc.code if isinstance(exc, (AITaskError, memos_relay.MemosRelayError)) else str(exc)
                 json_response(self, ai_task_status_for_error(exc), {"ok": False, "error": code})
@@ -3657,8 +3668,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/ai-tasks/general-web/preview":
             try:
-                require_ai_task_access(self.headers)
-                json_response(self, 200, preview_general_web_ai_task_payload(json_request(self)))
+                profile = require_ai_task_access(self.headers)
+                json_response(self, 200, preview_general_web_ai_task_payload(json_request(self), ai_task_archive(profile)))
             except (ValueError, AITaskError, memos_relay.MemosRelayError) as exc:
                 code = exc.code if isinstance(exc, (AITaskError, memos_relay.MemosRelayError)) else str(exc)
                 json_response(self, ai_task_status_for_error(exc), {"ok": False, "error": code})
@@ -3669,8 +3680,8 @@ class Handler(BaseHTTPRequestHandler):
         completed_ai_task_id = ai_task_complete_id(parsed.path)
         if completed_ai_task_id:
             try:
-                require_ai_task_access(self.headers)
-                json_response(self, 200, complete_ai_task_payload(completed_ai_task_id, json_request(self)))
+                profile = require_ai_task_access(self.headers)
+                json_response(self, 200, complete_ai_task_payload(completed_ai_task_id, json_request(self), ai_task_archive(profile)))
             except (ValueError, AITaskError, memos_relay.MemosRelayError) as exc:
                 code = exc.code if isinstance(exc, (AITaskError, memos_relay.MemosRelayError)) else str(exc)
                 json_response(self, ai_task_status_for_error(exc), {"ok": False, "error": code})

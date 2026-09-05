@@ -31,5 +31,6 @@ test("family portal proxies native memos api to governor", () => {
   const nginxSource = fs.readFileSync(path.join(__dirname, "../../deploy/h3-backend/family-portal/nginx.conf"), "utf8");
 
   assert.match(nginxSource, /location \^~ \/api\/memos\/ \{/);
-  assert.match(nginxSource, /location \^~ \/api\/memos\/ \{[\s\S]*proxy_pass http:\/\/governor-api:8096;/);
+  assert.match(nginxSource, /set \$governor_api http:\/\/governor-api:8096;/);
+  assert.match(nginxSource, /location \^~ \/api\/memos\/ \{[\s\S]*proxy_pass \$governor_api;/);
 });

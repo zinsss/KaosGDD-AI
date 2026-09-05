@@ -135,14 +135,52 @@ def fake_hwpx_bytes(text: str = "첨부 급여기준 세부 내용") -> bytes:
 class GovernorAITaskTests(unittest.TestCase):
     def test_ai_task_access_allows_family_profile(self) -> None:
         with patch.object(api.memos_relay, "verify_cloudflare_access", return_value=("family", "wife@example.com")):
-            self.assertEqual(api.require_ai_task_access({}), "wife@example.com")
+            self.assertEqual(api.require_ai_task_access({}), "family")
 
         with patch.object(api.memos_relay, "verify_cloudflare_access", return_value=("personal", "zin@example.com")):
-            self.assertEqual(api.require_ai_task_access({}), "zin@example.com")
+            self.assertEqual(api.require_ai_task_access({}), "personal")
 
         with patch.object(api.memos_relay, "verify_cloudflare_access", return_value=("supplies", "bot@example.com")):
             with self.assertRaisesRegex(ValueError, "ai_task_profile_required"):
                 api.require_ai_task_access({})
+
+    def test_ai_task_archive_uses_separate_family_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            personal_path = Path(temporary_directory) / "archive.json"
+            family_path = Path(temporary_directory) / "family-archive.json"
+            with patch.dict(
+                api.os.environ,
+                {
+                    "AI_TASKS_STATE_PATH": str(personal_path),
+                    "AI_TASKS_FAMILY_STATE_PATH": str(family_path),
+                },
+            ):
+                api.ai_task_archive.cache_clear()
+                api.ai_task_archive("personal").add_result(
+                    kind="web",
+                    prompt="personal prompt",
+                    source={"type": "official_web_search"},
+                    result={"title": "Personal", "content": "personal"},
+                )
+                api.ai_task_archive("family").add_result(
+                    kind="web",
+                    prompt="family prompt",
+                    source={"type": "official_web_search"},
+                    result={"title": "Family", "content": "family"},
+                )
+
+                self.assertEqual([item.prompt for item in api.ai_task_archive("personal").list_records()], ["personal prompt"])
+                self.assertEqual([item.prompt for item in api.ai_task_archive("family").list_records()], ["family prompt"])
+                self.assertTrue(personal_path.exists())
+                self.assertTrue(family_path.exists())
+                api.ai_task_archive.cache_clear()
+
+    def test_family_ai_task_archive_default_lives_beside_personal_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            personal_path = Path(temporary_directory) / "archive.json"
+            with patch.dict(api.os.environ, {"AI_TASKS_STATE_PATH": str(personal_path)}, clear=False):
+                with patch.dict(api.os.environ, {"AI_TASKS_FAMILY_STATE_PATH": ""}, clear=False):
+                    self.assertEqual(api._ai_task_archive_path("family"), Path(temporary_directory) / "archive.family.json")
 
     def test_archive_write_errors_are_reported_as_ai_task_errors(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
