@@ -520,10 +520,19 @@ services_preflight() {
   if grep -Eq 'proxy_pass[[:space:]]+http://[^;]*/?api/supplies|proxy_pass[[:space:]]+http://kaosgovernor-legacy-api' "${root}/config/family-portal/nginx.conf"; then
     die "family portal must not proxy retired supplies or legacy API routes"
   fi
+  if ! grep -q 'resolver 127\.0\.0\.11' "${root}/config/family-portal/nginx.conf"; then
+    die "family portal must use Docker DNS resolver for dynamic Governor upstreams"
+  fi
+  if ! grep -q 'set \$governor_api http://governor-api:8096;' "${root}/config/family-portal/nginx.conf"; then
+    die "family portal must define dynamic governor-api upstream"
+  fi
+  if ! grep -q 'set \$calendar_adapter http://calendar-adapter:8091;' "${root}/config/family-portal/nginx.conf"; then
+    die "family portal must define dynamic calendar-adapter upstream"
+  fi
   if ! grep -q 'location \^~ /api/supplies' "${root}/config/family-portal/nginx.conf"; then
     die "family portal must route the governed Supplies API explicitly"
   fi
-  if ! grep -A8 'location \^~ /api/supplies' "${root}/config/family-portal/nginx.conf" | grep -q 'proxy_pass http://governor-api:8096;'; then
+  if ! grep -A8 'location \^~ /api/supplies' "${root}/config/family-portal/nginx.conf" | grep -Eq 'proxy_pass (http://governor-api:8096|\$governor_api);'; then
     die "family portal must route /api/supplies to governor-api"
   fi
   if ! grep -q 'location \^~ /embed/agenda-supplies' "${root}/config/family-portal/nginx.conf"; then
@@ -538,7 +547,7 @@ services_preflight() {
   if ! grep -q 'location \^~ /api/memos/' "${root}/config/family-portal/nginx.conf"; then
     die "family portal must route the scoped Memos API explicitly"
   fi
-  if ! grep -A8 'location \^~ /api/memos/' "${root}/config/family-portal/nginx.conf" | grep -q 'proxy_pass http://governor-api:8096;'; then
+  if ! grep -A8 'location \^~ /api/memos/' "${root}/config/family-portal/nginx.conf" | grep -Eq 'proxy_pass (http://governor-api:8096|\$governor_api);'; then
     die "family portal must route /api/memos to governor-api"
   fi
   if ! grep -q 'location \^~ /api/ai-tasks/' "${root}/config/family-portal/nginx.conf"; then
@@ -581,10 +590,19 @@ family_portal_source_preflight() {
   if grep -Eq 'proxy_pass[[:space:]]+http://[^;]*/?api/supplies|proxy_pass[[:space:]]+http://kaosgovernor-legacy-api' "${nginx_source}"; then
     die "family portal source must not proxy retired supplies or legacy API routes"
   fi
+  if ! grep -q 'resolver 127\.0\.0\.11' "${nginx_source}"; then
+    die "family portal source must use Docker DNS resolver for dynamic Governor upstreams"
+  fi
+  if ! grep -q 'set \$governor_api http://governor-api:8096;' "${nginx_source}"; then
+    die "family portal source must define dynamic governor-api upstream"
+  fi
+  if ! grep -q 'set \$calendar_adapter http://calendar-adapter:8091;' "${nginx_source}"; then
+    die "family portal source must define dynamic calendar-adapter upstream"
+  fi
   if ! grep -q 'location \^~ /api/supplies' "${nginx_source}"; then
     die "family portal source must route the governed Supplies API explicitly"
   fi
-  if ! grep -A8 'location \^~ /api/supplies' "${nginx_source}" | grep -q 'proxy_pass http://governor-api:8096;'; then
+  if ! grep -A8 'location \^~ /api/supplies' "${nginx_source}" | grep -Eq 'proxy_pass (http://governor-api:8096|\$governor_api);'; then
     die "family portal source must route /api/supplies to governor-api"
   fi
   if ! grep -q 'location \^~ /embed/agenda-supplies' "${nginx_source}"; then
@@ -602,7 +620,7 @@ family_portal_source_preflight() {
   if ! grep -q 'location \^~ /api/memos/' "${nginx_source}"; then
     die "family portal source must route the scoped Memos API explicitly"
   fi
-  if ! grep -A8 'location \^~ /api/memos/' "${nginx_source}" | grep -q 'proxy_pass http://governor-api:8096;'; then
+  if ! grep -A8 'location \^~ /api/memos/' "${nginx_source}" | grep -Eq 'proxy_pass (http://governor-api:8096|\$governor_api);'; then
     die "family portal source must route /api/memos to governor-api"
   fi
   if ! grep -q 'location \^~ /api/ai-tasks/' "${nginx_source}"; then
@@ -656,7 +674,7 @@ family_transition_preflight() {
   fi
   if ! awk '
     /location = \/api\/text-presets[[:space:]]*\{/ { block = 1 }
-    block && /proxy_pass[[:space:]]+http:\/\/calendar-adapter:8091/ { found = 1 }
+    block && /proxy_pass[[:space:]]+(http:\/\/calendar-adapter:8091|\$calendar_adapter);/ { found = 1 }
     block && /^[[:space:]]*}/ { block = 0 }
     END { exit found ? 0 : 1 }
   ' "${root}/config/family-portal/nginx.conf"; then
