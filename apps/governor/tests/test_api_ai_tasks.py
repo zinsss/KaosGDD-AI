@@ -6,6 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 import urllib.error
+import urllib.parse
 from unittest.mock import patch
 
 from kaos_governor import api
@@ -312,6 +313,88 @@ class GovernorAITaskTests(unittest.TestCase):
             self.assertEqual(failed.status, "failed")
             self.assertEqual(failed.error, "ai_task_brain_not_configured")
 
+    def test_official_web_brain_call_retries_transient_http_errors(self) -> None:
+        attempts = 0
+
+        def fake_retry_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                payload = json.dumps({"ok": False, "error": "kaosbrain_official_web_summary_unavailable"}).encode("utf-8")
+                raise urllib.error.HTTPError(request.full_url, 502, "Bad Gateway", {}, BytesIO(payload))
+            return FakeHTTPResponse(
+                {
+                    "ok": True,
+                    "result": {
+                        "title": "요약",
+                        "content": "본문",
+                        "sources": [{"title": "KDCA", "url": "https://www.kdca.go.kr/notice"}],
+                    },
+                }
+            )
+
+        with (
+            patch.object(api, "AI_TASKS_BRAIN_URL", "http://brain.internal:8099/internal/ai-tasks/official-doc-memo/preview"),
+            patch.object(api, "AI_TASKS_WEB_BRAIN_URL", ""),
+            patch.object(api, "AI_TASKS_BRAIN_TOKEN", "secret"),
+        ):
+            result = api.call_ai_task_official_web_brain(
+                "summarize",
+                {"prompt": "요약", "sources": [{"title": "KDCA", "url": "https://www.kdca.go.kr/notice"}]},
+                urlopen=fake_retry_urlopen,
+            )
+
+        self.assertEqual(attempts, 2)
+        self.assertEqual(result["title"], "요약")
+
+    def test_ai_task_worker_preserves_sources_when_official_summary_fails(self) -> None:
+        def fake_summary_failure_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
+            if request.full_url == "http://brain.internal:8099/internal/ai-tasks/official-web/plan":
+                return FakeHTTPResponse(
+                    {
+                        "ok": True,
+                        "plan": {
+                            "query": "BPPV 치료 옵션",
+                            "alternateQueries": ["benign paroxysmal positional vertigo treatment guideline"],
+                            "preferredDomains": ["kdca.go.kr"],
+                            "task": "treatment_options",
+                            "language": "ko",
+                        },
+                    }
+                )
+            if request.full_url.startswith("https://www.kdca.go.kr/search.do?"):
+                return FakeHTTPResponse('<html><body><a href="/board/bppv">BPPV 치료 지침</a></body></html>', "text/html; charset=utf-8")
+            if request.full_url == "https://www.kdca.go.kr/board/bppv":
+                return FakeHTTPResponse("<html><body>BPPV treatment source text</body></html>", "text/html; charset=utf-8")
+            if request.full_url == "http://brain.internal:8099/internal/ai-tasks/official-web/summarize":
+                payload = json.dumps({"ok": False, "error": "kaosbrain_official_web_summary_unavailable"}).encode("utf-8")
+                raise urllib.error.HTTPError(request.full_url, 502, "Bad Gateway", {}, BytesIO(payload))
+            raise AssertionError(request.full_url)
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            archive = AITaskArchive(Path(temporary_directory) / "ai-tasks.json")
+            record = archive.add_running(kind="web", prompt="BPPV 치료 옵션", source={"type": "official_web_search"})
+            with (
+                patch.object(api, "AI_TASKS_BRAIN_URL", "http://brain.internal:8099/internal/ai-tasks/official-doc-memo/preview"),
+                patch.object(api, "AI_TASKS_WEB_BRAIN_URL", ""),
+                patch.object(api, "AI_TASKS_BRAIN_TOKEN", "secret"),
+            ):
+                api.run_ai_task_worker(
+                    record.task_id,
+                    {"prompt": "BPPV 치료 옵션"},
+                    source_task=False,
+                    archive=archive,
+                    urlopen=fake_summary_failure_urlopen,
+                )
+
+            failed = archive.list_records()[0]
+            self.assertEqual(failed.status, "failed")
+            self.assertEqual(failed.error, "kaosbrain_official_web_summary_unavailable")
+            self.assertEqual(failed.source["plan"]["task"], "treatment_options")
+            self.assertEqual(failed.source["sources"][0]["url"], "https://www.kdca.go.kr/board/bppv")
+            self.assertIn("Official sources found", failed.result["title"])
+            self.assertIn("https://www.kdca.go.kr/board/bppv", failed.result["content"])
+
     def test_hira_insurance_criteria_search_expands_almogran_to_ingredient(self) -> None:
         def fake_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
             body = request.data.decode("utf-8") if getattr(request, "data", None) else ""
@@ -386,6 +469,30 @@ class GovernorAITaskTests(unittest.TestCase):
 
         self.assertEqual(candidates[0].host, "nedrug.mfds.go.kr")
         self.assertEqual(candidates[0].source, "의약품통합정보시스템")
+
+    def test_treatment_option_queries_expand_korean_conditions_to_guideline_terms(self) -> None:
+        searched_terms: list[str] = []
+
+        def fake_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
+            if request.full_url.startswith("https://health.kr/"):
+                raise AssertionError("health.kr should not be queried for generic disease treatment options")
+            if request.full_url.startswith("https://www.hira.or.kr/"):
+                return FakeHTTPResponse("<html><body>검색된 내용이 없습니다.</body></html>", "text/html; charset=utf-8")
+            if request.full_url.startswith("https://pubmed.ncbi.nlm.nih.gov/"):
+                parsed = urllib.parse.urlsplit(request.full_url)
+                term = urllib.parse.unquote(urllib.parse.parse_qs(parsed.query).get("term", [""])[0])
+                searched_terms.append(term)
+                if term == "restless legs syndrome treatment guideline":
+                    return FakeHTTPResponse(
+                        '<html><body><a href="/39324694/">Restless legs syndrome treatment clinical practice guideline</a></body></html>',
+                        "text/html; charset=utf-8",
+                    )
+            return FakeHTTPResponse("<html><body>검색된 내용이 없습니다.</body></html>", "text/html; charset=utf-8")
+
+        candidates = official_health_search_candidates("하지불안증후군 치료 옵션", urlopen=fake_urlopen)
+
+        self.assertIn("restless legs syndrome treatment guideline", searched_terms)
+        self.assertEqual(candidates[0].url, "https://pubmed.ncbi.nlm.nih.gov/39324694/")
 
     def test_treatment_option_queries_search_trusted_guideline_sources(self) -> None:
         urls: list[str] = []

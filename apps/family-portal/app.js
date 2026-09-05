@@ -2807,6 +2807,16 @@ function renderAiTaskStatePanel(preview) {
   const status = String(preview?.status || "");
   if (status !== "running" && status !== "failed") return "";
   const isRunning = status === "running";
+  const result = preview?.result && typeof preview.result === "object" ? preview.result : {};
+  const sourceInfo = preview?.source && typeof preview.source === "object" ? preview.source : {};
+  const resultSources = Array.isArray(result.sources)
+    ? result.sources
+    : Array.isArray(sourceInfo.sources)
+      ? sourceInfo.sources
+      : [];
+  const resultContent = String(result.content || "").trim();
+  const canCopy = Boolean(resultContent);
+  const canSearchGeneralWeb = !isRunning && aiTaskIsOfficialWebPreview(preview) && resultSources.length > 0;
   return `
     <section class="archiveDetail aiTaskPreview aiTaskStatePanel" aria-label="AI task ${escapeHtml(status)}">
       <header class="archiveDetailHeader">
@@ -2816,6 +2826,8 @@ function renderAiTaskStatePanel(preview) {
         </div>
         <div class="archiveActions">
           ${preview?.archived ? `<button class="archiveAction" type="button" data-ai-task-close>BACK</button>` : ""}
+          ${canSearchGeneralWeb ? `<button class="archiveAction" type="button" data-ai-task-general-web>SEARCH WEB</button>` : ""}
+          ${canCopy ? `<button class="archiveAction" type="button" data-ai-task-copy>copy</button>` : ""}
           <button class="archiveAction" type="button" data-ai-tasks-refresh>↻</button>
         </div>
       </header>
@@ -2823,11 +2835,14 @@ function renderAiTaskStatePanel(preview) {
         ${archiveMeta("Status", status)}
         ${archiveMeta("Started", preview?.createdAt || "")}
         ${archiveMeta("Updated", preview?.updatedAt || "")}
-        ${archiveMeta("Source", preview?.source?.type || "")}
+        ${archiveMeta("Source", sourceInfo.type || "")}
       </dl>
       <div class="${isRunning ? "archiveNotice" : "archiveError"}" data-ai-task-detail role="status" tabindex="0">
         <p>${isRunning ? "Governor is searching/fetching sources and waiting for KaosBrain. This card will refresh automatically." : aiTaskErrorMessage(preview?.error || "ai_task_background_failed")}</p>
       </div>
+      ${renderAiTaskPlan(sourceInfo.plan)}
+      ${resultContent ? `<div class="archiveOcrRegion" role="region" aria-label="AI task partial result"><p>PARTIAL RESULT</p><pre>${escapeHtml(resultContent)}</pre></div>` : ""}
+      ${renderAiTaskSources(resultSources)}
     </section>
   `;
 }

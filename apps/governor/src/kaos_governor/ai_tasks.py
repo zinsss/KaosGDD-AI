@@ -179,8 +179,25 @@ class AITaskArchive:
             error="",
         )
 
-    def fail(self, task_id: str, *, error: str) -> AITaskRecord:
-        return self._replace(task_id, status="failed", error=_clean_token(error) or "ai_task_failed")
+    def fail(
+        self,
+        task_id: str,
+        *,
+        error: str,
+        source: Mapping[str, object] | None = None,
+        result: Mapping[str, object] | None = None,
+        memo: Mapping[str, object] | None = None,
+        provider: str | None = None,
+    ) -> AITaskRecord:
+        return self._replace(
+            task_id,
+            status="failed",
+            source=source,
+            result=result,
+            memo=memo,
+            provider=provider,
+            error=_clean_token(error) or "ai_task_failed",
+        )
 
     def complete(self, task_id: str, *, memo_name: str = "") -> AITaskRecord:
         normalized_id = str(task_id or "").strip()

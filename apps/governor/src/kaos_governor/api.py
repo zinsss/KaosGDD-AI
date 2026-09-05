@@ -756,6 +756,51 @@ def _general_web_ai_task_result(
     }, result
 
 
+def _ai_task_source_summaries(source_payloads: list[dict[str, object]], *, limit: int = 10) -> list[dict[str, str]]:
+    summaries: list[dict[str, str]] = []
+    for source in source_payloads:
+        url = str(source.get("url") or "").strip()
+        if not url.startswith(("https://", "http://")):
+            continue
+        title = " ".join(str(source.get("title") or url).split())[:200]
+        summaries.append({"title": title or url[:200], "url": url[:800]})
+        if len(summaries) >= limit:
+            break
+    return summaries
+
+
+def _official_web_failure_result(
+    prompt: str,
+    error: str,
+    *,
+    plan: dict[str, object] | None = None,
+    source_payloads: list[dict[str, object]] | None = None,
+    checked_at: str = "",
+) -> dict[str, object]:
+    sources = _ai_task_source_summaries(source_payloads or [])
+    if not sources:
+        return {}
+    plan_query = str((plan or {}).get("query") or prompt).strip()
+    lines = [
+        f"KaosBrain summary failed: {error}",
+        "",
+        "Governor did find readable allowed/trusted sources. Use the links below, adjust the prompt, or run supplemental SEARCH WEB from this card.",
+    ]
+    if plan_query:
+        lines.extend(["", f"Search query: {plan_query}"])
+    lines.append("")
+    lines.append("Sources found:")
+    for index, source in enumerate(sources, start=1):
+        lines.append(f"{index}. {source['title']} — {source['url']}")
+    return {
+        "title": "Official sources found; summary failed",
+        "content": "\n".join(lines),
+        "sources": sources,
+        "checkedAt": checked_at or datetime.now(UTC).date().isoformat(),
+        "model": "kaosgovernor-source-fallback",
+    }
+
+
 def preview_official_doc_memo_payload(
     payload: dict[str, object],
     archive: AITaskArchive | None = None,
@@ -829,6 +874,9 @@ def run_ai_task_worker(
     urlopen=urllib.request.urlopen,
 ) -> None:
     active_archive = archive or ai_task_archive()
+    partial_source: dict[str, object] | None = None
+    partial_result: dict[str, object] | None = None
+    prompt = ""
     try:
         if source_task:
             next_payload = _payload_with_extracted_pdf_source(payload)
@@ -837,14 +885,79 @@ def run_ai_task_worker(
             active_archive.finish_preview(task_id, source=source, memo=memo)
         else:
             prompt = _ai_task_prompt(payload, web=True)
-            source, result = _web_ai_task_result(prompt, urlopen=urlopen)
+            request = {
+                "prompt": prompt,
+                "checkedAt": datetime.now(UTC).date().isoformat(),
+            }
+            plan_request = {
+                **request,
+                "allowedDomains": allowed_official_health_hosts(),
+            }
+            plan = _clean_official_web_plan(
+                call_ai_task_official_web_brain("plan", plan_request, urlopen=urlopen),
+                prompt=prompt,
+            )
+            partial_source = {
+                "type": "official_web_search",
+                "checkedAt": request["checkedAt"],
+                "plan": plan,
+                "sources": [],
+            }
+            source_payloads = fetch_official_web_sources(plan, urlopen=urlopen)
+            partial_source["sources"] = _ai_task_source_summaries(source_payloads)
+            if not source_payloads:
+                raise AITaskError("ai_task_official_web_sources_not_found")
+            summary_request = {
+                **request,
+                "plan": plan,
+                "sources": source_payloads,
+            }
+            try:
+                result = _clean_official_web_result(
+                    call_ai_task_official_web_brain("summarize", summary_request, urlopen=urlopen),
+                    request=summary_request,
+                )
+            except AITaskError as exc:
+                partial_result = _official_web_failure_result(
+                    prompt,
+                    exc.code,
+                    plan=plan,
+                    source_payloads=source_payloads,
+                    checked_at=request["checkedAt"],
+                )
+                raise
+            source = {
+                "type": "official_web_search",
+                "checkedAt": result.get("checkedAt") or request["checkedAt"],
+                "plan": plan,
+                "sources": result.get("sources") if isinstance(result.get("sources"), list) else [],
+            }
+            if not source["sources"]:
+                source["sources"] = _ai_task_source_summaries(source_payloads)
             active_archive.finish_result(task_id, source=source, result=result)
     except AITaskError as exc:
-        active_archive.fail(task_id, error=exc.code)
+        fail_kwargs: dict[str, object] = {}
+        if partial_source is not None:
+            fail_kwargs["source"] = partial_source
+        if partial_result:
+            fail_kwargs["result"] = partial_result
+            fail_kwargs["memo"] = {
+                "title": str(partial_result.get("title") or "AI Task"),
+                "content": str(partial_result.get("content") or ""),
+            }
+        active_archive.fail(task_id, error=exc.code, **fail_kwargs)
     except Exception as exc:
         print(f"AI task worker failed: {type(exc).__name__}", flush=True)
         try:
-            active_archive.fail(task_id, error="ai_task_background_failed")
+            partial_result = _official_web_failure_result(
+                prompt,
+                "ai_task_background_failed",
+                source_payloads=(partial_source or {}).get("sources") if isinstance((partial_source or {}).get("sources"), list) else [],
+            )
+            fail_kwargs = {"source": partial_source} if partial_source is not None else {}
+            if partial_result:
+                fail_kwargs["result"] = partial_result
+            active_archive.fail(task_id, error="ai_task_background_failed", **fail_kwargs)
         except AITaskError:
             pass
 
@@ -1377,18 +1490,33 @@ def call_ai_task_official_web_brain(
             "User-Agent": "KaosGovernor/ai-tasks",
         },
     )
-    try:
-        with urlopen(request, timeout=AI_TASKS_BRAIN_TIMEOUT_SECONDS) as response:
-            raw = response.read()
-    except urllib.error.HTTPError as exc:
+    retryable_errors = {
+        "ai_task_official_web_brain_http_502",
+        "ai_task_official_web_brain_http_503",
+        "ai_task_official_web_brain_http_504",
+        "ai_task_official_web_brain_request_failed",
+        "kaosbrain_official_web_plan_unavailable",
+        "kaosbrain_official_web_summary_unavailable",
+    }
+    raw = b""
+    for attempt in range(2):
         try:
-            body = json.loads(exc.read().decode("utf-8"))
-            code = str(body.get("error") or f"ai_task_official_web_brain_http_{exc.code}")
-        except Exception:
-            code = f"ai_task_official_web_brain_http_{exc.code}"
-        raise AITaskError(code) from exc
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        raise AITaskError("ai_task_official_web_brain_request_failed") from exc
+            with urlopen(request, timeout=AI_TASKS_BRAIN_TIMEOUT_SECONDS) as response:
+                raw = response.read()
+            break
+        except urllib.error.HTTPError as exc:
+            try:
+                body = json.loads(exc.read().decode("utf-8"))
+                code = str(body.get("error") or f"ai_task_official_web_brain_http_{exc.code}")
+            except Exception:
+                code = f"ai_task_official_web_brain_http_{exc.code}"
+            if attempt == 0 and (code in retryable_errors or exc.code in {502, 503, 504}):
+                continue
+            raise AITaskError(code) from exc
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            if attempt == 0:
+                continue
+            raise AITaskError("ai_task_official_web_brain_request_failed") from exc
     try:
         body = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:

@@ -157,6 +157,7 @@ def official_health_search_candidates(
                 "www.ninds.nih.gov",
             }
         )
+    treatment_query = _looks_like_treatment_options_query(queries)
     sites = _ordered_sites(preferred)
     candidates: list[OfficialSearchCandidate] = list(health_kr_candidates)
     hira_candidates = _hira_insurance_criteria_candidates(queries, preferred=preferred, urlopen=urlopen)
@@ -169,7 +170,7 @@ def official_health_search_candidates(
         site_count = 0
         site_limit = max(4, min(MAX_CANDIDATES_PER_SEARCH, limit))
         per_query_limit = max(2, site_limit // 2)
-        for search_query in queries[:2]:
+        for search_query in queries[:4 if treatment_query else 2]:
             query_count = 0
             page_url = site.search_url.format(query=urllib.parse.quote(search_query))
             for link in _search_page_links(page_url, urlopen=urlopen):
@@ -218,11 +219,40 @@ def _expanded_queries(queries: list[str]) -> list[str]:
         "bppv": ("benign paroxysmal positional vertigo", "BPPV treatment guideline", "이석증", "양성돌발체위현훈"),
         "이석증": ("BPPV", "benign paroxysmal positional vertigo", "양성돌발체위현훈"),
         "양성돌발체위현훈": ("BPPV", "benign paroxysmal positional vertigo", "이석증"),
+        "양성돌발성체위현훈": ("BPPV", "benign paroxysmal positional vertigo", "이석증"),
+        "하지불안증후군": ("restless legs syndrome", "RLS", "restless legs syndrome treatment guideline"),
+        "restless legs syndrome": ("RLS", "하지불안증후군", "restless legs syndrome treatment guideline"),
+        "rls": ("restless legs syndrome", "restless legs syndrome treatment guideline", "하지불안증후군"),
     }
     for needle, replacements in aliases.items():
         if needle in joined:
             expanded.extend(replacements)
+    if _looks_like_treatment_options_query(expanded):
+        expanded.extend(_treatment_query_variants(expanded))
     return _unique_queries(expanded)
+
+
+def _treatment_query_variants(queries: Iterable[str]) -> list[str]:
+    variants: list[str] = []
+    for query in list(queries)[:6]:
+        base = re.sub(
+            r"(치료\s*옵션|치료옵션|치료\s*방법|치료방법|치료법|치료|처치|관리|진료지침|가이드라인|권고|options?|treatments?|therap(?:y|ies)|management|guidelines?|clinical practice)",
+            " ",
+            str(query or ""),
+            flags=re.I,
+        )
+        base = " ".join(base.replace("/", " ").replace(",", " ").split()).strip(" -·")
+        if len(base) < 2:
+            continue
+        if re.search(r"[가-힣]", base):
+            variants.extend((f"{base} 진료지침", f"{base} 치료 지침", f"{base} 치료"))
+        if re.search(r"[A-Za-z]", base):
+            variants.extend((
+                f"{base} clinical practice guideline",
+                f"{base} treatment guideline",
+                f"{base} management guideline",
+            ))
+    return variants
 
 
 def _preferred_hosts(values: Iterable[str]) -> set[str]:
