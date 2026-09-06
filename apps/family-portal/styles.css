@@ -7094,6 +7094,61 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   padding: 10px 12px;
 }
 
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskSourceQuality {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--archive-line);
+  background: rgba(20, 24, 31, 0.34);
+}
+
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskSourceQuality p {
+  margin: 0;
+  color: var(--archive-cyan);
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskSourceQuality div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskQualityChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45ch;
+  min-height: 1.75rem;
+  padding: 0 0.62rem;
+  border: 1px solid rgba(136, 192, 208, 0.42);
+  color: var(--archive-text);
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskQualityChip small {
+  color: var(--archive-amber);
+  font-size: 0.68rem;
+}
+
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskQualityChip.is-guideline {
+  border-color: rgba(235, 203, 139, 0.64);
+}
+
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskQualityChip.is-official {
+  border-color: rgba(163, 190, 140, 0.58);
+}
+
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskQualityChip.is-pubmed {
+  border-color: rgba(180, 142, 173, 0.58);
+}
+
 .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskSources summary {
   display: inline-flex;
   align-items: baseline;
@@ -7493,6 +7548,9 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 .app[data-profile="family"][data-route="ai-tasks"] .archiveStatusMessage,
 .app[data-profile="family"][data-route="ai-tasks"] .archiveRecordDate,
 .app[data-profile="family"][data-route="ai-tasks"] .archiveMetadata dd,
+.app[data-profile="family"][data-route="ai-tasks"] .aiTaskSourceQuality p,
+.app[data-profile="family"][data-route="ai-tasks"] .aiTaskQualityChip,
+.app[data-profile="family"][data-route="ai-tasks"] .aiTaskQualityChip small,
 .app[data-profile="family"][data-route="ai-tasks"] .aiTaskSources ol,
 .app[data-profile="family"][data-route="ai-tasks"] .aiTaskSources li small,
 .app[data-profile="family"][data-route="ai-tasks"] .aiTaskSources li pre {
@@ -7623,6 +7681,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 .app[data-profile="family"][data-route="ai-tasks"] .archiveIndex > .archiveStatusMessage,
 .app[data-profile="family"][data-route="ai-tasks"] .archiveIndex > .archiveError,
 .app[data-profile="family"][data-route="ai-tasks"] .archiveMetadata,
+.app[data-profile="family"][data-route="ai-tasks"] .aiTaskSourceQuality,
 .app[data-profile="family"][data-route="ai-tasks"] .aiTaskSources,
 .app[data-profile="family"][data-route="ai-tasks"] .aiTaskPlan,
 .app[data-profile="family"][data-route="ai-tasks"] .archiveNotice,

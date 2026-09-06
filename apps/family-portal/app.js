@@ -2245,7 +2245,7 @@ function aiTasksHaveRunningItems(items = state.aiTasks.items) {
 }
 
 function scheduleAiTasksPoll(delay = 3500) {
-  if (portalProfile() !== "main") return;
+  if (!aiTasksEnabledForProfile()) return;
   if (aiTaskPollTimer) window.clearTimeout(aiTaskPollTimer);
   state.aiTasks.polling = true;
   aiTaskPollTimer = window.setTimeout(async () => {
@@ -2868,6 +2868,82 @@ function aiTaskSourceHost(url) {
   }
 }
 
+function aiTaskSourceQualityKey(source) {
+  const sourceType = String(source?.type || "").toLowerCase();
+  const url = String(source?.url || "");
+  const host = aiTaskSourceHost(url).toLowerCase();
+  const title = String(source?.title || source?.citation || source?.book || "").toLowerCase();
+  const combined = `${host} ${url.toLowerCase()} ${title} ${sourceType}`;
+  if (sourceType.includes("pubmed") || host === "pubmed.ncbi.nlm.nih.gov") return "pubmed";
+  if (
+    combined.includes("guideline") ||
+    combined.includes("clinical-practice-guideline") ||
+    combined.includes("clinical practice guideline") ||
+    combined.includes("진료지침") ||
+    combined.includes("가이드라인") ||
+    host.includes("guideline.or.kr") ||
+    host.includes("komgi.kr") ||
+    host.includes("nice.org.uk") ||
+    host.includes("entnet.org") ||
+    host.includes("aasm.org") ||
+    host.includes("jcsm.aasm.org")
+  ) {
+    return "guideline";
+  }
+  if (
+    host.endsWith(".go.kr") ||
+    host.endsWith(".gov") ||
+    host.includes("kdca.go.kr") ||
+    host.includes("mohw.go.kr") ||
+    host.includes("hira.or.kr") ||
+    host.includes("nhis.or.kr") ||
+    host.includes("mfds.go.kr") ||
+    host.includes("health.kr") ||
+    host.includes("nih.gov") ||
+    host.includes("cdc.gov")
+  ) {
+    return "official";
+  }
+  if (host.includes("aafp.org") || combined.includes("american family physician") || combined.includes("review")) {
+    return "review";
+  }
+  return "web";
+}
+
+function aiTaskSourceQualityCounts(sources, textbookSources) {
+  const counts = { guideline: 0, official: 0, textbook: 0, pubmed: 0, review: 0, web: 0 };
+  if (Array.isArray(sources)) {
+    for (const source of sources) {
+      counts[aiTaskSourceQualityKey(source)] += 1;
+    }
+  }
+  if (Array.isArray(textbookSources)) {
+    counts.textbook += textbookSources.length;
+  }
+  return counts;
+}
+
+function renderAiTaskSourceQuality(sources, textbookSources, labels = {}) {
+  const counts = aiTaskSourceQualityCounts(sources, textbookSources);
+  const entries = [
+    ["guideline", labels.guideline || "GUIDELINE"],
+    ["official", labels.official || "OFFICIAL"],
+    ["textbook", labels.textbook || "TEXTBOOK"],
+    ["pubmed", labels.pubmed || "PUBMED ABSTRACT"],
+    ["review", labels.review || "CLINICAL REVIEW"],
+    ["web", labels.web || "WEB"],
+  ].filter(([key]) => counts[key] > 0);
+  if (!entries.length) return "";
+  return `
+    <section class="aiTaskSourceQuality" aria-label="${escapeHtml(labels.title || "Source quality")}">
+      <p>${escapeHtml(labels.title || "SOURCE QUALITY")}</p>
+      <div>
+        ${entries.map(([key, label]) => `<span class="aiTaskQualityChip is-${escapeHtml(key)}">${escapeHtml(label)} <small>${counts[key]}</small></span>`).join("")}
+      </div>
+    </section>
+  `;
+}
+
 function renderAiTaskPlan(plan) {
   if (!plan || typeof plan !== "object") return "";
   const alternates = Array.isArray(plan.alternateQueries) ? plan.alternateQueries.join(" // ") : "";
@@ -2944,6 +3020,7 @@ function renderAiTaskStatePanel(preview, labels = null) {
     searchWeb: "SEARCH WEB",
     copy: "copy",
     partialResult: "PARTIAL RESULT",
+    sourceQuality: "SOURCE QUALITY",
     runningMessage: "Governor is searching/fetching sources and waiting for KaosBrain. This card will refresh automatically.",
   };
   const isRunning = status === "running";
@@ -2986,6 +3063,9 @@ function renderAiTaskStatePanel(preview, labels = null) {
         <p>${isRunning ? escapeHtml(text.runningMessage) : escapeHtml(aiTaskErrorMessage(preview?.error || "ai_task_background_failed"))}</p>
       </div>
       ${renderAiTaskPlan(sourceInfo.plan)}
+      ${renderAiTaskSourceQuality(resultSources, textbookSources, {
+        title: text.sourceQuality,
+      })}
       ${resultContent ? `<div class="archiveOcrRegion" role="region" aria-label="AI task partial result"><p>${escapeHtml(text.partialResult)}</p><pre>${escapeHtml(resultContent)}</pre></div>` : ""}
       ${renderAiTaskSources(resultSources)}
       ${renderAiTaskTextbookSources(textbookSources)}
@@ -9713,6 +9793,13 @@ function renderAiTasks() {
         empty: "아직 저장된 AI 기록이 없어요.",
         reading: "AI 기록을 읽는 중...",
         sourceNote: "추가 웹 참고자료입니다. 중요한 판단은 공식 자료로 다시 확인하세요.",
+        sourceQuality: "자료 종류",
+        guideline: "진료지침",
+        official: "공식자료",
+        textbook: "교과서",
+        pubmed: "PubMed 초록",
+        review: "임상 리뷰",
+        web: "웹",
       }
     : {
         page: "AI TASK",
@@ -9745,6 +9832,13 @@ function renderAiTasks() {
         empty: "No AI tasks archived yet.",
         reading: "Reading AI task archive...",
         sourceNote: "Supplemental web context. Verify important decisions against official sources.",
+        sourceQuality: "SOURCE QUALITY",
+        guideline: "GUIDELINE",
+        official: "OFFICIAL",
+        textbook: "TEXTBOOK",
+        pubmed: "PUBMED ABSTRACT",
+        review: "CLINICAL REVIEW",
+        web: "WEB",
       };
   const selectedId = String(aiTasks.selectedId || "");
   const rows = aiTasks.items
@@ -9881,6 +9975,15 @@ function renderAiTasks() {
                   : ""
               }
               ${renderAiTaskPlan(sourceInfo.plan)}
+              ${renderAiTaskSourceQuality(webResult.sources, webResult.textbookSources, {
+                title: labels.sourceQuality,
+                guideline: labels.guideline,
+                official: labels.official,
+                textbook: labels.textbook,
+                pubmed: labels.pubmed,
+                review: labels.review,
+                web: labels.web,
+              })}
               <div class="archiveOcrRegion" data-ai-task-detail role="region" aria-label="AI task result" tabindex="0">
                 <p>${escapeHtml(labels.result)}</p>
                 <pre>${escapeHtml(webResult.content)}</pre>
