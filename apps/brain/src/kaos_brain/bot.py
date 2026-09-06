@@ -420,12 +420,13 @@ class BrainBot(BrainProposalMixin, BrainActiveControlMixin, discord.Client):
 
     async def on_ready(self) -> None:
         LOGGER.info("KaosBrain connected as %s", self.user)
-        if self.governor_tools is not None and (
+        if self.settings.active_control_enabled and self.governor_tools is not None and (
             self._active_control_refresh_task is None or self._active_control_refresh_task.done()
         ):
             self._active_control_refresh_task = asyncio.create_task(self._ensure_active_control_message())
         if (
-            self.governor_tools is not None
+            self.settings.active_control_enabled
+            and self.governor_tools is not None
             and self.settings.active_control_repost_seconds > 0
             and (self._active_control_repost_task is None or self._active_control_repost_task.done())
         ):
@@ -484,6 +485,7 @@ class BrainBot(BrainProposalMixin, BrainActiveControlMixin, discord.Client):
                 and message.channel.id == self.settings.notification_channel_id
                 and message.author.id == self.settings.governor_bot_user_id
                 and str(message.content or "").startswith(FAX_RECEIVED_NOTIFICATION_PREFIX)
+                and self.settings.active_control_enabled
             ):
                 await self._ensure_active_control_message()
             return

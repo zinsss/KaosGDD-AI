@@ -131,6 +131,7 @@ class Settings:
     governor_tools_api_token: str
     governor_tools_profile: str
     governor_tools_supplies_collection_id: str
+    active_control_enabled: bool
     active_control_state_path: str
     active_control_repost_seconds: int
     active_control_quiet_start_hour: int
@@ -243,7 +244,7 @@ class Settings:
             imaging_model=source.get("KAOSBRAIN_IMAGING_MODEL", "gemma3:4b").strip() or "gemma3:4b",
             request_timeout_seconds=timeout,
             max_reply_chars=max_reply_chars,
-            respond_without_mention=_boolean(source, "KAOSBRAIN_RESPOND_WITHOUT_MENTION", default=True),
+            respond_without_mention=_boolean(source, "KAOSBRAIN_RESPOND_WITHOUT_MENTION", default=False),
             auto_route_enabled=_boolean(source, "KAOSBRAIN_AUTO_ROUTE_ENABLED", default=True),
             kaosai_enabled=kaosai_enabled,
             kaosai_chat_enabled=kaosai_chat_enabled,
@@ -265,13 +266,14 @@ class Settings:
             governor_tools_api_token=governor_tools_api_token,
             governor_tools_profile=source.get("KAOSBRAIN_GOVERNOR_TOOLS_PROFILE", "main").strip() or "main",
             governor_tools_supplies_collection_id=source.get("KAOSBRAIN_SUPPLIES_COLLECTION_ID", "").strip(),
+            active_control_enabled=_boolean(source, "KAOSBRAIN_ACTIVE_CONTROL_ENABLED", default=False),
             active_control_state_path=source.get(
                 "KAOSBRAIN_ACTIVE_CONTROL_STATE_PATH",
                 "/data/kaosbrain/active-control.json",
             ).strip()
             or "/data/kaosbrain/active-control.json",
             active_control_repost_seconds=_non_negative_int(
-                source.get("KAOSBRAIN_ACTIVE_CONTROL_REPOST_SECONDS", "7200"),
+                source.get("KAOSBRAIN_ACTIVE_CONTROL_REPOST_SECONDS", "0"),
                 "KAOSBRAIN_ACTIVE_CONTROL_REPOST_SECONDS",
             ),
             active_control_quiet_start_hour=_hour(
