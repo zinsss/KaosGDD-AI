@@ -2027,6 +2027,69 @@ h3 {
   min-width: 0;
 }
 
+.calendarMonthTitle {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.calendarTitleButton {
+  appearance: none;
+  min-width: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  padding: 1px 3px;
+}
+
+.calendarTitleButton:hover,
+.calendarTitleButton:focus-visible,
+.calendarTitleButton.isActive {
+  background: var(--surface);
+  color: var(--accent);
+  outline: 1px solid var(--line);
+}
+
+.calendarPicker {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  width: min(260px, 100%);
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.calendarPicker.isMonthPicker {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.calendarPickerButton {
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.calendarPickerButton:hover,
+.calendarPickerButton:focus-visible,
+.calendarPickerButton.isActive {
+  border-color: var(--accent);
+  color: var(--accent);
+  outline: 0;
+}
+
 .monthNav {
   display: inline-grid;
   grid-template-columns: 32px 58px 32px;

@@ -166,6 +166,7 @@ const taskPriorityOptions = {
 
 const state = {
   selectedDate: ymd(new Date()),
+  calendarPicker: "",
   embedView: "calendar",
   currentCollection: "all",
   taskMode: "active",
@@ -5709,9 +5710,79 @@ function monthTitle(monthValue) {
   return `${date.toLocaleString("en", { month: "long" })} ${year}`;
 }
 
+function calendarMonthName(monthNumber) {
+  const date = new Date(2026, monthNumber - 1, 1);
+  return portalProfile() === "family" ? `${monthNumber}월` : date.toLocaleString("en", { month: "long" });
+}
+
+function calendarTitleParts(monthValue) {
+  const [year, month] = monthValue.split("-").map(Number);
+  return { year, month, monthLabel: calendarMonthName(month) };
+}
+
+function renderCalendarMonthTitle(monthValue) {
+  const { year, month, monthLabel } = calendarTitleParts(monthValue);
+  const yearActive = state.calendarPicker === "year";
+  const monthActive = state.calendarPicker === "month";
+  if (portalProfile() === "family") {
+    return `
+      <h2 class="calendarMonthTitle" aria-label="${escapeHtml(monthTitle(monthValue))}">
+        <button class="calendarTitleButton ${yearActive ? "isActive" : ""}" type="button" data-calendar-picker-toggle="year" aria-expanded="${yearActive}">${escapeHtml(year)}년</button>
+        <button class="calendarTitleButton ${monthActive ? "isActive" : ""}" type="button" data-calendar-picker-toggle="month" aria-expanded="${monthActive}">${escapeHtml(monthLabel)}</button>
+      </h2>
+    `;
+  }
+  return `
+    <h2 class="calendarMonthTitle" aria-label="${escapeHtml(monthTitle(monthValue))}">
+      <button class="calendarTitleButton ${monthActive ? "isActive" : ""}" type="button" data-calendar-picker-toggle="month" aria-expanded="${monthActive}">${escapeHtml(monthLabel)}</button>
+      <button class="calendarTitleButton ${yearActive ? "isActive" : ""}" type="button" data-calendar-picker-toggle="year" aria-expanded="${yearActive}">${escapeHtml(year)}</button>
+    </h2>
+  `;
+}
+
+function renderCalendarPicker(monthValue) {
+  const { year, month } = calendarTitleParts(monthValue);
+  if (state.calendarPicker === "year") {
+    const years = Array.from({ length: 13 }, (_, index) => year - 6 + index);
+    return `
+      <div class="calendarPicker" role="group" aria-label="${uiText("calendar.yearSelectorAria", "Year selector")}">
+        ${years
+          .map((item) => `
+            <button class="calendarPickerButton ${item === year ? "isActive" : ""}" type="button" data-calendar-year="${escapeHtml(item)}" aria-pressed="${item === year}">
+              ${escapeHtml(item)}
+            </button>
+          `)
+          .join("")}
+      </div>
+    `;
+  }
+  if (state.calendarPicker === "month") {
+    return `
+      <div class="calendarPicker isMonthPicker" role="group" aria-label="${uiText("calendar.monthSelectorAria", "Month selector")}">
+        ${Array.from({ length: 12 }, (_, index) => index + 1)
+          .map((item) => `
+            <button class="calendarPickerButton ${item === month ? "isActive" : ""}" type="button" data-calendar-month="${escapeHtml(item)}" aria-pressed="${item === month}">
+              ${escapeHtml(calendarMonthName(item))}
+            </button>
+          `)
+          .join("")}
+      </div>
+    `;
+  }
+  return "";
+}
+
 function shiftSelectedMonth(offset) {
   const [year, month, day] = state.selectedDate.split("-").map(Number);
   const target = new Date(year, month - 1 + offset, 1);
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  target.setDate(Math.min(day, lastDay));
+  state.selectedDate = ymd(target);
+}
+
+function setSelectedYearMonth(nextYear, nextMonth) {
+  const [_year, _month, day] = state.selectedDate.split("-").map(Number);
+  const target = new Date(nextYear, nextMonth - 1, 1);
   const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
   target.setDate(Math.min(day, lastDay));
   state.selectedDate = ymd(target);
@@ -6626,7 +6697,8 @@ function renderCalendarMonthPanel(options = {}) {
       <div class="panelHeader">
         <div>
           <p class="label">${uiText("calendar.label", "Calendar")}</p>
-          <h2>${escapeHtml(monthTitle(month))}</h2>
+          ${renderCalendarMonthTitle(month)}
+          ${renderCalendarPicker(month)}
         </div>
         <div class="calendarHeaderActions" aria-label="${uiText("calendar.actionsAria", "Calendar actions")}">
           <div class="monthNav" aria-label="${uiText("calendar.monthNavigationAria", "Month navigation")}">
@@ -12297,6 +12369,7 @@ document.addEventListener("click", async (event) => {
     if (getRoute() === "add-event" || (getRoute() === "add" && state.addKind === "event")) collectAddEventDraft();
     if (getRoute() === "add-task" || (getRoute() === "add" && state.addKind === "task")) collectAddTaskDraft();
     state.selectedDate = day.dataset.date;
+    state.calendarPicker = "";
     if (getRoute() === "add-task" || getRoute() === "edit-task" || (getRoute() === "add" && state.addKind === "task")) state.taskDueEnabled = true;
     if (state.addTaskDraft) {
       state.addTaskDraft.selectedDate = state.selectedDate;
@@ -12305,6 +12378,59 @@ document.addEventListener("click", async (event) => {
     }
     render();
     if (state.selectedDate.slice(0, 7) !== previousMonth) loadRemoteWeatherForSelectedMonth();
+    return;
+  }
+
+  const calendarPickerToggle = event.target.closest("[data-calendar-picker-toggle]");
+  if (calendarPickerToggle) {
+    event.preventDefault();
+    const picker = calendarPickerToggle.dataset.calendarPickerToggle || "";
+    state.calendarPicker = state.calendarPicker === picker ? "" : picker;
+    render();
+    return;
+  }
+
+  const calendarYear = event.target.closest("[data-calendar-year]");
+  if (calendarYear) {
+    const previousMonth = state.selectedDate.slice(0, 7);
+    const nextYear = Number(calendarYear.dataset.calendarYear);
+    const currentMonth = Number(state.selectedDate.slice(5, 7));
+    if (!Number.isInteger(nextYear)) return;
+    if (getRoute() === "add-event" || (getRoute() === "add" && state.addKind === "event")) collectAddEventDraft();
+    if (getRoute() === "add-task" || (getRoute() === "add" && state.addKind === "task")) collectAddTaskDraft();
+    setSelectedYearMonth(nextYear, currentMonth);
+    state.calendarPicker = "";
+    if (state.addTaskDraft && state.taskDueEnabled) {
+      state.addTaskDraft.selectedDate = state.selectedDate;
+      state.addTaskDraft.due = state.selectedDate;
+    }
+    render();
+    if (getRoute() !== "caregiver" && state.selectedDate.slice(0, 7) !== previousMonth) loadRemoteWeatherForSelectedMonth();
+    return;
+  }
+
+  const calendarMonth = event.target.closest("[data-calendar-month]");
+  if (calendarMonth) {
+    const previousMonth = state.selectedDate.slice(0, 7);
+    const nextMonth = Number(calendarMonth.dataset.calendarMonth);
+    const currentYear = Number(state.selectedDate.slice(0, 4));
+    if (!Number.isInteger(nextMonth) || nextMonth < 1 || nextMonth > 12) return;
+    if (getRoute() === "add-event" || (getRoute() === "add" && state.addKind === "event")) collectAddEventDraft();
+    if (getRoute() === "add-task" || (getRoute() === "add" && state.addKind === "task")) collectAddTaskDraft();
+    setSelectedYearMonth(currentYear, nextMonth);
+    state.calendarPicker = "";
+    if (state.addTaskDraft && state.taskDueEnabled) {
+      state.addTaskDraft.selectedDate = state.selectedDate;
+      state.addTaskDraft.due = state.selectedDate;
+    }
+    render();
+    if (getRoute() !== "caregiver" && state.selectedDate.slice(0, 7) !== previousMonth) loadRemoteWeatherForSelectedMonth();
+    return;
+  }
+
+  if (!event.target.closest(".calendarPicker") && !event.target.closest(".calendarMonthTitle") && state.calendarPicker) {
+    state.calendarPicker = "";
+    render();
     return;
   }
 
@@ -12322,6 +12448,7 @@ document.addEventListener("click", async (event) => {
     const previousMonth = state.selectedDate.slice(0, 7);
     if (getRoute() === "add-event" || (getRoute() === "add" && state.addKind === "event")) collectAddEventDraft();
     if (getRoute() === "add-task" || (getRoute() === "add" && state.addKind === "task")) collectAddTaskDraft();
+    state.calendarPicker = "";
     shiftSelectedMonth(Number(monthShift.dataset.monthShift));
     if (state.addTaskDraft && state.taskDueEnabled) state.addTaskDraft.due = state.selectedDate;
     render();
@@ -12333,6 +12460,7 @@ document.addEventListener("click", async (event) => {
     const previousMonth = state.selectedDate.slice(0, 7);
     if (getRoute() === "add-event" || (getRoute() === "add" && state.addKind === "event")) collectAddEventDraft();
     if (getRoute() === "add-task" || (getRoute() === "add" && state.addKind === "task")) collectAddTaskDraft();
+    state.calendarPicker = "";
     selectToday();
     if (state.addTaskDraft && state.taskDueEnabled) state.addTaskDraft.due = state.selectedDate;
     render();
