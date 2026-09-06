@@ -2604,7 +2604,7 @@ async function previewUnifiedAiTask(form) {
 
 function aiTaskErrorCode(error, fallback) {
   const message = String(error?.message || error || "").trim();
-  if (/^(Load failed|Failed to fetch)$/i.test(message) || /network\s*error/i.test(message)) {
+  if (isNetworkFetchError(error)) {
     return "ai_task_network_failed";
   }
   return message || fallback;
@@ -2673,6 +2673,72 @@ function aiTaskErrorMessage(code) {
     ai_task_profile_required: "AI Tasks are only available on kaosgdd.net and family.kaosgdd.net.",
   };
   return messages[normalized] || normalized || "AI Task preview failed";
+}
+
+function isNetworkFetchError(error) {
+  const message = String(error?.message || error || "").trim();
+  return /^(Load failed|Failed to fetch)$/i.test(message) || /network\s*error/i.test(message);
+}
+
+function mailErrorCode(error, fallback = "mail_unavailable") {
+  const message = String(error?.message || error || "").trim();
+  if (isNetworkFetchError(error)) return "cloudflare_access_session_required";
+  if (message === "HTTP 200") return "mail_unexpected_response";
+  return message || fallback;
+}
+
+function mailErrorMessage(error, fallback = "Mail board is unavailable") {
+  const code = mailErrorCode(error, fallback);
+  const messages = {
+    cloudflare_access_session_required: "Cloudflare Access session may be expired. Re-login, then retry.",
+    cloudflare_access_required: "Cloudflare Access login is required.",
+    cloudflare_access_invalid: "Cloudflare Access session is invalid. Re-login, then retry.",
+    main_profile_required: "Mail is available only on kaosgdd.net.",
+    mail_unexpected_response: "Mail request returned a non-JSON login/error page. Re-login, then retry.",
+    mail_archive_unavailable: "Mail archive is unavailable.",
+    mail_unread_unavailable: "Unread mail is unavailable.",
+    mail_attention_unavailable: "Mail attention status is unavailable.",
+    mail_detail_unavailable: "Mail detail is unavailable.",
+    mail_batch_unavailable: "Unread mail action failed.",
+    "HTTP 502": "Mail gateway returned HTTP 502. Retry; if repeated, check Governor/Naver IMAP.",
+    "HTTP 504": "Mail request timed out. Retry; if repeated, check Governor/Naver IMAP.",
+    naver_not_configured: "Naver Mail is not configured.",
+    imap_login_failed: "Naver Mail login failed.",
+    imap_list_failed: "Naver Mail mailbox list failed.",
+    imap_select_failed: "Naver Mail mailbox open failed.",
+    imap_search_failed: "Naver Mail search failed.",
+    imap_fetch_failed: "Naver Mail message fetch failed.",
+  };
+  return messages[code] || code || fallback;
+}
+
+function isMailAccessError(message) {
+  const text = String(message || "");
+  return /Cloudflare Access|login is required|Re-login|non-JSON login/i.test(text);
+}
+
+function mailReloginUrl() {
+  return `/api/mail/messages?${new URLSearchParams({ limit: "1" }).toString()}`;
+}
+
+async function mailJsonRequest(path, options = {}) {
+  const response = await fetch(path, {
+    ...options,
+    credentials: "same-origin",
+    cache: options.cache || "no-store",
+    headers: {
+      Accept: "application/json",
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(options.headers || {}),
+    },
+  });
+  const contentType = response.headers.get("Content-Type") || "";
+  if (response.redirected || !contentType.toLowerCase().includes("application/json")) {
+    throw new Error(response.status === 401 ? "cloudflare_access_required" : "mail_unexpected_response");
+  }
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+  return payload;
 }
 
 async function saveAiTaskMemo() {
@@ -3331,12 +3397,7 @@ async function loadMail(options = {}) {
   try {
     const params = new URLSearchParams({ limit: String(state.mail.limit || 50) });
     PERSONAL_MAIL_FOLDERS.forEach((folder) => params.append("folder", folder));
-    const response = await fetch(`/api/mail/messages?${params.toString()}`, {
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    const payload = await mailJsonRequest(`/api/mail/messages?${params.toString()}`);
     const page = window.KAOS_PORTAL_MAIL.normalizePage(payload);
     state.mail = {
       ...state.mail,
@@ -3353,7 +3414,7 @@ async function loadMail(options = {}) {
       ...state.mail,
       checked: true,
       loading: false,
-      error: error.message || "Mail board is unavailable",
+      error: mailErrorMessage(error, "Mail board is unavailable"),
       items: [],
       folders: [],
       mailboxCount: 0,
@@ -3379,12 +3440,7 @@ async function loadMailAttention(options = {}) {
   try {
     const params = new URLSearchParams();
     PERSONAL_MAIL_FOLDERS.forEach((folder) => params.append("folder", folder));
-    const response = await fetch(`/api/mail/attention?${params.toString()}`, {
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    const payload = await mailJsonRequest(`/api/mail/attention?${params.toString()}`);
     state.mail.attention = {
       checked: true,
       loading: false,
@@ -3397,7 +3453,7 @@ async function loadMailAttention(options = {}) {
       ...state.mail.attention,
       checked: true,
       loading: false,
-      error: error.message || "Mail attention is unavailable",
+      error: mailErrorMessage(error, "Mail attention is unavailable"),
       pendingCount: 0,
     };
   }
@@ -3431,12 +3487,7 @@ async function loadUnreadMail(options = {}) {
   if (getRoute() === "mail") render();
   try {
     const params = new URLSearchParams({ limit: String(state.mail.limit || 50) });
-    const response = await fetch(`/api/mail/unread?${params.toString()}`, {
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    const payload = await mailJsonRequest(`/api/mail/unread?${params.toString()}`);
     const page = window.KAOS_PORTAL_MAIL.normalizePage(payload);
     state.mail = {
       ...state.mail,
@@ -3453,7 +3504,7 @@ async function loadUnreadMail(options = {}) {
       unreadChecked: true,
       unreadLoading: false,
       unreadApplying: false,
-      unreadError: error.message || "Unread mail is unavailable",
+      unreadError: mailErrorMessage(error, "Unread mail is unavailable"),
       unreadItems: [],
       unreadActions: {},
       selectedKey: "",
@@ -3492,16 +3543,10 @@ async function applyUnreadMailActions() {
   state.mail.unreadError = "";
   render();
   try {
-    const response = await fetch("/api/mail/unread/actions", {
+    const payload = await mailJsonRequest("/api/mail/unread/actions", {
       method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
       body: JSON.stringify({ items }),
     });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
     state.mail.unreadApplying = false;
     state.mail.selectedKey = "";
     state.mail.selected = null;
@@ -3510,7 +3555,7 @@ async function applyUnreadMailActions() {
     await loadUnreadMail({ force: true });
   } catch (error) {
     state.mail.unreadApplying = false;
-    state.mail.unreadError = error.message || "Unread mail action failed";
+    state.mail.unreadError = mailErrorMessage(error, "Unread mail action failed");
     render();
   }
 }
@@ -3540,15 +3585,10 @@ async function selectMailRecord(key) {
   try {
     const params = new URLSearchParams({ mailbox: selected.mailbox });
     const basePath = selected.unread ? "/api/mail/unread/messages" : "/api/mail/messages";
-    const response = await fetch(`${basePath}/${encodeURIComponent(selected.uid)}?${params.toString()}`, {
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    const payload = await mailJsonRequest(`${basePath}/${encodeURIComponent(selected.uid)}?${params.toString()}`);
     state.mail.selected = window.KAOS_PORTAL_MAIL.normalizeDetail(payload);
   } catch (error) {
-    state.mail.detailError = error.message || "Mail detail is unavailable";
+    state.mail.detailError = mailErrorMessage(error, "Mail detail is unavailable");
   } finally {
     state.mail.detailLoading = false;
   }
@@ -7444,6 +7484,14 @@ function renderMail() {
   const activeLoading = mode === "unread" ? mail.unreadLoading || mail.unreadApplying : mail.loading;
   const activeChecked = mode === "unread" ? mail.unreadChecked : mail.checked;
   const activeError = mode === "unread" ? mail.unreadError : mail.error;
+  const activeErrorActions = activeError
+    ? `
+      <div class="archiveActions">
+        ${isMailAccessError(activeError) ? `<a class="archiveAction isActive" href="${escapeHtml(mailReloginUrl())}" target="_blank" rel="noopener">RELOGIN</a>` : ""}
+        <button class="archiveAction" type="button" data-mail-refresh>RETRY</button>
+      </div>
+    `
+    : "";
   const selectedListItem = items.find((item) => item.id === mail.selectedKey) || null;
   const selected = mail.selected || selectedListItem;
   const hasDetail = mail.detailLoading || mail.detailError || Boolean(selected);
@@ -7536,10 +7584,17 @@ function renderMail() {
             <div>
               <p>MAIL DETAIL</p>
               <h3 id="mailDetailTitle">Mail unavailable</h3>
-            </div>
-            <button class="archiveAction" type="button" data-mail-close>BACK</button>
-          </header>
-          <div class="archiveError" role="alert"><p>${escapeHtml(mail.detailError)}</p></div>
+          </div>
+          <button class="archiveAction" type="button" data-mail-close>BACK</button>
+        </header>
+          <div class="archiveError" role="alert">
+            <p>${escapeHtml(mail.detailError)}</p>
+            ${
+              isMailAccessError(mail.detailError)
+                ? `<a class="archiveAction isActive" href="${escapeHtml(mailReloginUrl())}" target="_blank" rel="noopener">RELOGIN</a>`
+                : ""
+            }
+          </div>
         </section>
       `
       : selected
@@ -7583,7 +7638,7 @@ function renderMail() {
           </div>
           ${
             activeError
-              ? `<div class="archiveError" role="alert"><p>${escapeHtml(activeError)}</p><button class="archiveAction" type="button" data-mail-refresh>RETRY</button></div>`
+              ? `<div class="archiveError" role="alert"><p>${escapeHtml(activeError)}</p>${activeErrorActions}</div>`
               : activeLoading && !activeChecked
                 ? `<p class="archiveStatusMessage">${mode === "unread" ? "Reading unread Naver Mail..." : "Reading Naver Mail headers..."}</p>`
                 : activeChecked && !rows

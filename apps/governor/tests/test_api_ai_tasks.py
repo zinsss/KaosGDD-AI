@@ -458,6 +458,10 @@ class GovernorAITaskTests(unittest.TestCase):
                     '<html><body><a href="/39324694/">Restless legs syndrome treatment guideline</a></body></html>',
                     "text/html; charset=utf-8",
                 )
+            if request.full_url == "https://jcsm.aasm.org/doi/10.5664/jcsm.11390":
+                return FakeHTTPResponse("<html><body>Restless legs syndrome clinical practice guideline.</body></html>", "text/html; charset=utf-8")
+            if request.full_url == "https://www.ninds.nih.gov/health-information/disorders/restless-legs-syndrome":
+                return FakeHTTPResponse("<html><body>Restless legs syndrome public health information.</body></html>", "text/html; charset=utf-8")
             if request.full_url == "https://pubmed.ncbi.nlm.nih.gov/39324694/":
                 return FakeHTTPResponse("<html><body>Restless legs syndrome guideline abstract.</body></html>", "text/html; charset=utf-8")
             if request.full_url.startswith("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?"):
@@ -781,7 +785,7 @@ class GovernorAITaskTests(unittest.TestCase):
         candidates = official_health_search_candidates("하지불안증후군 치료 옵션", urlopen=fake_urlopen)
 
         self.assertIn("restless legs syndrome treatment guideline", searched_terms)
-        self.assertEqual(candidates[0].url, "https://pubmed.ncbi.nlm.nih.gov/39324694/")
+        self.assertEqual(candidates[0].url, "https://jcsm.aasm.org/doi/10.5664/jcsm.11390")
 
     def test_treatment_option_queries_ignore_irrelevant_specialty_menu_links(self) -> None:
         urls: list[str] = []
@@ -815,7 +819,7 @@ class GovernorAITaskTests(unittest.TestCase):
 
         self.assertTrue(any(url.startswith("https://new.neuro.or.kr/search/") for url in urls))
         self.assertTrue(any(url.startswith("https://pubmed.ncbi.nlm.nih.gov/?term=") for url in urls))
-        self.assertEqual(candidates[0].url, "https://pubmed.ncbi.nlm.nih.gov/39324694/")
+        self.assertEqual(candidates[0].url, "https://jcsm.aasm.org/doi/10.5664/jcsm.11390")
         self.assertFalse(any("학회 연혁" in candidate.title or "학회 회칙" in candidate.title for candidate in candidates))
 
     def test_treatment_option_queries_search_trusted_guideline_sources(self) -> None:
@@ -845,9 +849,56 @@ class GovernorAITaskTests(unittest.TestCase):
         self.assertIn("pubmed.ncbi.nlm.nih.gov", allowed_official_health_hosts())
         self.assertIn("cks.nice.org.uk", allowed_official_health_hosts())
         self.assertIn("www.ninds.nih.gov", allowed_official_health_hosts())
+        self.assertIn("jcsm.aasm.org", allowed_official_health_hosts())
         self.assertTrue(any(url.startswith("https://pubmed.ncbi.nlm.nih.gov/?term=") for url in urls))
-        self.assertEqual(candidates[0].host, "pubmed.ncbi.nlm.nih.gov")
-        self.assertEqual(candidates[0].source, "PubMed")
+        self.assertEqual(candidates[0].host, "jcsm.aasm.org")
+        self.assertEqual(candidates[0].source, "American Academy of Sleep Medicine")
+
+    def test_treatment_option_queries_seed_guidelines_above_weak_pubmed_hits(self) -> None:
+        def fake_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
+            if request.full_url == "https://www.aafp.org/sitemap.xml":
+                return FakeHTTPResponse("<urlset></urlset>", "application/xml; charset=utf-8")
+            if request.full_url.startswith("https://www.hira.or.kr/"):
+                return FakeHTTPResponse("<html><body>검색된 내용이 없습니다.</body></html>", "text/html; charset=utf-8")
+            if request.full_url.startswith("https://pubmed.ncbi.nlm.nih.gov/"):
+                return FakeHTTPResponse(
+                    """<html><body>
+                    <a href="/39324694/">Characteristics of assessment and treatment in Benign Paroxysmal Positional Vertigo (BPPV).</a>
+                    <a href="/39324695/">Atypical PC-BPPV - Cupulolithiasis and Short-Arm Canalithiasis: A Retrospective Observational Study.</a>
+                    </body></html>""",
+                    "text/html; charset=utf-8",
+                )
+            return FakeHTTPResponse("<html><body>검색된 내용이 없습니다.</body></html>", "text/html; charset=utf-8")
+
+        candidates = official_health_search_candidates(
+            "BPPV 치료 옵션",
+            alternate_queries=["benign paroxysmal positional vertigo treatment guideline"],
+            urlopen=fake_urlopen,
+        )
+
+        titles = [candidate.title for candidate in candidates]
+        self.assertEqual(
+            candidates[0].url,
+            "https://www.entnet.org/quality-practice/quality-products/clinical-practice-guidelines/bppv/",
+        )
+        self.assertFalse(any("Characteristics of assessment" in title for title in titles))
+        self.assertFalse(any("Retrospective Observational" in title for title in titles))
+
+    def test_autism_treatment_queries_include_cdc_and_nice_seed_sources(self) -> None:
+        def fake_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
+            if request.full_url == "https://www.aafp.org/sitemap.xml":
+                return FakeHTTPResponse("<urlset></urlset>", "application/xml; charset=utf-8")
+            if request.full_url.startswith("https://www.hira.or.kr/"):
+                return FakeHTTPResponse("<html><body>검색된 내용이 없습니다.</body></html>", "text/html; charset=utf-8")
+            return FakeHTTPResponse("<html><body>검색된 내용이 없습니다.</body></html>", "text/html; charset=utf-8")
+
+        candidates = official_health_search_candidates("autistic spectrum disorder treatment options", urlopen=fake_urlopen)
+        hosts = [candidate.host for candidate in candidates]
+
+        self.assertIn("www.cdc.gov", allowed_official_health_hosts())
+        self.assertIn("www.nice.org.uk", allowed_official_health_hosts())
+        self.assertEqual(candidates[0].host, "www.cdc.gov")
+        self.assertIn("www.nice.org.uk", hosts)
 
     def test_treatment_option_queries_include_aafp_sitemap_source(self) -> None:
         urls: list[str] = []

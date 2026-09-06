@@ -76,9 +76,95 @@ OFFICIAL_HEALTH_SITES: tuple[OfficialSearchSite, ...] = (
     OfficialSearchSite("PubMed", ("pubmed.ncbi.nlm.nih.gov",), "https://pubmed.ncbi.nlm.nih.gov/?term={query}"),
     OfficialSearchSite("AAO-HNS Guidelines", ("entnet.org", "www.entnet.org"), "https://www.entnet.org/?s={query}"),
     OfficialSearchSite("NIH NINDS", ("ninds.nih.gov", "www.ninds.nih.gov"), "https://www.ninds.nih.gov/search?search={query}"),
+    OfficialSearchSite("NIH NIMH", ("nimh.nih.gov", "www.nimh.nih.gov")),
+    OfficialSearchSite("CDC", ("cdc.gov", "www.cdc.gov")),
     OfficialSearchSite("NICE CKS", ("cks.nice.org.uk",), "https://cks.nice.org.uk/search/?q={query}"),
+    OfficialSearchSite("NICE Guidelines", ("nice.org.uk", "www.nice.org.uk")),
     OfficialSearchSite("American Academy of Sleep Medicine", ("aasm.org", "www.aasm.org"), "https://aasm.org/?s={query}"),
+    OfficialSearchSite("Journal of Clinical Sleep Medicine", ("jcsm.aasm.org",)),
     OfficialSearchSite("American Family Physician", ("aafp.org", "www.aafp.org")),
+)
+
+
+GENERAL_TREATMENT_GUIDANCE_HOSTS = frozenset(
+    {
+        "pubmed.ncbi.nlm.nih.gov",
+        "cks.nice.org.uk",
+        "www.nice.org.uk",
+        "nice.org.uk",
+        "www.ninds.nih.gov",
+        "ninds.nih.gov",
+        "www.nimh.nih.gov",
+        "nimh.nih.gov",
+        "www.cdc.gov",
+        "cdc.gov",
+        "www.aafp.org",
+        "aafp.org",
+        "jcsm.aasm.org",
+        "www.entnet.org",
+        "entnet.org",
+    }
+)
+
+
+TRUSTED_TREATMENT_SEED_CANDIDATES: tuple[tuple[tuple[str, ...], tuple[OfficialSearchCandidate, ...]], ...] = (
+    (
+        ("bppv", "benign paroxysmal positional vertigo", "이석증", "양성돌발체위현훈", "양성돌발성체위현훈"),
+        (
+            OfficialSearchCandidate(
+                title="AAO-HNS Clinical Practice Guideline: Benign Paroxysmal Positional Vertigo (Update)",
+                url="https://www.entnet.org/quality-practice/quality-products/clinical-practice-guidelines/bppv/",
+                host="www.entnet.org",
+                score=95,
+                source="AAO-HNS Guidelines",
+            ),
+        ),
+    ),
+    (
+        ("restless legs syndrome", "rls", "하지불안증후군"),
+        (
+            OfficialSearchCandidate(
+                title="AASM Clinical Practice Guideline: Treatment of restless legs syndrome and periodic limb movement disorder",
+                url="https://jcsm.aasm.org/doi/10.5664/jcsm.11390",
+                host="jcsm.aasm.org",
+                score=94,
+                source="American Academy of Sleep Medicine",
+            ),
+            OfficialSearchCandidate(
+                title="NIH NINDS: Restless Legs Syndrome",
+                url="https://www.ninds.nih.gov/health-information/disorders/restless-legs-syndrome",
+                host="www.ninds.nih.gov",
+                score=88,
+                source="NIH NINDS",
+            ),
+        ),
+    ),
+    (
+        ("autism spectrum disorder", "autistic spectrum disorder", "asd", "자폐", "자폐스펙트럼"),
+        (
+            OfficialSearchCandidate(
+                title="CDC: Treatment and Intervention for Autism Spectrum Disorder",
+                url="https://www.cdc.gov/autism/treatment/index.html",
+                host="www.cdc.gov",
+                score=92,
+                source="CDC",
+            ),
+            OfficialSearchCandidate(
+                title="NICE Guideline CG170: Autism spectrum disorder in under 19s - support and management",
+                url="https://www.nice.org.uk/guidance/cg170/chapter/recommendations",
+                host="www.nice.org.uk",
+                score=90,
+                source="NICE Guidelines",
+            ),
+            OfficialSearchCandidate(
+                title="NICE Guideline CG142: Autism spectrum disorder in adults - diagnosis and management",
+                url="https://www.nice.org.uk/guidance/cg142/chapter/recommendations",
+                host="www.nice.org.uk",
+                score=89,
+                source="NICE Guidelines",
+            ),
+        ),
+    ),
 )
 
 
@@ -263,6 +349,10 @@ def official_health_search_candidates(
                 "www.entnet.org",
                 "cks.nice.org.uk",
                 "www.ninds.nih.gov",
+                "www.nimh.nih.gov",
+                "www.cdc.gov",
+                "www.nice.org.uk",
+                "jcsm.aasm.org",
                 "www.aafp.org",
             }
         )
@@ -271,6 +361,7 @@ def official_health_search_candidates(
     candidates: list[OfficialSearchCandidate] = list(health_kr_candidates)
     specialty_candidates: list[OfficialSearchCandidate] = []
     if treatment_query:
+        candidates.extend(_trusted_treatment_seed_candidates(queries, explicit_preferred=explicit_preferred))
         specialty_candidates = _korean_specialty_treatment_candidates(
             queries, preferred=preferred, explicit_preferred=explicit_preferred, urlopen=urlopen
         )
@@ -568,6 +659,27 @@ def _looks_like_treatment_options_query(queries: Iterable[str]) -> bool:
     return any(word in text for word in treatment_words) and not (
         any(word in text for word in benefit_only_words) and "치료" not in text
     )
+
+
+def _trusted_treatment_seed_candidates(
+    queries: list[str],
+    *,
+    explicit_preferred: set[str],
+) -> list[OfficialSearchCandidate]:
+    text = " ".join(str(query or "") for query in queries).casefold()
+    use_all_seeds = not explicit_preferred or any(host in GENERAL_TREATMENT_GUIDANCE_HOSTS for host in explicit_preferred)
+    candidates: list[OfficialSearchCandidate] = []
+    for triggers, seed_candidates in TRUSTED_TREATMENT_SEED_CANDIDATES:
+        if any(trigger.casefold() in text for trigger in triggers):
+            if use_all_seeds:
+                candidates.extend(seed_candidates)
+            else:
+                candidates.extend(
+                    candidate
+                    for candidate in seed_candidates
+                    if any(candidate.host == host or candidate.host.endswith(f".{host}") for host in explicit_preferred)
+                )
+    return candidates
 
 
 def _ordered_sites(preferred: set[str]) -> list[OfficialSearchSite]:
@@ -1076,6 +1188,9 @@ def _candidate_from_link(
     title = " ".join((link.get("title") or "").split()) or host
     if _looks_like_noise_title(title):
         return None
+    if host == "pubmed.ncbi.nlm.nih.gov" and _looks_like_treatment_options_query(queries):
+        if not _looks_like_high_value_pubmed_treatment_link(title, url):
+            return None
     score = _candidate_score(title, url, queries)
     if any(host == item or host.endswith(f".{item}") for item in preferred):
         score += 8
@@ -1178,6 +1293,36 @@ def _looks_like_noise_title(title: str) -> bool:
         "위원회 자료실",
         "전공의 수련지침서",
     }
+
+
+def _looks_like_high_value_pubmed_treatment_link(title: str, url: str) -> bool:
+    text = f"{title} {urllib.parse.unquote(url)}".casefold()
+    high_signal = (
+        "guideline",
+        "practice guideline",
+        "clinical practice",
+        "recommendation",
+        "consensus",
+        "position statement",
+        "systematic review",
+        "meta-analysis",
+        "effective diagnosis and treatment",
+        "diagnosis and treatment",
+    )
+    low_signal = (
+        "observational",
+        "retrospective",
+        "case report",
+        "case series",
+        "characteristics of",
+        "assessment and treatment in",
+        "atypical",
+        "barriers and facilitators",
+        "protocol",
+    )
+    if any(term in text for term in low_signal) and not any(term in text for term in high_signal):
+        return False
+    return any(term in text for term in high_signal)
 
 
 def _hira_criteria_recency_score(date_value: str) -> int:
