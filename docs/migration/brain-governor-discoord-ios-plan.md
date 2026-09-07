@@ -1,6 +1,6 @@
 # Brain / Governor / Discoord / iOS Migration Plan
 
-Last updated: 2026-09-05
+Last updated: 2026-09-07
 
 This is the canonical implementation and progress tracker for separating
 KaosBrain, KaosGovernor, KaosDiscoord, KaosGDD domain services, notifications,
@@ -50,11 +50,14 @@ H4, office-service, and stateful-service cutovers.
   that parse natural entries behind the scenes, show a structured preview, and
   write only after explicit confirmation through Governor; see
   [Family AI Without Chat](../architecture/personal-pwa-shortcuts.md#family-ai-without-chat).
-- Brain direction: `#brain` remains a natural-language KaosGDD gateway and may
-  grow into a conversational system-operations console. Brain never becomes a
-  privileged runner; Governor and restricted host executors own typed,
-  confirmed, audited runbooks. See [Brain as Kaos Gateway and System
-  Operator](../architecture/brain-system-operations.md).
+- Brain/system-operations direction: Discord is retiring as an operations
+  surface. `#brain` may remain a transitional/fallback conversation path, but
+  new restart, reboot, package-update, deploy, shell, and script-execution
+  workflows should target a user-owned Codex KaosSystemOperator session.
+  Brain never becomes a privileged runner; Governor and restricted host
+  executors own typed, confirmed, audited runbooks. See
+  [Brain as Kaos Gateway and System Operator](../architecture/brain-system-operations.md)
+  and [KaosSystemOperator Access Plan](../operator/kaos-system-operator-access-plan.md).
 - Phase 5 started with the Governor-side Discord adapter package extraction.
   Commit `20732fa` is deployed on H3: the canonical package/path is
   `kaosdiscoord` under `integrations/discoord`, while legacy imports and the
@@ -117,7 +120,7 @@ H4, office-service, and stateful-service cutovers.
 | 5 | Retain brain-only KaosDiscoord; detach workers and notifications | Package, Pushover, digest, and fax/mail worker slices implemented | Pushover and digest observed; fax/mail observation active | In progress |
 | 6 | Retain the personal PWA and add stable iOS integrations | Deep link, compact menu, personal Memos repair, Paperless browser, and Archive Terminal slice implemented | UI slices deployed; Memos/Paperless/Fax authenticated observation active | In progress |
 | 7 | Remove compatibility debt and finish documentation/CI | Not started | Not deployed | Planned |
-| 8 | Add governed Brain system operations | Read-only `system.status` slice implemented and tested | Deployed to H3/H4 and Discord-confirmed 2026-09-01 | Slice complete; next work planned |
+| 8 | Add governed system operations | Read-only `system.status` slice implemented and tested; Codex KaosSystemOperator is the target write surface | Deployed to H3/H4 and confirmed in Discord/PWA; no write executor enabled | Slice complete; Codex-operator path planned |
 
 Status meanings:
 
@@ -133,9 +136,12 @@ Status meanings:
 
 ```text
 Discord #brain ──> KaosDiscoord ──> KaosBrain ──> KaosGovernor
+        transitional/fallback only; no new privileged ops
 
 Personal/Family PWAs / Shortcuts / optional Scriptable ─> KaosGovernor
                                       Ask Kaos ─> KaosBrain ─> KaosGovernor
+
+Codex KaosSystemOperator ─> repo runbooks/docs ─> KaosGovernor ─> restricted host executors
 
 KaosGovernor ──> notification outbox ──> Pushover
 
@@ -149,7 +155,8 @@ Ownership rules:
 2. Governor deterministically validates, authorizes, confirms, routes, and
    records operations.
 3. Discoord transports the retained `#brain` conversation and owns no domain
-   policy. Direct operational Discord surfaces are transitional.
+   policy. Direct operational Discord surfaces are transitional; Discord is
+   not the target surface for new system write operations.
 4. Domain services execute and preserve their existing sources of truth.
 5. Personal/Family PWAs, Shortcuts, and Scriptable are clients, not state
    stores. Scriptable is optional rather than a required calendar container.
@@ -171,9 +178,10 @@ Ownership rules:
 - No removal of compatibility routes or Discord channels before replacement
   parity, observation, and an explicit history retain/export decision.
 - Database changes are additive and rollback-aware.
-- H4 retains the conversational bot and `#brain`. H3's operational Discord
-  identity remains only until Governor workers and direct-channel replacements
-  are independently verified.
+- H4 may retain the conversational bot and `#brain` during migration. H3's
+  operational Discord identity remains only until Governor workers and
+  direct-channel replacements are independently verified. New system
+  operations use the Codex KaosSystemOperator path instead of Discord.
 
 ## Phase 0 — Repository and Runtime Audit
 
@@ -1820,6 +1828,8 @@ Current behavior is preserved until the relevant domain migrates in Phase 3.
 | 2026-09-05 | 5 | Hardened AI Tasks PWA fetch failures on Safari/Cloudflare | Implementation commit `f112cba`; after a real iOS screenshot showed raw `Load failed` while the archive GET still loaded, the PWA now sends explicit same-origin credentials on AI Tasks archive/run/preview/general-web/complete fetches and maps Safari-style network abort messages such as `Load failed` / `Failed to fetch` to an actionable Cloudflare/Governor reachability message instead of displaying the raw browser string. Static cache bumped to `app.js?v=314` | H3 static portal promoted; served HTML confirms `app.js?v=314`, served JS contains the credentialed AI Task fetches and `ai_task_network_failed`, nginx validates, local route smoke reaches Governor and returns expected JSON auth failure with dummy Cloudflare identity, `node --check apps/family-portal/app.js`, `git diff --check`, and H3 helper suite (`369 OK`) pass. Production impact is frontend error handling/auth-cookie reliability only; no AI source policy change and no new write capability |
 
 | 2026-09-05 | 6 | Opened AI Tasks to Family with Korean output control | Implementation commit `751f8b4`; Family Portal now exposes an `AI` menu item for the shared read-only AI Tasks workbench, keeps Documents/Mail/Fax/System personal-only, and defaults the new `한국어` checkbox on Family while letting personal toggle it. Governor accepts personal or family Cloudflare profiles only for AI Task routes and forwards `outputLanguage=ko` through URL/text/PDF, official-web, general-web, and archive-completion flows; KaosBrain treats that language request as an override so English clinical prompts such as `autistic spectrum disorder` can produce Korean answers | Validation passes: `node --check apps/family-portal/app.js`, Python compile checks, focused Governor AI Task Docker tests (`37 OK`), focused Brain web-task tests (`14 OK`, `3 skipped` locally), H3 helper suite (`369 OK`), Brain helper suite (`361 OK`), H3 `family-up`, H3 `family-portal-sync`, live served asset checks for `styles.css?v=310` and `app.js?v=315`, Family AI Task route smoke reaching Governor/Cloudflare auth instead of static 404, and H4 KaosBrain deploy/doctor at `751f8b4`. Production impact remains AI Task read/search/archive plus explicit optional save-to-Memos only; no automatic Memos, Paperless, EMR, mail, fax, calendar, task, Documents, or system writes were added |
+
+| 2026-09-07 | Decision | Retired Discord as the target system-operations surface | Updated the migration tracker, Brain system-operations decision, Discord brain-only target, Discord bot rollout note, KaosSystemOperator access plan, and operator handoff to state that future real read/write system operations should run through a user-owned Codex KaosSystemOperator session with repo runbooks, read-only inspection first, and exact confirmation before production writes | Documentation only. No PWA route, Discord command, Governor API, host executor, credential, deployment, restart, package update, shell access, or production write capability was added |
 
 ## How to Update This Tracker
 

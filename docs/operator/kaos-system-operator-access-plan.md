@@ -1,10 +1,17 @@
 # KaosSystemOperator Access Plan
 
 Status: Phase 2 runbook planning, local dry-run planner, and non-networked mock
-lifecycle implemented; read-only `system.status` confirmed in Discord;
-execution remains disabled.
+lifecycle implemented; read-only `system.status` confirmed in Discord and PWA;
+production execution remains disabled.
 
-Last updated: 2026-09-01
+Last updated: 2026-09-07
+
+2026-09-07 direction: Discord is retiring as a system-operations surface.
+Do not add new restart, reboot, package-update, deploy, shell, or script
+execution controls to Discord. Real read/write system operations should be
+handled by an explicit user-owned Codex session running as KaosSystemOperator,
+with this repository as shared state, read-only inspection first, runbook-bound
+actions, and exact user confirmation before production writes.
 
 ## Purpose
 
@@ -32,8 +39,8 @@ docs/migration/brain-governor-discoord-ios-plan.md
 ## Control Path
 
 ```text
-Discord #brain / Codex operator session
-  -> KaosBrain or KaosSystemOperator interprets
+Codex KaosSystemOperator session
+  -> operator reads repo docs, inspects state, and prepares a typed runbook plan
   -> KaosGovernor validates actor, target, policy, preflight, confirmation
   -> host executor runs one versioned allowlisted runbook
   -> verification result and operation log are saved
@@ -41,6 +48,10 @@ Discord #brain / Codex operator session
 
 The model may draft, explain, inspect, and propose. It may not authorize itself
 or execute arbitrary generated commands on production systems.
+
+Discord `#brain`, while retained, is only a transitional conversation/fallback
+path. It may explain system status or point to the correct runbook, but it is
+not the target place for new privileged operations.
 
 ## Access Stages
 
@@ -275,13 +286,13 @@ At the end of a material session:
 ## Initial Implementation Plan
 
 1. Keep current `system.status` in production observation.
-2. Add personal PWA Settings/Admin read-only status view. Keep the PWA as a
-   system observation surface only; do not add restart, deploy, reboot, shell,
-   package-update, or other system write controls to PWA. A navigation-only
-   link to Discord `#brain` is allowed for operator conversation.
+2. Keep the personal PWA Settings/Admin page as a system observation surface
+   only; do not add restart, deploy, reboot, shell, package-update, or other
+   system write controls to PWA.
 3. Define repo runbook directory and JSON schema for operator operations.
 4. Add dry-run-only host executor prototype for H4.
-5. Add one allowlisted non-critical restart with exact confirmation.
+5. Add one allowlisted non-critical restart through the Codex
+   KaosSystemOperator path with exact confirmation.
 6. Add H3/H4 deploy/reboot only after backup verification is automated.
 7. Treat PACS/office operations as a separate project.
 

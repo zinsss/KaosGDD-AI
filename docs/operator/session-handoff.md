@@ -1,6 +1,6 @@
 # KaosSystemOperator Session Handoff
 
-Last updated: 2026-09-02
+Last updated: 2026-09-07
 
 ## Current State
 
@@ -11,6 +11,9 @@ Last updated: 2026-09-02
   `#brain` through the readonly `system.status` intent.
 - User confirmed the live Discord `#brain` `system status` response on
   2026-09-01.
+- User decided on 2026-09-07 that Discord will retire as the system-operations
+  surface. Future real read/write system work should use a user-owned Codex
+  KaosSystemOperator session and repo runbooks, not new Discord controls.
 - No read/write system executor is enabled.
 - Brain Guard still blocks shell, Docker, database, restart, deploy, reboot,
   and arbitrary admin intents.
@@ -83,5 +86,6 @@ Last updated: 2026-09-02
 - Do not execute generated scripts on production without a separate approved
   runbook operation.
 - Do not perform PACS/database/OS maintenance through ordinary chat approval.
-- Preserve PWA as daily UI and Discord only as `#brain` control/conversation
-  path.
+- Preserve PWA as daily UI and read-only system status. Treat Discord `#brain`
+  as transitional/fallback conversation only; do not build new privileged
+  system operations in Discord.

@@ -2,7 +2,8 @@
 
 Decision date: 2026-08-30
 
-Status: accepted; migration not yet complete.
+Status: accepted; migration not yet complete. Updated 2026-09-07:
+Discord is also retiring as the preferred system-operations surface.
 
 This decision supersedes earlier plans that made several Discord channels the
 primary personal UI. The preferred replacement is the PWA-native
@@ -12,7 +13,8 @@ Discord's final Kaos role is a fallback private `#brain` topic for persistent
 conversation with KaosBrain during migration. Direct task, calendar, supplies,
 Memos, document, mail/fax, notification, alert, and administration channels are
 transitional and will retire after their replacements pass production
-observation.
+observation. New system administration work should target the explicit
+KaosSystemOperator Codex-session workflow instead of Discord controls.
 
 ## Target
 
@@ -46,8 +48,8 @@ as structured cards.
 | Mail notification/organizer UI | Minimal Pushover alerts; Kaos Feed card; service-backed organizer state | Naver IMAP and Governor state |
 | Fax notification/intake UI | Personal KaosGDD PWA; minimal Pushover final-state alerts; Share Sheet/Shortcut or `#brain` send flow | HylaFAX and Governor operation records |
 | Daily digest | Minimal `Good Morning.` Pushover alert; detail on demand in Kaos Feed or fallback `#brain` | Governor aggregate reads |
-| System/maintenance alerts | Minimal Pushover alerts; detail on demand in Kaos Feed, Settings, or fallback `#brain` | Governor health/audit state |
-| Service administration | Personal KaosGDD control room / Kaos Feed and authenticated governed fallback `#brain` operations | Governor health state and restricted host executors |
+| System/maintenance alerts | Minimal Pushover alerts; detail on demand in KaosGDD Settings/Kaos Feed; fallback `#brain` only during migration | Governor health/audit state |
+| Service administration | KaosSystemOperator Codex session with repo runbooks; PWA read-only status only | Governor health state and restricted host executors |
 
 Pushover remains intentionally simple and text-only for the Apple Watch. It is
 not a static UI or source of truth. Native Calendar and Reminders notifications
@@ -101,7 +103,9 @@ A direct Discord surface may retire only when:
 
 ## Non-Goals
 
-- Do not remove `#brain` or the H4 conversational bot.
+- Do not add new privileged system-operation controls to Discord.
+- Do not remove `#brain` or the H4 conversational bot until its retained
+  history/fallback decision is explicit.
 - Do not immediately delete channels, messages, bot state, or credentials.
 - Do not move authoritative data into Shortcuts, Scriptable, Pushover, or
   Discord.

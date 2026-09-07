@@ -2,27 +2,33 @@
 
 Decision date: 2026-08-30
 
-Status: read-only status slice deployed and Discord-confirmed; execution
-capabilities are not yet enabled.
+Status: read-only status slice deployed and confirmed; execution capabilities
+are not yet enabled. Discord is no longer the target operations surface.
 
 ## Decision
 
 KaosBrain has two long-term user-facing roles:
 
 1. a natural-language gateway into KaosGDD domains; and
-2. a conversational system-operations console for H4 KaosBrain/KaosBrain-OpenAI,
-   H3+ KaosGDD, and separately isolated KaosPACS/office services.
+2. a system-operations reasoning/planning assistant for H4
+   KaosBrain/KaosBrain-OpenAI, H3+ KaosGDD, and separately isolated
+   KaosPACS/office services.
 
 Brain is not the privileged runner. It interprets, explains, diagnoses, and
 proposes typed operations. KaosGovernor owns policy, confirmation, audit, and
 operation state. A restricted executor beside each managed host or service
 runs only trusted, allowlisted runbooks.
 
+The practical privileged interface is a user-owned Codex
+KaosSystemOperator session, not Discord. Discord `#brain` may remain as a
+temporary conversation path while Discord is being retired, but new system
+write workflows should not be built there.
+
 ## Target Flow
 
 ```text
-Discord #brain / future Ask Kaos client
-  -> KaosBrain interprets or answers
+Codex KaosSystemOperator session / future PWA Ask Kaos client
+  -> KaosBrain or operator interprets, diagnoses, or plans
   -> KaosGovernor validates actor, target, policy, and preconditions
   -> exact confirmation when required
   -> restricted host executor selects a trusted runbook
@@ -116,10 +122,10 @@ Incremental delivery:
    health state.
 2. Expose `system.status` to the personal admin PWA as read-only display only.
    The PWA must not expose restart, deploy, reboot, shell, package-update, or
-   other system write controls. It may include a navigation-only link to
-   Discord `#brain` for operator conversation.
+   other system write controls.
 3. Define signed/versioned runbook contracts and a dry-run-only executor.
-4. Add one non-critical restart operation with exact confirmation and audit.
+4. Add one non-critical restart operation through the Codex
+   KaosSystemOperator path with exact confirmation and audit.
 5. Add pinned application deployment and rollback only after backup and
    recovery tests pass.
 6. Design PACS/office operations as a separate high-risk project; do not grant

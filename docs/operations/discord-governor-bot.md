@@ -1,12 +1,18 @@
 # KaosGovernor Discord bot rollout
 
-KaosGovernor uses its own deterministic bot for notifications, inbox/fax/mail
-workflows, confirmation buttons, timed jobs, and system operations. KaosBrain
-uses its own guarded Discord adapter. Family chat remains in its PWA.
+Status update 2026-09-07: Discord is retiring as a Kaos operations surface.
+This document is retained for maintenance of the transitional runtime only.
+Do not add new Discord-facing mail/fax, notification, digest, or system
+operations features here.
 
-The bot temporarily hosts the tested Governor modules in-process as part of the
-planned modular monolith. The first narrow tool API provides authenticated,
-read-only Memos search and current-content fetch routes.
+KaosGovernor historically used its own deterministic bot for notifications,
+inbox/fax/mail workflows, confirmation buttons, timed jobs, and early
+read-only system status. KaosBrain used its own guarded Discord adapter. Family
+chat remains in its PWA.
+
+The bot temporarily hosts tested Governor modules in-process as part of the
+planned modular monolith. Active work should move non-Discord lifecycles behind
+Governor-owned workers and PWA/Codex surfaces.
 
 ## Discord application
 
