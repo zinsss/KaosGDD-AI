@@ -149,7 +149,7 @@ const profileConfigs = {
       { route: "tasks", label: uiText("route.tasks", "Tasks") },
       { route: "rouny", label: uiText("route.rouny", "Rouny") },
       { route: "memos", label: uiText("route.memos", "Memos") },
-      { route: "text-presets", label: uiText("route.textPresets", "문구") },
+      { route: "text-presets", label: uiText("route.textPresets", "차팅") },
       { route: "ai-tasks", label: "AI" },
       { route: "ledger", label: uiText("route.ledger", "Ledger") },
       { route: "settings", label: uiText("route.settings", "Settings") },
@@ -10632,7 +10632,7 @@ function renderTextPresets() {
         <div class="panelHeader">
           <div>
             <p class="label">${uiText("textPresets.label", "Preset Text")}</p>
-            <h2>${uiText("textPresets.title", "문구")}</h2>
+            <h2>${uiText("textPresets.title", "차팅")}</h2>
           </div>
           <button class="openButton" type="button" data-family-text-presets-manage>${uiText("textPresets.manage", "Manage")}</button>
         </div>
@@ -10655,7 +10655,7 @@ function renderTextPresets() {
       <div class="panelHeader">
         <div>
           <p class="label">${uiText("textPresets.label", "Preset Text")}</p>
-          <h2>${uiText("textPresets.manageTitle", "문구 관리")}</h2>
+          <h2>${uiText("textPresets.manageTitle", "차팅 관리")}</h2>
         </div>
         <button class="openButton" type="button" data-family-text-presets-done>${uiText("common.done", "Done")}</button>
       </div>
