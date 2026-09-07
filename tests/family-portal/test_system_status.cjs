@@ -95,3 +95,14 @@ test("event preset settings rendering is delegated to the settings view module",
   assert.match(settingsViewSource, /data-event-preset-form/);
   assert.match(settingsViewSource, /Presets are Governor-owned calendar templates/);
 });
+
+test("recurring task settings rendering is delegated to the settings view module", () => {
+  assert.match(appSource, /KAOS_SETTINGS_VIEW\.renderRecurringTaskSettings\(settingsViewContext\(\)\)/);
+  assert.match(settingsViewSource, /data-recurring-tasks/);
+  assert.match(settingsViewSource, /data-recurring-new/);
+  assert.match(settingsViewSource, /data-recurring-sync/);
+  assert.match(settingsViewSource, /data-edit-recurring/);
+  assert.match(settingsViewSource, /data-delete-recurring/);
+  assert.match(settingsViewSource, /data-recurring-form/);
+  assert.match(settingsViewSource, /name="creationPolicy"/);
+});

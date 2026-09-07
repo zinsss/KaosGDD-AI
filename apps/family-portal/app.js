@@ -9009,9 +9009,15 @@ function settingsViewContext() {
     escapeHtml,
     generatedSyncSummary,
     defaultEventPreset,
+    defaultRecurringTask,
     renderFamilyShareToggle,
     defaultEventStartTime: DEFAULT_EVENT_START_TIME,
     defaultEventEndTime: DEFAULT_EVENT_END_TIME,
+    defaultTaskDueTime: DEFAULT_TASK_DUE_TIME,
+    taskMemoPlaceholder: TASK_MEMO_PLACEHOLDER,
+    recurringFrequencyLabel,
+    recurringCreationPolicyLabel,
+    recurringOwnerLabel,
   };
 }
 
@@ -9048,112 +9054,7 @@ function recurringOwnerLabel(item) {
 }
 
 function renderRecurringTaskSettings() {
-  const recurring = state.recurringTasks;
-  const editing = recurring.items.find((item) => item.id === recurring.editingId) || defaultRecurringTask();
-  const isEditing = Boolean(recurring.editingId);
-  const taskCount = recurring.items.length;
-  const statusBody = recurring.loading && !recurring.checked
-    ? `<p class="taskMeta">${uiText("recurring.loading", "Loading repeating tasks...")}</p>`
-    : recurring.error
-      ? `<div class="caregiverError"><span>${escapeHtml(recurring.error)}</span><button class="openButton" type="button" data-recurring-retry>${uiText("common.retry", "다시 시도")}</button></div>`
-      : "";
-  return `
-    <details class="settingsDisclosure" data-recurring-tasks ${recurring.expanded ? "open" : ""}>
-      <summary>
-        <span>
-          <strong>${uiText("recurring.title", "Repeating tasks")}</strong>
-          <small>${taskCount ? uiText("recurring.savedCount", "{count} saved", { count: taskCount }) : uiText("recurring.noneSaved", "None saved")}</small>
-        </span>
-      </summary>
-      <div class="settingsDisclosureBody">
-        ${statusBody}
-        ${isEditing ? `<div class="presetInlineActions"><button class="openButton" type="button" data-recurring-new>${uiText("recurring.new", "New")}</button></div>` : ""}
-        <div class="settingsActionRow">
-          <button class="openButton" type="button" data-recurring-sync ${recurring.syncing ? "disabled" : ""}>
-            ${recurring.syncing ? "동기화 중..." : "반복 할 일 동기화"}
-          </button>
-        </div>
-        ${
-          taskCount
-            ? `
-              <div class="presetList">
-                ${recurring.items
-                  .map((item) => {
-                    const due = item.activeDueDate || item.nextDueDate || item.firstDueDate;
-                    const stateLabel = item.enabled ? "" : ` · ${uiText("recurring.paused", "Paused")}`;
-                    const policyLabel = recurringCreationPolicyLabel(item.creationPolicy);
-                    return `
-                      <div class="presetRow">
-                        <button class="presetChoice ${item.id === recurring.editingId ? "isActive" : ""}" type="button" data-edit-recurring="${escapeHtml(item.id)}">
-                          <strong>${escapeHtml(item.title)}</strong>
-                          <span>${escapeHtml(`${recurringFrequencyLabel(item.frequency)} · ${policyLabel} · ${due} ${item.dueTime} · ${recurringOwnerLabel(item)}${stateLabel}`)}</span>
-                        </button>
-                        <button class="plainButton" type="button" data-delete-recurring="${escapeHtml(item.id)}">${uiText("common.delete", "Delete")}</button>
-                      </div>
-                    `;
-                  })
-                  .join("")}
-              </div>
-            `
-            : !statusBody ? `<p class="taskMeta">${uiText("recurring.noTasks", "No repeating tasks yet.")}</p>` : ""
-        }
-        <form class="composer presetEditor" data-recurring-form data-recurring-id="${isEditing ? escapeHtml(editing.id) : ""}">
-          <label>
-            <span>${uiText("task.label", "Task")}</span>
-            <input name="title" type="text" autocomplete="off" value="${isEditing ? escapeHtml(editing.title) : ""}" placeholder="${uiText("task.new", "New task")}" required />
-          </label>
-          <label>
-            <span>${uiText("common.memo", "Memo")}</span>
-            <textarea name="memo" rows="5" placeholder="${escapeHtml(uiText("task.memoPlaceholder", TASK_MEMO_PLACEHOLDER))}">${isEditing ? escapeHtml(editing.memo) : ""}</textarea>
-          </label>
-          ${renderFamilyShareToggle(Boolean(isEditing && editing.shareFamily))}
-          <div class="formGrid">
-            <label>
-              <span>${uiText("recurring.firstDueDate", "First due date")}</span>
-              <input name="firstDueDate" type="date" value="${escapeHtml(editing.firstDueDate)}" required />
-            </label>
-            <label>
-              <span>${uiText("task.time", "Time")}</span>
-              <input name="dueTime" type="time" value="${escapeHtml(editing.dueTime || DEFAULT_TASK_DUE_TIME)}" step="300" required />
-            </label>
-          </div>
-          <div class="formGrid">
-            <label>
-              <span>${uiText("task.priority", "Priority")}</span>
-              <select name="priority">
-                <option value="" ${!editing.priority ? "selected" : ""}>${uiText("common.none", "None")}</option>
-                <option value="9" ${editing.priority === "9" ? "selected" : ""}>${uiText("task.priorityLow", "Low")} (!)</option>
-                <option value="5" ${editing.priority === "5" ? "selected" : ""}>${uiText("task.priorityMedium", "Medium")} (!!)</option>
-                <option value="1" ${editing.priority === "1" ? "selected" : ""}>${uiText("task.priorityHigh", "High")} (!!!)</option>
-              </select>
-            </label>
-            <label>
-              <span>${uiText("recurring.frequency", "Repeat")}</span>
-              <select name="frequency">
-                <option value="daily" ${editing.frequency === "daily" ? "selected" : ""}>${uiText("recurring.daily", "Daily")}</option>
-                <option value="weekly" ${editing.frequency === "weekly" ? "selected" : ""}>${uiText("recurring.weekly", "Weekly")}</option>
-                <option value="monthly" ${editing.frequency === "monthly" ? "selected" : ""}>${uiText("recurring.monthly", "Monthly")}</option>
-                <option value="yearly" ${editing.frequency === "yearly" ? "selected" : ""}>${uiText("recurring.yearly", "Yearly")}</option>
-              </select>
-            </label>
-            <label>
-              <span>${uiText("recurring.creationPolicy", "다음 항목 생성")}</span>
-              <select name="creationPolicy">
-                <option value="on_schedule" ${editing.creationPolicy === "on_schedule" ? "selected" : ""}>${uiText("recurring.onSchedule", "정해진 날짜에 생성")}</option>
-                <option value="on_completion" ${editing.creationPolicy === "on_completion" ? "selected" : ""}>${uiText("recurring.onCompletion", "완료하면 다음 항목 생성")}</option>
-              </select>
-            </label>
-          </div>
-          <label class="toggleLine">
-            <span>${uiText("recurring.enabled", "Enabled")}</span>
-            <input name="enabled" type="checkbox" ${editing.enabled ? "checked" : ""} />
-          </label>
-          ${editing.error ? `<p class="formNote recurringError">${escapeHtml(editing.error)}</p>` : ""}
-          <button class="primaryButton" type="submit">${isEditing ? uiText("recurring.save", "Save repeating task") : uiText("recurring.create", "Create repeating task")}</button>
-        </form>
-      </div>
-    </details>
-  `;
+  return window.KAOS_SETTINGS_VIEW.renderRecurringTaskSettings(settingsViewContext());
 }
 
 function renderCaregiver() {
