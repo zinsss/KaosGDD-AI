@@ -5,6 +5,8 @@ const test = require("node:test");
 
 const { counts, filterItems, normalizeArchive, normalizeItem, normalizeMode } = require("../../apps/family-portal/fax.js");
 const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
+const faxViewSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/fax-view.js"), "utf8");
+const indexSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
 const composeServices = fs.readFileSync(path.join(__dirname, "../../deploy/h3-backend/compose.services.yaml"), "utf8");
 
 const incomingId = "0123456789abcdef0123456789abcdef";
@@ -53,13 +55,16 @@ test("unknown board modes safely select all", () => {
 });
 
 test("fax archive board uses the common no date title header", () => {
-  assert.match(appSource, /id="faxIndexTitle">RECORD BOARD[\s\S]*<span>NO\.<\/span><span>DATE<\/span><span>TITLE<\/span>/);
-  assert.doesNotMatch(appSource, /<span>ID<\/span><span>DATE<\/span><span>REMOTE<\/span><span>TITLE<\/span>/);
+  assert.match(appSource, /KAOS_FAX_VIEW\.renderFax\(faxViewContext\(\)\)/);
+  assert.match(faxViewSource, /id="faxIndexTitle">RECORD BOARD[\s\S]*<span>NO\.<\/span><span>DATE<\/span><span>TITLE<\/span>/);
+  assert.doesNotMatch(faxViewSource, /<span>ID<\/span><span>DATE<\/span><span>REMOTE<\/span><span>TITLE<\/span>/);
+  assert.match(indexSource, /src="\/fax-view\.js\?v=1"/);
+  assert.ok(indexSource.indexOf('src="/fax-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=325"'));
 });
 
 test("failed fax detail exposes ACK and attention markers use unacknowledged failures", () => {
-  assert.match(appSource, /data-fax-ack=/);
-  assert.match(appSource, /ACKNOWLEDGED/);
+  assert.match(faxViewSource, /data-fax-ack=/);
+  assert.match(faxViewSource, /ACKNOWLEDGED/);
   assert.match(appSource, /acknowledgeFaxFailure\(faxAck\.dataset\.faxAck \|\| ""\)/);
   assert.match(appSource, /Number\(state\.fax\.attention\?\.failed \|\| 0\) > 0/);
 });
