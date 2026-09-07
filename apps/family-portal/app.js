@@ -561,7 +561,7 @@ const mockAdapter = {
     rawEvent.allDay = allDay;
     rawEvent.repeat = String(formData.get("repeat") || "");
     rawEvent.alarmTime = String(formData.get("alarm") || "");
-    rawEvent.lastModified = new Date().toISOString().slice(0, 19);
+    rawEvent.lastModified = localDateTimeStamp();
     state.selectedDate = startDate;
   },
 
@@ -584,7 +584,7 @@ const mockAdapter = {
       dueTime: due.time,
       priority: taskPriorityFromForm(formData),
       status: "NEEDS-ACTION",
-      lastModified: new Date().toISOString().slice(0, 19),
+      lastModified: localDateTimeStamp(),
       categories: [],
     });
     state.taskMode = "active";
@@ -602,7 +602,7 @@ const mockAdapter = {
     rawTask.due = due.date;
     rawTask.dueTime = due.time;
     rawTask.priority = taskPriorityFromForm(formData);
-    rawTask.lastModified = new Date().toISOString().slice(0, 19);
+    rawTask.lastModified = localDateTimeStamp();
     state.taskMode = rawTask.status === "COMPLETED" ? "done" : "active";
   },
 
@@ -1906,7 +1906,7 @@ function applyPendingTaskStatuses(tasks) {
     const override = pending[task.uid];
     if (!override) return task;
     const nextTask = { ...task, status: override.status };
-    if (override.status === "COMPLETED") nextTask.completed = override.completed || new Date().toISOString().slice(0, 19);
+    if (override.status === "COMPLETED") nextTask.completed = override.completed || localDateTimeStamp();
     else delete nextTask.completed;
     return nextTask;
   });
@@ -4813,11 +4813,56 @@ async function updateRemoteTask(formData, options = {}) {
 }
 
 function parseDateTime(value) {
-  const raw = String(value || "");
+  const raw = String(value || "").trim();
+  if (!raw) return { date: "", time: "" };
+  const compact = raw.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/i);
+  if (compact) {
+    const [, year, month, day, hour, minute, second, utc] = compact;
+    if (utc) return dateTimePartsInTimeZone(new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}Z`));
+    return {
+      date: `${year}-${month}-${day}`,
+      time: `${hour}:${minute}`,
+    };
+  }
+  if (timestampHasExplicitTimezone(raw)) {
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) return dateTimePartsInTimeZone(parsed);
+  }
   return {
     date: raw.slice(0, 10),
     time: raw.includes("T") ? raw.slice(11, 16) : "",
   };
+}
+
+function timestampHasExplicitTimezone(raw) {
+  return /(?:Z|[+-]\d{2}:?\d{2})$/i.test(String(raw || "").trim());
+}
+
+function dateTimePartsInTimeZone(date, timeZone = "Asia/Seoul") {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(date).reduce((acc, part) => {
+    if (part.type !== "literal") acc[part.type] = part.value;
+    return acc;
+  }, {});
+  const hour = parts.hour === "24" ? "00" : parts.hour;
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    time: `${hour}:${parts.minute}`,
+    second: parts.second,
+  };
+}
+
+function localDateTimeStamp(date = new Date()) {
+  const parts = dateTimePartsInTimeZone(date);
+  return `${parts.date}T${parts.time}:${parts.second || "00"}`;
 }
 
 function addLocalMinutes(dateValue, timeValue, minutes) {
@@ -12721,7 +12766,7 @@ document.addEventListener("click", async (event) => {
       delete rawTask.completed;
     } else {
       rawTask.status = "COMPLETED";
-      rawTask.completed = new Date().toISOString().slice(0, 19);
+      rawTask.completed = localDateTimeStamp();
     }
     state.pendingTaskStatuses[rawTask.uid] = {
       status: rawTask.status,

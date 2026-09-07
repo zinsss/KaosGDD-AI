@@ -21,3 +21,14 @@ test("agenda calendar and tasks share Family GDDZiN Brain source pills", () => {
   assert.match(appSource, /labels = \{\n    brain: uiText\("badge\.brain", "Brain"\),\n  \}/);
   assert.doesNotMatch(appSource, /renderAutomationPill\("repeating"\)/);
 });
+
+test("task timestamps are created and displayed in Korea time", () => {
+  assert.match(appSource, /function dateTimePartsInTimeZone\(date, timeZone = "Asia\/Seoul"\) \{/);
+  assert.match(appSource, /function localDateTimeStamp\(date = new Date\(\)\) \{/);
+  assert.match(appSource, /function timestampHasExplicitTimezone\(raw\) \{/);
+  assert.match(appSource, /return dateTimePartsInTimeZone\(parsed\);/);
+  assert.match(appSource, /nextTask\.completed = override\.completed \|\| localDateTimeStamp\(\);/);
+  assert.match(appSource, /rawTask\.completed = localDateTimeStamp\(\);/);
+  assert.doesNotMatch(appSource, /completed = new Date\(\)\.toISOString\(\)\.slice\(0, 19\)/);
+  assert.doesNotMatch(appSource, /lastModified = new Date\(\)\.toISOString\(\)\.slice\(0, 19\)/);
+});
