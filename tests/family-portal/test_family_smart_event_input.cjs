@@ -31,11 +31,15 @@ test("family smart event parser splits wife-style day text without saving", () =
   assert.match(appSource, /function familySmartEventCommaStartsNewEvent\(value\)/);
   assert.match(appSource, /current = `\$\{current\},\$\{part\}`;/);
   assert.match(appSource, /timeExpression = String\.raw/);
+  assert.match(appSource, /embeddedTimePattern = new RegExp/);
   assert.match(appSource, /part\.match\(new RegExp/);
+  assert.match(appSource, /const embeddedMatch = part\.match\(embeddedTimePattern\);/);
+  assert.match(appSource, /part\.slice\(0, embeddedMatch\.index\)/);
+  assert.match(appSource, /part\.slice\(embeddedMatch\.index \+ embeddedMatch\[0\]\.length\)/);
   assert.match(appSource, /allDay: true/);
   assert.ok(appSource.includes("(?:\\\\s*[-~–—]\\\\s*${timeExpression})?"));
-  assert.match(appSource, /const explicitEndTime = match\[6\]/);
-  assert.match(appSource, /const title = String\(match\[9\] \|\| ""\)\.trim\(\) \|\| part;/);
+  assert.match(appSource, /explicitEndTime = match\[6\]/);
+  assert.match(appSource, /title = cleanFamilySmartEventTitle\(match\[9\] \|\| "", part\);/);
   assert.match(appSource, /explicitEndMinutes === null[\s\S]*addLocalMinutes\(dateValue, startTime, 60\)/);
   assert.match(appSource, /explicitEndMinutes <= startMinutes[\s\S]*addLocalMinutes\(dateValue, explicitEndTime, 24 \* 60\)/);
   assert.match(appSource, /function normalizeFamilySmartEventProposal\(item, dateValue = state\.selectedDate\)/);
@@ -127,7 +131,7 @@ test("family smart event assets include styling, translations, and cache busters
   assert.match(translations, /"event\.smartHoursSuffix": "시간"/);
   assert.match(translations, /"event\.smartMinutesSuffix": "분"/);
   assert.match(styles, /grid-template-columns: 96px minmax\(0, 1fr\);/);
-  assert.match(indexSource, /href="\/styles\.css\?v=311"/);
-  assert.match(indexSource, /src="\/translations\.js\?v=181"/);
-  assert.match(indexSource, /src="\/app\.js\?v=316"/);
+  assert.match(indexSource, /href="\/styles\.css\?v=313"/);
+  assert.match(indexSource, /src="\/translations\.js\?v=182"/);
+  assert.match(indexSource, /src="\/app\.js\?v=322"/);
 });

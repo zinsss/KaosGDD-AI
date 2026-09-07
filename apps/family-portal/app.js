@@ -981,6 +981,13 @@ function normalizeFamilySmartEventTime(hourValue, minuteValue, meridiem = "") {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
+function cleanFamilySmartEventTitle(value, fallback = "") {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .replace(/\s*,\s*/g, ",")
+    .trim() || String(fallback || "").trim();
+}
+
 function splitFamilySmartEventInput(value) {
   const strongParts = String(value || "")
     .replace(/\r\n?/g, "\n")
@@ -1009,32 +1016,46 @@ function splitFamilySmartEventWeakComma(value) {
 }
 
 function familySmartEventCommaStartsNewEvent(value) {
-  return /^(?:오전|오후)?\s*\d{1,2}(?::\d{1,2}|시(?:\s*\d{1,2}분?)?)(?:\s|$)/.test(String(value || "").trim());
+  return /(?:^|\s)(?:오전|오후)?\s*\d{1,2}(?::\d{1,2}|시(?:\s*\d{1,2}분?)?)(?=\s|$)/.test(String(value || "").trim());
 }
 
 function parseFamilySmartEventInput(value, dateValue = state.selectedDate) {
   const timeExpression = String.raw`(?:(오전|오후)\s*)?(\d{1,2})(?::(\d{1,2})|시(?:\s*(\d{1,2})분?)?)`;
+  const embeddedTimePattern = new RegExp(`(^|\\s)${timeExpression}(?:\\s*[-~–—]\\s*${timeExpression})?(?=\\s|$)`);
   return splitFamilySmartEventInput(value)
     .map((part) => part.trim())
     .filter(Boolean)
     .map((part) => {
       const match = part.match(new RegExp(`^${timeExpression}(?:\\s*[-~–—]\\s*${timeExpression})?\\s*(.*)$`));
+      let startTime = "";
+      let explicitEndTime = "";
+      let title = "";
       if (!match) {
-        return {
-          title: part,
-          allDay: true,
-          startDate: dateValue,
-          startTime: "",
-          endDate: dateValue,
-          endTime: "",
-        };
+        const embeddedMatch = part.match(embeddedTimePattern);
+        if (!embeddedMatch) {
+          return {
+            title: part,
+            allDay: true,
+            startDate: dateValue,
+            startTime: "",
+            endDate: dateValue,
+            endTime: "",
+          };
+        }
+        const startMarker = embeddedMatch[2] || "";
+        startTime = normalizeFamilySmartEventTime(embeddedMatch[3], embeddedMatch[4] || embeddedMatch[5] || "0", startMarker);
+        explicitEndTime = embeddedMatch[7]
+          ? normalizeFamilySmartEventTime(embeddedMatch[7], embeddedMatch[8] || embeddedMatch[9] || "0", embeddedMatch[6] || startMarker)
+          : "";
+        title = cleanFamilySmartEventTitle(`${part.slice(0, embeddedMatch.index)} ${part.slice(embeddedMatch.index + embeddedMatch[0].length)}`, part);
+      } else {
+        const startMarker = match[1] || "";
+        startTime = normalizeFamilySmartEventTime(match[2], match[3] || match[4] || "0", startMarker);
+        explicitEndTime = match[6]
+          ? normalizeFamilySmartEventTime(match[6], match[7] || match[8] || "0", match[5] || startMarker)
+          : "";
+        title = cleanFamilySmartEventTitle(match[9] || "", part);
       }
-      const startMarker = match[1] || "";
-      const startTime = normalizeFamilySmartEventTime(match[2], match[3] || match[4] || "0", startMarker);
-      const explicitEndTime = match[6]
-        ? normalizeFamilySmartEventTime(match[6], match[7] || match[8] || "0", match[5] || startMarker)
-        : "";
-      const title = String(match[9] || "").trim() || part;
       if (!startTime) {
         return {
           title: part,

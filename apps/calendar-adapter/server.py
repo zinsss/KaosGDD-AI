@@ -1669,6 +1669,12 @@ def normalize_smart_event_time(hour_value, minute_value="", meridiem=""):
     return f"{hour:02d}:{minute:02d}"
 
 
+def clean_smart_event_title(value, fallback=""):
+    title = re.sub(r"\s+", " ", str(value or ""))
+    title = re.sub(r"\s*,\s*", ",", title).strip()
+    return title or str(fallback or "").strip()
+
+
 def split_family_smart_event_text(value):
     normalized = re.sub(r"\r\n?", "\n", str(value or "")).replace("，", ",").replace("、", ",")
     strong_parts = [
@@ -1699,13 +1705,14 @@ def split_family_smart_event_weak_comma(value):
 
 
 def family_smart_event_comma_starts_new_event(value):
-    return bool(re.match(r"^(?:오전|오후)?\s*\d{1,2}(?::\d{1,2}|시(?:\s*\d{1,2}분?)?)(?:\s|$)", str(value or "").strip()))
+    return bool(re.search(r"(?:^|\s)(?:오전|오후)?\s*\d{1,2}(?::\d{1,2}|시(?:\s*\d{1,2}분?)?)(?=\s|$)", str(value or "").strip()))
 
 
 def parse_family_smart_event_text(value, date_value):
     date_value = validate_date(date_value) or datetime.now(LOCAL_TIMEZONE).strftime("%Y-%m-%d")
     time_expression = r"(?:(오전|오후)\s*)?(\d{1,2})(?::(\d{1,2})|시(?:\s*(\d{1,2})분?)?)"
     pattern = re.compile(rf"^{time_expression}(?:\s*[-~–—]\s*{time_expression})?\s*(.*)$")
+    embedded_pattern = re.compile(rf"(^|\s){time_expression}(?:\s*[-~–—]\s*{time_expression})?(?=\s|$)")
     proposals = []
     for raw_part in split_family_smart_event_text(value):
         part = raw_part.strip()
@@ -1713,26 +1720,45 @@ def parse_family_smart_event_text(value, date_value):
             continue
         match = pattern.match(part)
         if not match:
-            proposals.append(
-                {
-                    "title": part,
-                    "allDay": True,
-                    "startDate": date_value,
-                    "startTime": "",
-                    "endDate": date_value,
-                    "endTime": "",
-                    "source": "grammar",
-                }
+            embedded_match = embedded_pattern.search(part)
+            if not embedded_match:
+                proposals.append(
+                    {
+                        "title": part,
+                        "allDay": True,
+                        "startDate": date_value,
+                        "startTime": "",
+                        "endDate": date_value,
+                        "endTime": "",
+                        "source": "grammar",
+                    }
+                )
+                continue
+            start_marker = embedded_match.group(2) or ""
+            start_time = normalize_smart_event_time(
+                embedded_match.group(3),
+                embedded_match.group(4) or embedded_match.group(5) or "0",
+                start_marker,
             )
-            continue
-        start_marker = match.group(1) or ""
-        start_time = normalize_smart_event_time(match.group(2), match.group(3) or match.group(4) or "0", start_marker)
-        explicit_end_time = (
-            normalize_smart_event_time(match.group(6), match.group(7) or match.group(8) or "0", match.group(5) or start_marker)
-            if match.group(6)
-            else ""
-        )
-        title = (match.group(9) or "").strip() or part
+            explicit_end_time = (
+                normalize_smart_event_time(
+                    embedded_match.group(7),
+                    embedded_match.group(8) or embedded_match.group(9) or "0",
+                    embedded_match.group(6) or start_marker,
+                )
+                if embedded_match.group(7)
+                else ""
+            )
+            title = clean_smart_event_title(f"{part[:embedded_match.start()]} {part[embedded_match.end():]}", part)
+        else:
+            start_marker = match.group(1) or ""
+            start_time = normalize_smart_event_time(match.group(2), match.group(3) or match.group(4) or "0", start_marker)
+            explicit_end_time = (
+                normalize_smart_event_time(match.group(6), match.group(7) or match.group(8) or "0", match.group(5) or start_marker)
+                if match.group(6)
+                else ""
+            )
+            title = clean_smart_event_title(match.group(9) or "", part)
         if not start_time:
             proposals.append(
                 {

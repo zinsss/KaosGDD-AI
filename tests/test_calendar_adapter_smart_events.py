@@ -46,6 +46,18 @@ class CalendarAdapterSmartEventParserTests(unittest.TestCase):
         self.assertEqual(events[1]["startTime"], "13:40")
         self.assertEqual(events[1]["endTime"], "14:40")
 
+    def test_accepts_title_before_time(self) -> None:
+        events = calendar_adapter.parse_family_smart_event_text(
+            "신휘 15:00",
+            "2026-09-03",
+        )
+
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["title"], "신휘")
+        self.assertFalse(events[0]["allDay"])
+        self.assertEqual(events[0]["startTime"], "15:00")
+        self.assertEqual(events[0]["endTime"], "16:00")
+
 
 if __name__ == "__main__":
     unittest.main()
