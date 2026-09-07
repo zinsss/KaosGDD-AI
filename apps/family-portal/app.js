@@ -6218,92 +6218,32 @@ function renderToday() {
 }
 
 function renderCalendarMonthPanel(options = {}) {
-  const compact = options.compact === true;
-  const month = state.selectedDate.slice(0, 7);
-  const events = mockAdapter.getEvents();
-  const regularEvents = events.filter((event) => !isGoogleHolidayEvent(event) && !isGeneratedCalendarEvent(event));
-  const publicHolidayDates = new Set(
-    activeCalendarData().events.map(normalizeEvent).filter(isPublicHolidayEvent).map((event) => event.date),
-  );
-  const datedTasks = mockAdapter.getTasks().filter((task) => task.due);
-  const eventCounts = countByDate(regularEvents, "date");
-  const taskCounts = countByDate(datedTasks, "due");
-  const dutyDates = new Set(regularEvents.filter(hasDutyEvent).map((event) => event.date));
-  const marketDates = new Set(events.filter(isMarketDayEvent).map((event) => event.date));
-  const caregiverDays = new Set(
-    portalProfile() === "family" && state.caregiver.key === month
-      ? (state.caregiver.data?.daily || [])
-          .filter((item) => Number(item.minutes) > 0 || Number(item.extras) > 0)
-          .map((item) => item.date)
-      : [],
-  );
-  const weatherByDate = compact
-    ? new Map()
-    : new Map((activeCalendarData().weather || []).map((weather) => [weather.date, weather]));
-  return `
-    <section class="panel calendarMonthPanel ${compact ? "isCompact" : ""}">
-      <div class="panelHeader">
-        <div>
-          <p class="label">${uiText("calendar.label", "Calendar")}</p>
-          ${renderCalendarMonthTitle(month)}
-          ${renderCalendarPicker(month)}
-        </div>
-        <div class="calendarHeaderActions" aria-label="${uiText("calendar.actionsAria", "Calendar actions")}">
-          <div class="monthNav" aria-label="${uiText("calendar.monthNavigationAria", "Month navigation")}">
-            <button class="monthNavButton" type="button" data-month-shift="-1" aria-label="${uiText("calendar.previousMonth", "Previous month")}">&lt;&lt;</button>
-            <button class="monthTodayButton" type="button" data-month-today>${uiText("calendar.today", "Today")}</button>
-            <button class="monthNavButton" type="button" data-month-shift="1" aria-label="${uiText("calendar.nextMonth", "Next month")}">&gt;&gt;</button>
-          </div>
-          ${!compact && portalProfile() === "family" ? `<a class="openButton" href="#/caregiver">${uiText("caregiver.label", "Caregiver")}</a>` : ""}
-          ${!compact && portalProfile() === "family" ? `<a class="openButton" href="#/add-event" data-calendar-add-event>${uiText("common.add", "Add")}</a>` : ""}
-        </div>
-      </div>
-      <div class="calendarGrid" aria-label="${uiText("calendar.monthGridAria", "Month grid")}">
-        ${calendarWeekdays().map((day) => `<span class="weekday">${day}</span>`).join("")}
-        ${monthCells(month)
-          .map((cell) => {
-            const hasDuty = dutyDates.has(cell.value);
-            const hasCaregiver = caregiverDays.has(cell.value);
-            const hasMarket = marketDates.has(cell.value);
-            const classes = [
-              "day",
-              cell.muted ? "isMuted" : "",
-              cell.value === ymd(new Date()) ? "isToday" : "",
-              cell.value === state.selectedDate ? "isSelected" : "",
-              hasDuty ? "isDuty" : "",
-              publicHolidayDates.has(cell.value) ? "isPublicHoliday" : "",
-              dateTone(cell.value),
-            ]
-              .filter(Boolean)
-              .join(" ");
-            const weather = weatherByDate.get(cell.value);
-            const eventCount = eventCounts[cell.value] || 0;
-            const taskCount = taskCounts[cell.value] || 0;
-            return `
-              <button class="${classes}" type="button" data-date="${cell.value}">
-                <span class="dayHeader">
-                  <span class="dayNumber">${cell.label}</span>
-                </span>
-                ${weatherGlyph(weather) ? `<span class="dayWeatherGlyph">${escapeHtml(weatherGlyph(weather))}</span>` : ""}
-                ${
-                  hasCaregiver || hasMarket || eventCount || taskCount
-                    ? `
-                      <span class="dayMarkers">
-                        ${hasCaregiver ? `<span class="dayCaregiverMark" aria-label="${uiText("caregiver.dayMarker", "Caregiver record")}">•</span>` : ""}
-                        ${hasMarket ? `<span class="dayMarketMark" aria-label="Market Day">•</span>` : ""}
-                        ${eventCount ? `<span class="dayEventCount">${eventCount}</span>` : ""}
-                        ${taskCount ? `<span class="dayTaskCount">${taskCount}</span>` : ""}
-                      </span>
-                    `
-                    : ""
-                }
-              </button>
-            `;
-          })
-          .join("")}
-      </div>
-    </section>
-  `;
+  return window.KAOS_CALENDAR_VIEW.renderCalendarMonthPanel(calendarMonthPanelContext(), options);
+}
+
+function calendarMonthPanelContext() {
+  return {
+    state,
+    mockAdapter,
+    isGoogleHolidayEvent,
+    isGeneratedCalendarEvent,
+    activeCalendarData,
+    normalizeEvent,
+    isPublicHolidayEvent,
+    countByDate,
+    hasDutyEvent,
+    isMarketDayEvent,
+    portalProfile,
+    renderCalendarMonthTitle,
+    renderCalendarPicker,
+    uiText,
+    calendarWeekdays,
+    monthCells,
+    ymd,
+    dateTone,
+    weatherGlyph,
+    escapeHtml,
+  };
 }
 
 function renderCalendarAgendaPanel() {
