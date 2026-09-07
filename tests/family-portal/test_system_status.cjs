@@ -4,6 +4,7 @@ const path = require("node:path");
 const test = require("node:test");
 
 const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
+const settingsViewSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/settings-view.js"), "utf8");
 const systemStatusViewSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/system-status-view.js"), "utf8");
 const indexSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
 const nginxSource = fs.readFileSync(path.join(__dirname, "../../deploy/h3-backend/family-portal/nginx.conf"), "utf8");
@@ -63,4 +64,15 @@ test("main settings avoids legacy editor stacks and keeps system writes out of P
   assert.doesNotMatch(mainSettingsSource, /renderCustomEventSettings\(\)/);
   assert.match(appSource, /if \(route === "settings"\) \{[\s\S]*loadSystemStatus\(\);[\s\S]*loadGovernorSettingsStatus\(\);[\s\S]*if \(portalProfile\(\) !== "main"\) \{[\s\S]*loadWeatherSettings\(\);[\s\S]*loadRecurringTasks\(\);[\s\S]*\}/);
   assert.match(styles, /\.app\[data-profile="main"\] \.settingsLinkGrid \{/);
+});
+
+test("custom event settings rendering is delegated to the settings view module", () => {
+  assert.match(appSource, /KAOS_SETTINGS_VIEW\.renderCustomEventSettings\(settingsViewContext\(\)\)/);
+  assert.match(settingsViewSource, /data-custom-events/);
+  assert.match(settingsViewSource, /data-custom-event-setting="marketDaysEnabled"/);
+  assert.match(settingsViewSource, /data-custom-event-setting="claimDayEnabled"/);
+  assert.match(settingsViewSource, /data-custom-events-sync/);
+  assert.match(settingsViewSource, /Generated calendar events/);
+  assert.match(indexSource, /src="\/settings-view\.js\?v=1"/);
+  assert.ok(indexSource.indexOf('src="/settings-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=325"'));
 });
