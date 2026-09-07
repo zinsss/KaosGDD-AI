@@ -9012,63 +9012,7 @@ function settingsViewContext() {
 }
 
 function renderHolidaySettings() {
-  const holidays = state.holidays;
-  const publicCount = holidays.items.filter((item) => item.publicHoliday).length;
-  const groups = holidays.items.reduce((result, item) => {
-    const year = item.startDate.slice(0, 4) || uiText("holidays.unknownYear", "Other");
-    if (!result[year]) result[year] = [];
-    result[year].push(item);
-    return result;
-  }, {});
-  const body = holidays.loading && !holidays.checked
-    ? `<p class="taskMeta">${uiText("holidays.loading", "Loading Korean calendar...")}</p>`
-    : holidays.error
-      ? `<div class="caregiverError"><span>${escapeHtml(holidays.error)}</span><button class="openButton" type="button" data-holidays-retry>${uiText("common.retry", "다시 시도")}</button></div>`
-      : holidays.items.length
-        ? Object.keys(groups).sort().map((year) => `
-            <section class="holidayYearGroup">
-              <h3>${escapeHtml(year)}</h3>
-              <div class="holidaySettingList">
-                ${groups[year].map((item) => `
-                  <label class="holidaySettingRow">
-                    <span>
-                      <time>${escapeHtml(item.startDate.slice(5))}</time>
-                      <strong>${escapeHtml(item.title)}</strong>
-                    </span>
-                    <input
-                      type="checkbox"
-                      data-holiday-classification="${escapeHtml(item.uid)}"
-                      aria-label="${escapeHtml(uiText("holidays.publicHolidayAria", "Mark {title} as a public holiday", { title: item.title }))}"
-                      ${item.publicHoliday ? "checked" : ""}
-                    />
-                  </label>
-                `).join("")}
-              </div>
-            </section>
-          `).join("")
-        : `<p class="taskMeta">${uiText("holidays.none", "No Korean calendar entries imported yet.")}</p>`;
-  return `
-    <details class="settingsDisclosure" data-holidays ${holidays.expanded ? "open" : ""}>
-      <summary>
-        <span>
-          <strong>${uiText("holidays.title", "Korean calendar")}</strong>
-          <small>${uiText("holidays.summary", "{publicCount} public holidays · {total} entries", {
-            publicCount,
-            total: holidays.items.length,
-          })}</small>
-        </span>
-      </summary>
-      <div class="settingsDisclosureBody">
-        <div class="holidaySettingsIntro">
-          <p>${uiText("holidays.help", "Checked dates are red public holidays. Unchecked entries remain dim calendar information.")}</p>
-          <button class="openButton" type="button" data-holidays-sync ${holidays.syncing ? "disabled" : ""}>
-            ${holidays.syncing ? uiText("holidays.syncing", "Syncing...") : uiText("holidays.sync", "Sync Google calendar")}
-          </button>
-        </div>
-        ${body}
-      </div>
-    </details>
-  `;
+  return window.KAOS_SETTINGS_VIEW.renderHolidaySettings(settingsViewContext());
 }
 
 function renderEventPresetSettings() {

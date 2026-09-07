@@ -64,5 +64,65 @@ window.KAOS_SETTINGS_VIEW = (() => {
     `;
   }
 
-  return { renderCustomEventSettings };
+  function renderHolidaySettings(deps) {
+    const holidays = deps.state.holidays;
+    const publicCount = holidays.items.filter((item) => item.publicHoliday).length;
+    const groups = holidays.items.reduce((result, item) => {
+      const year = item.startDate.slice(0, 4) || deps.uiText("holidays.unknownYear", "Other");
+      if (!result[year]) result[year] = [];
+      result[year].push(item);
+      return result;
+    }, {});
+    const body = holidays.loading && !holidays.checked
+      ? `<p class="taskMeta">${deps.uiText("holidays.loading", "Loading Korean calendar...")}</p>`
+      : holidays.error
+        ? `<div class="caregiverError"><span>${deps.escapeHtml(holidays.error)}</span><button class="openButton" type="button" data-holidays-retry>${deps.uiText("common.retry", "다시 시도")}</button></div>`
+        : holidays.items.length
+          ? Object.keys(groups).sort().map((year) => `
+              <section class="holidayYearGroup">
+                <h3>${deps.escapeHtml(year)}</h3>
+                <div class="holidaySettingList">
+                  ${groups[year].map((item) => `
+                    <label class="holidaySettingRow">
+                      <span>
+                        <time>${deps.escapeHtml(item.startDate.slice(5))}</time>
+                        <strong>${deps.escapeHtml(item.title)}</strong>
+                      </span>
+                      <input
+                        type="checkbox"
+                        data-holiday-classification="${deps.escapeHtml(item.uid)}"
+                        aria-label="${deps.escapeHtml(deps.uiText("holidays.publicHolidayAria", "Mark {title} as a public holiday", { title: item.title }))}"
+                        ${item.publicHoliday ? "checked" : ""}
+                      />
+                    </label>
+                  `).join("")}
+                </div>
+              </section>
+            `).join("")
+          : `<p class="taskMeta">${deps.uiText("holidays.none", "No Korean calendar entries imported yet.")}</p>`;
+    return `
+      <details class="settingsDisclosure" data-holidays ${holidays.expanded ? "open" : ""}>
+        <summary>
+          <span>
+            <strong>${deps.uiText("holidays.title", "Korean calendar")}</strong>
+            <small>${deps.uiText("holidays.summary", "{publicCount} public holidays · {total} entries", {
+              publicCount,
+              total: holidays.items.length,
+            })}</small>
+          </span>
+        </summary>
+        <div class="settingsDisclosureBody">
+          <div class="holidaySettingsIntro">
+            <p>${deps.uiText("holidays.help", "Checked dates are red public holidays. Unchecked entries remain dim calendar information.")}</p>
+            <button class="openButton" type="button" data-holidays-sync ${holidays.syncing ? "disabled" : ""}>
+              ${holidays.syncing ? deps.uiText("holidays.syncing", "Syncing...") : deps.uiText("holidays.sync", "Sync Google calendar")}
+            </button>
+          </div>
+          ${body}
+        </div>
+      </details>
+    `;
+  }
+
+  return { renderCustomEventSettings, renderHolidaySettings };
 })();

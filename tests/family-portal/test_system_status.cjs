@@ -76,3 +76,12 @@ test("custom event settings rendering is delegated to the settings view module",
   assert.match(indexSource, /src="\/settings-view\.js\?v=1"/);
   assert.ok(indexSource.indexOf('src="/settings-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=325"'));
 });
+
+test("holiday settings rendering is delegated to the settings view module", () => {
+  assert.match(appSource, /KAOS_SETTINGS_VIEW\.renderHolidaySettings\(settingsViewContext\(\)\)/);
+  assert.match(settingsViewSource, /data-holidays/);
+  assert.match(settingsViewSource, /data-holidays-sync/);
+  assert.match(settingsViewSource, /data-holidays-retry/);
+  assert.match(settingsViewSource, /data-holiday-classification/);
+  assert.match(settingsViewSource, /holidaySettingList/);
+});
