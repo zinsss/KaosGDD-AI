@@ -39,7 +39,11 @@ test("family preset text API is proxied to calendar-adapter", () => {
 test("category buttons copy one random saved text with the shared clipboard helper", () => {
   assert.match(appSource, /data-family-text-category-copy/);
   assert.match(appSource, /function randomFamilyTextPreset\(category\)/);
-  assert.match(appSource, /Math\.floor\(Math\.random\(\) \* normalized\.length\)/);
+  assert.match(appSource, /FAMILY_TEXT_PRESET_RANDOM_STATE_KEY = "kaosgdd\.v2\.family\.textPresets\.randomState\.v1"/);
+  assert.match(appSource, /function shuffledFamilyTextPresetIndexes\(count\)/);
+  assert.match(appSource, /Math\.floor\(Math\.random\(\) \* \(index \+ 1\)\)/);
+  assert.match(appSource, /remaining\.shift\(\)/);
+  assert.match(appSource, /categoryState\.signature !== signature \|\| !remaining\.length/);
   assert.match(appSource, /const preset = randomFamilyTextPreset\(category\);/);
   assert.match(appSource, /await writeTextToClipboard\(preset\);/);
   assert.match(appSource, /textPresets\.copied/);
@@ -65,12 +69,12 @@ test("family preset text assets include styles, translations, and cache-busted b
   assert.match(styles, /\.familyTextPresetEditor \{/);
   assert.match(styles, /\.familyTextPresetEditor \{[\s\S]*border-top: 1px solid var\(--line\);/);
   assert.match(styles, /\.familyTextPresetEditor textarea \{/);
-  assert.match(translations, /"route\.textPresets": "문구"/);
-  assert.match(translations, /"textPresets\.manageTitle": "문구 관리"/);
+  assert.match(translations, /"route\.textPresets": "차팅"/);
+  assert.match(translations, /"textPresets\.manageTitle": "차팅 관리"/);
   assert.match(translations, /"textPresets\.shared":/);
   assert.match(translations, /"textPresets\.localFallback":/);
   assert.match(translations, /"textPresets\.copyRandom": "랜덤 복사"/);
-  assert.match(indexSource, /href="\/styles\.css\?v=311"/);
-  assert.match(indexSource, /src="\/translations\.js\?v=181"/);
-  assert.match(indexSource, /src="\/app\.js\?v=316"/);
+  assert.match(indexSource, /href="\/styles\.css\?v=314"/);
+  assert.match(indexSource, /src="\/translations\.js\?v=182"/);
+  assert.match(indexSource, /src="\/app\.js\?v=325"/);
 });
