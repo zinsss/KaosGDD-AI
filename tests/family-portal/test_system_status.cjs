@@ -4,18 +4,23 @@ const path = require("node:path");
 const test = require("node:test");
 
 const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
+const systemStatusViewSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/system-status-view.js"), "utf8");
+const indexSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
 const nginxSource = fs.readFileSync(path.join(__dirname, "../../deploy/h3-backend/family-portal/nginx.conf"), "utf8");
 const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
 
 test("settings loads the read-only system status endpoint", () => {
   assert.match(appSource, /fetch\("\/api\/system\/status"/);
   assert.match(appSource, /function renderSystemStatusPanel\(\)/);
-  assert.match(appSource, /data-system-status/);
+  assert.match(appSource, /KAOS_SYSTEM_STATUS_VIEW\.renderSystemStatusPanel\(systemStatusViewContext\(\)\)/);
+  assert.match(systemStatusViewSource, /data-system-status/);
   assert.match(appSource, /function recurringWorkerSummary\(worker\) \{/);
   assert.match(appSource, /function recurringWorkerStatusLine\(worker\) \{/);
-  assert.match(appSource, /Recurring sync/);
-  assert.match(appSource, /const worker = runtime\.worker \|\| \{\};/);
-  assert.match(appSource, /Observation only\. No restart, deploy, reboot, shell, package-update, or system write controls are exposed in PWA\./);
+  assert.match(systemStatusViewSource, /Recurring sync/);
+  assert.match(systemStatusViewSource, /const worker = runtime\.worker \|\| \{\};/);
+  assert.match(systemStatusViewSource, /Observation only\. No restart, deploy, reboot, shell, package-update, or system write controls are exposed in PWA\./);
+  assert.match(indexSource, /src="\/system-status-view\.js\?v=1"/);
+  assert.ok(indexSource.indexOf('src="/system-status-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=325"'));
 });
 
 test("settings top add button is hidden because system writes are not exposed in PWA", () => {
@@ -24,9 +29,9 @@ test("settings top add button is hidden because system writes are not exposed in
 });
 
 test("system status has a navigation-only brain channel link", () => {
-  assert.match(appSource, /data-brain-channel-link/);
-  assert.match(appSource, /#brain link not configured/);
-  assert.doesNotMatch(appSource, /data-system-(restart|reboot|deploy|shell|update)/);
+  assert.match(systemStatusViewSource, /data-brain-channel-link/);
+  assert.match(systemStatusViewSource, /#brain link not configured/);
+  assert.doesNotMatch(systemStatusViewSource, /data-system-(restart|reboot|deploy|shell|update)/);
 });
 
 test("nginx proxies only the read-only system api namespace to governor api", () => {
