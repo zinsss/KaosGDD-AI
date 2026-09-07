@@ -4,6 +4,7 @@ const path = require("node:path");
 const test = require("node:test");
 
 const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
+const memosViewSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/memos-view.js"), "utf8");
 
 test("top add opens the native one-box memo composer", () => {
   assert.match(appSource, /if \(action === "memo"\) \{\s*window\.location\.hash = "#\/add-memo";/s);
@@ -18,11 +19,11 @@ test("memo composer posts one private content payload through the Governor relay
 });
 
 test("main and family memos routes render native archive board controls", () => {
-  assert.match(appSource, /data-archive-kind="memos"/);
-  assert.match(appSource, /data-memo-search/);
-  assert.match(appSource, /data-memos-refresh/);
-  assert.match(appSource, /href="#\/add-memo">NEW<\/a>/);
-  assert.match(appSource, /data-memo-open/);
+  assert.match(memosViewSource, /data-archive-kind="memos"/);
+  assert.match(memosViewSource, /data-memo-search/);
+  assert.match(memosViewSource, /data-memos-refresh/);
+  assert.match(memosViewSource, /href="#\/add-memo">NEW<\/a>/);
+  assert.match(memosViewSource, /data-memo-open/);
   assert.match(appSource, /if \(route === "memos"\) loadMemos\(\);/);
   assert.doesNotMatch(appSource, /portalProfile\(\) === "family"[\s\S]*memosFrame/);
 });
