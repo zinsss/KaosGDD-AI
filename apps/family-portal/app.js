@@ -69,6 +69,7 @@ const COMPOSER_RECOVERY_STORAGE_KEY = "kaosgdd.v2.composerRecovery.v1";
 const FAMILY_FONT_STORAGE_KEY = "kaosgdd.v2.family.font.v1";
 const FAMILY_FONT_OPTIONS = new Set(["nanum", "pretendard", "nixgon", "skybori"]);
 const FAMILY_TEXT_PRESETS_STORAGE_KEY = "kaosgdd.v2.family.textPresets.v1";
+const FAMILY_TEXT_PRESET_RANDOM_STATE_KEY = "kaosgdd.v2.family.textPresets.randomState.v1";
 const DEFAULT_FAMILY_TEXT_PRESET_CATEGORIES = Object.freeze([
   {
     id: "default",
@@ -5324,10 +5325,56 @@ function saveFamilyTextPresetEditorDraft() {
   return saveFamilyTextPresetDocument(documentValue);
 }
 
+function readFamilyTextPresetRandomState() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(FAMILY_TEXT_PRESET_RANDOM_STATE_KEY) || "null");
+    return parsed && typeof parsed === "object" && parsed.categories && typeof parsed.categories === "object"
+      ? parsed
+      : { categories: {} };
+  } catch {
+    return { categories: {} };
+  }
+}
+
+function writeFamilyTextPresetRandomState(value) {
+  try {
+    window.localStorage.setItem(FAMILY_TEXT_PRESET_RANDOM_STATE_KEY, JSON.stringify(value));
+  } catch {
+    // Copying should still work if private-mode/localStorage quota blocks history.
+  }
+}
+
+function shuffledFamilyTextPresetIndexes(count) {
+  const indexes = Array.from({ length: count }, (_value, index) => index);
+  for (let index = indexes.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [indexes[index], indexes[swapIndex]] = [indexes[swapIndex], indexes[index]];
+  }
+  return indexes;
+}
+
 function randomFamilyTextPreset(category) {
   const normalized = normalizeFamilyTextPresets(category?.texts || []);
   if (!normalized.length) return "";
-  return normalized[Math.floor(Math.random() * normalized.length)];
+  const categoryId = String(category?.id || category?.name || "default");
+  const signature = JSON.stringify(normalized);
+  const state = readFamilyTextPresetRandomState();
+  const categoryState = state.categories[categoryId] && typeof state.categories[categoryId] === "object"
+    ? state.categories[categoryId]
+    : {};
+  let remaining = Array.isArray(categoryState.remaining)
+    ? categoryState.remaining.filter((index) => Number.isInteger(index) && index >= 0 && index < normalized.length)
+    : [];
+  if (categoryState.signature !== signature || !remaining.length) {
+    remaining = shuffledFamilyTextPresetIndexes(normalized.length);
+  }
+  const selectedIndex = remaining.shift();
+  state.categories[categoryId] = {
+    signature,
+    remaining,
+  };
+  writeFamilyTextPresetRandomState(state);
+  return normalized[selectedIndex] || normalized[0];
 }
 
 function mainFontPreference() {
