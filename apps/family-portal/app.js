@@ -9460,151 +9460,21 @@ function renderRecurringTaskSettings() {
 }
 
 function renderCaregiver() {
-  const month = state.selectedDate.slice(0, 7);
-  const data = state.caregiver.key === month ? state.caregiver.data : null;
-  const summary = data?.summary || {
-    days: 0,
-    minutes: 0,
-    hourlyWage: 0,
-    basePay: 0,
-    extras: 0,
-    transportFee: 0,
-    total: 0,
+  return window.KAOS_CAREGIVER_VIEW.renderCaregiver(caregiverViewContext());
+}
+
+function caregiverViewContext() {
+  return {
+    state,
+    uiText,
+    escapeHtml,
+    monthTitle,
+    formatCaregiverHours,
+    formatCaregiverWon,
+    calendarWeekdays,
+    monthCells,
+    formatCaregiverMonthCellHours,
   };
-  const settings = data?.settings || {
-    hourlyWage: 0,
-    transportFee: 0,
-  };
-  const daily = Array.isArray(data?.daily) ? data.daily : [];
-  const dailyByDate = new Map(daily.map((item) => [item.date, item]));
-  const recordedDays = daily.filter((item) => Number(item.minutes) > 0 || Number(item.extras) > 0);
-  const currentError = state.caregiver.key === month ? state.caregiver.error : "";
-  const isLoading = state.caregiver.loadingKey === month || (!data && !currentError);
-  const statusBody = isLoading
-    ? `<p class="taskMeta">${uiText("caregiver.loading", "Loading monthly summary...")}</p>`
-    : currentError
-      ? `
-          <div class="caregiverError">
-            <span>${escapeHtml(currentError)}</span>
-            <button class="openButton" type="button" data-caregiver-retry>${uiText("common.retry", "다시 시도")}</button>
-          </div>
-        `
-      : "";
-  return `
-    <div class="caregiverPage">
-      <section class="panel caregiverSummaryPanel">
-        <div class="panelHeader">
-          <div>
-            <p class="label">${uiText("caregiver.label", "Caregiver")}</p>
-            <h2>${escapeHtml(monthTitle(month))}</h2>
-          </div>
-          <div class="calendarHeaderActions">
-            <div class="monthNav" aria-label="${uiText("calendar.monthNavigationAria", "Month navigation")}">
-              <button class="monthNavButton" type="button" data-month-shift="-1" aria-label="${uiText("calendar.previousMonth", "Previous month")}">&lt;&lt;</button>
-              <button class="monthTodayButton" type="button" data-month-today>${uiText("calendar.today", "Today")}</button>
-              <button class="monthNavButton" type="button" data-month-shift="1" aria-label="${uiText("calendar.nextMonth", "Next month")}">&gt;&gt;</button>
-            </div>
-            <a class="openButton" href="#/calendar">${uiText("caregiver.backToCalendar", "Calendar")}</a>
-          </div>
-        </div>
-        <div class="panelBody">
-          ${statusBody}
-          ${
-            data
-              ? `
-                <form class="caregiverSummaryForm" data-caregiver-settings-form>
-                  <div class="caregiverSummaryRow">
-                    <span>${uiText("caregiver.totalTime", "Total care time")}</span>
-                    <strong>${summary.days}${uiText("caregiver.daysSuffix", "d")} / ${formatCaregiverHours(summary.minutes)}</strong>
-                  </div>
-                  <label class="caregiverSummaryRow">
-                    <span>${uiText("caregiver.hourlyWage", "Hourly wage")}</span>
-                    <span class="caregiverMoneyInput">
-                      <input name="hourlyWage" type="text" inputmode="numeric" value="${escapeHtml(settings.hourlyWage)}" />
-                      <span>${uiText("caregiver.wonSuffix", "won")}</span>
-                    </span>
-                  </label>
-                  <div class="caregiverSummaryRow">
-                    <span>${uiText("caregiver.basePay", "Base pay")}</span>
-                    <strong>${formatCaregiverWon(summary.basePay)}</strong>
-                  </div>
-                  <div class="caregiverSummaryRow">
-                    <span>${uiText("caregiver.extras", "Extra fees")}</span>
-                    <strong>${formatCaregiverWon(summary.extras)}</strong>
-                  </div>
-                  <label class="caregiverSummaryRow">
-                    <span>${uiText("caregiver.transportFee", "Transport fee")}</span>
-                    <span class="caregiverMoneyInput">
-                      <input name="transportFee" type="text" inputmode="numeric" value="${escapeHtml(settings.transportFee)}" />
-                      <span>${uiText("caregiver.wonSuffix", "won")}</span>
-                    </span>
-                  </label>
-                  <div class="caregiverSummaryRow caregiverTotalRow">
-                    <span>${uiText("caregiver.totalPay", "Total payment")}</span>
-                    <strong>${formatCaregiverWon(summary.total)}</strong>
-                  </div>
-                  <button class="primaryButton caregiverSettingsSave" type="submit">${uiText("common.save", "Save")}</button>
-                </form>
-              `
-              : ""
-          }
-        </div>
-      </section>
-      ${
-        data
-          ? `
-            <details class="panel caregiverDetailPanel">
-              <summary class="caregiverDetailSummary">${uiText("caregiver.details", "Monthly details")}</summary>
-              <div class="panelBody caregiverDetailBody">
-                <div class="caregiverDetailTools">
-                  <span>${escapeHtml(monthTitle(month))} 공유용 요약</span>
-                  <button class="openButton" type="button" data-caregiver-copy-month>복사</button>
-                </div>
-                <div class="caregiverMonthGrid" aria-label="${uiText("caregiver.monthGridAria", "Monthly care hours")}">
-                  ${calendarWeekdays().map((day) => `<span class="caregiverWeekday">${day}</span>`).join("")}
-                  ${monthCells(month)
-                    .map((cell) => {
-                      if (cell.muted) return '<span class="caregiverMonthDay isMuted" aria-hidden="true"></span>';
-                      const item = dailyByDate.get(cell.value);
-                      return `
-                        <span class="caregiverMonthDay">
-                          <span>${cell.label}</span>
-                          <strong>${item?.minutes ? formatCaregiverMonthCellHours(item.minutes) : ""}</strong>
-                        </span>
-                      `;
-                    })
-                    .join("")}
-                </div>
-                <div class="caregiverDailyList" aria-label="${uiText("caregiver.dailyBreakdownAria", "Daily care details")}">
-                  ${
-                    recordedDays.length
-                      ? recordedDays
-                          .map(
-                            (item) => `
-                              <div class="caregiverDailyRow">
-                                <div class="caregiverDailyHeading">
-                                  <strong>${escapeHtml(item.date.slice(5))} ${escapeHtml(item.weekday)}</strong>
-                                  <span>${escapeHtml(formatCaregiverHours(item.minutes))}</span>
-                                </div>
-                                <div class="caregiverDailyAmounts">
-                                  <span>${uiText("caregiver.basePay", "Base pay")} ${formatCaregiverWon(item.basePay)}</span>
-                                  <span>${uiText("caregiver.extras", "Extra fees")} ${formatCaregiverWon(item.extras)}</span>
-                                </div>
-                                ${item.notes ? `<p>${escapeHtml(item.notes)}</p>` : ""}
-                              </div>
-                            `,
-                          )
-                          .join("")
-                      : `<p class="taskMeta">${uiText("caregiver.noRecords", "No care records this month.")}</p>`
-                  }
-                </div>
-              </div>
-            </details>
-          `
-          : ""
-      }
-    </div>
-  `;
 }
 
 function render() {
