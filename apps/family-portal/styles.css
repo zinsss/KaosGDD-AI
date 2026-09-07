@@ -2056,6 +2056,31 @@ h3 {
   outline: 1px solid var(--line);
 }
 
+.calendarTitleSelect {
+  appearance: auto;
+  max-width: 100%;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  padding: 1px 3px;
+}
+
+.calendarTitleSelect:hover,
+.calendarTitleSelect:focus-visible {
+  background: var(--surface);
+  color: var(--accent);
+  outline: 1px solid var(--line);
+}
+
+.calendarTitleSelect option {
+  color: var(--text);
+  background: var(--panel);
+}
+
 .calendarPicker {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

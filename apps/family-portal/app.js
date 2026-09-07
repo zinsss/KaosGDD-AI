@@ -5910,53 +5910,37 @@ function calendarTitleParts(monthValue) {
 
 function renderCalendarMonthTitle(monthValue) {
   const { year, month, monthLabel } = calendarTitleParts(monthValue);
-  const yearActive = state.calendarPicker === "year";
-  const monthActive = state.calendarPicker === "month";
+  const years = Array.from({ length: 13 }, (_value, index) => year - 6 + index);
+  const yearSelect = `
+    <select class="calendarTitleSelect isYearSelect" data-calendar-year-select aria-label="${uiText("calendar.yearSelectorAria", "Year selector")}">
+      ${years.map((item) => `<option value="${escapeHtml(item)}" ${item === year ? "selected" : ""}>${escapeHtml(portalProfile() === "family" ? `${item}년` : item)}</option>`).join("")}
+    </select>
+  `;
+  const monthSelect = `
+    <select class="calendarTitleSelect isMonthSelect" data-calendar-month-select aria-label="${uiText("calendar.monthSelectorAria", "Month selector")}">
+      ${Array.from({ length: 12 }, (_value, index) => index + 1)
+        .map((item) => `<option value="${escapeHtml(item)}" ${item === month ? "selected" : ""}>${escapeHtml(calendarMonthName(item))}</option>`)
+        .join("")}
+    </select>
+  `;
   if (portalProfile() === "family") {
     return `
       <h2 class="calendarMonthTitle" aria-label="${escapeHtml(monthTitle(monthValue))}">
-        <button class="calendarTitleButton ${yearActive ? "isActive" : ""}" type="button" data-calendar-picker-toggle="year" aria-expanded="${yearActive}">${escapeHtml(year)}년</button>
-        <button class="calendarTitleButton ${monthActive ? "isActive" : ""}" type="button" data-calendar-picker-toggle="month" aria-expanded="${monthActive}">${escapeHtml(monthLabel)}</button>
+        ${yearSelect}
+        ${monthSelect}
       </h2>
     `;
   }
   return `
     <h2 class="calendarMonthTitle" aria-label="${escapeHtml(monthTitle(monthValue))}">
-      <button class="calendarTitleButton ${monthActive ? "isActive" : ""}" type="button" data-calendar-picker-toggle="month" aria-expanded="${monthActive}">${escapeHtml(monthLabel)}</button>
-      <button class="calendarTitleButton ${yearActive ? "isActive" : ""}" type="button" data-calendar-picker-toggle="year" aria-expanded="${yearActive}">${escapeHtml(year)}</button>
+      ${monthSelect}
+      ${yearSelect}
     </h2>
   `;
 }
 
 function renderCalendarPicker(monthValue) {
-  const { year, month } = calendarTitleParts(monthValue);
-  if (state.calendarPicker === "year") {
-    const years = Array.from({ length: 13 }, (_, index) => year - 6 + index);
-    return `
-      <div class="calendarPicker" role="group" aria-label="${uiText("calendar.yearSelectorAria", "Year selector")}">
-        ${years
-          .map((item) => `
-            <button class="calendarPickerButton ${item === year ? "isActive" : ""}" type="button" data-calendar-year="${escapeHtml(item)}" aria-pressed="${item === year}">
-              ${escapeHtml(item)}
-            </button>
-          `)
-          .join("")}
-      </div>
-    `;
-  }
-  if (state.calendarPicker === "month") {
-    return `
-      <div class="calendarPicker isMonthPicker" role="group" aria-label="${uiText("calendar.monthSelectorAria", "Month selector")}">
-        ${Array.from({ length: 12 }, (_, index) => index + 1)
-          .map((item) => `
-            <button class="calendarPickerButton ${item === month ? "isActive" : ""}" type="button" data-calendar-month="${escapeHtml(item)}" aria-pressed="${item === month}">
-              ${escapeHtml(calendarMonthName(item))}
-            </button>
-          `)
-          .join("")}
-      </div>
-    `;
-  }
+  void monthValue;
   return "";
 }
 
@@ -5974,6 +5958,22 @@ function setSelectedYearMonth(nextYear, nextMonth) {
   const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
   target.setDate(Math.min(day, lastDay));
   state.selectedDate = ymd(target);
+}
+
+function applySelectedCalendarYearMonth(nextYear, nextMonth) {
+  if (!Number.isInteger(nextYear) || !Number.isInteger(nextMonth) || nextMonth < 1 || nextMonth > 12) return false;
+  const previousMonth = state.selectedDate.slice(0, 7);
+  if (getRoute() === "add-event" || (getRoute() === "add" && state.addKind === "event")) collectAddEventDraft();
+  if (getRoute() === "add-task" || (getRoute() === "add" && state.addKind === "task")) collectAddTaskDraft();
+  setSelectedYearMonth(nextYear, nextMonth);
+  state.calendarPicker = "";
+  if (state.addTaskDraft && state.taskDueEnabled) {
+    state.addTaskDraft.selectedDate = state.selectedDate;
+    state.addTaskDraft.due = state.selectedDate;
+  }
+  render();
+  if (getRoute() !== "caregiver" && state.selectedDate.slice(0, 7) !== previousMonth) loadRemoteWeatherForSelectedMonth();
+  return true;
 }
 
 function selectToday() {
@@ -12618,39 +12618,17 @@ document.addEventListener("click", async (event) => {
 
   const calendarYear = event.target.closest("[data-calendar-year]");
   if (calendarYear) {
-    const previousMonth = state.selectedDate.slice(0, 7);
     const nextYear = Number(calendarYear.dataset.calendarYear);
     const currentMonth = Number(state.selectedDate.slice(5, 7));
-    if (!Number.isInteger(nextYear)) return;
-    if (getRoute() === "add-event" || (getRoute() === "add" && state.addKind === "event")) collectAddEventDraft();
-    if (getRoute() === "add-task" || (getRoute() === "add" && state.addKind === "task")) collectAddTaskDraft();
-    setSelectedYearMonth(nextYear, currentMonth);
-    state.calendarPicker = "";
-    if (state.addTaskDraft && state.taskDueEnabled) {
-      state.addTaskDraft.selectedDate = state.selectedDate;
-      state.addTaskDraft.due = state.selectedDate;
-    }
-    render();
-    if (getRoute() !== "caregiver" && state.selectedDate.slice(0, 7) !== previousMonth) loadRemoteWeatherForSelectedMonth();
+    applySelectedCalendarYearMonth(nextYear, currentMonth);
     return;
   }
 
   const calendarMonth = event.target.closest("[data-calendar-month]");
   if (calendarMonth) {
-    const previousMonth = state.selectedDate.slice(0, 7);
     const nextMonth = Number(calendarMonth.dataset.calendarMonth);
     const currentYear = Number(state.selectedDate.slice(0, 4));
-    if (!Number.isInteger(nextMonth) || nextMonth < 1 || nextMonth > 12) return;
-    if (getRoute() === "add-event" || (getRoute() === "add" && state.addKind === "event")) collectAddEventDraft();
-    if (getRoute() === "add-task" || (getRoute() === "add" && state.addKind === "task")) collectAddTaskDraft();
-    setSelectedYearMonth(currentYear, nextMonth);
-    state.calendarPicker = "";
-    if (state.addTaskDraft && state.taskDueEnabled) {
-      state.addTaskDraft.selectedDate = state.selectedDate;
-      state.addTaskDraft.due = state.selectedDate;
-    }
-    render();
-    if (getRoute() !== "caregiver" && state.selectedDate.slice(0, 7) !== previousMonth) loadRemoteWeatherForSelectedMonth();
+    applySelectedCalendarYearMonth(currentYear, nextMonth);
     return;
   }
 
@@ -13387,6 +13365,22 @@ document.addEventListener("change", async (event) => {
   if (mainMenu) {
     const route = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(mainMenu.value) || "today";
     window.location.hash = `#/${route}`;
+    return;
+  }
+
+  const calendarYearSelect = event.target.closest("[data-calendar-year-select]");
+  if (calendarYearSelect) {
+    const nextYear = Number(calendarYearSelect.value);
+    const currentMonth = Number(state.selectedDate.slice(5, 7));
+    applySelectedCalendarYearMonth(nextYear, currentMonth);
+    return;
+  }
+
+  const calendarMonthSelect = event.target.closest("[data-calendar-month-select]");
+  if (calendarMonthSelect) {
+    const currentYear = Number(state.selectedDate.slice(0, 4));
+    const nextMonth = Number(calendarMonthSelect.value);
+    applySelectedCalendarYearMonth(currentYear, nextMonth);
     return;
   }
 

@@ -46,18 +46,30 @@ test("unknown personal routes safely select Agenda", () => {
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=311"');
+  const styleIndex = index.indexOf('href="/styles.css?v=314"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=5"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
   const faxIndex = index.indexOf('src="/fax.js?v=2"');
   const mailIndex = index.indexOf('src="/mail.js?v=7"');
-  const applicationIndex = index.indexOf('src="/app.js?v=316"');
+  const applicationIndex = index.indexOf('src="/app.js?v=323"');
   assert.ok(styleIndex >= 0);
   assert.ok(navigationIndex >= 0);
   assert.ok(documentsIndex > navigationIndex);
   assert.ok(faxIndex > documentsIndex);
   assert.ok(mailIndex > faxIndex);
   assert.ok(applicationIndex > mailIndex);
+});
+
+test("calendar title uses native month and year dropdowns", () => {
+  const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
+  const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
+
+  assert.match(appSource, /data-calendar-year-select/);
+  assert.match(appSource, /data-calendar-month-select/);
+  assert.match(appSource, /applySelectedCalendarYearMonth\(nextYear, currentMonth\)/);
+  assert.match(appSource, /applySelectedCalendarYearMonth\(currentYear, nextMonth\)/);
+  assert.match(styles, /\.calendarTitleSelect \{/);
+  assert.match(styles, /appearance: auto;/);
 });
 
 test("weather icon font is lazy-loaded after emoji fallback render", () => {
