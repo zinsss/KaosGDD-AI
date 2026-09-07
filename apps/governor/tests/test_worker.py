@@ -11,6 +11,7 @@ from kaos_governor.daily_digest import KST
 from kaos_governor.import_workers import ImportCycleResult
 from kaos_governor.worker import (
     GovernorWorker,
+    RecurringTaskSyncConfig,
     WorkerConfig,
     WorkerConfigurationError,
     validate_delivery_ownership,
@@ -144,6 +145,44 @@ class GovernorWorkerTests(unittest.TestCase):
         self.assertEqual(status["lastFaxActionCount"], 0)
         self.assertEqual(status["naverMail"]["owner"], "worker")
         self.assertEqual(status["fax"]["owner"], "worker")
+
+    def test_worker_syncs_recurring_tasks_once_per_kst_day(self) -> None:
+        first = datetime(2026, 9, 7, 0, 1, tzinfo=KST)
+        second = first + timedelta(minutes=10)
+        next_day = datetime(2026, 9, 8, 0, 1, tzinfo=KST)
+        recurring = SimpleNamespace(
+            run_once=mock.Mock(
+                side_effect=[
+                    [("one", SimpleNamespace(action="create", clear_active=False))],
+                    [("one", SimpleNamespace(action="none", clear_active=True))],
+                ]
+            )
+        )
+        notifications = SimpleNamespace(
+            config=SimpleNamespace(poll_seconds=5),
+            deliver_pending=mock.Mock(return_value=0),
+            enqueue=mock.Mock(return_value=True),
+            status=mock.Mock(return_value={"pendingCount": 0, "deliveryMode": "worker"}),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            worker = GovernorWorker(
+                WorkerConfig(status_path=Path(temporary) / "worker.json"),
+                notifications,
+                recurring_tasks=recurring,
+                recurring_task_config=RecurringTaskSyncConfig(enabled=True, poll_seconds=300),
+            )
+
+            worker.run_once(first)
+            worker.run_once(second)
+            worker.run_once(next_day)
+            status = json.loads(worker.config.status_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(recurring.run_once.call_count, 2)
+        self.assertEqual(recurring.run_once.call_args_list[0].kwargs["today"].isoformat(), "2026-09-07")
+        self.assertEqual(recurring.run_once.call_args_list[1].kwargs["today"].isoformat(), "2026-09-08")
+        self.assertEqual(status["recurringTasks"]["enabled"], True)
+        self.assertEqual(status["recurringTasks"]["lastSyncDate"], "2026-09-08")
+        self.assertEqual(status["recurringTasks"]["lastSyncCount"], 1)
 
     def test_missing_heartbeat_is_unhealthy(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

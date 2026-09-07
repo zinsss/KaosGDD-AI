@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 import hashlib
 import json
 import logging
@@ -14,6 +14,7 @@ from typing import Mapping
 
 from .calendar import CalendarAdapterClient, CalendarAdapterConfig
 from .daily_digest import DailyDigestConfig, DailyDigestService, KST, digest_events
+from .database import connect, wait_for_database_and_migrate
 from .fax import FaxConfig, FaxService
 from .import_workers import (
     FaxLifecycleWorker,
@@ -22,6 +23,7 @@ from .import_workers import (
 )
 from .mail import NaverMailConfig, NaverMailPoller
 from .notifications import PushoverConfig, TextNotification, TextNotificationService
+from .tasks import PostgresRecurringTaskStore, RecurringTaskPlan, RecurringTaskService
 
 
 LOGGER = logging.getLogger(__name__)
@@ -92,6 +94,27 @@ class WorkerConfig:
         )
 
 
+@dataclass(frozen=True)
+class RecurringTaskSyncConfig:
+    enabled: bool = False
+    poll_seconds: int = 300
+    migrations_dir: Path = Path("/usr/local/share/kaos-governor/migrations")
+
+    @classmethod
+    def from_env(cls, env: Mapping[str, str] | None = None) -> "RecurringTaskSyncConfig":
+        source = os.environ if env is None else env
+        return cls(
+            enabled=source.get("RECURRING_TASK_SYNC_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"},
+            poll_seconds=_positive_int(source, "RECURRING_TASK_SYNC_POLL_SECONDS", 300),
+            migrations_dir=Path(
+                source.get(
+                    "GOVERNOR_MIGRATIONS_DIR",
+                    "/usr/local/share/kaos-governor/migrations",
+                )
+            ),
+        )
+
+
 class GovernorWorker:
     def __init__(
         self,
@@ -100,16 +123,24 @@ class GovernorWorker:
         daily_digest: DailyDigestService | None = None,
         mail_lifecycle: NaverMailLifecycleWorker | None = None,
         fax_lifecycle: FaxLifecycleWorker | None = None,
+        recurring_tasks: RecurringTaskService | None = None,
+        recurring_task_config: RecurringTaskSyncConfig | None = None,
     ) -> None:
         self.config = config
         self.notifications = notifications
         self.daily_digest = daily_digest
         self.mail_lifecycle = mail_lifecycle
         self.fax_lifecycle = fax_lifecycle
+        self.recurring_tasks = recurring_tasks
+        self.recurring_task_config = recurring_task_config or RecurringTaskSyncConfig(enabled=False)
         self._next_digest_check_at: datetime | None = None
         self._next_content_refresh_at: datetime | None = None
         self._next_mail_check_at: datetime | None = None
         self._next_fax_check_at: datetime | None = None
+        self._next_recurring_task_check_at: datetime | None = None
+        self._last_recurring_task_sync_date: date | None = None
+        self._last_recurring_task_sync_count = 0
+        self._last_recurring_task_sync_error = ""
 
     @staticmethod
     def _current_kst(now: datetime | None) -> datetime:
@@ -197,9 +228,28 @@ class GovernorWorker:
         self._next_fax_check_at = current + timedelta(seconds=lifecycle.service.config.poll_seconds)
         return lifecycle.run_once()
 
+    def _sync_recurring_tasks(self, now: datetime | None) -> int:
+        service = self.recurring_tasks
+        config = self.recurring_task_config
+        if service is None or not config.enabled:
+            return 0
+        current = self._current_kst(now)
+        if self._next_recurring_task_check_at is not None and current < self._next_recurring_task_check_at:
+            return 0
+        self._next_recurring_task_check_at = current + timedelta(seconds=config.poll_seconds)
+        today = current.date()
+        if self._last_recurring_task_sync_date == today:
+            return 0
+        results = service.run_once(today=today, now=current)
+        self._last_recurring_task_sync_date = today
+        self._last_recurring_task_sync_count = sum(1 for _definition_id, plan in results if recurring_plan_changed(plan))
+        self._last_recurring_task_sync_error = ""
+        return self._last_recurring_task_sync_count
+
     def run_once(self, now: datetime | None = None) -> int:
         delivered = 0
         scheduled = 0
+        recurring_task_result = 0
         mail_result = ImportCycleResult()
         fax_result = ImportCycleResult()
         errors = []
@@ -213,6 +263,11 @@ class GovernorWorker:
             errors.append(f"{type(exc).__name__}: {exc}")
             if self.daily_digest is not None:
                 self.daily_digest.record_error(exc)
+        try:
+            recurring_task_result = self._sync_recurring_tasks(now)
+        except Exception as exc:
+            self._last_recurring_task_sync_error = f"{type(exc).__name__}: {exc}"
+            errors.append(self._last_recurring_task_sync_error)
         try:
             mail_result = self._poll_mail(now)
         except Exception as exc:
@@ -231,6 +286,7 @@ class GovernorWorker:
             status="degraded" if errors else "ready",
             delivered=delivered,
             scheduled=scheduled,
+            recurring_task_result=recurring_task_result,
             mail_result=mail_result,
             fax_result=fax_result,
             error=error,
@@ -246,6 +302,7 @@ class GovernorWorker:
         status: str,
         delivered: int,
         scheduled: int,
+        recurring_task_result: int,
         mail_result: ImportCycleResult,
         fax_result: ImportCycleResult,
         error: str,
@@ -259,6 +316,19 @@ class GovernorWorker:
                 "lastCycleAt": _timestamp(now),
                 "lastDeliveredCount": delivered,
                 "lastScheduledNotificationCount": scheduled,
+                "lastRecurringTaskSyncDate": self._last_recurring_task_sync_date.isoformat()
+                if self._last_recurring_task_sync_date
+                else "",
+                "lastRecurringTaskSyncCount": recurring_task_result,
+                "recurringTasks": {
+                    "enabled": bool(self.recurring_tasks is not None and self.recurring_task_config.enabled),
+                    "pollSeconds": self.recurring_task_config.poll_seconds,
+                    "lastSyncDate": self._last_recurring_task_sync_date.isoformat()
+                    if self._last_recurring_task_sync_date
+                    else "",
+                    "lastSyncCount": self._last_recurring_task_sync_count,
+                    "lastError": self._last_recurring_task_sync_error,
+                },
                 "lastMailProcessedCount": mail_result.processed,
                 "lastFaxActionCount": fax_result.processed,
                 "lastError": error,
@@ -297,6 +367,10 @@ def validate_delivery_ownership(config: PushoverConfig) -> None:
         raise WorkerConfigurationError(
             "PUSHOVER_DELIVERY_MODE must be worker when kaos-governor-worker is running"
         )
+
+
+def recurring_plan_changed(plan: RecurringTaskPlan) -> bool:
+    return plan.action != "none" or plan.clear_active
 
 
 def worker_healthy(
@@ -369,6 +443,18 @@ def main() -> None:
             FaxService(fax_config),
             notifications,
         )
+    recurring_task_config = RecurringTaskSyncConfig.from_env()
+    recurring_tasks = None
+    if recurring_task_config.enabled:
+        wait_for_database_and_migrate(recurring_task_config.migrations_dir)
+        calendar_url = os.environ.get(
+            "CALENDAR_ADAPTER_INTERNAL_URL",
+            "http://calendar-adapter:8091",
+        ).strip()
+        recurring_tasks = RecurringTaskService(
+            PostgresRecurringTaskStore(connect),
+            CalendarAdapterClient(CalendarAdapterConfig(calendar_url)),
+        )
     asyncio.run(
         _run(
             GovernorWorker(
@@ -377,6 +463,8 @@ def main() -> None:
                 daily_digest,
                 mail_lifecycle,
                 fax_lifecycle,
+                recurring_tasks,
+                recurring_task_config,
             )
         )
     )

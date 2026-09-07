@@ -88,8 +88,14 @@ services:
     init: true
     env_file:
       - .env
+      - path: ${KAOS_ROOT:-/srv/kaos}/secrets/governor-postgres.env
+        format: raw
     environment:
       PUSHOVER_DELIVERY_MODE: "${PUSHOVER_DELIVERY_MODE:-worker}"
+      GOVERNOR_DB_HOST: "governor-postgres"
+      GOVERNOR_DB_PORT: "5432"
+      RECURRING_TASK_SYNC_ENABLED: "${RECURRING_TASK_SYNC_ENABLED:-true}"
+      RECURRING_TASK_SYNC_POLL_SECONDS: "${RECURRING_TASK_SYNC_POLL_SECONDS:-300}"
     secrets:
       - naver_mail_password
       - fax_connector_token
