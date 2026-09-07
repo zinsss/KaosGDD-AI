@@ -1,7 +1,13 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const test = require("node:test");
 
 const { counts, filterItems, mailboxMatchesTarget, normalizeDetail, normalizeMessage, normalizeMode, normalizePage } = require("../../apps/family-portal/mail.js");
+
+const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
+const mailViewSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/mail-view.js"), "utf8");
+const indexSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
 
 test("normalizes Naver mail headers for the portal", () => {
   const message = normalizeMessage({
@@ -75,4 +81,17 @@ test("filters scoped mail rows by board tab", () => {
   assert.equal(filterItems(page.items, "yeongdeok")[0].subject, "보건소");
   assert.equal(filterItems(page.items, "tax")[0].subject, "세무사");
   assert.equal(filterItems(page.items, "unread")[0].mailbox, "세무사");
+});
+
+test("mail board rendering is delegated to the view module", () => {
+  assert.match(appSource, /KAOS_MAIL_VIEW\.renderMail\(mailViewContext\(\)\)/);
+  assert.match(mailViewSource, /data-archive-kind="mail"/);
+  assert.match(mailViewSource, /id="mailIndexTitle">RECORD BOARD/);
+  assert.match(mailViewSource, /<span>NO\.<\/span><span>DATE<\/span><span>TITLE<\/span>/);
+  assert.match(mailViewSource, /data-mail-unread-action="read"/);
+  assert.match(mailViewSource, /data-mail-unread-action="delete"/);
+  assert.match(mailViewSource, /data-mail-unread-apply/);
+  assert.match(mailViewSource, /mailReloginUrl/);
+  assert.match(indexSource, /src="\/mail-view\.js\?v=1"/);
+  assert.ok(indexSource.indexOf('src="/mail-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=325"'));
 });
