@@ -4,22 +4,28 @@ const path = require("node:path");
 const test = require("node:test");
 
 const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
+const suppliesViewSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/supplies-view.js"), "utf8");
+const indexSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
 const nginxSource = fs.readFileSync(path.join(__dirname, "../../deploy/h3-backend/family-portal/nginx.conf"), "utf8");
 
 test("top add opens the native supply composer route", () => {
   assert.match(appSource, /"add-supply": "Add Supply"/);
   assert.match(appSource, /if \(action === "supply"\) \{\s*window\.location\.hash = "#\/add-supply";/s);
   assert.match(appSource, /else if \(route === "add-supply"\) view\.innerHTML = renderAddSupply\(\);/);
-  assert.match(appSource, /data-create-supply/);
+  assert.match(appSource, /KAOS_SUPPLIES_VIEW\.renderAddSupply\(suppliesViewContext\(\)\)/);
+  assert.match(suppliesViewSource, /data-create-supply/);
 });
 
 test("main supplies route renders as an archive board instead of an inline composer", () => {
-  assert.match(appSource, /data-archive-kind="supplies"/);
-  assert.match(appSource, /id="suppliesIndexTitle">RECORD BOARD/);
-  assert.match(appSource, /id="suppliesIndexTitle">RECORD BOARD[\s\S]*<span>NO\.<\/span><span>DATE<\/span><span>TITLE<\/span>/);
-  assert.match(appSource, /data-supplies-mode="active"/);
-  assert.match(appSource, /data-supplies-mode="done"/);
-  assert.match(appSource, /data-supplies-retry/);
+  assert.match(appSource, /KAOS_SUPPLIES_VIEW\.renderSupplies\(suppliesViewContext\(\), options\)/);
+  assert.match(suppliesViewSource, /data-archive-kind="supplies"/);
+  assert.match(suppliesViewSource, /id="suppliesIndexTitle">RECORD BOARD/);
+  assert.match(suppliesViewSource, /id="suppliesIndexTitle">RECORD BOARD[\s\S]*<span>NO\.<\/span><span>DATE<\/span><span>TITLE<\/span>/);
+  assert.match(suppliesViewSource, /data-supplies-mode="active"/);
+  assert.match(suppliesViewSource, /data-supplies-mode="done"/);
+  assert.match(suppliesViewSource, /data-supplies-retry/);
+  assert.match(indexSource, /src="\/supplies-view\.js\?v=1"/);
+  assert.ok(indexSource.indexOf('src="/supplies-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=325"'));
 });
 
 test("family portal routes supplies api only to governor", () => {
