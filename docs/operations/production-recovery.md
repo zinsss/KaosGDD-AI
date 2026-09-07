@@ -1,7 +1,7 @@
 # Current Production and Recovery Map
 
 This document is the concise recovery source for the active KaosGDD deployment
-as of 2026-08-28. It describes ownership and reconstruction; it never contains
+as of 2026-09-08. It describes ownership and reconstruction; it never contains
 secret values.
 
 ## H3: deterministic application plane
@@ -27,8 +27,9 @@ Service-native data and configuration:
 ```
 
 Active services include Governor Discord/tools, Governor API and PostgreSQL,
-Radicale, Memos, Vaultwarden, SFTPGo, Calendar Adapter, Family portal, Caddy,
-and cloudflared. The Calendar Adapter mounts repository source directly from
+Radicale, Memos, Vaultwarden, SFTPGo, Calendar Adapter, Family portal, n8n with
+its dedicated PostgreSQL database, Caddy, and cloudflared. The Calendar Adapter
+mounts repository source directly from
 `apps/calendar-adapter`; `/srv/kaos/data/calendar-adapter` is a retained legacy
 copy and is not the live application mount.
 
@@ -49,7 +50,21 @@ Normal deployment entry points:
 ./deploy/h3-backend/kaos-h3 family-up
 ./deploy/h3-backend/kaos-h3 services-up
 ./deploy/h3-backend/kaos-h3 edge-up
+./deploy/h3-backend/kaos-h3 n8n-up
 ```
+
+n8n recovery is one inseparable set:
+
+```text
+/srv/kaos/data/n8n
+/srv/kaos/data/n8n-postgres
+/srv/kaos/secrets/n8n.env
+```
+
+The database holds workflows, executions, and encrypted credentials; the
+encryption key needed to decrypt those credentials is in `n8n.env`. Back up
+all three paths at the same recovery point and restore their original owners
+and modes before running `kaos-h3 n8n-up`.
 
 Stateful service recovery must use the guarded backup, checksum, write-freeze,
 and rollback process in [`h3-backend-cutover.md`](../migration/h3-backend-cutover.md).
@@ -162,12 +177,13 @@ Minimum cross-host credentials that may need rotation after loss are:
 - Memos and Paperless scoped access tokens
 - Naver app/mail password
 - OpenClaw gateway and reauthentication tokens
+- n8n database password and credential-encryption key
 
 ## Recovery order
 
 1. Restore host networking, time, Docker, and Tailscale.
 2. Restore H3 service-native data and Governor state before application start.
-3. Start H3 backends, Governor, family services, and edge through guarded
+3. Start H3 backends, Governor, family services, n8n, and edge through guarded
    deployment commands.
 4. Restore H4 file-backed secrets and OpenClaw state, then start KaosBrain.
 5. Verify narrow H4-to-H3 tool access.

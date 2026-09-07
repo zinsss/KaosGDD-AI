@@ -9,6 +9,7 @@ COMPOSE=(docker compose --project-directory "${DEPLOY_DIR}" --env-file "${ENV_FI
 BACKENDS_COMPOSE=("${COMPOSE[@]}" -f "${DEPLOY_DIR}/compose.backends.yaml")
 SERVICES_COMPOSE=("${COMPOSE[@]}" -f "${DEPLOY_DIR}/compose.services.yaml")
 EDGE_COMPOSE=("${COMPOSE[@]}" -f "${DEPLOY_DIR}/compose.edge.yaml")
+N8N_COMPOSE=(env COMPOSE_IGNORE_ORPHANS=true "${COMPOSE[@]}" -f "${DEPLOY_DIR}/compose.n8n.yaml")
 
 die() {
   printf 'ERROR: %s\n' "$*" >&2
@@ -656,6 +657,90 @@ family_portal_sync() {
   info "Family portal synced from repository source."
 }
 
+n8n_secret_path() {
+  printf '%s/secrets/n8n.env' "${KAOS_ROOT:-/srv/kaos}"
+}
+
+n8n_setup() {
+  load_env
+  require_command docker
+  require_command openssl
+  docker compose version >/dev/null 2>&1 || die "Docker Compose v2 is required"
+  local root=${KAOS_ROOT:-/srv/kaos}
+  local secret_file
+  secret_file=$(n8n_secret_path)
+  local host_uid=${N8N_DATA_UID:-1000}
+  local host_gid=${N8N_DATA_GID:-1000}
+  local postgres_uid=${N8N_POSTGRES_DATA_UID:-70}
+  local postgres_gid=${N8N_POSTGRES_DATA_GID:-70}
+  require_command sudo
+  sudo mkdir -p -- "${root}/data/n8n" "${root}/data/n8n-postgres" "${root}/secrets"
+  sudo chown -- "${host_uid}:${host_gid}" "${root}/data/n8n"
+  sudo chmod 0750 "${root}/data/n8n"
+  sudo chown -- "${postgres_uid}:${postgres_gid}" "${root}/data/n8n-postgres"
+  sudo chmod 0700 "${root}/data/n8n-postgres"
+  sudo chown -- "root:$(id -g)" "${root}/secrets"
+  sudo chmod 0750 "${root}/secrets"
+  if ! sudo test -s "${secret_file}"; then
+    local database_password encryption_key temporary_file
+    database_password=$(openssl rand -hex 32)
+    encryption_key=$(openssl rand -hex 32)
+    temporary_file=$(mktemp)
+    chmod 0600 "${temporary_file}"
+    printf '%s\n' \
+      'POSTGRES_DB=n8n' \
+      'POSTGRES_USER=n8n' \
+      "POSTGRES_PASSWORD=${database_password}" \
+      'DB_POSTGRESDB_DATABASE=n8n' \
+      'DB_POSTGRESDB_USER=n8n' \
+      "DB_POSTGRESDB_PASSWORD=${database_password}" \
+      "N8N_ENCRYPTION_KEY=${encryption_key}" \
+      >"${temporary_file}"
+    sudo install -m 0640 -o root -g "$(id -g)" "${temporary_file}" "${secret_file}"
+    rm -f "${temporary_file}"
+    info "Generated ${secret_file}."
+  fi
+  n8n_preflight
+  info "n8n setup complete. It remains private and stopped until: ${0} n8n-up"
+}
+
+n8n_preflight() {
+  load_env
+  local root=${KAOS_ROOT:-/srv/kaos}
+  local secret_file
+  secret_file=$(n8n_secret_path)
+  require_nonempty_file "${secret_file}"
+  require_dir "${root}/data/n8n"
+  require_dir "${root}/data/n8n-postgres"
+  for name in POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD DB_POSTGRESDB_DATABASE DB_POSTGRESDB_USER DB_POSTGRESDB_PASSWORD N8N_ENCRYPTION_KEY; do
+    grep -Eq "^${name}=.+" "${secret_file}" || die "${secret_file} is missing ${name}"
+  done
+  [[ "${N8N_BIND_ADDRESS:-127.0.0.1}" == "127.0.0.1" ]] \
+    || die "n8n must remain loopback-only until its authenticated HTTPS route is approved"
+  case "${N8N_PROTOCOL:-http}" in
+    http|https) ;;
+    *) die "N8N_PROTOCOL must be http or https" ;;
+  esac
+  "${N8N_COMPOSE[@]}" config --quiet
+  info "n8n preflight passed."
+}
+
+n8n_smoke() {
+  load_env
+  local address=${N8N_BIND_ADDRESS:-127.0.0.1}
+  local url="http://${address}:5678/healthz"
+  local attempt
+  for attempt in $(seq 1 60); do
+    if curl --fail --silent --show-error "${url}" >/dev/null 2>&1; then
+      info "n8n health check passed at ${url}."
+      return
+    fi
+    sleep 1
+  done
+  "${N8N_COMPOSE[@]}" logs --tail=100 n8n n8n-postgres >&2 || true
+  die "n8n health endpoint did not become ready: ${url}"
+}
+
 family_transition_preflight() {
   load_env
   local root=${KAOS_ROOT:-/srv/kaos}
@@ -739,6 +824,12 @@ Commands:
   services-preflight Validate staged Radicale, Memos, Vaultwarden, SFTPGo, and family portal data
   family-portal-sync
                       Sync repository Family portal assets/config to the live H3 service path
+  n8n-setup          Create private n8n data paths and generated secrets
+  n8n-preflight      Validate n8n paths, secrets, and Compose configuration
+  n8n-up             Start the isolated n8n and PostgreSQL services
+  n8n-down           Stop n8n without deleting its data or credentials
+  n8n-status         Show n8n containers and check the local health endpoint
+  n8n-logs           Follow n8n and its PostgreSQL logs
   services-config    Render migrated service Compose configuration
   services-up        Start migrated non-edge services after guarded preflight
   services-down      Stop migrated non-edge services without deleting data
@@ -771,6 +862,12 @@ case "${command}" in
   backends-down) load_env; "${BACKENDS_COMPOSE[@]}" stop memos radicale ;;
   services-preflight) services_preflight ;;
   family-portal-sync) family_portal_sync ;;
+  n8n-setup) n8n_setup ;;
+  n8n-preflight) n8n_preflight ;;
+  n8n-up) n8n_preflight; "${N8N_COMPOSE[@]}" up --detach n8n-postgres n8n; n8n_smoke ;;
+  n8n-down) load_env; "${N8N_COMPOSE[@]}" stop n8n n8n-postgres ;;
+  n8n-status) load_env; "${N8N_COMPOSE[@]}" ps n8n n8n-postgres; n8n_smoke ;;
+  n8n-logs) load_env; "${N8N_COMPOSE[@]}" logs --follow --tail=100 n8n n8n-postgres ;;
   services-config) load_env; "${SERVICES_COMPOSE[@]}" config | redact_config ;;
   services-up) services_preflight; "${SERVICES_COMPOSE[@]}" up --detach memos radicale vaultwarden sftpgo family-portal ;;
   services-down) load_env; "${SERVICES_COMPOSE[@]}" stop memos radicale vaultwarden sftpgo family-portal ;;

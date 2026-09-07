@@ -38,6 +38,7 @@ jobs:
           node --check apps/family-portal/navigation.js
           node --check apps/family-portal/app.js
           node --test tests/family-portal/*.cjs
+          node --test tests/deploy/*.cjs
       - name: Render H3 deployment
         run: |
           cp deploy/h3-backend/.env.example deploy/h3-backend/.env
@@ -51,6 +52,9 @@ jobs:
           mkdir -p "${GITHUB_WORKSPACE}/.ci-kaos/secrets"
           printf 'POSTGRES_DB=kaos_governor_test\nPOSTGRES_USER=kaos_governor_test\nPOSTGRES_PASSWORD=phase2-test-password\n' \
             > "${GITHUB_WORKSPACE}/.ci-kaos/secrets/governor-postgres.env"
+          printf 'POSTGRES_DB=n8n\nPOSTGRES_USER=n8n\nPOSTGRES_PASSWORD=test\nDB_POSTGRESDB_DATABASE=n8n\nDB_POSTGRESDB_USER=n8n\nDB_POSTGRESDB_PASSWORD=test\nN8N_ENCRYPTION_KEY=test-test-test-test\n' \
+            > "${GITHUB_WORKSPACE}/.ci-kaos/secrets/n8n.env"
+          mkdir -p "${GITHUB_WORKSPACE}/.ci-kaos/data/n8n" "${GITHUB_WORKSPACE}/.ci-kaos/data/n8n-postgres"
           printf 'test\n' > deploy/h3-backend/secrets/discord_bot_token
           printf 'test\n' > deploy/h3-backend/secrets/governor_api_token
           : > deploy/h3-backend/secrets/memos_access_token
@@ -61,6 +65,12 @@ jobs:
             --project-directory deploy/h3-backend \
             --env-file deploy/h3-backend/.env \
             -f deploy/h3-backend/compose.yaml \
+            config --quiet
+          docker compose \
+            --project-directory deploy/h3-backend \
+            --env-file deploy/h3-backend/.env \
+            -f deploy/h3-backend/compose.yaml \
+            -f deploy/h3-backend/compose.n8n.yaml \
             config --quiet
       - name: Render Office fax connector deployment
         run: |

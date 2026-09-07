@@ -1,0 +1,81 @@
+services:
+  n8n-postgres:
+    image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+    container_name: n8n-postgres
+    restart: unless-stopped
+    env_file:
+      - path: ${KAOS_ROOT:-/srv/kaos}/secrets/n8n.env
+        format: raw
+    volumes:
+      - ${KAOS_ROOT:-/srv/kaos}/data/n8n-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
+  n8n:
+    # n8n 2.37.10. Upgrade only after exporting workflows and reviewing release notes.
+    image: n8nio/n8n@sha256:307d6065be25619aa24cfc63a7c2f04ca56d084a08c05c8e9f189a89f353b1ec
+    container_name: n8n
+    restart: unless-stopped
+    depends_on:
+      n8n-postgres:
+        condition: service_healthy
+    env_file:
+      - path: ${KAOS_ROOT:-/srv/kaos}/secrets/n8n.env
+        format: raw
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: n8n-postgres
+      DB_POSTGRESDB_PORT: "5432"
+      DB_POSTGRESDB_SCHEMA: public
+      N8N_LISTEN_ADDRESS: 0.0.0.0
+      N8N_PORT: "5678"
+      N8N_PROTOCOL: "${N8N_PROTOCOL:-http}"
+      N8N_HOST: "${N8N_HOST:-127.0.0.1}"
+      N8N_EDITOR_BASE_URL: "${N8N_EDITOR_BASE_URL:-http://127.0.0.1:5678}"
+      N8N_WEBHOOK_URL: "${N8N_WEBHOOK_URL:-http://127.0.0.1:5678/}"
+      N8N_SECURE_COOKIE: "${N8N_SECURE_COOKIE:-false}"
+      N8N_PROXY_HOPS: "${N8N_PROXY_HOPS:-0}"
+      GENERIC_TIMEZONE: "${N8N_TIMEZONE:-Asia/Seoul}"
+      TZ: "${N8N_TIMEZONE:-Asia/Seoul}"
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "true"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+      N8N_TEMPLATES_ENABLED: "false"
+      N8N_PUBLIC_API_DISABLED: "true"
+      N8N_COMMUNITY_PACKAGES_ENABLED: "false"
+      N8N_UNVERIFIED_PACKAGES_ENABLED: "false"
+      N8N_RUNNERS_TASK_TIMEOUT: "300"
+      N8N_COMPRESSION_NODE_MAX_DECOMPRESSED_SIZE_BYTES: "268435456"
+      N8N_COMPRESSION_NODE_MAX_ZIP_ENTRIES: "1000"
+      N8N_DEFAULT_BINARY_DATA_MODE: filesystem
+      NODES_EXCLUDE: '["n8n-nodes-base.executeCommand","n8n-nodes-base.readWriteFile","n8n-nodes-base.localFileTrigger"]'
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: "${N8N_EXECUTIONS_MAX_AGE_HOURS:-336}"
+      EXECUTIONS_DATA_PRUNE_MAX_COUNT: "${N8N_EXECUTIONS_MAX_COUNT:-10000}"
+    ports:
+      - "${N8N_BIND_ADDRESS:-127.0.0.1}:5678:5678"
+    volumes:
+      - ${KAOS_ROOT:-/srv/kaos}/data/n8n:/home/node/.n8n
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:5678/healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
+networks:
+  backend:
+    name: kaosgdd-backend

@@ -212,6 +212,12 @@ kaos-h3 family-down
 kaos-h3 edge-preflight
 kaos-h3 edge-up
 kaos-h3 edge-down
+kaos-h3 n8n-setup
+kaos-h3 n8n-preflight
+kaos-h3 n8n-up
+kaos-h3 n8n-down
+kaos-h3 n8n-status
+kaos-h3 n8n-logs
 ```
 
 `down`, `backends-down`, `services-down`, `family-down`, and `edge-down` never
@@ -225,6 +231,53 @@ directory. Discord `/maintenance-report` only reads that JSON file. Neither
 command runs upgrades, pulls Docker images, restarts services, or reboots hosts.
 Docker image update checks remain manual because checking them reliably
 requires an explicit image pull.
+
+## n8n
+
+n8n is deployed under its own Compose file and lifecycle. It is not included
+in `services-up`, `family-up`, or the Governor restart path. Initial setup uses
+the official pinned n8n 2.37.10 image and a separate PostgreSQL 17 container.
+It stores native state under:
+
+```text
+/srv/kaos/data/n8n
+/srv/kaos/data/n8n-postgres
+/srv/kaos/secrets/n8n.env
+```
+
+Prepare and start it with:
+
+```bash
+./deploy/h3-backend/kaos-h3 n8n-setup
+./deploy/h3-backend/kaos-h3 n8n-up
+./deploy/h3-backend/kaos-h3 n8n-status
+```
+
+The editor initially binds only to `http://127.0.0.1:5678`. Reach it through
+an SSH tunnel while preparing workflows:
+
+```bash
+ssh -L 5678:127.0.0.1:5678 zin@kaosgdd
+```
+
+Then open `http://127.0.0.1:5678` locally and create the owner account. Do not
+change `N8N_BIND_ADDRESS` or publish port 5678 directly. A future public editor
+route requires authenticated HTTPS, matching `N8N_HOST`,
+`N8N_EDITOR_BASE_URL`, `N8N_WEBHOOK_URL`, secure cookies, and an intentional
+reverse-proxy hop count.
+
+The preparation deployment has no host filesystem, Docker socket, Governor,
+Paperless, mail, fax, or OpenAI credentials. Add credentials only for an
+approved workflow. Community packages, template loading, shell execution, and
+arbitrary host-file nodes are disabled. Execution records are pruned after 14
+days or 10,000 executions by default.
+
+Back up both n8n data directories and `n8n.env` together. The encryption key
+inside `n8n.env` is required to recover stored credentials. `n8n-down` stops
+the containers but never removes the database, editor state, or credentials.
+
+See [the n8n workflow migration plan](../../docs/migration/n8n-workflow-migration-plan.md)
+before moving any current KaosGDD workflow.
 
 ## Stateful backends
 
