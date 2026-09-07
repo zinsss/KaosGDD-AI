@@ -4,15 +4,16 @@ const path = require("node:path");
 const test = require("node:test");
 
 const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
+const documentsViewSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/documents-view.js"), "utf8");
 const memosViewSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/memos-view.js"), "utf8");
 const indexSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
 const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
 
 test("documents inbox rows open a local detail panel with status-only actions", () => {
-  assert.match(appSource, /data-document-inbox-open/);
-  assert.match(appSource, /data-document-inbox-detail/);
-  assert.match(appSource, /data-document-inbox-refresh-status/);
-  assert.match(appSource, /data-document-inbox-paperless/);
+  assert.match(documentsViewSource, /data-document-inbox-open/);
+  assert.match(documentsViewSource, /data-document-inbox-detail/);
+  assert.match(documentsViewSource, /data-document-inbox-refresh-status/);
+  assert.match(documentsViewSource, /data-document-inbox-paperless/);
 });
 
 test("document upload selects the new inbox record after returning to inbox", () => {
@@ -22,15 +23,15 @@ test("document upload selects the new inbox record after returning to inbox", ()
 test("documents metadata review previews before confirmed apply", () => {
   assert.match(appSource, /data-document-metadata-review/);
   assert.match(appSource, /function renderDocumentMetadataReview/);
-  assert.match(appSource, /archiveMeta\("Tags", selected\.tags\?\.length/);
-  assert.match(appSource, /renderDocumentMetadataReview\(\{ documentId: selected\.id, recordId: selectedReviewRecord\?\.id \|\| "", title: selected\.title, tags: selected\.tags \}\)/);
+  assert.match(documentsViewSource, /archiveMeta\("Tags", selected\.tags\?\.length/);
+  assert.match(documentsViewSource, /renderDocumentMetadataReview\(\{ documentId: selected\.id, recordId: selectedReviewRecord\?\.id \|\| "", title: selected\.title, tags: selected\.tags \}\)/);
   assert.match(appSource, /metadata\/proposal/);
   assert.match(appSource, /data-document-ai-tags/);
   assert.match(appSource, /metadata\/tag-suggestions/);
   assert.match(appSource, /resetDocumentMetadataReview\("", state\.documents\.selected\.id, state\.documents\.selected\.title, state\.documents\.selected\.tags\);/);
-  assert.match(appSource, /archiveMeta\("File", selected\.filename \|\| "unknown"\)/);
-  assert.match(appSource, /archiveMeta\("Tags", selected\.tags\?\.length/);
-  assert.match(appSource, /: "none"\)/);
+  assert.match(documentsViewSource, /archiveMeta\("File", selected\.filename \|\| "unknown"\)/);
+  assert.match(documentsViewSource, /archiveMeta\("Tags", selected\.tags\?\.length/);
+  assert.match(documentsViewSource, /: "none"\)/);
   assert.match(appSource, /AI TAGS/);
   assert.match(appSource, /CONFIRM BEFORE APPLYING/);
   assert.match(appSource, /window\.confirm\(`Apply Paperless metadata/);
@@ -44,12 +45,12 @@ test("documents metadata review previews before confirmed apply", () => {
 });
 
 test("documents archive keeps inbox documents visible with review markers", () => {
-  assert.match(appSource, /const inboxRecordByDocumentId = documents\.inboxItems\.reduce/);
-  assert.match(appSource, /const reviewRecord = inboxRecordByDocumentId\.get\(String\(item\.id\)\);/);
-  assert.match(appSource, /class="archiveReviewMarker"/);
-  assert.match(appSource, /const selectedReviewRecord = selected \? inboxRecordByDocumentId\.get\(String\(selected\.id\)\) \|\| null : null;/);
-  assert.match(appSource, /archiveMeta\("Inbox", selectedReviewRecord\.statusLabel \|\| "REVIEW"\)/);
-  assert.match(appSource, /renderDocumentMetadataReview\(\{ documentId: selected\.id, recordId: selectedReviewRecord\?\.id \|\| "", title: selected\.title, tags: selected\.tags \}\)/);
+  assert.match(documentsViewSource, /const inboxRecordByDocumentId = documents\.inboxItems\.reduce/);
+  assert.match(documentsViewSource, /const reviewRecord = inboxRecordByDocumentId\.get\(String\(item\.id\)\);/);
+  assert.match(documentsViewSource, /class="archiveReviewMarker"/);
+  assert.match(documentsViewSource, /const selectedReviewRecord = selected \? inboxRecordByDocumentId\.get\(String\(selected\.id\)\) \|\| null : null;/);
+  assert.match(documentsViewSource, /archiveMeta\("Inbox", selectedReviewRecord\.statusLabel \|\| "REVIEW"\)/);
+  assert.match(documentsViewSource, /renderDocumentMetadataReview\(\{ documentId: selected\.id, recordId: selectedReviewRecord\?\.id \|\| "", title: selected\.title, tags: selected\.tags \}\)/);
   assert.match(styles, /\.archiveReviewMarker \{/);
 });
 
@@ -63,9 +64,9 @@ test("documents archive supports multiple selected tag filters", () => {
   assert.match(appSource, /async function loadDocumentTags/);
   assert.match(appSource, /fetch\("\/api\/paperless\/tags"/);
   assert.match(appSource, /\(state\.documents\.selectedTags \|\| \[\]\)\.forEach\(\(tag\) => params\.append\("tag", tag\)\);/);
-  assert.match(appSource, /data-document-tag/);
+  assert.match(documentsViewSource, /data-document-tag/);
   assert.match(appSource, /async function toggleDocumentTagFilter/);
-  assert.match(appSource, /data-documents-clear-tags/);
+  assert.match(documentsViewSource, /data-documents-clear-tags/);
   assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\]\) \.archiveTagFilters \{/);
   assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\]\) \.archiveTagChip \{/);
 });
@@ -104,4 +105,16 @@ test("memos archive rendering is delegated to the view module", () => {
   assert.match(memosViewSource, /data-memo-detail/);
   assert.match(indexSource, /src="\/memos-view\.js\?v=1"/);
   assert.ok(indexSource.indexOf('src="/memos-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=325"'));
+});
+
+test("documents archive rendering is delegated to the view module", () => {
+  assert.match(appSource, /KAOS_DOCUMENTS_VIEW\.renderDocuments\(documentsViewContext\(\)\)/);
+  assert.match(documentsViewSource, /data-archive-kind="documents"/);
+  assert.match(documentsViewSource, /id="documentsIndexTitle">RECORD BOARD/);
+  assert.match(documentsViewSource, /id="documentsInboxTitle">INBOX BOARD/);
+  assert.match(documentsViewSource, /data-document-search/);
+  assert.match(documentsViewSource, /data-paperless-open/);
+  assert.match(documentsViewSource, /data-paperless-detail/);
+  assert.match(indexSource, /src="\/documents-view\.js\?v=1"/);
+  assert.ok(indexSource.indexOf('src="/documents-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=325"'));
 });
