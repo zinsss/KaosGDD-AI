@@ -85,3 +85,13 @@ test("holiday settings rendering is delegated to the settings view module", () =
   assert.match(settingsViewSource, /data-holiday-classification/);
   assert.match(settingsViewSource, /holidaySettingList/);
 });
+
+test("event preset settings rendering is delegated to the settings view module", () => {
+  assert.match(appSource, /KAOS_SETTINGS_VIEW\.renderEventPresetSettings\(settingsViewContext\(\)\)/);
+  assert.match(settingsViewSource, /data-event-presets/);
+  assert.match(settingsViewSource, /data-event-preset-new/);
+  assert.match(settingsViewSource, /data-edit-event-preset/);
+  assert.match(settingsViewSource, /data-delete-event-preset/);
+  assert.match(settingsViewSource, /data-event-preset-form/);
+  assert.match(settingsViewSource, /Presets are Governor-owned calendar templates/);
+});

@@ -9008,6 +9008,10 @@ function settingsViewContext() {
     uiText,
     escapeHtml,
     generatedSyncSummary,
+    defaultEventPreset,
+    renderFamilyShareToggle,
+    defaultEventStartTime: DEFAULT_EVENT_START_TIME,
+    defaultEventEndTime: DEFAULT_EVENT_END_TIME,
   };
 }
 
@@ -9016,89 +9020,7 @@ function renderHolidaySettings() {
 }
 
 function renderEventPresetSettings() {
-  const editing = state.eventPresets.items.find((preset) => preset.id === state.eventPresets.editingId) || defaultEventPreset();
-  const isEditing = Boolean(state.eventPresets.editingId);
-  const presetCount = state.eventPresets.items.length;
-  const statusBody = state.eventPresets.loading && !state.eventPresets.checked
-    ? `<p class="taskMeta">${uiText("event.presetsLoading", "Loading event presets...")}</p>`
-    : state.eventPresets.error
-      ? `<div class="caregiverError"><span>${escapeHtml(state.eventPresets.error)}</span><button class="openButton" type="button" data-event-presets-retry>${uiText("common.retry", "다시 시도")}</button></div>`
-      : "";
-  return `
-    <details class="settingsDisclosure" data-event-presets ${state.eventPresets.expanded ? "open" : ""}>
-      <summary>
-        <span>
-          <strong>${uiText("event.presets", "Event presets")}</strong>
-          <small>${presetCount ? uiText("event.savedCount", "{count} saved", { count: presetCount }) : uiText("event.noneSaved", "None saved")}</small>
-        </span>
-      </summary>
-      <div class="settingsDisclosureBody">
-        ${statusBody}
-        <div class="settingsPolicyNote">
-          <strong>Policy</strong>
-          <span>Presets are Governor-owned calendar templates. Radicale owns the actual events created from them.</span>
-        </div>
-        ${isEditing ? `<div class="presetInlineActions"><button class="openButton" type="button" data-event-preset-new>${uiText("event.newPreset", "New")}</button></div>` : ""}
-        ${
-          presetCount
-            ? `
-              <div class="presetList">
-                ${state.eventPresets.items
-                  .map(
-                    (preset) => `
-                      <div class="presetRow">
-                        <button class="presetChoice ${preset.id === state.eventPresets.editingId ? "isActive" : ""}" type="button" data-edit-event-preset="${escapeHtml(preset.id)}">
-                          <strong>${escapeHtml(preset.name)}</strong>
-                          <span>${escapeHtml([preset.title || uiText("common.untitled", "Untitled"), preset.allDay ? uiText("event.allDay", "all-day") : `${preset.startTime}-${preset.endTime}`, preset.shareFamily ? uiText("common.family", "Family") : uiText("common.personal", "Personal")].join(" · "))}</span>
-                        </button>
-                        <button class="plainButton" type="button" data-delete-event-preset="${escapeHtml(preset.id)}">${uiText("common.delete", "Delete")}</button>
-                      </div>
-                    `,
-                  )
-                  .join("")}
-              </div>
-            `
-            : !statusBody ? `<p class="taskMeta">${uiText("event.noPresets", "No event presets yet.")}</p>` : ""
-        }
-        ${state.eventPresets.error ? "" : `
-        <form class="composer presetEditor" data-event-preset-form data-event-preset-id="${isEditing ? escapeHtml(editing.id) : ""}">
-        <label>
-          <span>${uiText("event.presetName", "Preset name")}</span>
-          <input name="presetName" type="text" autocomplete="off" value="${isEditing ? escapeHtml(editing.name) : ""}" placeholder="${uiText("event.dutyName", "Duty")}" required />
-        </label>
-        <label>
-          <span>${uiText("common.title", "Title")}</span>
-          <input name="title" type="text" autocomplete="off" value="${isEditing ? escapeHtml(editing.title) : ""}" placeholder="${uiText("event.titlePlaceholder", "Event title")}" required />
-        </label>
-        ${renderFamilyShareToggle(Boolean(isEditing && editing.shareFamily), "event")}
-        <label class="toggleLine">
-          <span>${uiText("event.allDay", "All-day")}</span>
-          <input name="allDay" type="checkbox" data-all-day-toggle ${!isEditing || editing.allDay ? "checked" : ""} />
-        </label>
-        <div class="formGrid">
-          <label data-event-time-field ${!isEditing || editing.allDay ? 'class="isDisabled"' : ""}>
-            <span>${uiText("event.startTime", "Start time")}</span>
-            <input name="startTime" type="time" value="${escapeHtml(isEditing ? editing.startTime : DEFAULT_EVENT_START_TIME)}" step="300" ${!isEditing || editing.allDay ? "disabled" : ""} />
-          </label>
-          <label data-event-time-field ${!isEditing || editing.allDay ? 'class="isDisabled"' : ""}>
-            <span>${uiText("event.endTime", "End time")}</span>
-            <input name="endTime" type="time" value="${escapeHtml(isEditing ? editing.endTime : DEFAULT_EVENT_END_TIME)}" step="300" ${!isEditing || editing.allDay ? "disabled" : ""} />
-          </label>
-        </div>
-        <label data-event-time-field ${!isEditing || editing.allDay ? 'class="isDisabled"' : ""}>
-          <span>${uiText("event.alarmTime", "Alarm time")}</span>
-          <input name="alarm" type="time" value="${escapeHtml(isEditing ? editing.alarm : "")}" step="300" ${!isEditing || editing.allDay ? "disabled" : ""} />
-        </label>
-        <label>
-          <span>${uiText("common.memo", "Memo")}</span>
-          <textarea name="memo" rows="4" placeholder="${uiText("event.notes", "Event notes")}">${isEditing ? escapeHtml(editing.memo) : ""}</textarea>
-        </label>
-        <button class="primaryButton" type="submit">${isEditing ? uiText("event.savePreset", "Save preset") : uiText("event.createPreset", "Create preset")}</button>
-        </form>
-        `}
-      </div>
-    </details>
-  `;
+  return window.KAOS_SETTINGS_VIEW.renderEventPresetSettings(settingsViewContext());
 }
 
 function recurringFrequencyLabel(frequency) {

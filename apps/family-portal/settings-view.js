@@ -124,5 +124,91 @@ window.KAOS_SETTINGS_VIEW = (() => {
     `;
   }
 
-  return { renderCustomEventSettings, renderHolidaySettings };
+  function renderEventPresetSettings(deps) {
+    const editing = deps.state.eventPresets.items.find((preset) => preset.id === deps.state.eventPresets.editingId) || deps.defaultEventPreset();
+    const isEditing = Boolean(deps.state.eventPresets.editingId);
+    const presetCount = deps.state.eventPresets.items.length;
+    const statusBody = deps.state.eventPresets.loading && !deps.state.eventPresets.checked
+      ? `<p class="taskMeta">${deps.uiText("event.presetsLoading", "Loading event presets...")}</p>`
+      : deps.state.eventPresets.error
+        ? `<div class="caregiverError"><span>${deps.escapeHtml(deps.state.eventPresets.error)}</span><button class="openButton" type="button" data-event-presets-retry>${deps.uiText("common.retry", "다시 시도")}</button></div>`
+        : "";
+    return `
+      <details class="settingsDisclosure" data-event-presets ${deps.state.eventPresets.expanded ? "open" : ""}>
+        <summary>
+          <span>
+            <strong>${deps.uiText("event.presets", "Event presets")}</strong>
+            <small>${presetCount ? deps.uiText("event.savedCount", "{count} saved", { count: presetCount }) : deps.uiText("event.noneSaved", "None saved")}</small>
+          </span>
+        </summary>
+        <div class="settingsDisclosureBody">
+          ${statusBody}
+          <div class="settingsPolicyNote">
+            <strong>Policy</strong>
+            <span>Presets are Governor-owned calendar templates. Radicale owns the actual events created from them.</span>
+          </div>
+          ${isEditing ? `<div class="presetInlineActions"><button class="openButton" type="button" data-event-preset-new>${deps.uiText("event.newPreset", "New")}</button></div>` : ""}
+          ${
+            presetCount
+              ? `
+                <div class="presetList">
+                  ${deps.state.eventPresets.items
+                    .map(
+                      (preset) => `
+                        <div class="presetRow">
+                          <button class="presetChoice ${preset.id === deps.state.eventPresets.editingId ? "isActive" : ""}" type="button" data-edit-event-preset="${deps.escapeHtml(preset.id)}">
+                            <strong>${deps.escapeHtml(preset.name)}</strong>
+                            <span>${deps.escapeHtml([preset.title || deps.uiText("common.untitled", "Untitled"), preset.allDay ? deps.uiText("event.allDay", "all-day") : `${preset.startTime}-${preset.endTime}`, preset.shareFamily ? deps.uiText("common.family", "Family") : deps.uiText("common.personal", "Personal")].join(" · "))}</span>
+                          </button>
+                          <button class="plainButton" type="button" data-delete-event-preset="${deps.escapeHtml(preset.id)}">${deps.uiText("common.delete", "Delete")}</button>
+                        </div>
+                      `,
+                    )
+                    .join("")}
+                </div>
+              `
+              : !statusBody ? `<p class="taskMeta">${deps.uiText("event.noPresets", "No event presets yet.")}</p>` : ""
+          }
+          ${deps.state.eventPresets.error ? "" : `
+          <form class="composer presetEditor" data-event-preset-form data-event-preset-id="${isEditing ? deps.escapeHtml(editing.id) : ""}">
+          <label>
+            <span>${deps.uiText("event.presetName", "Preset name")}</span>
+            <input name="presetName" type="text" autocomplete="off" value="${isEditing ? deps.escapeHtml(editing.name) : ""}" placeholder="${deps.uiText("event.dutyName", "Duty")}" required />
+          </label>
+          <label>
+            <span>${deps.uiText("common.title", "Title")}</span>
+            <input name="title" type="text" autocomplete="off" value="${isEditing ? deps.escapeHtml(editing.title) : ""}" placeholder="${deps.uiText("event.titlePlaceholder", "Event title")}" required />
+          </label>
+          ${deps.renderFamilyShareToggle(Boolean(isEditing && editing.shareFamily), "event")}
+          <label class="toggleLine">
+            <span>${deps.uiText("event.allDay", "All-day")}</span>
+            <input name="allDay" type="checkbox" data-all-day-toggle ${!isEditing || editing.allDay ? "checked" : ""} />
+          </label>
+          <div class="formGrid">
+            <label data-event-time-field ${!isEditing || editing.allDay ? 'class="isDisabled"' : ""}>
+              <span>${deps.uiText("event.startTime", "Start time")}</span>
+              <input name="startTime" type="time" value="${deps.escapeHtml(isEditing ? editing.startTime : deps.defaultEventStartTime)}" step="300" ${!isEditing || editing.allDay ? "disabled" : ""} />
+            </label>
+            <label data-event-time-field ${!isEditing || editing.allDay ? 'class="isDisabled"' : ""}>
+              <span>${deps.uiText("event.endTime", "End time")}</span>
+              <input name="endTime" type="time" value="${deps.escapeHtml(isEditing ? editing.endTime : deps.defaultEventEndTime)}" step="300" ${!isEditing || editing.allDay ? "disabled" : ""} />
+            </label>
+          </div>
+          <label data-event-time-field ${!isEditing || editing.allDay ? 'class="isDisabled"' : ""}>
+            <span>${deps.uiText("event.alarmTime", "Alarm time")}</span>
+            <input name="alarm" type="time" value="${deps.escapeHtml(isEditing ? editing.alarm : "")}" step="300" ${!isEditing || editing.allDay ? "disabled" : ""} />
+          </label>
+          <label>
+            <span>${deps.uiText("common.memo", "Memo")}</span>
+            <textarea name="memo" rows="4" placeholder="${deps.uiText("event.notes", "Event notes")}">${isEditing ? deps.escapeHtml(editing.memo) : ""}</textarea>
+          </label>
+          <button class="primaryButton" type="submit">${isEditing ? deps.uiText("event.savePreset", "Save preset") : deps.uiText("event.createPreset", "Create preset")}</button>
+          </form>
+          `}
+        </div>
+      </details>
+    `;
+  }
+
+  return { renderCustomEventSettings, renderHolidaySettings, renderEventPresetSettings };
 })();
