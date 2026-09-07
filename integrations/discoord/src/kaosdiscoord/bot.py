@@ -65,6 +65,17 @@ from .tools import BrainToolServer, ImagingSecondLookClient, ImagingSecondLookCo
 LOGGER = logging.getLogger(__name__)
 
 
+def read_worker_status(path: Path | None = None) -> dict[str, object]:
+    status_path = path or Path("/data/notifications/governor-worker.json")
+    try:
+        payload = json.loads(status_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, TypeError, ValueError, json.JSONDecodeError):
+        return {"available": False}
+    if not isinstance(payload, dict):
+        return {"available": False}
+    return {"available": True, **payload}
+
+
 def load_maintenance_reminder_state(path: Path) -> set[str]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -900,6 +911,7 @@ class GovernorBot(discord.Client):
             "fax": self.fax_service.status(),
             "textNotifications": self.text_notifications.status(),
             "dailyDigest": self.daily_digest.status(),
+            "worker": read_worker_status(),
             "memosSearch": self.memos.status(),
             "calendarSurface": (
                 self.discord_calendar.status() if self.discord_calendar is not None else {"enabled": False}

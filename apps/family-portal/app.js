@@ -10552,6 +10552,30 @@ function runtimeStatusLine(label, raw) {
   `;
 }
 
+function recurringWorkerSummary(worker) {
+  if (!worker || typeof worker !== "object" || worker.available === false) return "worker unavailable";
+  const recurring = worker.recurringTasks || {};
+  if (!recurring || typeof recurring !== "object") return "not reported";
+  const parts = [statusEnabledLabel(recurring.enabled)];
+  const lastSyncDate = String(recurring.lastSyncDate || worker.lastRecurringTaskSyncDate || "").trim();
+  if (lastSyncDate) parts.push(`sync ${lastSyncDate}`);
+  const count = recurring.lastSyncCount ?? worker.lastRecurringTaskSyncCount;
+  if (Number.isFinite(Number(count))) parts.push(`changed ${Number(count)}`);
+  const error = String(recurring.lastError || "").trim();
+  if (error) parts.push(`error ${error}`);
+  return parts.filter(Boolean).join(" · ");
+}
+
+function recurringWorkerStatusLine(worker) {
+  const summary = recurringWorkerSummary(worker);
+  return `
+    <article class="systemRuntimeRow">
+      <span>Recurring sync</span>
+      <strong>${escapeHtml(summary)}</strong>
+    </article>
+  `;
+}
+
 function renderSystemStatusPanel() {
   if (portalProfile() !== "main") return "";
   const status = state.systemStatus;
@@ -10572,6 +10596,7 @@ function renderSystemStatusPanel() {
   const runtime = data.status || {};
   const brainTools = runtime.brainTools || {};
   const serviceStatus = runtime.serviceStatus || {};
+  const worker = runtime.worker || {};
   const brainUrl = String(data.brainChannelUrl || "").trim();
   return `
     <section class="settingsStatusPanel systemStatusPanel" data-system-status>
@@ -10608,10 +10633,15 @@ function renderSystemStatusPanel() {
           <span>Services</span>
           <strong>${escapeHtml(serviceStatusSummary(serviceStatus))}</strong>
         </div>
+        <div>
+          <span>Recurring sync</span>
+          <strong>${escapeHtml(recurringWorkerSummary(worker))}</strong>
+        </div>
       </div>
       ${renderSystemServiceRows(serviceStatus)}
       <div class="systemRuntimeList">
         ${[
+          recurringWorkerStatusLine(worker),
           runtimeStatusLine("Mail", runtime.naverMail),
           runtimeStatusLine("Mail organizer", runtime.naverMailOrganizer),
           runtimeStatusLine("Fax", runtime.fax),

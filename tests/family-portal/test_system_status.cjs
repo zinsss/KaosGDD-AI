@@ -11,6 +11,10 @@ test("settings loads the read-only system status endpoint", () => {
   assert.match(appSource, /fetch\("\/api\/system\/status"/);
   assert.match(appSource, /function renderSystemStatusPanel\(\)/);
   assert.match(appSource, /data-system-status/);
+  assert.match(appSource, /function recurringWorkerSummary\(worker\) \{/);
+  assert.match(appSource, /function recurringWorkerStatusLine\(worker\) \{/);
+  assert.match(appSource, /Recurring sync/);
+  assert.match(appSource, /const worker = runtime\.worker \|\| \{\};/);
   assert.match(appSource, /Observation only\. No restart, deploy, reboot, shell, package-update, or system write controls are exposed in PWA\./);
 });
 

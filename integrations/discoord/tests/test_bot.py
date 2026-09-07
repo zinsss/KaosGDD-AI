@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, Mock
 from kaos_governor.mail import MailMessage
 from kaos_governor.daily_digest import KST
 from kaosdiscoord import bot as bot_module
-from kaosdiscoord.bot import GovernorBot
+from kaosdiscoord.bot import GovernorBot, read_worker_status
 from kaosdiscoord.maintenance import MaintenanceReport, MaintenanceTarget
 
 
@@ -22,6 +22,22 @@ class FakeServiceStatus:
 
 
 class GovernorBotTests(unittest.IsolatedAsyncioTestCase):
+    async def test_worker_status_reader_returns_recurring_sync_status(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            status_path = Path(temporary) / "governor-worker.json"
+            status_path.write_text(
+                '{"status":"ready","recurringTasks":{"enabled":true,"lastSyncDate":"2026-09-07","lastSyncCount":1}}',
+                encoding="utf-8",
+            )
+
+            status = read_worker_status(status_path)
+
+        self.assertTrue(status["available"])
+        self.assertEqual(status["recurringTasks"]["lastSyncDate"], "2026-09-07")
+
+    async def test_worker_status_reader_handles_missing_status_file(self) -> None:
+        self.assertEqual(read_worker_status(Path("/tmp/missing-kaos-worker-status.json")), {"available": False})
+
     async def test_worker_mode_never_starts_inline_pushover_delivery(self) -> None:
         notifications = SimpleNamespace(
             config=SimpleNamespace(delivery_mode="worker", poll_seconds=5),
