@@ -1224,7 +1224,7 @@ class GovernorAITaskTests(unittest.TestCase):
         self.assertEqual(candidates[0].title, "가짜 편두통 치료제")
         self.assertIn("mtgHmeDd=20260101", candidates[0].url)
 
-    def test_antibiotic_drug_class_reads_hira_general_principle(self) -> None:
+    def test_drug_page_linked_hira_criteria_are_searched_from_official_source(self) -> None:
         hira_searches: list[str] = []
 
         def fake_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
@@ -1253,11 +1253,35 @@ class GovernorAITaskTests(unittest.TestCase):
                         }
                     ]
                 )
+            if request.full_url == "https://health.kr/searchDrug/result_drug.asp?drug_cd=D618":
+                return FakeHTTPResponse(
+                    """<html><body><table><tr><th>급여인정기준</th><td id="td_bbs_info">
+                    <div onclick="expert_hira_detail(765)"><b>·&nbsp;Cefpodoxime 경구제&nbsp;</b>, 2022.08.01</div>
+                    <div onclick="expert_hira_detail(150)"><b>·&nbsp;[일반원칙]&nbsp;항생제&nbsp;</b>, 2013.09.01</div>
+                    </td></tr></table></body></html>""",
+                    "text/html; charset=utf-8",
+                )
             if request.full_url.startswith("https://www.hira.or.kr/rc/insu/insuadtcrtr/InsuAdtCrtrList.do"):
                 body = request.data.decode("utf-8") if getattr(request, "data", None) else ""
                 search_word = urllib.parse.parse_qs(body).get("searchKeyword", [""])[0]
                 hira_searches.append(search_word)
-                if search_word != "[일반원칙] 항생제":
+                if search_word == "Cefpodoxime 경구제":
+                    return FakeHTTPResponse(
+                        """<html><body>
+                        <a href="#none" onclick="viewInsuAdtCrtr(1, '20220801', '2', '0765', '1'); return false;"
+                           title="Cefpodoxime 경구제 새창으로 열기">Cefpodoxime 경구제</a>
+                        </body></html>""",
+                        "text/html; charset=utf-8",
+                    )
+                if search_word == "[일반원칙] 항생제":
+                    return FakeHTTPResponse(
+                        """<html><body>
+                        <a href="#none" onclick="viewInsuAdtCrtr(1, '20130901', '1', '0026', '1'); return false;"
+                           title="[일반원칙] 항생제 새창으로 열기">[일반원칙] 항생제</a>
+                        </body></html>""",
+                        "text/html; charset=utf-8",
+                    )
+                else:
                     return FakeHTTPResponse(
                         """<html><body>
                         <a href="#none" onclick="viewInsuAdtCrtr(1, '20260901', '2', '0004', '1'); return false;"
@@ -1265,13 +1289,6 @@ class GovernorAITaskTests(unittest.TestCase):
                         </body></html>""",
                         "text/html; charset=utf-8",
                     )
-                return FakeHTTPResponse(
-                    """<html><body>
-                    <a href="#none" onclick="viewInsuAdtCrtr(1, '20130901', '1', '0026', '1'); return false;"
-                       title="[일반원칙] 항생제 새창으로 열기">[일반원칙] 항생제</a>
-                    </body></html>""",
-                    "text/html; charset=utf-8",
-                )
             return FakeHTTPResponse("<html></html>", "text/html; charset=utf-8")
 
         candidates = official_health_search_candidates(
@@ -1280,9 +1297,11 @@ class GovernorAITaskTests(unittest.TestCase):
             urlopen=fake_urlopen,
         )
 
-        self.assertEqual(hira_searches[0], "[일반원칙] 항생제")
-        self.assertEqual(candidates[0].title, "[일반원칙] 항생제")
-        self.assertIn("mtgMtrRegSno=0026", candidates[0].url)
+        self.assertEqual(hira_searches[:2], ["Cefpodoxime 경구제", "[일반원칙] 항생제"])
+        candidate_by_title = {candidate.title: candidate for candidate in candidates}
+        self.assertIn("Cefpodoxime 경구제", candidate_by_title)
+        self.assertIn("[일반원칙] 항생제", candidate_by_title)
+        self.assertIn("mtgMtrRegSno=0026", candidate_by_title["[일반원칙] 항생제"].url)
 
     def test_search_filters_skip_links(self) -> None:
         def fake_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]

@@ -366,9 +366,12 @@ def official_health_search_candidates(
     treatment_query = _looks_like_treatment_options_query(raw_queries)
     queries = _expanded_queries(raw_queries)
     health_kr_queries: list[str] = []
+    health_kr_hira_queries: list[str] = []
     health_kr_candidates: list[OfficialSearchCandidate] = []
     if _looks_like_drug_lookup_query(queries):
-        health_kr_queries, health_kr_candidates = _health_kr_drug_queries_and_candidates(queries, urlopen=urlopen)
+        health_kr_queries, health_kr_hira_queries, health_kr_candidates = _health_kr_drug_queries_and_candidates(
+            queries, urlopen=urlopen
+        )
     queries = _expanded_queries(_unique_queries([*queries, *health_kr_queries]))
     drug_lookup_query = _looks_like_drug_lookup_query(queries)
     explicit_preferred = _preferred_hosts(preferred_domains)
@@ -410,9 +413,14 @@ def official_health_search_candidates(
     if treatment_query and not medicine_benefit_query:
         benefit_queries = _unique_queries([*_treatment_benefit_queries(raw_queries), *_treatment_benefit_queries(queries)])
         hira_queries = _unique_queries([*benefit_queries, *queries])
-    hira_queries = _unique_queries([*_hira_general_principle_queries(queries), *hira_queries])
+    hira_queries = _unique_queries([*health_kr_hira_queries, *hira_queries])
     hira_candidates = (
-        _hira_insurance_criteria_candidates(hira_queries, preferred=hira_preferred, urlopen=urlopen)
+        _hira_insurance_criteria_candidates(
+            hira_queries,
+            preferred=hira_preferred,
+            priority_queries=health_kr_hira_queries,
+            urlopen=urlopen,
+        )
         if medicine_benefit_query
         or treatment_query
         or any(host in preferred for host in ("hira.or.kr", "www.hira.or.kr"))
@@ -720,14 +728,6 @@ def _trusted_treatment_seed_candidates(
     return candidates
 
 
-def _hira_general_principle_queries(queries: Iterable[str]) -> list[str]:
-    text = " ".join(str(query or "") for query in queries).casefold()
-    general_principles: list[str] = []
-    if "항생제" in text:
-        general_principles.append("[일반원칙] 항생제")
-    return general_principles
-
-
 def _ordered_sites(preferred: set[str]) -> list[OfficialSearchSite]:
     with_search = [site for site in OFFICIAL_HEALTH_SITES if site.search_url]
     return _sort_sites_by_preference(with_search, preferred)
@@ -745,9 +745,11 @@ def _hira_insurance_criteria_candidates(
     queries: list[str],
     *,
     preferred: set[str],
+    priority_queries: Iterable[str] = (),
     urlopen: Callable = urllib.request.urlopen,
 ) -> list[OfficialSearchCandidate]:
     candidates: list[OfficialSearchCandidate] = []
+    priority_titles = {_normalized_criteria_title(query) for query in priority_queries}
     for search_query in queries[:6]:
         request = urllib.request.Request(
             HIRA_INSURANCE_CRITERIA_URL,
@@ -799,7 +801,7 @@ def _hira_insurance_criteria_candidates(
             score = _candidate_score(title, url, queries) + 15 + _hira_criteria_recency_score(match.group("date"))
             if any(host in preferred for host in ("hira.or.kr", "www.hira.or.kr")):
                 score += 8
-            if search_query.strip().casefold().startswith("[일반원칙]") and title.casefold().startswith("[일반원칙]"):
+            if _normalized_criteria_title(title) in priority_titles:
                 score += 20
             candidates.append(
                 OfficialSearchCandidate(
@@ -819,8 +821,9 @@ def _health_kr_drug_queries_and_candidates(
     queries: list[str],
     *,
     urlopen: Callable = urllib.request.urlopen,
-) -> tuple[list[str], list[OfficialSearchCandidate]]:
+) -> tuple[list[str], list[str], list[OfficialSearchCandidate]]:
     discovered_queries: list[str] = []
+    linked_hira_queries: list[str] = []
     candidates: list[OfficialSearchCandidate] = []
     searched_terms: set[str] = set()
     for query in queries[:4]:
@@ -838,6 +841,8 @@ def _health_kr_drug_queries_and_candidates(
                 fields = {**result, **details}
                 terms = _health_kr_terms_from_drug(fields)
                 discovered_queries.extend(terms)
+                # Treat health.kr only as a link index; the matching criteria text is re-found and fetched from HIRA.
+                linked_hira_queries.extend(_health_kr_hira_criteria_queries(drug_code, urlopen=urlopen))
                 url = f"{HEALTH_KR_DRUG_PAGE_URL}?{urllib.parse.urlencode({'drug_cd': drug_code})}"
                 candidate_title = _health_kr_candidate_title(fields)
                 score = _candidate_score(candidate_title, url, [*queries, *terms]) + 4
@@ -852,7 +857,46 @@ def _health_kr_drug_queries_and_candidates(
                 )
             if discovered_queries:
                 break
-    return _unique_queries(discovered_queries), _ranked_unique_candidates(candidates)[:MAX_CANDIDATES_PER_SEARCH]
+    return (
+        _unique_queries(discovered_queries),
+        _unique_queries(linked_hira_queries)[:6],
+        _ranked_unique_candidates(candidates)[:MAX_CANDIDATES_PER_SEARCH],
+    )
+
+
+def _health_kr_hira_criteria_queries(
+    drug_code: str,
+    *,
+    urlopen: Callable = urllib.request.urlopen,
+) -> list[str]:
+    url = f"{HEALTH_KR_DRUG_PAGE_URL}?{urllib.parse.urlencode({'drug_cd': drug_code})}"
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "text/html, text/plain;q=0.9",
+            "User-Agent": "Mozilla/5.0 (KaosGovernor/official-search)",
+        },
+    )
+    try:
+        with urlopen(request, timeout=7) as response:
+            page = _decode(response.read(MAX_SEARCH_PAGE_BYTES), response.headers.get("Content-Type", ""))
+    except Exception:
+        return []
+    titles: list[str] = []
+    for match in re.finditer(
+        r"onclick=[\"']\s*expert_hira_detail\(\d+\)\s*[\"'][^>]*>\s*<b\b[^>]*>(?P<title>.*?)</b>",
+        page,
+        flags=re.I | re.S,
+    ):
+        title = " ".join(_strip_tags(html.unescape(match.group("title"))).replace("\u00a0", " ").split())
+        title = title.lstrip("· ")
+        if title:
+            titles.append(title)
+    return _unique_queries(titles)[:6]
+
+
+def _normalized_criteria_title(value: str) -> str:
+    return re.sub(r"[^0-9a-z가-힣]+", "", str(value or "").casefold())
 
 
 def _korean_specialty_preferred_hosts(queries: list[str]) -> set[str]:
@@ -1121,8 +1165,6 @@ def _health_kr_drug_detail(drug_code: str, *, urlopen: Callable = urllib.request
 def _health_kr_terms_from_drug(fields: dict[str, object]) -> list[str]:
     terms: list[str] = []
     classification_code = str(fields.get("cls_code_num") or fields.get("cls_code") or "").strip()
-    if classification_code == "618":
-        terms.append("항생제")
     for key in ("drug_name", "drug_enm", "list_sunb_name", "ingr_mg", "sunb", "effect"):
         terms.extend(_health_kr_text_terms(str(fields.get(key) or "")))
     kpic_categories = _health_kr_kpic_terms(str(fields.get("kpic_category") or ""))
