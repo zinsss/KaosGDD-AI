@@ -32,6 +32,7 @@ execution is not a KaosGDD domain record.
 | Google Gmail/Calendar/Drive integration | Build first in n8n | New OAuth-heavy integration with mature n8n nodes; no live KaosGDD workflow to disrupt. |
 | Consensus academic search | Good pilot | n8n can call the official API or MCP, normalize citations, and return bounded source records to Governor. |
 | General third-party API jobs | Good candidate | HTTP credentials, schedules, retry/backoff, branching, and webhook handling fit n8n. |
+| n8n AI Assistant through OpenClaw | Possible later experiment | OpenClaw can expose an OpenAI-compatible endpoint backed by its OpenAI OAuth profile, but the main Gateway bearer token is an operator credential and must not be stored in n8n. |
 | Naver IMAP polling and target-folder archive | Shadow-test later | n8n can poll IMAP, but Governor already has working mailbox state, Pushover attention, detail fetch, and batch actions. Avoid two active pollers. |
 | Unread mail mark-read/delete batches | Keep in Governor | User-confirmed destructive actions and mailbox-generation checks belong at the governed API boundary. n8n may execute a future approved job, but must not decide the action. |
 | Pushover delivery | Keep current worker initially | The durable outbox and deduplication already work. A shadow n8n delivery can be compared later without sending notifications. |
@@ -132,6 +133,36 @@ cutover/rollback decision.
 - Do not enable Execute Command, arbitrary filesystem access, or unreviewed
   community nodes for production workflows.
 - Run n8n's security audit after owner setup and after adding a new workflow.
+
+## Possible later experiment: OpenClaw model bridge
+
+n8n's optional AI Assistant may be tested against an OpenAI-compatible HTTP
+endpoint exposed by OpenClaw. In that arrangement n8n authenticates to the
+private OpenClaw endpoint, and OpenClaw uses its own OpenAI OAuth profile
+internally. n8n does not receive or store the OpenAI OAuth credential.
+
+Do not connect n8n directly to the existing KaosBrain Gateway with its shared
+Gateway token. OpenClaw treats that token as owner/operator authority, and AI
+Assistant prompts can include workflow definitions and execution data. Before
+testing, provide one of these isolation boundaries:
+
+- a separate n8n-only OpenClaw Gateway with a separate token, restricted agent,
+  and no shell, system-operation, messaging, filesystem, or destructive tools;
+- or a narrow private relay that accepts a dedicated n8n credential, fixes the
+  target to the restricted agent/model, enforces payload and rate limits, and
+  forwards only the required compatible model calls.
+
+Keep the route on a private H3-to-H4 network. Start with synthetic, non-medical
+content and verify `/v1/models` plus a non-streaming chat completion before
+entering the endpoint in n8n. The expected model target is
+`openclaw/default`, not a raw OpenAI model ID. Do not allow patient data,
+mail bodies, document bodies, or production execution data until the isolation,
+logging, retention, timeout, and failure behavior have been reviewed.
+
+This is an optional editor-assistance experiment, not a dependency of n8n
+workflows. If compatibility or security is unsatisfactory, disconnect the
+model and continue running model-free workflows; no KaosGDD workflow ownership
+should change as part of this test.
 
 ## Recommended first implementation
 
