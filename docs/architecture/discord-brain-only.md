@@ -2,19 +2,23 @@
 
 Decision date: 2026-08-30
 
-Status: accepted; migration not yet complete. Updated 2026-09-07:
-Discord is also retiring as the preferred system-operations surface.
+Status: superseded in part by the 2026-09-08
+[consolidation inventory](../migration/consolidation-inventory.md). Discord is
+retiring as both the preferred system-operations surface and the long-term
+Brain transport; this document remains the channel-by-channel replacement
+record.
 
 This decision supersedes earlier plans that made several Discord channels the
 primary personal UI. The preferred replacement is the PWA-native
 [Kaos Feed Command Interface](kaos-feed-command-interface.md): a chat-like
 timeline of openable command cards, buttons, forms, receipts, and deep links.
-Discord's final Kaos role is a fallback private `#brain` topic for persistent
-conversation with KaosBrain during migration. Direct task, calendar, supplies,
-Memos, document, mail/fax, notification, alert, and administration channels are
-transitional and will retire after their replacements pass production
-observation. New system administration work should target the explicit
-KaosSystemOperator Codex-session workflow instead of Discord controls.
+Discord's remaining transitional Kaos role is a fallback private `#brain`
+topic for persistent conversation with KaosBrain during migration. Direct
+task, calendar, supplies, Memos, document, mail/fax, notification, alert, and
+administration channels are transitional and will retire after their
+replacements pass production observation. New system administration work
+should target the explicit KaosSystemOperator Codex-session workflow instead
+of Discord controls.
 
 ## Target
 
@@ -59,16 +63,18 @@ remain authoritative for events and tasks.
 
 The current H3 service/container retains the transitional
 `kaos-governor-discord` name, but its canonical source package and executable
-are `integrations/discoord` and `kaosdiscoord`. That process also starts
-schedulers, polling, Pushover delivery, health/tool routes, and domain adapters.
-The Discord gateway cannot simply be stopped. First move those non-Discord
-lifecycles behind a Governor-owned runtime entry point. Keep the same
-modular-monolith deployment unless a separate process is operationally
-justified; this decision does not require microservices.
+are `integrations/discoord` and `kaosdiscoord`. Mail/fax polling, daily digest,
+recurring tasks, and Pushover delivery now run in `kaos-governor-worker` in the
+live deployment. The Discord process still hosts port 8098 system/Brain tool
+routes, and Governor API currently proxies system status to it, so it cannot
+yet be stopped. Move those remaining routes into a transport-neutral Governor
+runtime first. Keep the same modular-monolith codebase unless a separate
+process is operationally justified; this decision does not require more
+microservices.
 
-H4 retains the KaosBrain Discord identity and the `#brain` topic. H3's
-operational Discord identity and direct channel surfaces retire after the
-worker split and replacement gates complete.
+H4 temporarily retains the KaosBrain Discord identity and the `#brain` topic.
+Both H3's operational Discord identity and H4's Discord transport retire after
+their PWA/OpenClaw replacement gates complete.
 
 ## Retirement Sequence
 

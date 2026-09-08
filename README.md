@@ -2,10 +2,11 @@
 
 Architecture, deterministic orchestration, AI integrations, and deployment plans for the next KaosGDD platform.
 
-> Status (2026-08-28): H3 Governor/backends and H4 KaosBrain are in production.
-> The office Fax Connector and Fax Bridge are active beside HylaFAX. Migration
-> remains incremental: clinic services and stateful data are never moved or
-> replaced automatically.
+> Status (2026-09-08): H3 Governor/backends and H4 KaosBrain are in production.
+> The office Fax Connector and Fax Bridge are active beside HylaFAX. Current
+> work favors consolidation and Discord retirement over adding runtimes.
+> Migration remains incremental: clinic services and stateful data are never
+> moved or replaced automatically.
 
 ## System Roles
 
@@ -17,7 +18,7 @@ Architecture, deterministic orchestration, AI integrations, and deployment plans
 - **n8n**: optional ready-made workflow backend for approved external integrations, retries, schedules, and review steps. It keeps its upstream name and interface; Governor remains the authority for KaosGDD state and confirmations.
 - **Authoritative backends**: Radicale, Memos, Paperless, HylaFAX, and other service-owned data stores.
 - **Family KaosGDD**: the retained family-scoped web interface and embedded family AI chat. Its canonical shared personal/family PWA source is `apps/family-portal`.
-- **Personal clients**: the retained `kaosgdd.net` PWA is the primary visual console; iOS Shortcuts provides system integration and quick actions, native Calendar/Reminders continue synchronization and scheduled notifications, Pushover provides immediate alerts, and Discord retains only the conversational `#brain` surface.
+- **Personal clients**: the retained `kaosgdd.net` PWA is the primary visual console; iOS Shortcuts provides system integration and quick actions, native Calendar/Reminders continue synchronization and scheduled notifications, and Pushover provides immediate alerts. Discord is a transitional Brain transport and receives no new domain or system-operation dependencies.
 
 KaosBrain and Family AI never become sources of truth. They call narrow KaosGovernor tools. KaosGovernor applies deterministic validation before changing an authoritative backend. Deterministic clients may call Governor without invoking Brain.
 
@@ -90,6 +91,7 @@ Upstream applications will be referenced using pinned release versions or image 
 - [H3+ backend deployment](deploy/h3-backend/README.md)
 - [H3+ stateful migration](docs/migration/h3-backend-cutover.md)
 - [n8n workflow migration plan](docs/migration/n8n-workflow-migration-plan.md)
+- [Production consolidation inventory](docs/migration/consolidation-inventory.md)
 
 ## Non-Negotiable Principles
 
