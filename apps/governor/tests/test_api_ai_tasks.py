@@ -1224,6 +1224,66 @@ class GovernorAITaskTests(unittest.TestCase):
         self.assertEqual(candidates[0].title, "가짜 편두통 치료제")
         self.assertIn("mtgHmeDd=20260101", candidates[0].url)
 
+    def test_antibiotic_drug_class_reads_hira_general_principle(self) -> None:
+        hira_searches: list[str] = []
+
+        def fake_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
+            if request.full_url == "https://health.kr/searchDrug/search_total_result.asp":
+                return FakeHTTPResponse('<script>window.csrfToken = "token123";</script>', "text/html; charset=utf-8")
+            if request.full_url.startswith("https://health.kr/searchDrug/ajax/ajax_commonSearch.asp"):
+                return FakeHTTPResponse(
+                    [
+                        {
+                            "drug_code": "D618",
+                            "drug_name": "바난정",
+                            "drug_enm": "Banan Tab.",
+                            "list_sunb_name": "Cefpodoxime Proxetil 100mg",
+                            "effect": "세균성 감염증",
+                        }
+                    ]
+                )
+            if request.full_url == "https://health.kr/searchDrug/ajax/ajax_result_drug.asp?drug_cd=D618":
+                return FakeHTTPResponse(
+                    [
+                        {
+                            "drug_code": "D618",
+                            "drug_name": "바난정",
+                            "sunb": "Cefpodoxime Proxetil 세프포독심프록세틸 100mg",
+                            "cls_code_num": "618",
+                        }
+                    ]
+                )
+            if request.full_url.startswith("https://www.hira.or.kr/rc/insu/insuadtcrtr/InsuAdtCrtrList.do"):
+                body = request.data.decode("utf-8") if getattr(request, "data", None) else ""
+                search_word = urllib.parse.parse_qs(body).get("searchKeyword", [""])[0]
+                hira_searches.append(search_word)
+                if search_word != "[일반원칙] 항생제":
+                    return FakeHTTPResponse(
+                        """<html><body>
+                        <a href="#none" onclick="viewInsuAdtCrtr(1, '20260901', '2', '0004', '1'); return false;"
+                           title="무관한 최신 약제 기준 새창으로 열기">무관한 최신 약제 기준</a>
+                        </body></html>""",
+                        "text/html; charset=utf-8",
+                    )
+                return FakeHTTPResponse(
+                    """<html><body>
+                    <a href="#none" onclick="viewInsuAdtCrtr(1, '20130901', '1', '0026', '1'); return false;"
+                       title="[일반원칙] 항생제 새창으로 열기">[일반원칙] 항생제</a>
+                    </body></html>""",
+                    "text/html; charset=utf-8",
+                )
+            return FakeHTTPResponse("<html></html>", "text/html; charset=utf-8")
+
+        candidates = official_health_search_candidates(
+            "바난정 급여기준",
+            preferred_domains=["hira.or.kr"],
+            urlopen=fake_urlopen,
+        )
+
+        self.assertEqual(hira_searches[0], "[일반원칙] 항생제")
+        self.assertEqual(candidates[0].title, "[일반원칙] 항생제")
+        self.assertIn("mtgMtrRegSno=0026", candidates[0].url)
+
     def test_search_filters_skip_links(self) -> None:
         def fake_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
             if request.full_url.startswith("https://health.kr/"):

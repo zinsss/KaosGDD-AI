@@ -410,6 +410,7 @@ def official_health_search_candidates(
     if treatment_query and not medicine_benefit_query:
         benefit_queries = _unique_queries([*_treatment_benefit_queries(raw_queries), *_treatment_benefit_queries(queries)])
         hira_queries = _unique_queries([*benefit_queries, *queries])
+    hira_queries = _unique_queries([*_hira_general_principle_queries(queries), *hira_queries])
     hira_candidates = (
         _hira_insurance_criteria_candidates(hira_queries, preferred=hira_preferred, urlopen=urlopen)
         if medicine_benefit_query
@@ -719,6 +720,14 @@ def _trusted_treatment_seed_candidates(
     return candidates
 
 
+def _hira_general_principle_queries(queries: Iterable[str]) -> list[str]:
+    text = " ".join(str(query or "") for query in queries).casefold()
+    general_principles: list[str] = []
+    if "항생제" in text:
+        general_principles.append("[일반원칙] 항생제")
+    return general_principles
+
+
 def _ordered_sites(preferred: set[str]) -> list[OfficialSearchSite]:
     with_search = [site for site in OFFICIAL_HEALTH_SITES if site.search_url]
     return _sort_sites_by_preference(with_search, preferred)
@@ -790,6 +799,8 @@ def _hira_insurance_criteria_candidates(
             score = _candidate_score(title, url, queries) + 15 + _hira_criteria_recency_score(match.group("date"))
             if any(host in preferred for host in ("hira.or.kr", "www.hira.or.kr")):
                 score += 8
+            if search_query.strip().casefold().startswith("[일반원칙]") and title.casefold().startswith("[일반원칙]"):
+                score += 20
             candidates.append(
                 OfficialSearchCandidate(
                     title=title[:200],
@@ -1109,11 +1120,14 @@ def _health_kr_drug_detail(drug_code: str, *, urlopen: Callable = urllib.request
 
 def _health_kr_terms_from_drug(fields: dict[str, object]) -> list[str]:
     terms: list[str] = []
+    classification_code = str(fields.get("cls_code_num") or fields.get("cls_code") or "").strip()
+    if classification_code == "618":
+        terms.append("항생제")
     for key in ("drug_name", "drug_enm", "list_sunb_name", "ingr_mg", "sunb", "effect"):
         terms.extend(_health_kr_text_terms(str(fields.get(key) or "")))
     kpic_categories = _health_kr_kpic_terms(str(fields.get("kpic_category") or ""))
     terms.extend(kpic_categories)
-    if str(fields.get("cls_code_num") or "") == "114" or str(fields.get("cls_code") or "") == "114":
+    if classification_code == "114":
         terms.append("해열 진통 소염제")
     joined = " ".join(terms)
     if "편두통" in joined or "almotriptan" in joined.casefold():
