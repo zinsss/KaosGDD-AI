@@ -1739,31 +1739,59 @@ async function openWeatherLocationPopup(dateValue) {
   if (state.weatherLocationPopup.open && getRoute() === "calendar") render();
 }
 
-function openWeatherDetailPopup(dateValue, cityValue) {
+async function openWeatherDetailPopup(dateValue, cityValue) {
   const city = String(cityValue || state.weatherLocation).trim() || state.weatherLocation;
   const option = WEATHER_LOCATION_OPTIONS.find((location) => location.id === city) || {
     id: city,
     label: city,
     translationKey: "",
   };
-  const existing = state.weatherLocationPopup.items.find(
+  const existing = (Array.isArray(state.weatherLocationPopup.items) ? state.weatherLocationPopup.items : []).find(
     (item) => item.id === city && item.weather?.date === dateValue,
   );
   const cachedWeather = activeCalendarData().weather?.find(
-    (weather) => weather.date === dateValue && weather.city === city,
-  );
+    (weather) => weather.date === dateValue && (!weather.city || weather.city === city),
+  ) || (city === state.weatherLocation ? weatherForDate(dateValue) : null);
   const item = existing || (cachedWeather ? { ...option, weather: cachedWeather } : null);
+  const key = `detail:${city}:${dateValue}`;
   state.weatherLocationPopup = {
     open: true,
     mode: "detail",
-    key: `detail:${city}:${dateValue}`,
+    key,
     date: dateValue,
-    loading: false,
-    error: item ? "" : uiText("weather.unavailable", "Weather unavailable"),
+    loading: !item,
+    error: "",
     items: item ? [item] : [],
   };
   render();
   document.querySelector("[data-close-weather-locations]")?.focus();
+  if (item) return;
+
+  try {
+    const params = new URLSearchParams({ city, start: dateValue, end: dateValue });
+    const response = await fetch(`/api/weather/month?${params.toString()}`, {
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+    const weather = normalizeWeatherItems(payload.items || []).find((entry) => entry.date === dateValue) || null;
+    if (state.weatherLocationPopup.key !== key) return;
+    state.weatherLocationPopup = {
+      ...state.weatherLocationPopup,
+      loading: false,
+      error: weather ? "" : (payload.error || uiText("weather.unavailable", "Weather unavailable")),
+      items: weather ? [{ ...option, weather }] : [],
+    };
+  } catch (error) {
+    if (state.weatherLocationPopup.key !== key) return;
+    state.weatherLocationPopup = {
+      ...state.weatherLocationPopup,
+      loading: false,
+      error: error.message || uiText("weather.unavailable", "Weather unavailable"),
+      items: [],
+    };
+  }
+  if (state.weatherLocationPopup.open && getRoute() === "calendar") render();
 }
 
 function currentPosition() {
