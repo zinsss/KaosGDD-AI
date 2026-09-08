@@ -42,6 +42,10 @@ test("family memos receive the shared archive layout and light family theme", ()
     /\.app\[data-profile="family"\]:is\(\[data-route="ai-tasks"\], \[data-route="memos"\]\) \.archiveTerminal/,
   );
   assert.match(stylesSource, /--archive-bg: #fffaff;/);
+  assert.match(
+    stylesSource,
+    /\.app\[data-profile="family"\]\[data-route="memos"\] \[data-archive-kind="memos"\] \.archiveSearchBar \{\n  border-color: transparent;\n  border-radius: 0;\n  background: transparent;/,
+  );
 });
 
 test("family portal proxies native memos api to governor", () => {

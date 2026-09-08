@@ -7601,6 +7601,12 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   padding-bottom: 12px;
 }
 
+.app[data-profile="family"][data-route="memos"] [data-archive-kind="memos"] .archiveSearchBar {
+  border-color: transparent;
+  border-radius: 0;
+  background: transparent;
+}
+
 .app[data-profile="family"]:is([data-route="ai-tasks"], [data-route="memos"]) .archiveIndexHeader h3,
 .app[data-profile="family"]:is([data-route="ai-tasks"], [data-route="memos"]) .archiveDetailHeader h3,
 .app[data-profile="family"]:is([data-route="ai-tasks"], [data-route="memos"]) .archiveRecordTitle {

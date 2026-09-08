@@ -79,7 +79,7 @@ test("family preset text assets include styles, translations, and cache-busted b
   assert.match(translations, /"textPresets\.shared":/);
   assert.match(translations, /"textPresets\.localFallback":/);
   assert.match(translations, /"textPresets\.copyRandom": "랜덤 복사"/);
-  assert.match(indexSource, /href="\/styles\.css\?v=318"/);
+  assert.match(indexSource, /href="\/styles\.css\?v=319"/);
   assert.match(indexSource, /src="\/translations\.js\?v=183"/);
   assert.match(indexSource, /src="\/text-presets\.js\?v=1"/);
   assert.match(indexSource, /src="\/app\.js\?v=327"/);
