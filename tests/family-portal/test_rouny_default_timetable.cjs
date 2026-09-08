@@ -32,5 +32,5 @@ test("Rouny detail offers Make default and identifies the current default", () =
 test("Rouny timeline uses slightly taller hourly cells", () => {
   assert.match(appSource, /ROUNY_TIMELINE_HOUR_HEIGHT = 72/);
   assert.match(styles, /\.rounyTimelineHour \{[\s\S]*?height: 72px;/);
-  assert.match(indexSource, /href="\/styles\.css\?v=315"/);
+  assert.match(indexSource, /href="\/styles\.css\?v=316"/);
 });

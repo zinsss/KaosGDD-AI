@@ -6984,6 +6984,41 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   gap: 12px;
 }
 
+.supplyAddPanel .archiveFormRows {
+  display: grid;
+  gap: 10px;
+}
+
+.supplyAddPanel .archiveFormRow {
+  display: grid;
+  grid-template-columns: 5.25ch minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--archive-amber);
+  font-size: 0.86rem;
+  font-weight: 850;
+}
+
+.supplyAddPanel .archiveFormRow input {
+  appearance: none;
+  width: 100%;
+  min-width: 0;
+  min-height: 52px;
+  border: 1px solid var(--archive-line);
+  border-radius: 0;
+  outline: none;
+  background: var(--archive-surface);
+  box-shadow: none;
+  color: var(--archive-text);
+  padding: 10px 12px;
+  font: 18px/1.35 "Sarasa Gothic Mono", ui-monospace, monospace;
+}
+
+.supplyAddPanel .archiveFormRow input:focus-visible {
+  border-color: var(--archive-cyan);
+}
+
 .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .archiveMetadataReview {
   display: grid;
   gap: 8px;

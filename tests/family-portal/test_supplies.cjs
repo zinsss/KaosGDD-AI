@@ -5,6 +5,7 @@ const test = require("node:test");
 
 const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
 const suppliesViewSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/supplies-view.js"), "utf8");
+const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
 const indexSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
 const nginxSource = fs.readFileSync(path.join(__dirname, "../../deploy/h3-backend/family-portal/nginx.conf"), "utf8");
 
@@ -14,6 +15,10 @@ test("top add opens the native supply composer route", () => {
   assert.match(appSource, /else if \(route === "add-supply"\) view\.innerHTML = renderAddSupply\(\);/);
   assert.match(appSource, /KAOS_SUPPLIES_VIEW\.renderAddSupply\(suppliesViewContext\(\)\)/);
   assert.match(suppliesViewSource, /data-create-supply/);
+  assert.match(styles, /\.supplyAddPanel \.archiveFormRow input \{[\s\S]*?min-height: 52px;/);
+  assert.match(styles, /\.supplyAddPanel \.archiveFormRow input \{[\s\S]*?border: 1px solid var\(--archive-line\);/);
+  assert.match(styles, /\.supplyAddPanel \.archiveFormRow input \{[\s\S]*?background: var\(--archive-surface\);/);
+  assert.match(indexSource, /href="\/styles\.css\?v=316"/);
 });
 
 test("main supplies route renders as an archive board instead of an inline composer", () => {
