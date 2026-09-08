@@ -67,32 +67,32 @@ test("documents archive supports multiple selected tag filters", () => {
   assert.match(documentsViewSource, /data-document-tag/);
   assert.match(appSource, /async function toggleDocumentTagFilter/);
   assert.match(documentsViewSource, /data-documents-clear-tags/);
-  assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\]\) \.archiveTagFilters \{/);
-  assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\]\) \.archiveTagChip \{/);
+  assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\], \[data-profile="family"\]\[data-route="memos"\]\) \.archiveTagFilters \{/);
+  assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\], \[data-profile="family"\]\[data-route="memos"\]\) \.archiveTagChip \{/);
 });
 
 test("documents upload and metadata editor use aligned label columns", () => {
   assert.match(appSource, /<label class="archiveCommandLine">[\s\S]*<span>FILE<\/span>[\s\S]*<span>TITLE<\/span>/);
   assert.match(appSource, /<div class="archiveCommandLine">[\s\S]*<span>TITLE<\/span>[\s\S]*<span>TAGS<\/span>/);
-  assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\]\) \.archiveCommandLine \{\n  display: grid;\n  grid-template-columns: 5\.25ch minmax\(0, 1fr\);/);
-  assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\]\) \.archiveMetadataReview \{\n  display: grid;\n  gap: 8px;/);
+  assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\], \[data-profile="family"\]\[data-route="memos"\]\) \.archiveCommandLine \{\n  display: grid;\n  grid-template-columns: 5\.25ch minmax\(0, 1fr\);/);
+  assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\], \[data-profile="family"\]\[data-route="memos"\]\) \.archiveMetadataReview \{\n  display: grid;\n  gap: 8px;/);
 });
 
 test("archive command actions render as bracketed text while mode tabs stay boxed", () => {
-  assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\]\) \.archiveAction::before,[\s\S]*content: "\[";/);
-  assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\]\) \.archiveAction::after,[\s\S]*content: "\]";/);
-  assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\]\) \.archiveAction,[\s\S]*border: 0;[\s\S]*background: transparent;/);
-  assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\]\) \.archiveCommandActions \.archiveAction \{[\s\S]*border: 1px solid var\(--archive-line\);[\s\S]*background: rgba\(67, 76, 94, 0\.34\);/);
-  assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\]\) \.archiveCommandActions \.archiveAction::before,[\s\S]*content: none;/);
+  assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\], \[data-profile="family"\]\[data-route="memos"\]\) \.archiveAction::before,[\s\S]*content: "\[";/);
+  assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\], \[data-profile="family"\]\[data-route="memos"\]\) \.archiveAction::after,[\s\S]*content: "\]";/);
+  assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\], \[data-profile="family"\]\[data-route="memos"\]\) \.archiveAction,[\s\S]*border: 0;[\s\S]*background: transparent;/);
+  assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\], \[data-profile="family"\]\[data-route="memos"\]\) \.archiveCommandActions \.archiveAction \{[\s\S]*border: 1px solid var\(--archive-line\);[\s\S]*background: rgba\(67, 76, 94, 0\.34\);/);
+  assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\], \[data-profile="family"\]\[data-route="memos"\]\) \.archiveCommandActions \.archiveAction::before,[\s\S]*content: none;/);
 });
 
 test("desktop archive rows keep no date and title in separate lanes", () => {
-  assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\]\) \.archiveRecordId \{[\s\S]*overflow: hidden;[\s\S]*text-overflow: ellipsis;[\s\S]*white-space: nowrap;/);
-  assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\]\) \.archiveRecordDate \{[\s\S]*overflow: hidden;[\s\S]*text-overflow: ellipsis;[\s\S]*white-space: nowrap;/);
-  assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\]\) \.archiveColumnHeader \{[\s\S]*grid-template-columns: 12ch 18ch minmax\(0, 1fr\) 48px;/);
-  assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\]\) \.archiveColumnHeader span \{[\s\S]*font-size: 0\.68rem;/);
+  assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\], \[data-profile="family"\]\[data-route="memos"\]\) \.archiveRecordId \{[\s\S]*overflow: hidden;[\s\S]*text-overflow: ellipsis;[\s\S]*white-space: nowrap;/);
+  assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\], \[data-profile="family"\]\[data-route="memos"\]\) \.archiveRecordDate \{[\s\S]*overflow: hidden;[\s\S]*text-overflow: ellipsis;[\s\S]*white-space: nowrap;/);
+  assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\], \[data-profile="family"\]\[data-route="memos"\]\) \.archiveColumnHeader \{[\s\S]*grid-template-columns: 12ch 18ch minmax\(0, 1fr\) 48px;/);
+  assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\], \[data-profile="family"\]\[data-route="memos"\]\) \.archiveColumnHeader span \{[\s\S]*font-size: 0\.68rem;/);
   assert.match(styles, /\.app\[data-profile="main"\] \[data-archive-kind="memos"\] \.archiveColumnHeader \{[\s\S]*grid-template-columns: 12ch 18ch minmax\(0, 1fr\);/);
-  assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\]\) \.archiveRecordButton \{[\s\S]*grid-template-columns: 12ch 18ch minmax\(0, 1fr\);/);
+  assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\], \[data-profile="family"\]\[data-route="memos"\]\) \.archiveRecordButton \{[\s\S]*grid-template-columns: 12ch 18ch minmax\(0, 1fr\);/);
 });
 
 test("memos archive rendering is delegated to the view module", () => {

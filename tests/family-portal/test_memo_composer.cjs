@@ -5,6 +5,7 @@ const test = require("node:test");
 
 const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
 const memosViewSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/memos-view.js"), "utf8");
+const stylesSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
 
 test("top add opens the native one-box memo composer", () => {
   assert.match(appSource, /if \(action === "memo"\) \{\s*window\.location\.hash = "#\/add-memo";/s);
@@ -26,6 +27,18 @@ test("main and family memos routes render native archive board controls", () => 
   assert.match(memosViewSource, /data-memo-open/);
   assert.match(appSource, /if \(route === "memos"\) loadMemos\(\);/);
   assert.doesNotMatch(appSource, /portalProfile\(\) === "family"[\s\S]*memosFrame/);
+});
+
+test("family memos receive the shared archive layout and light family theme", () => {
+  assert.match(
+    stylesSource,
+    /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\], \[data-profile="family"\]\[data-route="memos"\]\) \.archiveTerminal/,
+  );
+  assert.match(
+    stylesSource,
+    /\.app\[data-profile="family"\]:is\(\[data-route="ai-tasks"\], \[data-route="memos"\]\) \.archiveTerminal/,
+  );
+  assert.match(stylesSource, /--archive-bg: #fffaff;/);
 });
 
 test("family portal proxies native memos api to governor", () => {

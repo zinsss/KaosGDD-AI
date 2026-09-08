@@ -77,7 +77,7 @@ test("AI Tasks official document memo flow previews before saving to Memos", () 
 });
 
 test("Family AI Tasks keeps its own light theme surface", () => {
-  assert.match(stylesSource, /\.app\[data-profile="family"\]\[data-route="ai-tasks"\] \.archiveTerminal/);
+  assert.match(stylesSource, /\.app\[data-profile="family"\]:is\(\[data-route="ai-tasks"\], \[data-route="memos"\]\) \.archiveTerminal/);
   assert.match(stylesSource, /--archive-bg: #fffaff;/);
   assert.match(stylesSource, /font-family: inherit;/);
   assert.match(stylesSource, /grid-template-columns: repeat\(9, auto\);/);
