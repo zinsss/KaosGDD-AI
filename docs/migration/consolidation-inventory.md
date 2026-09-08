@@ -139,10 +139,21 @@ trigger before enabling the n8n production trigger.
    `SYSTEM_STATUS_TOOLS_BASE_URL` at `http://governor-tools:8098` while keeping
    H4's existing tailnet address stable. Authenticated H3 and H4 live reads
    passed after cutover.
-3. Observe PWA status, AI Tasks, document tags, calendar parsing, imaging, and
-   remaining H4 tool calls with Discord's embedded tools disabled.
+3. **Complete 2026-09-09:** read-only production observation passed with
+   Discord's embedded tools disabled. Standalone `kaos-governor-tools` was
+   healthy with zero restarts; authenticated system, calendar, task, Memos,
+   Paperless, tag-context, mail, and imaging-status reads passed. H4 made
+   authenticated system, today, document, and task reads directly through
+   port 8098, and its AI Task, document-tag, calendar-preview, and imaging
+   handlers passed authenticated validation probes without model calls or
+   writes. H4 doctor also passed; its checkout was behind only in paths that
+   do not affect the H4 Brain deployment.
 4. Disable the H3 Discord container for an observation window, then remove it
    and its credential only after history/rollback decisions are complete.
+   Before a rollback restart, account for the retained 2026-09-07 through
+   2026-09-09 pending Discord digest publications so they cannot be replayed.
+   Discord-side digest publishing is already disabled; worker-owned Pushover,
+   mail/fax polling, recurring tasks, and digest scheduling remain independent.
 
 ### Phase 3: retire Discord as a Brain transport
 
