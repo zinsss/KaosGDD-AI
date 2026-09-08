@@ -14,6 +14,12 @@ import discord
 from kaos_governor import Actor, GovernorOperations
 from kaos_governor.calendar import CalendarAdapterClient
 from kaos_governor.tasks import TaskMutationCommand, TaskMutationExecution, TaskMutationService
+from kaos_governor.tool_tasks import (
+    TASK_PRIORITIES,
+    is_supplies_collection,
+    normalize_supplies_due,
+    validate_edit_due,
+)
 
 from .access import AccessPolicy
 from .markdown import NO_MENTIONS, escape_text
@@ -22,7 +28,6 @@ from .markdown import NO_MENTIONS, escape_text
 LOGGER = logging.getLogger(__name__)
 MAX_VISIBLE_TASKS = 25
 MAX_RECENT_SUPPLIES = 25
-TASK_PRIORITIES = {"", "1", "5", "9"}
 DUE_LINE_PATTERN = re.compile(r"^:(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}))?$")
 MESSAGE_REFRESH_DELAY_SECONDS = 0.35
 TASK_REPEAT_NOTIFICATION_TYPE = "task_repeat"
@@ -1444,16 +1449,6 @@ def parse_due_line(line: str) -> tuple[str, str] | None:
     return due_date, due_time
 
 
-def validate_edit_due(due_date: str, due_time: str) -> tuple[str, str] | None:
-    clean_due_date = due_date.strip()
-    clean_due_time = due_time.strip()
-    if not clean_due_date:
-        return None if clean_due_time else ("", "")
-    if clean_due_time:
-        return parse_due_line(f":{clean_due_date} {clean_due_time}")
-    return parse_due_line(f":{clean_due_date}")
-
-
 def render_task_message(task: Mapping[str, Any], *, show_due: bool = True, completed: bool | None = None) -> str:
     due = str(task.get("due") or "")
     due_time = str(task.get("dueTime") or "")
@@ -1521,19 +1516,6 @@ def task_payload(task: Mapping[str, Any], *, status: str) -> dict[str, Any]:
         "priority": str(task.get("priority") or ""),
         "status": status,
     }
-
-
-def normalize_supplies_due(payload: dict[str, Any], *, collection_id: str = "") -> dict[str, Any]:
-    resolved_collection_id = collection_id or str(payload.get("collectionId") or "")
-    if is_supplies_collection(resolved_collection_id):
-        payload = dict(payload)
-        payload["dueDate"] = ""
-        payload["dueTime"] = ""
-    return payload
-
-
-def is_supplies_collection(collection_id: str) -> bool:
-    return "supplies" in collection_id.lower()
 
 
 def _message_matches(message: discord.Message, *, content: str, view: discord.ui.View | None) -> bool:

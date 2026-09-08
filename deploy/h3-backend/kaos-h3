@@ -104,6 +104,7 @@ install_state_directories() {
     "${root}/ai-tasks"
     "${root}/documents"
     "${root}/notifications"
+    "${root}/tools"
   )
   if mkdir -p "${paths[@]}" 2>/dev/null \
     && chgrp "${gid}" "${paths[@]}" 2>/dev/null \
@@ -174,9 +175,7 @@ preflight() {
   if [[ "${GOVERNOR_OPERATION_STORE:-postgres}" == "postgres" ]]; then
     require_nonempty_file "${KAOS_ROOT:-/srv/kaos}/secrets/governor-postgres.env"
   fi
-  if [[ "${GOVERNOR_BRAIN_TOOLS_ENABLED:-false}" == "true" ]]; then
-    require_secret ios_shortcuts_token
-  fi
+  require_secret ios_shortcuts_token
   [[ "${DISCORD_GUILD_ID:-}" != "123456789012345678" ]] || die "replace the example Discord guild ID"
   [[ "${DISCORD_ALLOWED_USER_IDS:-}" != *"123456789012345678"* ]] || die "replace the example Discord user ID"
   [[ "${DISCORD_ALLOWED_CHANNEL_IDS:-}" != *"123456789012345678"* ]] || die "replace the example Discord channel IDs"
@@ -272,12 +271,26 @@ wait_worker_healthy() {
   die "Governor worker did not become healthy"
 }
 
+wait_tools_healthy() {
+  local attempt tools_status=""
+  for attempt in $(seq 1 30); do
+    tools_status=$(docker inspect --format '{{.State.Health.Status}}' kaos-governor-tools 2>/dev/null || true)
+    [[ "${tools_status}" == "healthy" ]] && return
+    sleep 1
+  done
+  "${COMPOSE[@]}" logs --tail=80 governor-tools >&2 || true
+  die "Governor tools did not become healthy"
+}
+
 smoke() {
   load_env
   local address=${GOVERNOR_BIND_ADDRESS:-127.0.0.1}
   [[ "${address}" != "0.0.0.0" ]] || address=127.0.0.1
   local health_url="http://${address}:${HEALTH_PORT:-8097}/health"
   local ready_url="http://${address}:${HEALTH_PORT:-8097}/ready"
+  local tools_address=${GOVERNOR_BRAIN_TOOLS_BIND_ADDRESS:-127.0.0.1}
+  [[ "${tools_address}" != "0.0.0.0" ]] || tools_address=127.0.0.1
+  local tools_url="http://${tools_address}:${GOVERNOR_BRAIN_TOOLS_PORT:-8098}/health"
   local attempt
   for attempt in $(seq 1 30); do
     if curl --fail --silent --show-error "${health_url}" >/dev/null 2>&1; then
@@ -296,6 +309,7 @@ smoke() {
       if [[ "${PUSHOVER_DELIVERY_MODE:-worker}" == "worker" ]]; then
         wait_worker_healthy
       fi
+      curl --fail --silent --show-error "${tools_url}" >/dev/null
       return
     fi
     sleep 1
@@ -307,19 +321,21 @@ smoke() {
 up_runtime() {
   local recreate=$1
   local recreate_options=()
+  install_state_directories "$(governor_state_root)"
   if [[ "${recreate}" == "true" ]]; then
     recreate_options+=(--force-recreate)
   fi
+  "${COMPOSE[@]}" build governor-discord governor-worker governor-tools
+  "${COMPOSE[@]}" stop governor-discord >/dev/null 2>&1 || true
   if [[ "${PUSHOVER_DELIVERY_MODE:-worker}" == "worker" ]]; then
-    "${COMPOSE[@]}" build governor-discord governor-worker
-    "${COMPOSE[@]}" stop governor-discord >/dev/null 2>&1 || true
     "${COMPOSE[@]}" up --detach "${recreate_options[@]}" governor-worker
     wait_worker_healthy
-    "${COMPOSE[@]}" up --detach "${recreate_options[@]}" governor-discord
   else
     "${COMPOSE[@]}" stop governor-worker >/dev/null 2>&1 || true
-    "${COMPOSE[@]}" up --detach --build "${recreate_options[@]}" governor-discord
   fi
+  "${COMPOSE[@]}" up --detach "${recreate_options[@]}" governor-tools
+  wait_tools_healthy
+  "${COMPOSE[@]}" up --detach "${recreate_options[@]}" governor-discord
 }
 
 maintenance_report() {
@@ -809,12 +825,12 @@ Commands:
   setup              Create local env, secrets, and Governor state directories
   preflight          Validate configuration without starting containers
   test               Build and run the complete container test suite
-  build              Build the production Governor and worker images
-  up                 Validate, build, start Governor/worker, and check health
+  build              Build the production Governor, worker, and tools images
+  up                 Validate, build, start Governor/worker/tools, and check health
   down               Stop Governor without deleting persistent data
   restart            Recreate Governor from current configuration
   status             Show Compose and health status
-  logs               Follow Governor logs
+  logs               Follow Governor, worker, and tools logs
   smoke              Check local/Tailscale health and Discord readiness
   maintenance-report Write a read-only host maintenance JSON report for Discord
   config             Render the effective Compose configuration
@@ -848,12 +864,12 @@ case "${command}" in
   setup) setup ;;
   preflight) preflight ;;
   test) test_image ;;
-  build) load_env; "${COMPOSE[@]}" build governor-discord governor-worker ;;
+  build) load_env; "${COMPOSE[@]}" build governor-discord governor-worker governor-tools ;;
   up) preflight; up_runtime false; smoke ;;
   down) load_env; "${COMPOSE[@]}" down ;;
   restart) preflight; up_runtime true; smoke ;;
   status) load_env; "${COMPOSE[@]}" ps; smoke ;;
-  logs) load_env; "${COMPOSE[@]}" logs --follow --tail=100 governor-discord ;;
+  logs) load_env; "${COMPOSE[@]}" logs --follow --tail=100 governor-discord governor-worker governor-tools ;;
   smoke) smoke ;;
   maintenance-report) maintenance_report ;;
   config) load_env; "${COMPOSE[@]}" config | redact_config ;;

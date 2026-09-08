@@ -102,11 +102,12 @@ actor, target versions, and expiry. A model-interpreted `yes` is insufficient.
 
 The repository already contains read-only maintenance/health probes and a
 KaosDiscoord restart path with an explicit allowlist, dry-run default, timeout,
-and audit state. Brain now exposes the first operator operation:
-`system.status`. It is read-only, deployed in commit `1f2a5e0`, goes through
-the authenticated Governor Brain tools API, and renders existing KaosDiscoord
-health/service state in the H4 `#brain` path. The user confirmed the live
-Discord response on 2026-09-01.
+and audit state. Brain exposes the first operator operation: `system.status`.
+It is read-only and goes through the authenticated Governor tools API. Since
+2026-09-08, that API runs in the transport-neutral `kaos-governor-tools`
+service rather than the Discord process. The H4 `#brain` compatibility path can
+still render the same Governor/service state while transport retirement
+continues.
 
 Brain Guard still rejects shell, Docker, database, restart, deployment, and
 arbitrary admin intents. That rejection remains in place while the control

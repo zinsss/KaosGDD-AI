@@ -110,9 +110,10 @@ Run:
 ./deploy/h3-backend/kaos-h3 up
 ```
 
-`up` runs preflight, builds locally, starts KaosDiscoord and the Governor
-worker, and waits for both health checks. It does not start Memos or Radicale
-and cannot touch PACS, DICOM, Paperless, HylaFAX, or RustDesk.
+`up` runs preflight, builds locally, starts KaosDiscoord plus the Governor
+worker and tools runtimes, and waits for their health checks. It does not start
+Memos or Radicale and cannot touch PACS, DICOM, Paperless, HylaFAX, or
+RustDesk.
 
 Governor mutation proposals use PostgreSQL when
 `GOVERNOR_OPERATION_STORE=postgres`. This persists the operation,
@@ -129,8 +130,9 @@ window, then records `execution_interrupted` and removes it.
 
 PostgreSQL mode uses the existing `governor-postgres` service and
 `/srv/kaos/secrets/governor-postgres.env`. Start or verify that service before
-Governor. The Discord image applies additive Governor migrations before it
-connects to Discord, so it fails closed if the database cannot become ready.
+Governor. Governor API, tools, and Discord runtimes apply additive Governor
+migrations before serving, so they fail closed if the database cannot become
+ready.
 For a deliberately isolated installation without PostgreSQL, set
 `GOVERNOR_OPERATION_STORE=memory`; pending confirmations then do not survive a
 process restart.
@@ -143,7 +145,9 @@ The default health binding is loopback only:
 GOVERNOR_BIND_ADDRESS=127.0.0.1
 ```
 
-KaosBrain should use the separate tool API, not the health port:
+KaosBrain should use the separate transport-neutral Governor tools service,
+not the Discord health port. The legacy environment-variable names are kept so
+existing H4 and Tailscale configuration does not need to change:
 
 ```text
 GOVERNOR_BRAIN_TOOLS_ENABLED=true
@@ -151,10 +155,13 @@ GOVERNOR_BRAIN_TOOLS_BIND_ADDRESS=<H3_TAILSCALE_IP>
 GOVERNOR_BRAIN_TOOLS_PORT=8098
 ```
 
+The `kaos-governor-tools` container owns port 8098. The Discord container does
+not bind that port and starts with its embedded compatibility server disabled.
 The tool API requires the `GOVERNOR_API_TOKEN` bearer token and exposes only
-narrow `/tools/...` endpoints for Brain. Allow TCP 8098 only from H4 and
-personal tailnet devices that need Shortcuts access. Do not publish Governor
-tools through Caddy, cloudflared, or the public Internet.
+narrow `/tools/...` endpoints for Brain; `/health` is the sole unauthenticated
+route. Allow TCP 8098 only from H4 and personal tailnet devices that need
+Shortcuts access. Do not publish Governor tools through Caddy, cloudflared, or
+the public Internet.
 
 For iOS Shortcuts, add a tailnet-only HTTPS front end once (never use Funnel):
 

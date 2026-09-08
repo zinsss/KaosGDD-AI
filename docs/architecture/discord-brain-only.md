@@ -61,16 +61,16 @@ remain authoritative for events and tasks.
 
 ## Runtime Consequence
 
-The current H3 service/container retains the transitional
+The current H3 Discord service/container retains the transitional
 `kaos-governor-discord` name, but its canonical source package and executable
 are `integrations/discoord` and `kaosdiscoord`. Mail/fax polling, daily digest,
-recurring tasks, and Pushover delivery now run in `kaos-governor-worker` in the
-live deployment. The Discord process still hosts port 8098 system/Brain tool
-routes, and Governor API currently proxies system status to it, so it cannot
-yet be stopped. Move those remaining routes into a transport-neutral Governor
-runtime first. Keep the same modular-monolith codebase unless a separate
-process is operationally justified; this decision does not require more
-microservices.
+recurring tasks, and Pushover delivery run in `kaos-governor-worker`. The full
+port 8098 system/Brain tool contract moved to `kaos-governor-tools` on
+2026-09-08; Governor API proxies system status to that service and Discord's
+embedded compatibility server is disabled. This removes the tool dependency
+from the Discord process. Keep the same modular-monolith codebase unless a
+separate process is operationally justified; this split is a lifecycle
+boundary, not a new domain or authority.
 
 H4 temporarily retains the KaosBrain Discord identity and the `#brain` topic.
 Both H3's operational Discord identity and H4's Discord transport retire after

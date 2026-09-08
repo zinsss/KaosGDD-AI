@@ -62,7 +62,8 @@ unused from that output.
 | `family-portal`, `roun-web` | Keep | Current family surfaces; consolidate UI code internally rather than introducing another backend. |
 | `sftpgo`, `vaultwarden` | Keep independently | Useful upstream services, not KaosGDD domain engines. Avoid coupling new Governor workflows to them without a concrete need. |
 | `n8n`, `n8n-postgres` | Time-boxed keep | One active weekly source monitor is not enough by itself to justify a permanent automation stack. Keep while evaluating two additional valuable workflows; otherwise retire both and return the monitor to a simpler native schedule. |
-| `kaos-governor-discord` | Transitional | Direct Discord feature schedulers are disabled, but port 8098 system/Brain tools still live here and Governor API proxies system status to it. Move those routes before stopping it. |
+| `kaos-governor-tools` | Keep | Transport-neutral authenticated tool boundary for H4, PWA status, scoped Shortcuts, and imaging second-look. It owns port 8098 independently of Discord. |
+| `kaos-governor-discord` | Transitional | Direct Discord feature schedulers and its embedded tools server are disabled. It now owns only the remaining Discord transport/compatibility surface and can enter an observation-before-retirement phase. |
 | stopped `kaosgovernor-legacy-api` and `kaosgovernor-legacy-database` | Retirement candidate | Both are already stopped. Remove only after final rollback/data inspection and explicit approval. |
 
 ### H4: preserve OpenAI access, remove transport coupling deliberately
@@ -132,13 +133,14 @@ trigger before enabling the n8n production trigger.
 
 ### Phase 2: remove the hidden H3 Discord dependency
 
-1. Move the `/tools/system/status` and other retained port 8098 tool routes
-   from `integrations/discoord` into a transport-neutral Governor API/worker
-   module.
-2. Point Governor's `SYSTEM_STATUS_TOOLS_BASE_URL` and H4's Governor-tools
-   client at the new endpoint.
-3. Prove PWA status, AI Tasks, document tags, calendar parsing, imaging, and
-   any remaining H4 tool calls without the H3 Discord container.
+1. **Complete 2026-09-08:** move the complete port 8098 route surface from
+   `integrations/discoord` into the standalone `kaos-governor-tools` runtime.
+2. **Complete 2026-09-08:** point Governor's
+   `SYSTEM_STATUS_TOOLS_BASE_URL` at `http://governor-tools:8098` while keeping
+   H4's existing tailnet address stable. Authenticated H3 and H4 live reads
+   passed after cutover.
+3. Observe PWA status, AI Tasks, document tags, calendar parsing, imaging, and
+   remaining H4 tool calls with Discord's embedded tools disabled.
 4. Disable the H3 Discord container for an observation window, then remove it
    and its credential only after history/rollback decisions are complete.
 
@@ -191,8 +193,7 @@ the feature is technically possible.
 
 ## Immediate Recommendation
 
-Do not merge containers or migrate live schedules yet. The first implementation
-work should be the transport-neutral replacement for the H3 port 8098
-system/Brain tools. That removes a real architectural dependency and unlocks
-Discord retirement. The first n8n migration should follow only after that, with
+The transport-neutral H3 port 8098 Governor tools replacement is now live; do
+not add a second tool boundary. Observe it before disabling the remaining H3
+Discord transport. The first n8n migration should follow only after that, with
 recurring-task sync as a one-owner, shadow-tested cutover.

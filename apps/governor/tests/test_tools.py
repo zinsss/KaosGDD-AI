@@ -14,7 +14,7 @@ from kaos_governor import MemoryDurableGovernorStore, PendingOperationPayload
 from kaos_governor.durable import validate_pending_payload
 from kaos_governor.documents import PaperlessDocument, PaperlessSearchPage, PaperlessSearchResult, PaperlessTag
 from kaos_governor.memos import Memo, MemoSearchPage, MemoSearchResult
-from kaosdiscoord.tools import (
+from kaos_governor.tools import (
     BrainToolServer,
     ImagingSecondLookClient,
     ImagingSecondLookConfig,
@@ -367,6 +367,15 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
 
     def shortcut_headers(self):
         return {"Authorization": "Bearer shortcut-secret"}
+
+    async def test_health_is_public_and_transport_neutral(self) -> None:
+        response = await self.client.get("/health")
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(
+            await response.json(),
+            {"status": "ok", "service": "kaos-governor-tools"},
+        )
 
     async def test_tools_require_bearer_token(self) -> None:
         response = await self.client.get("/tools/today")

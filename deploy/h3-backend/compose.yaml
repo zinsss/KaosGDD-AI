@@ -16,6 +16,7 @@ services:
       - path: ${KAOS_ROOT:-/srv/kaos}/secrets/governor-postgres.env
         format: raw
     environment:
+      GOVERNOR_BRAIN_TOOLS_ENABLED: "false"
       GOVERNOR_OPERATION_STORE: "${GOVERNOR_OPERATION_STORE:-postgres}"
       GOVERNOR_DB_HOST: "governor-postgres"
       GOVERNOR_DB_PORT: "5432"
@@ -47,7 +48,6 @@ services:
       - pushover_user_key
     ports:
       - "${GOVERNOR_BIND_ADDRESS:-127.0.0.1}:${HEALTH_PORT:-8097}:8097"
-      - "${GOVERNOR_BRAIN_TOOLS_BIND_ADDRESS:-127.0.0.1}:${GOVERNOR_BRAIN_TOOLS_PORT:-8098}:8098"
     volumes:
       - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/mail:/data/mail
       - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/fax:/data/fax
@@ -116,6 +116,67 @@ services:
       - no-new-privileges:true
     mem_limit: 256m
     pids_limit: 50
+    logging:
+      driver: json-file
+      options:
+        max-size: 2m
+        max-file: "2"
+    networks:
+      - backend
+
+  governor-tools:
+    build:
+      context: ../..
+      dockerfile: apps/governor/Dockerfile
+      target: runtime
+    image: kaosgdd-ai-governor-tools:0.3.0
+    pull_policy: never
+    container_name: kaos-governor-tools
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env
+      - path: ${KAOS_ROOT:-/srv/kaos}/secrets/governor-postgres.env
+        format: raw
+    environment:
+      GOVERNOR_DB_HOST: "governor-postgres"
+      GOVERNOR_DB_PORT: "5432"
+      GOVERNOR_TOOLS_HOST: "0.0.0.0"
+      GOVERNOR_TOOLS_PORT: "8098"
+      GOVERNOR_TOOLS_STATE_PATH: "/data/tools/second-look-status.json"
+      GOVERNOR_WORKER_STATE_PATH: "/data/notifications/governor-worker.json"
+    entrypoint: ["kaos-governor-tools"]
+    secrets:
+      - governor_api_token
+      - ios_shortcuts_token
+      - memos_access_token
+      - naver_mail_password
+      - paperless_api_token
+      - fax_connector_token
+    ports:
+      - "${GOVERNOR_BRAIN_TOOLS_BIND_ADDRESS:-127.0.0.1}:${GOVERNOR_BRAIN_TOOLS_PORT:-8098}:8098"
+    volumes:
+      - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/mail:/data/mail:ro
+      - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/fax:/data/fax:ro
+      - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/notifications:/data/notifications:ro
+      - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/tools:/data/tools
+    group_add:
+      - "${KAOS_HOST_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp:size=96m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    pids_limit: 50
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8098/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
     logging:
       driver: json-file
       options:

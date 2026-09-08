@@ -37,6 +37,7 @@ from kaos_governor.memos import MemoMutationService, MemosConfig, MemosService
 from kaos_governor.notifications import PushoverConfig, TextNotification, TextNotificationService
 from kaos_governor.postgres_durable import PostgresDurableGovernorStore
 from kaos_governor.tasks import TaskMutationService
+from kaos_governor.tools import BrainToolServer, ImagingSecondLookClient, ImagingSecondLookConfig
 
 from . import __version__
 from .access import AccessPolicy
@@ -60,7 +61,6 @@ from .memos import DiscordMemosCapture
 from .organizer import DiscordMailOrganizer
 from .system_status import DiscordServiceStatusSurface
 from .tasks import DiscordTasksSurface
-from .tools import BrainToolServer, ImagingSecondLookClient, ImagingSecondLookConfig
 
 LOGGER = logging.getLogger(__name__)
 
