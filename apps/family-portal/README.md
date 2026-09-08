@@ -38,10 +38,12 @@ Family retains its existing direct navigation and family-only routes.
 Data enters the UI through adapter-shaped functions in `app.js`. Calendar and task reads/writes use `/api/calendar/*`; mock data remains a local fallback when the adapter is unavailable.
 
 Family Rouny templates use `/api/rouny/templates`, owned by KaosGDD Brain.
-The browser keeps an offline local cache and sends revision-checked full-document
-writes. A pre-Brain local timetable migrates automatically only while the server
-document is empty; a fresh browser's generated Basic template is not uploaded
-until the user saves it.
+The shared document stores one explicit `defaultTemplateId`; the Family agenda
+uses that timetable while opening another timetable only selects it for viewing
+and editing. The browser keeps an offline local cache and sends revision-checked
+full-document writes. A pre-Brain local timetable migrates automatically only
+while the server document is empty; a fresh browser's generated Basic template
+is not uploaded until the user saves it.
 
 Family preset text uses `/api/text-presets`, served by Calendar Adapter as a
 shared Family-only state document. The standalone `#/text-presets` page keeps a

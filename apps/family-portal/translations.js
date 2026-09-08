@@ -284,6 +284,8 @@ window.KAOS_TRANSLATIONS = {
     "rouny.addClass": "수업 추가",
     "rouny.editClass": "수업 수정",
     "rouny.saveAs": "다른 이름으로 저장",
+    "rouny.makeDefault": "기본으로 만들기",
+    "rouny.defaultTemplate": "기본 시간표",
     "rouny.classTitle": "수업 이름",
     "rouny.activity": "활동",
     "rouny.addTime": "시간 추가",

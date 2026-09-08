@@ -61,6 +61,7 @@ const LEDGER_EXPENSE_CATEGORIES = new Set(["계좌 지출", "현금 지출", "�
 const LEDGER_INCOME_CATEGORIES = new Set(["계좌 수입", "현금 수입"]);
 const ROUNY_TEMPLATE_STORAGE_KEY = "kaosgdd.v2.rouny.templates.v1";
 const ROUNY_SELECTED_STORAGE_KEY = "kaosgdd.v2.rouny.selectedTemplateId.v1";
+const ROUNY_DEFAULT_STORAGE_KEY = "kaosgdd.v2.rouny.defaultTemplateId.v1";
 const ROUNY_INCLUDE_SATURDAY_KEY = "kaosgdd.v2.rouny.includeSaturday.v1";
 const ROUNY_SYNC_REVISION_KEY = "kaosgdd.v2.rouny.syncRevision.v1";
 const ROUNY_SYNC_DIRTY_KEY = "kaosgdd.v2.rouny.syncDirty.v1";
@@ -282,6 +283,7 @@ const state = {
     checked: false,
     templates: [],
     selectedTemplateId: "",
+    defaultTemplateId: "",
     draft: null,
     undoStack: [],
     page: "list",
@@ -6066,7 +6068,8 @@ function renderFamilyAgendaMixedList(events, tasks) {
 function familyAgendaRounyStatus(now = new Date()) {
   ensureRounyState();
   if (!state.rouny.hasPersistedLocal && !state.rouny.remoteLive) return null;
-  const template = state.rouny.templates.find((item) => item.id === state.rouny.selectedTemplateId)
+  const template = state.rouny.templates.find((item) => item.id === state.rouny.defaultTemplateId)
+    || state.rouny.templates.find((item) => item.id === state.rouny.selectedTemplateId)
     || state.rouny.templates[0];
   if (!template) return null;
   const dayOfWeek = String(now.getDay());
@@ -7115,22 +7118,42 @@ function readLocalRounyDocument() {
     const raw = window.localStorage.getItem(ROUNY_TEMPLATE_STORAGE_KEY);
     const parsed = JSON.parse(raw || "[]");
     const templates = Array.isArray(parsed) ? parsed.map(normalizeRounyTemplate).filter(Boolean) : [];
+    const storedDefaultTemplateId = window.localStorage.getItem(ROUNY_DEFAULT_STORAGE_KEY) || "";
+    const previousSelectedTemplateId = window.localStorage.getItem(ROUNY_SELECTED_STORAGE_KEY) || "";
+    const defaultTemplateId = normalizeRounyDefaultTemplateId(
+      storedDefaultTemplateId || previousSelectedTemplateId,
+      templates,
+    );
     const revisionValue = window.localStorage.getItem(ROUNY_SYNC_REVISION_KEY);
     const revision = revisionValue !== null && /^\d+$/.test(revisionValue) ? Number(revisionValue) : null;
     return {
       exists: raw !== null && templates.length > 0,
       templates,
+      defaultTemplateId,
       revision,
       dirty: window.localStorage.getItem(ROUNY_SYNC_DIRTY_KEY) === "true",
     };
   } catch {
-    return { exists: false, templates: [], revision: null, dirty: false };
+    return { exists: false, templates: [], defaultTemplateId: "", revision: null, dirty: false };
   }
 }
 
-function persistRounyTemplates(templates, { revision, dirty } = {}) {
+function normalizeRounyDefaultTemplateId(templateId, templates = state.rouny.templates) {
+  const normalizedId = String(templateId || "");
+  return (templates || []).some((template) => template.id === normalizedId) ? normalizedId : "";
+}
+
+function persistRounyTemplates(templates, { revision, dirty, defaultTemplateId } = {}) {
   window.localStorage.setItem(ROUNY_TEMPLATE_STORAGE_KEY, JSON.stringify(templates));
   state.rouny.hasPersistedLocal = templates.length > 0;
+  if (defaultTemplateId !== undefined) {
+    state.rouny.defaultTemplateId = normalizeRounyDefaultTemplateId(defaultTemplateId, templates);
+    if (state.rouny.defaultTemplateId) {
+      window.localStorage.setItem(ROUNY_DEFAULT_STORAGE_KEY, state.rouny.defaultTemplateId);
+    } else {
+      window.localStorage.removeItem(ROUNY_DEFAULT_STORAGE_KEY);
+    }
+  }
   if (revision !== undefined) {
     state.rouny.localRevision = revision;
     window.localStorage.setItem(ROUNY_SYNC_REVISION_KEY, String(revision));
@@ -7141,8 +7164,12 @@ function persistRounyTemplates(templates, { revision, dirty } = {}) {
   }
 }
 
-function rounyTemplatesSignature(templates) {
-  return JSON.stringify((templates || []).map(normalizeRounyTemplate).filter(Boolean));
+function rounyTemplatesSignature(templates, defaultTemplateId = "") {
+  const normalizedTemplates = (templates || []).map(normalizeRounyTemplate).filter(Boolean);
+  return JSON.stringify({
+    defaultTemplateId: normalizeRounyDefaultTemplateId(defaultTemplateId, normalizedTemplates),
+    templates: normalizedTemplates,
+  });
 }
 
 function applyRemoteRounyDocument(document) {
@@ -7156,14 +7183,23 @@ function applyRemoteRounyDocument(document) {
   state.rouny.remoteDocument = null;
   if (templates.length) {
     state.rouny.templates = templates;
+    const remoteDefaultTemplateId = normalizeRounyDefaultTemplateId(document?.defaultTemplateId, templates);
+    const localDefaultTemplateId = normalizeRounyDefaultTemplateId(state.rouny.defaultTemplateId, templates);
+    state.rouny.defaultTemplateId = remoteDefaultTemplateId || localDefaultTemplateId;
     if (!templates.some((template) => template.id === state.rouny.selectedTemplateId)) {
       state.rouny.selectedTemplateId = templates[0].id;
     }
     const selected = templates.find((template) => template.id === state.rouny.selectedTemplateId) || templates[0];
     state.rouny.draft = cloneValue(selected);
     window.localStorage.setItem(ROUNY_SELECTED_STORAGE_KEY, selected.id);
-    persistRounyTemplates(templates, { revision, dirty: false });
+    persistRounyTemplates(templates, {
+      revision,
+      dirty: false,
+      defaultTemplateId: state.rouny.defaultTemplateId,
+    });
   } else {
+    state.rouny.defaultTemplateId = "";
+    window.localStorage.removeItem(ROUNY_DEFAULT_STORAGE_KEY);
     window.localStorage.setItem(ROUNY_SYNC_REVISION_KEY, String(revision));
     window.localStorage.setItem(ROUNY_SYNC_DIRTY_KEY, "false");
   }
@@ -7192,8 +7228,11 @@ async function loadRemoteRounyTemplates({ force = false } = {}) {
         ? document.templates.map(normalizeRounyTemplate).filter(Boolean)
         : [];
       const serverRevision = Math.max(0, Number(document.revision) || 0);
-      const localSignature = rounyTemplatesSignature(state.rouny.templates);
-      const serverSignature = rounyTemplatesSignature(serverTemplates);
+      const serverDefaultTemplateId = normalizeRounyDefaultTemplateId(document.defaultTemplateId, serverTemplates);
+      const migratableLocalDefault = normalizeRounyDefaultTemplateId(state.rouny.defaultTemplateId, serverTemplates);
+      const effectiveServerDefault = serverDefaultTemplateId || migratableLocalDefault;
+      const localSignature = rounyTemplatesSignature(state.rouny.templates, state.rouny.defaultTemplateId);
+      const serverSignature = rounyTemplatesSignature(serverTemplates, effectiveServerDefault);
       state.rouny.remoteChecked = true;
       state.rouny.remoteLoading = false;
       state.rouny.remoteLive = true;
@@ -7213,7 +7252,17 @@ async function loadRemoteRounyTemplates({ force = false } = {}) {
         }
       } else if (!state.rouny.hasPersistedLocal || localSignature === serverSignature) {
         applyRemoteRounyDocument(document);
-        state.rouny.syncState = "synced";
+        if (!serverDefaultTemplateId && migratableLocalDefault) {
+          state.rouny.syncState = "saving";
+          persistRounyTemplates(state.rouny.templates, {
+            revision: serverRevision,
+            dirty: true,
+            defaultTemplateId: migratableLocalDefault,
+          });
+          queueRounyRemoteSave();
+        } else {
+          state.rouny.syncState = "synced";
+        }
       } else if (state.rouny.localDirty && state.rouny.localRevision === serverRevision) {
         state.rouny.syncState = "saving";
         queueRounyRemoteSave();
@@ -7221,7 +7270,11 @@ async function loadRemoteRounyTemplates({ force = false } = {}) {
         applyRemoteRounyDocument(document);
         state.rouny.syncState = "synced";
       } else {
-        state.rouny.remoteDocument = { ...document, templates: serverTemplates };
+        state.rouny.remoteDocument = {
+          ...document,
+          defaultTemplateId: serverDefaultTemplateId,
+          templates: serverTemplates,
+        };
         state.rouny.syncState = "conflict";
       }
     } catch (error) {
@@ -7249,7 +7302,8 @@ function queueRounyRemoteSave() {
     while (rounyRemoteSavePending && state.rouny.remoteLive && state.rouny.syncState !== "conflict") {
       rounyRemoteSavePending = false;
       const templates = cloneValue(state.rouny.templates);
-      const signature = rounyTemplatesSignature(templates);
+      const defaultTemplateId = normalizeRounyDefaultTemplateId(state.rouny.defaultTemplateId, templates);
+      const signature = rounyTemplatesSignature(templates, defaultTemplateId);
       state.rouny.syncState = "saving";
       state.rouny.syncError = "";
       updateRounySyncStatus();
@@ -7257,7 +7311,7 @@ function queueRounyRemoteSave() {
         const response = await fetch("/api/rouny/templates", {
           method: "PUT",
           headers: { Accept: "application/json", "Content-Type": "application/json" },
-          body: JSON.stringify({ baseRevision: state.rouny.revision, templates }),
+          body: JSON.stringify({ baseRevision: state.rouny.revision, defaultTemplateId, templates }),
         });
         const document = await response.json().catch(() => ({}));
         if (response.status === 409) {
@@ -7268,8 +7322,15 @@ function queueRounyRemoteSave() {
         }
         if (!response.ok) throw new Error(document.error || `HTTP ${response.status}`);
         state.rouny.revision = Math.max(0, Number(document.revision) || 0);
-        const changedAgain = signature !== rounyTemplatesSignature(state.rouny.templates);
-        persistRounyTemplates(state.rouny.templates, { revision: state.rouny.revision, dirty: changedAgain });
+        const changedAgain = signature !== rounyTemplatesSignature(
+          state.rouny.templates,
+          state.rouny.defaultTemplateId,
+        );
+        persistRounyTemplates(state.rouny.templates, {
+          revision: state.rouny.revision,
+          dirty: changedAgain,
+          defaultTemplateId: state.rouny.defaultTemplateId,
+        });
         state.rouny.syncState = changedAgain ? "saving" : "synced";
         if (changedAgain) rounyRemoteSavePending = true;
       } catch (error) {
@@ -7289,7 +7350,13 @@ function queueRounyRemoteSave() {
 function saveRounyTemplates(templates) {
   const normalized = templates.map(normalizeRounyTemplate).filter(Boolean);
   state.rouny.templates = normalized;
-  persistRounyTemplates(normalized, { dirty: true });
+  if (state.rouny.defaultTemplateId && !normalizeRounyDefaultTemplateId(state.rouny.defaultTemplateId, normalized)) {
+    state.rouny.defaultTemplateId = normalized[0]?.id || "";
+  }
+  persistRounyTemplates(normalized, {
+    dirty: true,
+    defaultTemplateId: state.rouny.defaultTemplateId,
+  });
   if (state.rouny.selectedTemplateId) window.localStorage.setItem(ROUNY_SELECTED_STORAGE_KEY, state.rouny.selectedTemplateId);
   queueRounyRemoteSave();
 }
@@ -7303,6 +7370,7 @@ function ensureRounyState() {
     state.rouny.hasPersistedLocal = local.exists;
     state.rouny.localRevision = local.revision;
     state.rouny.localDirty = local.dirty;
+    state.rouny.defaultTemplateId = normalizeRounyDefaultTemplateId(local.defaultTemplateId, state.rouny.templates);
     state.rouny.selectedTemplateId = window.localStorage.getItem(ROUNY_SELECTED_STORAGE_KEY) || state.rouny.templates[0]?.id || "";
     state.rouny.includeSaturday = window.localStorage.getItem(ROUNY_INCLUDE_SATURDAY_KEY) === "true";
     if (!state.rouny.templates.some((template) => template.id === state.rouny.selectedTemplateId)) {
@@ -7399,6 +7467,18 @@ function selectRounyTemplate(templateId) {
   state.rouny.editingItemId = "";
   state.rouny.editingItemDraft = null;
   window.localStorage.setItem(ROUNY_SELECTED_STORAGE_KEY, template.id);
+}
+
+function setDefaultRounyTemplate(templateId) {
+  const normalizedTemplateId = normalizeRounyDefaultTemplateId(templateId);
+  if (!normalizedTemplateId || normalizedTemplateId === state.rouny.defaultTemplateId) return false;
+  state.rouny.defaultTemplateId = normalizedTemplateId;
+  persistRounyTemplates(state.rouny.templates, {
+    dirty: true,
+    defaultTemplateId: normalizedTemplateId,
+  });
+  queueRounyRemoteSave();
+  return true;
 }
 
 function saveRounyDraft({ asCopy = false } = {}) {
@@ -7998,11 +8078,11 @@ function renderRounyTemplateList() {
           ${state.rouny.templates
             .map(
               (template) => `
-                <div class="rounyTemplateRow ${template.id === state.rouny.selectedTemplateId ? "isActive" : ""}" draggable="true" data-rouny-template-id="${escapeHtml(template.id)}">
+                <div class="rounyTemplateRow ${template.id === state.rouny.defaultTemplateId ? "isActive" : ""}" draggable="true" data-rouny-template-id="${escapeHtml(template.id)}">
                   <button class="rounyDragHandle" type="button" aria-label="${uiText("rouny.dragTemplateAria", "Drag template")}">≡</button>
                   <button class="rounyTemplateButton" type="button" data-rouny-select="${escapeHtml(template.id)}">
                     <strong>${escapeHtml(template.name)}</strong>
-                    <span>${uiText("rouny.classCount", `{count} class${template.items.length === 1 ? "" : "es"}`, { count: template.items.length })}</span>
+                    <span>${uiText("rouny.classCount", `{count} class${template.items.length === 1 ? "" : "es"}`, { count: template.items.length })}${template.id === state.rouny.defaultTemplateId ? ` · ${uiText("rouny.defaultTemplate", "Default timetable")}` : ""}</span>
                   </button>
                   <button class="plainButton" type="button" data-rouny-delete="${escapeHtml(template.id)}">${uiText("common.delete", "Delete")}</button>
                 </div>
@@ -8017,6 +8097,8 @@ function renderRounyTemplateList() {
 
 function renderRounyTemplateDetail() {
   const draft = state.rouny.draft;
+  const isSavedTemplate = state.rouny.templates.some((template) => template.id === draft.id);
+  const isDefaultTemplate = draft.id === state.rouny.defaultTemplateId;
   return `
     <form class="rounyEditor" data-rouny-editor>
       <section class="panel rounyTemplateHeaderPanel">
@@ -8036,6 +8118,7 @@ function renderRounyTemplateDetail() {
         <button class="openButton" type="button" data-rouny-reset>${uiText("rouny.reset", "Reset")}</button>
         <button class="openButton" type="button" data-rouny-copy>${uiText("rouny.copy", "Copy")}</button>
         <button class="openButton" type="button" data-rouny-print>${uiText("rouny.print", "Print")}</button>
+        <button class="openButton" type="button" data-rouny-set-default="${escapeHtml(draft.id)}" ${isSavedTemplate && !isDefaultTemplate ? "" : "disabled"}>${isDefaultTemplate ? uiText("rouny.defaultTemplate", "Default timetable") : uiText("rouny.makeDefault", "Make default")}</button>
         <button class="primaryButton" type="button" data-rouny-save>${uiText("common.save", "Save")}</button>
         <button class="openButton" type="button" data-rouny-save-as>${uiText("rouny.saveAs", "Save as")}</button>
       </section>
@@ -9989,6 +10072,12 @@ document.addEventListener("click", async (event) => {
   if (rounySelect) {
     selectRounyTemplate(rounySelect.dataset.rounySelect);
     render();
+    return;
+  }
+
+  const rounySetDefault = event.target.closest("[data-rouny-set-default]");
+  if (rounySetDefault) {
+    if (setDefaultRounyTemplate(rounySetDefault.dataset.rounySetDefault)) render();
     return;
   }
 

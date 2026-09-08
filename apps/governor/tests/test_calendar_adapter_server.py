@@ -276,10 +276,14 @@ class CalendarAdapterServerTests(unittest.TestCase):
                 }
             ]
 
-            saved = server.put_rouny_document({"baseRevision": 0, "templates": templates})
+            saved = server.put_rouny_document(
+                {"baseRevision": 0, "defaultTemplateId": "template-1", "templates": templates}
+            )
             current = server.rouny_document()
 
             self.assertEqual(saved["revision"], 1)
+            self.assertEqual(saved["defaultTemplateId"], "template-1")
+            self.assertEqual(current["defaultTemplateId"], "template-1")
             self.assertEqual(current["templates"][0]["name"], "기본")
             self.assertEqual(current["templates"][0]["items"][0]["color"], "#a7c6ff")
             self.assertEqual(current["templates"][0]["items"][0]["icon"], "✏️")
@@ -307,6 +311,29 @@ class CalendarAdapterServerTests(unittest.TestCase):
                 server.put_rouny_document({"baseRevision": 0, "templates": [template]})
 
             self.assertEqual(caught.exception.document["revision"], 1)
+
+    def test_rouny_document_rejects_default_outside_saved_templates(self) -> None:
+        server = load_server_module()
+        with tempfile.TemporaryDirectory() as temporary:
+            server.ROUNY_TEMPLATES_FILE = str(Path(temporary) / "rouny-templates.json")
+            template = {
+                "id": "template-1",
+                "name": "기본",
+                "items": [
+                    {
+                        "id": "item-1",
+                        "title": "수업",
+                        "memo": "",
+                        "color": "#f4c7df",
+                        "slots": [{"id": "slot-1", "dayOfWeek": "1", "startTime": "09:00", "endTime": "09:40"}],
+                    }
+                ],
+            }
+
+            with self.assertRaisesRegex(ValueError, "invalid_rouny_default_template"):
+                server.put_rouny_document(
+                    {"baseRevision": 0, "defaultTemplateId": "missing-template", "templates": [template]}
+                )
 
     def test_text_presets_document_saves_shared_categories_with_revision_guard(self) -> None:
         server = load_server_module()

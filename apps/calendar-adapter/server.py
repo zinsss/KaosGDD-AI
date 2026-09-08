@@ -2988,11 +2988,16 @@ def rouny_document():
         revision = int(payload.get("revision") or 0)
     except (TypeError, ValueError):
         revision = 0
+    templates = validate_rouny_templates(payload.get("templates") or [])
+    default_template_id = str(payload.get("defaultTemplateId") or "").strip()
+    if default_template_id not in {template["id"] for template in templates}:
+        default_template_id = ""
     return {
         "ok": True,
         "scope": "family",
         "revision": max(0, revision),
-        "templates": validate_rouny_templates(payload.get("templates") or []),
+        "defaultTemplateId": default_template_id,
+        "templates": templates,
         "updatedAt": str(payload.get("updatedAt") or ""),
     }
 
@@ -3002,6 +3007,11 @@ def put_rouny_document(payload):
     if isinstance(base_revision, bool) or not isinstance(base_revision, int) or base_revision < 0:
         raise ValueError("invalid_rouny_revision")
     normalized = validate_rouny_templates(payload.get("templates"))
+    default_template_id = str(payload.get("defaultTemplateId") or "").strip()
+    if len(default_template_id) > MAX_ROUNY_ID_LENGTH:
+        raise ValueError("invalid_rouny_default_template")
+    if default_template_id and default_template_id not in {template["id"] for template in normalized}:
+        raise ValueError("invalid_rouny_default_template")
     current = rouny_document()
     if current["revision"] != base_revision:
         raise RounyConflict(current)
@@ -3009,6 +3019,7 @@ def put_rouny_document(payload):
     updated = {
         "scope": "family",
         "revision": base_revision + 1,
+        "defaultTemplateId": default_template_id,
         "templates": normalized,
         "updatedAt": current_utc_iso(),
     }

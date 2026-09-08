@@ -21,7 +21,7 @@ test("settings loads the read-only system status endpoint", () => {
   assert.match(systemStatusViewSource, /const worker = runtime\.worker \|\| \{\};/);
   assert.match(systemStatusViewSource, /Observation only\. No restart, deploy, reboot, shell, package-update, or system write controls are exposed in PWA\./);
   assert.match(indexSource, /src="\/system-status-view\.js\?v=1"/);
-  assert.ok(indexSource.indexOf('src="/system-status-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=325"'));
+  assert.ok(indexSource.indexOf('src="/system-status-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=326"'));
 });
 
 test("settings top add button is hidden because system writes are not exposed in PWA", () => {
@@ -74,7 +74,7 @@ test("custom event settings rendering is delegated to the settings view module",
   assert.match(settingsViewSource, /data-custom-events-sync/);
   assert.match(settingsViewSource, /Generated calendar events/);
   assert.match(indexSource, /src="\/settings-view\.js\?v=1"/);
-  assert.ok(indexSource.indexOf('src="/settings-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=325"'));
+  assert.ok(indexSource.indexOf('src="/settings-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=326"'));
 });
 
 test("holiday settings rendering is delegated to the settings view module", () => {

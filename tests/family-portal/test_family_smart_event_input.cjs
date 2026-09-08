@@ -139,8 +139,8 @@ test("family smart event assets include styling, translations, and cache busters
   assert.match(translations, /"event\.smartMinutesSuffix": "분"/);
   assert.match(styles, /grid-template-columns: 96px minmax\(0, 1fr\);/);
   assert.match(indexSource, /href="\/styles\.css\?v=314"/);
-  assert.match(indexSource, /src="\/translations\.js\?v=182"/);
+  assert.match(indexSource, /src="\/translations\.js\?v=183"/);
   assert.match(indexSource, /src="\/smart-events\.js\?v=1"/);
-  assert.ok(indexSource.indexOf('src="/smart-events.js?v=1"') < indexSource.indexOf('src="/app.js?v=325"'));
-  assert.match(indexSource, /src="\/app\.js\?v=325"/);
+  assert.ok(indexSource.indexOf('src="/smart-events.js?v=1"') < indexSource.indexOf('src="/app.js?v=326"'));
+  assert.match(indexSource, /src="\/app\.js\?v=326"/);
 });
