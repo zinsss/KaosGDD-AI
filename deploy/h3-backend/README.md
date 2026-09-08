@@ -279,6 +279,27 @@ the containers but never removes the database, editor state, or credentials.
 See [the n8n workflow migration plan](../../docs/migration/n8n-workflow-migration-plan.md)
 before moving any current KaosGDD workflow.
 
+### First manual pilot
+
+The repository-managed first pilot is:
+
+```text
+deploy/h3-backend/n8n/workflows/medical-literature-pilot.json
+```
+
+It is intentionally inactive and has no webhook, schedule, credentials, AI
+model, or KaosGDD write path. In the n8n editor, open
+`KaosGDD Pilot - Europe PMC Literature Search`, edit the `query` value in
+`Prepare Search`, and select **Execute workflow**. `Normalize Results` returns
+at most five bounded citation records including source URLs and abstracts.
+
+The HTTP Request and Code nodes appear in n8n's official risky-node audit.
+Their reviewed pilot configuration uses one fixed Europe PMC HTTPS endpoint,
+does not read environment variables, and performs no filesystem, shell, or
+credential operation. Re-run `docker exec n8n n8n audit` after modifying the
+workflow, and export the reviewed inactive JSON back to the repository before
+enabling any trigger.
+
 ## Stateful backends
 
 `compose.backends.yaml` pins the exact Memos and Radicale images observed on

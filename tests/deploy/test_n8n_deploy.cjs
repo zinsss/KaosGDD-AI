@@ -8,6 +8,9 @@ const migrationPlan = fs.readFileSync(
   "docs/migration/n8n-workflow-migration-plan.md",
   "utf8",
 );
+const literaturePilot = JSON.parse(
+  fs.readFileSync("deploy/h3-backend/n8n/workflows/medical-literature-pilot.json", "utf8"),
+);
 
 test("n8n and its supported PostgreSQL release are digest-pinned", () => {
   assert.match(compose, /image: postgres:17-alpine@sha256:[a-f0-9]{64}/);
@@ -50,4 +53,29 @@ test("migration plan preserves Governor authority and one workflow owner", () =>
   assert.match(migrationPlan, /No live KaosGDD workflow has\s+> moved to n8n/);
   assert.match(migrationPlan, /Stop the native owner before activating the n8n owner/);
   assert.match(migrationPlan, /System updates, reboot, shell scripts \| Do not migrate/);
+});
+
+test("first n8n pilot is manual, inactive, credential-free, and read-only", () => {
+  assert.equal(literaturePilot.id, "KaosMedLitPilotV1");
+  assert.equal(literaturePilot.active, false);
+  assert.deepEqual(literaturePilot.tags, []);
+  assert.ok(literaturePilot.nodes.some((node) => node.type === "n8n-nodes-base.manualTrigger"));
+  assert.ok(literaturePilot.nodes.some((node) => node.type === "n8n-nodes-base.httpRequest"));
+  assert.ok(literaturePilot.nodes.every((node) => !node.credentials));
+  assert.ok(literaturePilot.nodes.every((node) => node.type !== "n8n-nodes-base.webhook"));
+  assert.ok(literaturePilot.nodes.every((node) => node.type !== "n8n-nodes-base.scheduleTrigger"));
+  assert.ok(literaturePilot.nodes.every((node) => node.type !== "n8n-nodes-base.executeCommand"));
+  const request = literaturePilot.nodes.find((node) => node.name === "Search Europe PMC");
+  assert.equal(request.parameters.url, "https://www.ebi.ac.uk/europepmc/webservices/rest/search");
+  assert.equal(request.parameters.options.timeout, 15000);
+  const code = literaturePilot.nodes
+    .filter((node) => node.type === "n8n-nodes-base.code")
+    .map((node) => node.parameters.jsCode)
+    .join("\n");
+  assert.doesNotMatch(code, /process\.env|\$env|\$vars|fetch\s*\(/);
+  assert.match(code, /const pageSize = 5/);
+  assert.match(code, /query\.length > 500/);
+  assert.match(code, /records\.slice\(0, request\.pageSize\)/);
+  assert.match(code, /cleanText\(record\.abstractText, 4000\)/);
+  assert.match(migrationPlan, /first inactive, manual,\s*> read-only literature-search pilot/);
 });

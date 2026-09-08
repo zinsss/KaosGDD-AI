@@ -1,6 +1,7 @@
 # n8n workflow migration plan
 
-> Status: n8n infrastructure preparation only. No live KaosGDD workflow has
+> Status: n8n infrastructure is running and the first inactive, manual,
+> read-only literature-search pilot is available. No live KaosGDD workflow has
 > moved to n8n, and no duplicate scheduler or poller should be enabled yet.
 
 ## Role and boundary
@@ -77,7 +78,13 @@ included in the H3 backup inventory, and the editor is not publicly reachable.
 
 ### Stage 1: non-destructive pilot
 
-- Build one manual Consensus or harmless public-API workflow.
+- Start with the repository-managed
+  `deploy/h3-backend/n8n/workflows/medical-literature-pilot.json` workflow. It
+  manually queries the public Europe PMC API and returns at most five bounded,
+  normalized citation records. It has no credentials, webhook, schedule, AI
+  model, or KaosGDD write path.
+- Build one manual Consensus or another harmless public-API workflow after the
+  Europe PMC baseline is reviewed.
 - Accept a synthetic job from Governor and return normalized JSON.
 - Store no patient identifiers, document bodies, mail bodies, or credentials
   in pinned execution data.
@@ -166,8 +173,9 @@ should change as part of this test.
 
 ## Recommended first implementation
 
-Use Consensus as the first end-to-end pilot because it is read-only, has a
-documented API/MCP surface, returns source metadata, and cannot alter current
-KaosGDD state. After that succeeds, connect the two Google accounts in
-read-only mode. Existing mail, fax, document, calendar, task, notification,
-and system-operation workflows remain native until separately approved.
+Review the imported manual Europe PMC literature-search pilot first. Once its
+bounded output is satisfactory, add the Governor webhook contract and compare
+a Consensus-backed branch if credentials are available. After that succeeds,
+connect the two Google accounts in read-only mode. Existing mail, fax,
+document, calendar, task, notification, and system-operation workflows remain
+native until separately approved.

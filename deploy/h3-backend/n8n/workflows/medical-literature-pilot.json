@@ -1,0 +1,126 @@
+{
+  "id": "KaosMedLitPilotV1",
+  "name": "KaosGDD Pilot - Europe PMC Literature Search",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "e23059f0-18c7-4d30-a476-2c707c9f225c",
+      "name": "Run Manually",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const query = 'restless legs syndrome treatment guideline';\nconst pageSize = 5;\n\nif (!query.trim() || query.length > 500) {\n  throw new Error('query must contain 1-500 characters');\n}\n\nreturn [{\n  json: {\n    schemaVersion: 1,\n    jobId: `manual-${Date.now()}`,\n    query: query.trim(),\n    pageSize,\n  },\n}];"
+      },
+      "id": "615b1425-4a39-446b-a9fa-ec01b9f153fb",
+      "name": "Prepare Search",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -280,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $json.query }}"
+            },
+            {
+              "name": "format",
+              "value": "json"
+            },
+            {
+              "name": "resultType",
+              "value": "core"
+            },
+            {
+              "name": "pageSize",
+              "value": "={{ $json.pageSize }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "1447e291-b32b-4df5-8f01-3769fb38f435",
+      "name": "Search Europe PMC",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -20,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const request = $('Prepare Search').first().json;\nconst payload = $input.first().json;\nconst records = Array.isArray(payload?.resultList?.result) ? payload.resultList.result : [];\nconst cleanText = (value, maxLength) => String(value ?? '').replace(/\\s+/g, ' ').trim().slice(0, maxLength);\n\nconst results = records.slice(0, request.pageSize).map((record) => {\n  const source = cleanText(record.source, 16);\n  const id = cleanText(record.id || record.pmid || record.pmcid, 128);\n  return {\n    source,\n    id,\n    pmid: cleanText(record.pmid, 32),\n    pmcid: cleanText(record.pmcid, 32),\n    doi: cleanText(record.doi, 256),\n    title: cleanText(record.title, 1000),\n    authors: cleanText(record.authorString, 1000),\n    journal: cleanText(record.journalTitle, 500),\n    publicationYear: cleanText(record.pubYear, 8),\n    publicationTypes: cleanText(record.pubType, 500),\n    abstract: cleanText(record.abstractText, 4000),\n    citedByCount: Number(record.citedByCount || 0),\n    isOpenAccess: record.isOpenAccess === 'Y',\n    url: source && id\n      ? `https://europepmc.org/article/${encodeURIComponent(source)}/${encodeURIComponent(id)}`\n      : '',\n  };\n});\n\nreturn [{\n  json: {\n    schemaVersion: 1,\n    jobId: request.jobId,\n    provider: 'Europe PMC',\n    query: request.query,\n    retrievedAt: new Date().toISOString(),\n    totalHits: Number(payload?.hitCount || 0),\n    resultCount: results.length,\n    results,\n  },\n}];"
+      },
+      "id": "fe52ddc0-c42a-4a36-ad19-020ac71b548c",
+      "name": "Normalize Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Run Manually": {
+      "main": [
+        [
+          {
+            "node": "Prepare Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Search": {
+      "main": [
+        [
+          {
+            "node": "Search Europe PMC",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Europe PMC": {
+      "main": [
+        [
+          {
+            "node": "Normalize Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "versionId": "360a7a78-8ef8-4ee2-b11a-f5a82f20a555",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "tags": []
+}
