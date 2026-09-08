@@ -300,6 +300,22 @@ credential operation. Re-run `docker exec n8n n8n audit` after modifying the
 workflow, and export the reviewed inactive JSON back to the repository before
 enabling any trigger.
 
+### AI source monitor
+
+`n8n/workflows/ai-source-monitor.json` is a read-only weekly monitor for the
+live AI Tasks source registry. At 03:30 KST each Sunday it reads the current
+logical allowlist from Governor over the private backend network, fetches one
+representative public page for every source at a throttled rate, and compares
+availability, HTTP status, and search-page structure with the preceding run.
+The first production run creates the baseline. Results remain in n8n execution
+history; the workflow sends no notification and never edits Governor's
+allowlist. A source change must be reviewed before any search adapter is
+updated.
+
+The initial production baseline was established during deployment. Future
+schema changes should intentionally reset the monitor schema version and then
+let the next scheduled production execution establish a new baseline.
+
 ## Stateful backends
 
 `compose.backends.yaml` pins the exact Memos and Radicale images observed on

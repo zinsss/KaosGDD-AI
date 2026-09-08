@@ -1,8 +1,10 @@
 # n8n workflow migration plan
 
 > Status: n8n infrastructure is running and the first inactive, manual,
-> read-only literature-search pilot is available. No live KaosGDD workflow has
-> moved to n8n, and no duplicate scheduler or poller should be enabled yet.
+> read-only literature-search pilot is available. A read-only weekly AI source
+> health monitor is the first active n8n schedule; it owns no KaosGDD domain
+> state and sends no notifications. No existing KaosGDD workflow has moved to
+> n8n, and no duplicate scheduler or poller should be enabled yet.
 
 ## Role and boundary
 

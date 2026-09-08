@@ -13,7 +13,11 @@ from unittest.mock import patch
 
 from kaos_governor import api
 from kaos_governor.ai_tasks import AITaskArchive, AITaskError
-from kaos_governor.official_search import allowed_official_health_hosts, official_health_search_candidates
+from kaos_governor.official_search import (
+    allowed_official_health_hosts,
+    official_health_monitor_targets,
+    official_health_search_candidates,
+)
 from kaos_governor.textbook_search import search_textbook_sources
 
 
@@ -132,7 +136,48 @@ def fake_hwpx_bytes(text: str = "첨부 급여기준 세부 내용") -> bytes:
     return output.getvalue()
 
 
+class CaptureHandler(api.Handler):
+    def __init__(self, path: str) -> None:
+        self.path = path
+        self.headers: dict[str, str] = {}
+        self.rfile = BytesIO()
+        self.wfile = BytesIO()
+        self.status = 0
+
+    def send_response(self, code: int, message: str | None = None) -> None:
+        self.status = code
+
+    def send_header(self, keyword: str, value: str) -> None:
+        return None
+
+    def end_headers(self) -> None:
+        return None
+
+
 class GovernorAITaskTests(unittest.TestCase):
+    def test_internal_n8n_source_registry_route_is_metadata_only(self) -> None:
+        handler = CaptureHandler("/internal/n8n/ai-source-registry")
+
+        handler.do_GET()
+
+        payload = json.loads(handler.wfile.getvalue())
+        self.assertEqual(handler.status, 200)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["sourceCount"], len(payload["targets"]))
+        self.assertNotIn("token", json.dumps(payload).lower())
+
+    def test_source_monitor_registry_covers_every_allowlisted_source(self) -> None:
+        targets = official_health_monitor_targets()
+
+        self.assertGreaterEqual(len(targets), 60)
+        self.assertEqual(len(targets), len({(item["name"], tuple(item["hosts"])) for item in targets}))
+        monitored_hosts = {host for item in targets for host in item["hosts"]}
+        self.assertEqual(monitored_hosts, set(allowed_official_health_hosts()))
+        hira = next(item for item in targets if item["name"] == "건강보험심사평가원")
+        health_kr = next(item for item in targets if item["name"] == "약학정보원")
+        self.assertIn("InsuAdtCrtrList.do", hira["url"])
+        self.assertIn("search_total_result.asp", health_kr["url"])
+
     def test_ai_task_access_allows_family_profile(self) -> None:
         with patch.object(api.memos_relay, "verify_cloudflare_access", return_value=("family", "wife@example.com")):
             self.assertEqual(api.require_ai_task_access({}), "family")

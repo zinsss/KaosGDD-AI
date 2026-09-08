@@ -1,0 +1,131 @@
+{
+  "id": "KaosAISourceMonitorV1",
+  "name": "KaosGDD - AI Source Monitor",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "0723214e-7a46-456d-a6cb-c11acf400d24",
+      "name": "Run Manually",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-720, 0]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1,
+              "triggerAtDay": [0],
+              "triggerAtHour": 3,
+              "triggerAtMinute": 30
+            }
+          ]
+        },
+        "misfirePolicy": "skip"
+      },
+      "id": "de934c8c-5f9e-43aa-a65d-cf06bdc9eb6f",
+      "name": "Weekly Sunday 03:30 KST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [-720, -160]
+    },
+    {
+      "parameters": {
+        "url": "http://governor-api:8096/internal/n8n/ai-source-registry",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "02b45870-4d34-443f-98b4-ce6354cc58a4",
+      "name": "Load Live Allowlist",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [-460, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const registry = $input.first().json;\nif (!registry?.ok || registry.schemaVersion !== 1 || !Array.isArray(registry.targets)) {\n  throw new Error('invalid Governor AI source registry');\n}\nif (registry.targets.length < 1 || registry.targets.length > 200) {\n  throw new Error('unexpected AI source target count');\n}\n\nreturn registry.targets.map((target, index) => {\n  const url = String(target.url || '');\n  if (!url.startsWith('https://')) {\n    throw new Error(`target ${index} is not HTTPS`);\n  }\n  return {\n    json: {\n      schemaVersion: 1,\n      index,\n      name: String(target.name || '').slice(0, 200),\n      hosts: Array.isArray(target.hosts) ? target.hosts.slice(0, 10) : [],\n      checkKind: target.checkKind === 'search' ? 'search' : 'homepage',\n      url,\n    },\n  };\n});"
+      },
+      "id": "917d205c-d9fc-4754-ac3c-4b4e6cc0f568",
+      "name": "Build Bounded Checks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-200, 0]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "KaosGDD-Source-Monitor/1.0"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.5"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 750
+            }
+          },
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "text"
+            }
+          },
+          "optimizeResponse": true,
+          "responseType": "text",
+          "truncateResponse": true,
+          "maxLength": 20000
+        }
+      },
+      "id": "36cd15fd-927a-4dca-9b80-bd5cbad21020",
+      "name": "Inspect Public Source",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [60, 0],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const targets = $('Build Bounded Checks').all().map((item) => item.json);\nconst responses = $input.all().map((item) => item.json);\nconst state = $getWorkflowStaticData('global');\nconst monitorSchemaVersion = 3;\nconst previous = state.monitorSchemaVersion === monitorSchemaVersion && state.baseline && typeof state.baseline === 'object' ? state.baseline : {};\nconst now = new Date().toISOString();\n\nfunction hashText(value) {\n  let hash = 2166136261;\n  for (let i = 0; i < value.length; i += 1) {\n    hash ^= value.charCodeAt(i);\n    hash = Math.imul(hash, 16777619);\n  }\n  return (hash >>> 0).toString(16).padStart(8, '0');\n}\n\nfunction structureOf(body) {\n  const text = String(body || '').slice(0, 20000).replace(/\\s+/g, ' ');\n  const title = (text.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i)?.[1] || '')\n    .replace(/<[^>]+>/g, '').trim().slice(0, 300);\n  const forms = [...text.matchAll(/<form\\b[^>]*>/gi)].slice(0, 20).map((match) => {\n    const tag = match[0];\n    const method = (tag.match(/\\bmethod=([\"'])([^\"']+)\\1/i)?.[2] || 'get').toLowerCase();\n    const actionValue = tag.match(/\\baction=([\"'])([^\"']*)\\1/i)?.[2] || '';\n    const action = actionValue.split(/[?#]/, 1)[0].toLowerCase();\n    return { method, action };\n  });\n  const fields = [...text.matchAll(/<(input|select|textarea)\\b[^>]*\\bname=([\"'])([^\"']+)\\2[^>]*>/gi)]\n    .slice(0, 80).map((match) => ({ tag: match[1].toLowerCase(), name: match[3].toLowerCase() }))\n    .sort((left, right) => `${left.tag}:${left.name}`.localeCompare(`${right.tag}:${right.name}`));\n  return { title, formCount: forms.length, fieldCount: fields.length, fingerprint: hashText(JSON.stringify({ forms, fields })) };\n}\n\nconst current = {};\nconst checks = [];\nconst changes = [];\nfor (let index = 0; index < targets.length; index += 1) {\n  const target = targets[index];\n  const response = responses[index] || {};\n  const statusCode = Number(response.statusCode || 0);\n  const error = String(response.error?.message || response.error || '').slice(0, 500);\n  const available = !error && statusCode >= 200 && statusCode < 400;\n  const headers = response.headers && typeof response.headers === 'object' ? response.headers : {};\n  const structure = structureOf(response.data ?? response.body);\n  const snapshot = {\n    name: target.name,\n    url: target.url,\n    checkKind: target.checkKind,\n    available,\n    statusCode,\n    contentType: String(headers['content-type'] || headers['Content-Type'] || '').slice(0, 200),\n    etag: String(headers.etag || headers.ETag || '').slice(0, 300),\n    lastModified: String(headers['last-modified'] || headers['Last-Modified'] || '').slice(0, 200),\n    title: structure.title,\n    formCount: structure.formCount,\n    fieldCount: structure.fieldCount,\n    structureFingerprint: structure.fingerprint,\n    error,\n    checkedAt: now,\n  };\n  current[target.name] = snapshot;\n  checks.push(snapshot);\n  const before = previous[target.name];\n  if (!before) continue;\n  if (before.available !== snapshot.available) {\n    changes.push({ name: target.name, type: snapshot.available ? 'recovered' : 'unavailable', before: before.statusCode, after: snapshot.statusCode, error });\n  } else if (before.statusCode !== snapshot.statusCode) {\n    changes.push({ name: target.name, type: 'status_changed', before: before.statusCode, after: snapshot.statusCode });\n  } else if (before.url !== snapshot.url) {\n    changes.push({ name: target.name, type: 'monitor_url_changed', before: before.url, after: snapshot.url });\n  } else if (target.checkKind === 'search' && before.structureFingerprint !== snapshot.structureFingerprint) {\n    changes.push({ name: target.name, type: 'search_structure_changed', before: before.structureFingerprint, after: snapshot.structureFingerprint });\n  }\n}\n\nconst removed = Object.keys(previous).filter((name) => !current[name]);\nfor (const name of removed) changes.push({ name, type: 'removed_from_allowlist' });\nconst baselineCreated = Object.keys(previous).length === 0;\nstate.monitorSchemaVersion = monitorSchemaVersion;\nstate.baseline = current;\nstate.lastRun = now;\nstate.lastChanges = changes.slice(0, 200);\n\nreturn [{ json: {\n  ok: true,\n  schemaVersion: monitorSchemaVersion,\n  checkedAt: now,\n  baselineCreated,\n  checkedCount: checks.length,\n  availableCount: checks.filter((item) => item.available).length,\n  unavailableCount: checks.filter((item) => !item.available).length,\n  changedCount: changes.length,\n  changes: changes.slice(0, 200),\n  checks,\n} }];"
+      },
+      "id": "9cfae5ae-fef9-424f-bafb-9c49c07296ee",
+      "name": "Compare With Previous Run",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [320, 0]
+    }
+  ],
+  "connections": {
+    "Run Manually": {"main": [[{"node": "Load Live Allowlist", "type": "main", "index": 0}]]},
+    "Weekly Sunday 03:30 KST": {"main": [[{"node": "Load Live Allowlist", "type": "main", "index": 0}]]},
+    "Load Live Allowlist": {"main": [[{"node": "Build Bounded Checks", "type": "main", "index": 0}]]},
+    "Build Bounded Checks": {"main": [[{"node": "Inspect Public Source", "type": "main", "index": 0}]]},
+    "Inspect Public Source": {"main": [[{"node": "Compare With Previous Run", "type": "main", "index": 0}]]}
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "timezone": "Asia/Seoul"
+  },
+  "versionId": "dce68d79-162d-4d9d-b6fe-a3637e79646e",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "tags": []
+}

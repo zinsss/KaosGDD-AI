@@ -306,6 +306,43 @@ def allowed_official_health_hosts() -> list[str]:
     return sorted(OFFICIAL_HEALTH_ALLOWED_HOSTS)
 
 
+def official_health_monitor_targets() -> list[dict[str, object]]:
+    """Return one live health-check target for every logical allowlisted source.
+
+    This is intentionally metadata-only.  n8n may inspect these public URLs,
+    but it does not receive credentials or authority to change the allowlist.
+    """
+    special_urls = {
+        "건강보험심사평가원": HIRA_INSURANCE_CRITERIA_URL,
+        "약학정보원": HEALTH_KR_SEARCH_PAGE_URL,
+        "American Family Physician": AAFP_SITEMAP_URL,
+    }
+    targets: list[dict[str, object]] = []
+    seen: set[tuple[str, tuple[str, ...]]] = set()
+    for site in (*OFFICIAL_HEALTH_SITES, *KOREAN_SPECIALTY_TREATMENT_SITES):
+        key = (site.name, site.hosts)
+        if key in seen:
+            continue
+        seen.add(key)
+        template = special_urls.get(site.name) or site.search_url
+        if template:
+            url = template.replace("{query}", urllib.parse.quote("health guideline"))
+            check_kind = "search"
+        else:
+            canonical_host = next((host for host in site.hosts if host.startswith("www.")), site.hosts[0])
+            url = f"https://{canonical_host}/"
+            check_kind = "homepage"
+        targets.append(
+            {
+                "name": site.name,
+                "hosts": list(site.hosts),
+                "url": url,
+                "checkKind": check_kind,
+            }
+        )
+    return targets
+
+
 def looks_like_treatment_options_query(query: str, alternate_queries: Iterable[str] = ()) -> bool:
     return _looks_like_treatment_options_query([query, *alternate_queries])
 

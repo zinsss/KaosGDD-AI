@@ -42,6 +42,7 @@ from kaos_governor.official_search import (
     allowed_official_health_hosts,
     is_allowed_official_health_host,
     looks_like_treatment_options_query,
+    official_health_monitor_targets,
     official_health_search_candidates,
 )
 from kaos_governor.tasks import PostgresRecurringTaskStore, RecurringTaskDefinition, RecurringTaskError, RecurringTaskService, validate_payload
@@ -3242,6 +3243,19 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/health":
             status = database_status()
             json_response(self, 200 if status.get("ok") else 503, {"ok": bool(status.get("ok")), "database": status})
+            return
+        if parsed.path == "/internal/n8n/ai-source-registry":
+            targets = official_health_monitor_targets()
+            json_response(
+                self,
+                200,
+                {
+                    "ok": True,
+                    "schemaVersion": 1,
+                    "sourceCount": len(targets),
+                    "targets": targets,
+                },
+            )
             return
         if parsed.path == "/api/ledger":
             try:
