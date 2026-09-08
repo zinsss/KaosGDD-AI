@@ -5117,16 +5117,19 @@ function renderTopNav(route) {
             </a>
           `).join("")}
         </nav>
-        ${
-          topAction
-            ? `
+        <div class="topHeaderActions">
+          <button class="topReloadButton" type="button" data-app-reload aria-label="Reload KaosGDD" title="Reload KaosGDD">↻</button>
+          ${
+            topAction
+              ? `
               <div class="topAddWrap">
                 <button class="topAddButton" type="button" data-top-add="${escapeHtml(topAction)}" aria-label="Add" aria-haspopup="menu" aria-expanded="false">+</button>
                 ${renderTopAddMenu(route)}
               </div>
             `
-            : ""
-        }
+              : ""
+          }
+        </div>
       </div>
     `;
     return;
@@ -5373,8 +5376,22 @@ function routeTitle(route) {
   document.getElementById("routeTitle").textContent = title;
   document.querySelector(".kicker").textContent = profileConfig().label;
   const app = document.querySelector(".app");
+  const identity = document.querySelector(".appIdentity");
   app.dataset.route = route;
   app.dataset.profile = portalProfile();
+  if (identity && portalProfile() === "family") {
+    identity.dataset.appReload = "";
+    identity.setAttribute("role", "button");
+    identity.setAttribute("tabindex", "0");
+    identity.setAttribute("aria-label", "새로고침");
+    identity.setAttribute("title", "새로고침");
+  } else if (identity) {
+    delete identity.dataset.appReload;
+    identity.removeAttribute("role");
+    identity.removeAttribute("tabindex");
+    identity.removeAttribute("aria-label");
+    identity.removeAttribute("title");
+  }
   if (portalProfile() === "main") {
     const severity = mainAttentionSeverity();
     if (severity) app.dataset.attention = severity;
@@ -9288,6 +9305,12 @@ function updateTopBarShadow() {
 }
 
 document.addEventListener("click", async (event) => {
+  if (event.target.closest("[data-app-reload]")) {
+    event.preventDefault();
+    window.location.reload();
+    return;
+  }
+
   const topAddMenuAction = event.target.closest("[data-top-add-menu-action]");
   if (topAddMenuAction) {
     event.preventDefault();
@@ -10784,6 +10807,12 @@ document.addEventListener("submit", async (event) => {
 });
 
 document.addEventListener("keydown", (event) => {
+  if (event.target.closest("[data-app-reload]") && ["Enter", " "].includes(event.key)) {
+    event.preventDefault();
+    window.location.reload();
+    return;
+  }
+
   const block = event.target.closest("[data-rouny-grid-item]");
   if (!block || !["Enter", " "].includes(event.key)) return;
   event.preventDefault();

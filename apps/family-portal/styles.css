@@ -450,15 +450,43 @@ html.isAgendaSuppliesEmbed body {
   min-width: 0;
 }
 
+.topHeaderActions {
+  display: flex;
+  grid-column: 3;
+  grid-row: 1;
+  align-items: center;
+  justify-self: end;
+  gap: 8px;
+}
+
 .desktopMainMenuList {
   display: none;
 }
 
 .topAddWrap {
   position: relative;
-  grid-column: 3;
-  grid-row: 1;
-  justify-self: end;
+}
+
+.topReloadButton {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  border: 1px solid rgba(136, 192, 208, 0.5);
+  border-radius: 999px;
+  background: rgba(67, 76, 94, 0.28);
+  color: var(--nord8);
+  padding: 0;
+  font: 700 1.2rem/1 "Sarasa Gothic Mono", ui-monospace, monospace;
+}
+
+.topReloadButton:hover,
+.topReloadButton:focus-visible,
+.topReloadButton:active {
+  border-color: rgba(235, 203, 139, 0.72);
+  color: var(--nord13);
+  background: rgba(235, 203, 139, 0.13);
 }
 
 .topAddButton {
@@ -5039,6 +5067,21 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   box-shadow: 0 6px 14px rgba(96, 75, 107, 0.18);
 }
 
+.app[data-profile="family"] .appIdentity[data-app-reload] {
+  border-radius: 6px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.app[data-profile="family"] .appIdentity[data-app-reload]:focus-visible {
+  outline: 2px solid rgba(155, 95, 143, 0.5);
+  outline-offset: 4px;
+}
+
+.app[data-profile="family"] .appIdentity[data-app-reload]:active {
+  opacity: 0.64;
+}
+
 .app[data-profile="family"] .panel {
   box-shadow: none;
 }
@@ -5887,20 +5930,17 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   }
 
   .app[data-profile="main"] .appIdentity {
-    padding-right: 50px;
+    padding-right: 94px;
   }
 
   .app[data-profile="main"] .topNav {
     margin-top: 28px;
   }
 
-  .app[data-profile="main"] .topAddWrap {
+  .app[data-profile="main"] .topHeaderActions {
     position: absolute;
     top: 16px;
     right: 16px;
-    grid-column: auto;
-    grid-row: auto;
-    justify-self: auto;
   }
 
   .app[data-profile="main"] .desktopMainMenuList {
