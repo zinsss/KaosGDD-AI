@@ -24,6 +24,9 @@ test("main and family memos routes render native archive board controls", () => 
   assert.match(memosViewSource, /data-memo-search/);
   assert.match(memosViewSource, /data-memos-refresh/);
   assert.match(memosViewSource, /href="#\/add-memo">NEW<\/a>/);
+  assert.ok(memosViewSource.indexOf('href="#/add-memo">NEW</a>') < memosViewSource.indexOf('class="archiveSearchBox"'));
+  assert.ok(memosViewSource.indexOf('class="archiveSearchBox"') < memosViewSource.indexOf('data-memos-refresh'));
+  assert.match(stylesSource, /\[data-archive-kind="memos"\] \.archiveSearchBar \{\n  grid-template-columns: auto minmax\(0, 1fr\) 44px;/);
   assert.match(memosViewSource, /data-memo-open/);
   assert.match(appSource, /if \(route === "memos"\) loadMemos\(\);/);
   assert.doesNotMatch(appSource, /portalProfile\(\) === "family"[\s\S]*memosFrame/);

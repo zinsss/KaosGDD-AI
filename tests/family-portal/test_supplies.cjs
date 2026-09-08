@@ -18,7 +18,7 @@ test("top add opens the native supply composer route", () => {
   assert.match(styles, /\.supplyAddPanel \.archiveFormRow input \{[\s\S]*?min-height: 52px;/);
   assert.match(styles, /\.supplyAddPanel \.archiveFormRow input \{[\s\S]*?border: 1px solid var\(--archive-line\);/);
   assert.match(styles, /\.supplyAddPanel \.archiveFormRow input \{[\s\S]*?background: var\(--archive-surface\);/);
-  assert.match(indexSource, /href="\/styles\.css\?v=317"/);
+  assert.match(indexSource, /href="\/styles\.css\?v=318"/);
 });
 
 test("main supplies route renders as an archive board instead of an inline composer", () => {

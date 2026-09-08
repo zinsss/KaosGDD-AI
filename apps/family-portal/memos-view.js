@@ -70,13 +70,13 @@ window.KAOS_MEMOS_VIEW = (() => {
     return `
       <section class="archiveTerminal" data-archive-kind="memos" aria-label="Memo archive">
         <form class="archiveCommand archiveSearchBar" data-memo-search role="search">
+          <a class="archiveAction archiveTopAction" href="#/add-memo">NEW</a>
           <label class="archiveSearchBox" for="memoQuery">
             <span class="archiveSearchIcon" aria-hidden="true">⌕</span>
             <input id="memoQuery" name="query" type="search" value="${deps.escapeHtml(memos.query)}" placeholder="Search memos" autocomplete="off" />
             ${memos.appliedQuery ? `<button class="archiveSearchClear" type="button" data-memos-clear aria-label="Clear memo search">×</button>` : ""}
           </label>
           <button class="archiveAction archiveTopAction" type="button" data-memos-refresh aria-label="Refresh memos" title="Refresh memos" ${memos.loading ? "disabled" : ""}>↻</button>
-          <a class="archiveAction archiveTopAction" href="#/add-memo">NEW</a>
           <button class="srOnly" type="submit">Search</button>
         </form>
         <div class="archiveWorkspace ${hasDetail ? "hasDetail" : ""}">

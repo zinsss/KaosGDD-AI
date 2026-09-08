@@ -6578,6 +6578,10 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   padding: 0;
 }
 
+.app:is([data-profile="main"], [data-profile="family"][data-route="memos"]) [data-archive-kind="memos"] .archiveSearchBar {
+  grid-template-columns: auto minmax(0, 1fr) 44px;
+}
+
 .app[data-profile="main"] [data-archive-kind="fax"] .archiveCommand,
 .app[data-profile="main"] [data-archive-kind="mail"] .archiveCommand {
   display: flex;
