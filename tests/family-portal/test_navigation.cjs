@@ -46,13 +46,13 @@ test("unknown personal routes safely select Agenda", () => {
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=314"');
+  const styleIndex = index.indexOf('href="/styles.css?v=315"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=5"');
   const calendarViewIndex = index.indexOf('src="/calendar-view.js?v=1"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
   const faxIndex = index.indexOf('src="/fax.js?v=2"');
   const mailIndex = index.indexOf('src="/mail.js?v=7"');
-  const applicationIndex = index.indexOf('src="/app.js?v=326"');
+  const applicationIndex = index.indexOf('src="/app.js?v=327"');
   assert.ok(styleIndex >= 0);
   assert.ok(navigationIndex >= 0);
   assert.ok(calendarViewIndex > navigationIndex);
@@ -74,7 +74,7 @@ test("calendar month panel rendering is delegated to the view module", () => {
   assert.match(calendarViewSource, /data-date="\$\{cell\.value\}"/);
   assert.match(calendarViewSource, /data-calendar-add-event/);
   assert.match(index, /src="\/calendar-view\.js\?v=1"/);
-  assert.ok(index.indexOf('src="/calendar-view.js?v=1"') < index.indexOf('src="/app.js?v=326"'));
+  assert.ok(index.indexOf('src="/calendar-view.js?v=1"') < index.indexOf('src="/app.js?v=327"'));
 });
 
 test("calendar title uses native month and year dropdowns", () => {

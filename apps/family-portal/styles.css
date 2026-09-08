@@ -4245,7 +4245,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   position: absolute;
   left: 0;
   right: 0;
-  height: 64px;
+  height: 72px;
   border-top: 1px solid #d7e3f7;
   pointer-events: none;
 }
