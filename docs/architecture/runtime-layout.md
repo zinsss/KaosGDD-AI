@@ -26,6 +26,15 @@ namespace.
   called KaosAI. It is a Brain dependency, not a source of truth.
 - KaosGovernor: the deterministic authority for rules, confirmations,
   idempotency, audit, jobs, and service tool APIs.
+- n8n: the ready-made application scheduling and integration control plane.
+  It may decide when an approved workflow starts and retain its execution
+  history, but it does not become the authority for KaosGDD domain state.
+
+For scheduled application work, keep the boundary concise: n8n owns **when**;
+KaosGovernor owns **whether and how** a KaosGDD operation may run. Privileged
+host schedules remain with systemd or KaosSystemOperator. This provides a
+single maintenance view for ordinary workflows without giving n8n unrestricted
+system or domain authority.
 
 Current live OpenClaw/OpenAI paths and environment variables may still use the
 legacy `kaosai` name. Do not move live env files, secrets, systemd units, or

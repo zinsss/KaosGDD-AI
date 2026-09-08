@@ -28,6 +28,45 @@ audit records, and the final state visible in the PWA. n8n owns only its
 workflow definitions, encrypted credentials, and execution history. An n8n
 execution is not a KaosGDD domain record.
 
+## Scheduling boundary
+
+The target is one place to inspect and maintain ordinary application
+schedules, but not one component that owns every job. n8n is the scheduling
+control plane: it decides **when** an approved workflow starts, shows execution
+history, and handles bounded retries. Governor remains the domain executor: it
+decides **what** is allowed, validates the request, enforces idempotency and
+confirmation, performs KaosGDD writes, and records authoritative outcomes.
+
+```text
+n8n schedule
+    |
+    +-- external/read-only work ---- provider or public API
+    |
+    +-- KaosGDD domain work -------- Governor validates and executes
+                                      |
+                                      +-- Radicale / Memos / Paperless
+                                      +-- mail / fax / notifications
+```
+
+Centralized visibility does not justify moving privileged host maintenance
+into n8n. Backups, security updates, service recovery, reboot, and other root
+operations remain systemd timers or KaosSystemOperator work. Continuous
+workers may also remain native services when a long-running process is safer
+than repeatedly starting a workflow.
+
+| Concern | Owner |
+| --- | --- |
+| Trigger time, workflow history, bounded retry | n8n |
+| Domain rules, authorization, confirmation, idempotency | Governor |
+| Calendar/task/document/mail/fax state changes | Governor and its adapters |
+| AI interpretation and synthesis | KaosBrain/OpenAI |
+| Host backup, update, recovery, reboot | systemd / KaosSystemOperator |
+
+Before moving a schedule, inventory its current trigger, executor, state
+owner, idempotency key, failure behavior, and rollback switch. Shadow the n8n
+trigger without writes first. Enable only one production scheduler after the
+comparison gate; never leave native and n8n triggers active for the same job.
+
 ## Current workflow assessment
 
 | Workflow | Initial decision | Reason and possible n8n role |
