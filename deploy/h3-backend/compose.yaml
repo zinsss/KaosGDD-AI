@@ -145,10 +145,13 @@ services:
       GOVERNOR_TOOLS_PORT: "8098"
       GOVERNOR_TOOLS_STATE_PATH: "/data/tools/second-look-status.json"
       GOVERNOR_WORKER_STATE_PATH: "/data/notifications/governor-worker.json"
+      FAX_PROPOSAL_STAGE_ROOT: "/data/tools/fax-proposals"
+      IOS_FAX_SHORTCUT_TOKEN_FILE: "/run/secrets/ios_fax_shortcut_token"
     entrypoint: ["kaos-governor-tools"]
     secrets:
       - governor_api_token
       - ios_shortcuts_token
+      - ios_fax_shortcut_token
       - memos_access_token
       - naver_mail_password
       - paperless_api_token
@@ -157,7 +160,7 @@ services:
       - "${GOVERNOR_BRAIN_TOOLS_BIND_ADDRESS:-127.0.0.1}:${GOVERNOR_BRAIN_TOOLS_PORT:-8098}:8098"
     volumes:
       - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/mail:/data/mail:ro
-      - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/fax:/data/fax:ro
+      - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/fax:/data/fax
       - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/notifications:/data/notifications:ro
       - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/tools:/data/tools
     group_add:
@@ -196,6 +199,8 @@ secrets:
     file: ./secrets/governor_api_token
   ios_shortcuts_token:
     file: ./secrets/ios_shortcuts_token
+  ios_fax_shortcut_token:
+    file: ./secrets/ios_fax_shortcut_token
   memos_access_token:
     file: ./secrets/memos_access_token
   naver_mail_password:

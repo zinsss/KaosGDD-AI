@@ -151,9 +151,13 @@ setup() {
   if [[ ! -s "$(secret_path ios_shortcuts_token)" ]]; then
     openssl rand -hex 32 > "$(secret_path ios_shortcuts_token)"
   fi
+  if [[ ! -s "$(secret_path ios_fax_shortcut_token)" ]]; then
+    openssl rand -hex 32 > "$(secret_path ios_fax_shortcut_token)"
+  fi
   chmod 0640 "${SECRETS_DIR}"/discord_bot_token \
     "${SECRETS_DIR}"/governor_api_token \
     "${SECRETS_DIR}"/ios_shortcuts_token \
+    "${SECRETS_DIR}"/ios_fax_shortcut_token \
     "${SECRETS_DIR}"/memos_access_token \
     "${SECRETS_DIR}"/naver_mail_password \
     "${SECRETS_DIR}"/paperless_api_token \
@@ -176,6 +180,7 @@ preflight() {
     require_nonempty_file "${KAOS_ROOT:-/srv/kaos}/secrets/governor-postgres.env"
   fi
   require_secret ios_shortcuts_token
+  require_secret ios_fax_shortcut_token
   [[ "${DISCORD_GUILD_ID:-}" != "123456789012345678" ]] || die "replace the example Discord guild ID"
   [[ "${DISCORD_ALLOWED_USER_IDS:-}" != *"123456789012345678"* ]] || die "replace the example Discord user ID"
   [[ "${DISCORD_ALLOWED_CHANNEL_IDS:-}" != *"123456789012345678"* ]] || die "replace the example Discord channel IDs"

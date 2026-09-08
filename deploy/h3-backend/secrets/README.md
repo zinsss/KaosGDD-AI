@@ -5,6 +5,7 @@
 - `discord_bot_token`
 - `governor_api_token`
 - `ios_shortcuts_token`
+- `ios_fax_shortcut_token`
 - `memos_access_token`
 - `naver_mail_password`
 - `paperless_api_token`
@@ -23,9 +24,10 @@ Durable Governor proposals use the separately managed environment file
 committed. `kaos-h3 preflight` requires it whenever
 `GOVERNOR_OPERATION_STORE=postgres`.
 
-`ios_shortcuts_token` authenticates only the read-only `/shortcuts/...`
-routes. It is intentionally separate from the powerful Governor API token and
-is safe to store in a personal iOS Shortcut.
+`ios_shortcuts_token` authenticates only read-only `/shortcuts/...` routes.
+`ios_fax_shortcut_token` is a separate personal credential for the narrowly
+scoped, confirmation-required outbound fax routes. Neither token grants access
+to the powerful Governor API or the Office Fax Connector credential.
 
 For Apple Watch text alerts, `pushover_app_token` is the API token for the
 KaosGDD Notifications application and `pushover_user_key` is the recipient key

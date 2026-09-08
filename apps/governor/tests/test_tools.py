@@ -3,12 +3,13 @@ from __future__ import annotations
 import asyncio
 import base64
 from datetime import date, datetime, timezone
+import io
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 import unittest
 
-from aiohttp import web
+from aiohttp import FormData, web
 from aiohttp.test_utils import TestClient, TestServer
 from kaos_governor import MemoryDurableGovernorStore, PendingOperationPayload
 from kaos_governor.durable import validate_pending_payload
@@ -31,6 +32,7 @@ from kaos_governor.tools import (
     _pending_mutation_record,
     kst_today,
 )
+from pypdf import PdfWriter
 
 
 class FakeCalendarAdapter:
@@ -156,6 +158,38 @@ class FakeCalendarAdapter:
         self.deleted.append((profile, uid, collection_id))
         self.tasks = [task for task in self.tasks if task.get("uid") != uid]
         return {"uid": uid}
+
+
+def _one_page_pdf() -> bytes:
+    writer = PdfWriter()
+    writer.add_blank_page(width=612, height=792)
+    output = io.BytesIO()
+    writer.write(output)
+    return output.getvalue()
+
+
+class FakeFaxService:
+    def __init__(self) -> None:
+        self.config = SimpleNamespace(
+            enabled=True,
+            transport="connector",
+            connector_base_url="https://fax.internal",
+            connector_token="configured",
+            max_pdf_bytes=2 * 1024 * 1024,
+        )
+        self.calls = []
+
+    def submit(self, request, metadata):
+        self.calls.append((request, dict(metadata)))
+        return (
+            {
+                "jobId": "fax-job-1",
+                "status": "submitted",
+                "destination": request.destination,
+                "filename": request.filename,
+            },
+            True,
+        )
 
 
 class TimezoneTests(unittest.TestCase):
@@ -337,9 +371,11 @@ def _second_look_payload(request_id: str) -> dict:
 
 class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
         self.calendar = FakeCalendarAdapter()
         self.memos = FakeMemos()
         self.paperless = FakePaperless()
+        self.fax = FakeFaxService()
         self.calendar_refresh_count = 0
 
         async def refresh_calendar_surfaces() -> None:
@@ -350,23 +386,43 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
             8098,
             governor_api_token="governor-secret",
             ios_shortcuts_token="shortcut-secret",
+            ios_fax_shortcut_token="fax-shortcut-secret",
             calendar_adapter=self.calendar,  # type: ignore[arg-type]
             memos=self.memos,  # type: ignore[arg-type]
             paperless=self.paperless,  # type: ignore[arg-type]
             calendar_refresh_callback=refresh_calendar_surfaces,
             today_provider=lambda: date(2026, 8, 14),
+            fax_service=self.fax,  # type: ignore[arg-type]
+            fax_stage_root=Path(self.temporary.name) / "fax-proposals",
         )
         self.client = TestClient(TestServer(server.application()))
         await self.client.start_server()
 
     async def asyncTearDown(self) -> None:
         await self.client.close()
+        self.temporary.cleanup()
 
     def headers(self):
         return {"Authorization": "Bearer governor-secret"}
 
     def shortcut_headers(self):
         return {"Authorization": "Bearer shortcut-secret"}
+
+    def fax_shortcut_headers(self):
+        return {"Authorization": "Bearer fax-shortcut-secret"}
+
+    @staticmethod
+    def fax_form(*, destination: str = "02-284-8302", key: str = "shortcut-run-1") -> FormData:
+        form = FormData()
+        form.add_field("destination", destination)
+        form.add_field("idempotencyKey", key)
+        form.add_field(
+            "document",
+            _one_page_pdf(),
+            filename="referral.pdf",
+            content_type="application/pdf",
+        )
+        return form
 
     async def test_health_is_public_and_transport_neutral(self) -> None:
         response = await self.client.get("/health")
@@ -421,6 +477,73 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(tool_with_shortcut_token.status, 401)
         self.assertEqual((await tool_with_shortcut_token.json())["error"], "governor_api_unauthorized")
+
+    async def test_fax_shortcut_uses_a_separate_write_token(self) -> None:
+        fax_with_read_token = await self.client.post(
+            "/shortcuts/fax/send/proposals",
+            headers=self.shortcut_headers(),
+            data=self.fax_form(),
+        )
+        supplies_with_fax_token = await self.client.get(
+            "/shortcuts/supplies",
+            headers=self.fax_shortcut_headers(),
+        )
+
+        self.assertEqual(fax_with_read_token.status, 401)
+        self.assertEqual((await fax_with_read_token.json())["error"], "fax_shortcut_api_unauthorized")
+        self.assertEqual(supplies_with_fax_token.status, 401)
+        self.assertEqual((await supplies_with_fax_token.json())["error"], "shortcuts_api_unauthorized")
+
+    async def test_fax_shortcut_requires_preview_then_exact_approval(self) -> None:
+        proposal_response = await self.client.post(
+            "/shortcuts/fax/send/proposals",
+            headers=self.fax_shortcut_headers(),
+            data=self.fax_form(),
+        )
+        proposal = await proposal_response.json()
+
+        self.assertEqual(proposal_response.status, 201)
+        self.assertEqual(proposal["fax"]["destination"], "022848302")
+        self.assertEqual(proposal["fax"]["pageCount"], 1)
+        self.assertEqual(self.fax.calls, [])
+
+        approval_url = f"/shortcuts/fax/send/proposals/{proposal['confirmationId']}/approve"
+        approval_response = await self.client.post(
+            approval_url,
+            headers=self.fax_shortcut_headers(),
+            json={},
+        )
+        replay_response = await self.client.post(
+            approval_url,
+            headers=self.fax_shortcut_headers(),
+            json={},
+        )
+
+        self.assertEqual(approval_response.status, 200)
+        self.assertFalse((await approval_response.json())["replayed"])
+        self.assertEqual(replay_response.status, 200)
+        self.assertTrue((await replay_response.json())["replayed"])
+        self.assertEqual(len(self.fax.calls), 1)
+
+    async def test_internal_tool_fax_route_reuses_the_same_service(self) -> None:
+        form = self.fax_form(key="pwa-run-1")
+        form.add_field("actorId", "zin")
+        proposal_response = await self.client.post(
+            "/tools/fax/send/proposals",
+            headers=self.headers(),
+            data=form,
+        )
+        proposal = await proposal_response.json()
+
+        self.assertEqual(proposal_response.status, 201)
+        approval_response = await self.client.post(
+            f"/tools/fax/send/proposals/{proposal['confirmationId']}/approve",
+            headers=self.headers(),
+            json={"actorId": "zin"},
+        )
+
+        self.assertEqual(approval_response.status, 200)
+        self.assertEqual(len(self.fax.calls), 1)
 
     async def test_imaging_second_look_accepts_kaosaio_temporary_preview(self) -> None:
         response = await self.client.post(

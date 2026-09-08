@@ -42,8 +42,9 @@ Ready-made backend services keep their service-native paths under `/srv/kaos`,
 for example `/srv/kaos/data/radicale`, `/srv/kaos/data/memos`, and
 `/srv/kaos/data/vaultwarden`.
 
-The setup command generates `governor_api_token` and the separate, read-only
-`ios_shortcuts_token`. Add
+The setup command generates `governor_api_token`, the separate read-only
+`ios_shortcuts_token`, and the confirmation-required
+`ios_fax_shortcut_token`. Add
 `memos_access_token` only when Memos search is enabled, and
 `naver_mail_password` only when Naver mail is enabled.
 

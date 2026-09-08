@@ -204,6 +204,77 @@ https://kaosgdd.net/#/documents
 
 Deep links select presentation state only. They do not authorize a mutation.
 
+### Fax Share Sheet contract
+
+Outbound fax uses one transport-neutral `FaxMutationService`. The iOS route
+and the future personal PWA route are thin adapters around that same service;
+document conversion, number normalization, durable confirmation,
+idempotency, staging cleanup, and `FaxService` submission must not be copied
+into either client.
+
+```text
+iOS Share Sheet                     future personal PWA
+       |                                      |
+/shortcuts/fax/send/...              /tools/fax/send/...
+       +----------------------+---------------+
+                              |
+                     FaxMutationService
+                   proposal -> exact approval
+                              |
+                         FaxService
+                              |
+                   Office Fax Connector
+```
+
+The Shortcut uses the tailnet-only Governor Tools origin and the dedicated
+`IOS_FAX_SHORTCUT_TOKEN`; it must not store `GOVERNOR_API_TOKEN` or the Office
+Connector token. The PWA will later call its authenticated same-origin facade,
+which will relay to the `/tools/...` adapter using the existing server-side
+Governor credential.
+
+Proposal request:
+
+```text
+POST /shortcuts/fax/send/proposals
+Authorization: Bearer <IOS_FAX_SHORTCUT_TOKEN>
+Content-Type: multipart/form-data
+
+destination=<text preserving a leading zero>
+idempotencyKey=<one UUID generated for this Shortcut run>
+document=<one PDF or image file>
+```
+
+The response contains `confirmationId`, `expiresAt`, and an exact preview with
+the normalized destination, output filename, byte size, page count, and
+SHA-256 digest. Creating this proposal never transmits a fax. The Shortcut
+must show at least destination, filename, and page count and offer explicit
+Send/Cancel choices. Send calls:
+
+```text
+POST /shortcuts/fax/send/proposals/<confirmationId>/approve
+Authorization: Bearer <IOS_FAX_SHORTCUT_TOKEN>
+```
+
+An approval is single-use. Retrying the same successful approval returns its
+stored receipt without sending again. Unapproved staged PDFs expire and are
+removed; binary document data is never stored in the durable operation
+database. The first client accepts one PDF or common image. Image-to-PDF
+conversion happens once in the shared service so the future PWA behaves
+identically.
+
+Suggested iOS Shortcut actions:
+
+1. Accept Files and Images from the Share Sheet and require exactly one item.
+2. Ask for the fax number as **Text**, not Number, to preserve a leading zero.
+3. Generate a UUID and submit the multipart proposal above with Get Contents
+   of URL.
+4. Read the returned `fax` dictionary and show an alert containing its
+   destination, filename, and page count.
+5. On Send only, POST the approval URL with the same scoped bearer token; on
+   Cancel, stop the Shortcut without another request.
+6. Show the returned job ID/status as the receipt. A later slice may deep-link
+   this receipt into the PWA fax archive.
+
 ## Native iOS Relationship
 
 Radicale remains authoritative regardless of which interface is visible. iOS

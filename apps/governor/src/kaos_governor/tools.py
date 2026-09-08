@@ -26,6 +26,8 @@ from . import (
 )
 from .calendar import CalendarAdapterClient, CalendarAdapterError, profile_host, render_month_png
 from .documents import DocumentIntakeError, PaperlessDocumentService
+from .fax import FaxError, FaxService
+from .fax_mutations import FaxMutationService, fax_preview_payload
 from .memos import (
     MemoMutationCommand,
     MemoMutationError,
@@ -50,6 +52,82 @@ def kst_today(now: datetime | None = None) -> date:
     if current.tzinfo is None:
         current = current.replace(tzinfo=timezone.utc)
     return current.astimezone(KST).date()
+
+
+async def _optional_json_object(request: web.Request) -> dict[str, Any]:
+    if not request.can_read_body:
+        return {}
+    try:
+        body = await request.json()
+    except (ValueError, json.JSONDecodeError):
+        raise FaxError("invalid_json") from None
+    if not isinstance(body, Mapping):
+        raise FaxError("invalid_json")
+    return dict(body)
+
+
+async def _fax_multipart_request(
+    request: web.Request,
+    *,
+    max_bytes: int,
+) -> tuple[dict[str, str], str, bytes]:
+    if not request.content_type.startswith("multipart/"):
+        raise FaxError("multipart_form_required")
+    reader = await request.multipart()
+    fields: dict[str, str] = {}
+    document_name = ""
+    document = b""
+    async for part in reader:
+        name = str(part.name or "")
+        if part.filename is not None:
+            if name not in {"document", "file"} or document_name:
+                raise FaxError("fax_attachment_required")
+            chunks: list[bytes] = []
+            size = 0
+            while True:
+                chunk = await part.read_chunk()
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > max_bytes:
+                    raise FaxError("pdf_size_invalid")
+                chunks.append(chunk)
+            document_name = str(part.filename or "fax.pdf")
+            document = b"".join(chunks)
+            continue
+        if name not in {"destination", "idempotencyKey", "actorId"}:
+            continue
+        value = await part.text()
+        if len(value) > 500:
+            raise FaxError("fax_field_too_long")
+        fields[name] = value
+    if not document_name or not document:
+        raise FaxError("fax_attachment_required")
+    return fields, document_name, document
+
+
+def _fax_request_actor(request: web.Request, values: Mapping[str, Any]) -> Actor:
+    if request.path.startswith("/shortcuts/fax/"):
+        return Actor("user", "ios-fax", "personal")
+    actor_id = str(values.get("actorId") or "").strip()
+    if not actor_id:
+        raise FaxError("actor_id_required")
+    return Actor("user", actor_id, "personal")
+
+
+def _fax_mutation_error(exc: Exception) -> web.Response:
+    code = str(exc)
+    if code in {"confirmation_not_found", "operation_not_found"}:
+        status = 404
+    elif code in {"operation_payload_not_found", "fax_staged_document_missing"}:
+        status = 410
+    elif code.startswith("fax_connector_"):
+        status = 502
+    elif code in {"fax_send_unavailable", "fax_send_disabled"}:
+        status = 503
+    else:
+        status = 400
+    return web.json_response({"error": code}, status=status)
 
 
 def _text_fingerprint(value: str) -> dict[str, object]:
@@ -318,11 +396,15 @@ class BrainToolServer:
         second_look_status_path: Path | None = None,
         second_look_status_callback: Callable[[], Awaitable[None]] | None = None,
         ios_shortcuts_token: str = "",
+        ios_fax_shortcut_token: str = "",
+        fax_service: FaxService | None = None,
+        fax_stage_root: Path | None = None,
     ) -> None:
         self._host = host
         self._port = port
         self._governor_api_token = governor_api_token
         self._ios_shortcuts_token = ios_shortcuts_token
+        self._ios_fax_shortcut_token = ios_fax_shortcut_token
         self._calendar_adapter = calendar_adapter
         self._memos = memos
         self._paperless = paperless
@@ -334,6 +416,15 @@ class BrainToolServer:
         self._mail_messages_provider = mail_messages_provider
         self._today_provider = today_provider or kst_today
         self._operations = GovernorOperations(durable_store)
+        self._fax_mutations = (
+            FaxMutationService(
+                fax_service,
+                self._operations,
+                fax_stage_root or Path("/data/tools/fax-proposals"),
+            )
+            if fax_service is not None
+            else None
+        )
         self._task_mutations = task_mutations or TaskMutationService(calendar_adapter)
         self._memo_mutations = memo_mutations or MemoMutationService(memos)
         self._imaging_second_look_client = imaging_second_look or ImagingSecondLookClient(ImagingSecondLookConfig())
@@ -350,6 +441,11 @@ class BrainToolServer:
         app.middlewares.append(self._auth_middleware)
         app.router.add_get("/health", self._health)
         app.router.add_get("/shortcuts/supplies", self._shortcut_supplies)
+        app.router.add_post("/shortcuts/fax/send/proposals", self._propose_fax_send)
+        app.router.add_post(
+            "/shortcuts/fax/send/proposals/{confirmation_id}/approve",
+            self._approve_fax_send,
+        )
         app.router.add_get("/tools/today", self._today)
         app.router.add_get("/tools/events/upcoming", self._upcoming_events)
         app.router.add_get("/tools/calendar/week", self._calendar_week)
@@ -377,6 +473,11 @@ class BrainToolServer:
         app.router.add_post("/tools/tasks/create/proposals", self._propose_task_create)
         app.router.add_post("/tools/tasks/update-due/proposals", self._propose_task_due_update)
         app.router.add_post("/tools/events/create/proposals", self._propose_event_create)
+        app.router.add_post("/tools/fax/send/proposals", self._propose_fax_send)
+        app.router.add_post(
+            "/tools/fax/send/proposals/{confirmation_id}/approve",
+            self._approve_fax_send,
+        )
         app.router.add_post("/tools/imaging/second-look", self._imaging_second_look)
         app.router.add_get("/tools/imaging/second-look/status", self._imaging_second_look_status)
         app.router.add_post("/tools/confirmations/{confirmation_id}/approve", self._approve_confirmation)
@@ -384,6 +485,8 @@ class BrainToolServer:
 
     async def start(self) -> None:
         await asyncio.to_thread(self._operations.expire_stale_proposals)
+        if self._fax_mutations is not None:
+            await asyncio.to_thread(self._fax_mutations.cleanup_staged)
         self._runner = web.AppRunner(self.application(), access_log=None)
         await self._runner.setup()
         await web.TCPSite(self._runner, self._host, self._port).start()
@@ -411,6 +514,10 @@ class BrainToolServer:
     @web.middleware
     async def _auth_middleware(self, request: web.Request, handler):
         if request.path == "/health":
+            return await handler(request)
+        if request.path.startswith("/shortcuts/fax/"):
+            if not self._authorized(request, self._ios_fax_shortcut_token):
+                return web.json_response({"error": "fax_shortcut_api_unauthorized"}, status=401)
             return await handler(request)
         if request.path.startswith("/shortcuts/"):
             if not self._authorized(request, self._ios_shortcuts_token):
@@ -449,6 +556,64 @@ class BrainToolServer:
                 "text": "\n".join(f"• {title}" for title in titles) if titles else "No supplies.",
             }
         )
+
+    async def _propose_fax_send(self, request: web.Request) -> web.Response:
+        service = self._fax_mutations
+        if service is None:
+            return web.json_response({"error": "fax_send_unavailable"}, status=503)
+        try:
+            fields, filename, content = await _fax_multipart_request(
+                request,
+                max_bytes=service.fax.config.max_pdf_bytes,
+            )
+            actor = _fax_request_actor(request, fields)
+            idempotency_key = str(
+                request.headers.get("Idempotency-Key") or fields.get("idempotencyKey") or ""
+            ).strip()
+            destination = str(fields.get("destination") or "").strip()
+            if not idempotency_key:
+                raise FaxError("idempotency_key_required")
+            if not destination:
+                raise FaxError("fax_destination_required")
+            proposal = await asyncio.to_thread(
+                service.propose,
+                actor=actor,
+                idempotency_key=idempotency_key,
+                destination=destination,
+                filename=filename,
+                content=content,
+            )
+        except (FaxError, DurableGovernorError) as exc:
+            return _fax_mutation_error(exc)
+        operation = proposal.operation.operation
+        confirmation = proposal.operation.confirmation
+        return web.json_response(
+            {
+                "operationId": operation.operation_id,
+                "confirmationId": confirmation.confirmation_id,
+                "expiresAt": confirmation.expires_at.isoformat(),
+                "created": proposal.operation.created,
+                "fax": fax_preview_payload(proposal.pending),
+                "source": "fax-governor",
+            },
+            status=201,
+        )
+
+    async def _approve_fax_send(self, request: web.Request) -> web.Response:
+        service = self._fax_mutations
+        if service is None:
+            return web.json_response({"error": "fax_send_unavailable"}, status=503)
+        try:
+            body = await _optional_json_object(request)
+            actor = _fax_request_actor(request, body)
+            result = await asyncio.to_thread(
+                service.approve,
+                request.match_info["confirmation_id"],
+                actor=actor,
+            )
+        except (FaxError, DurableGovernorError) as exc:
+            return _fax_mutation_error(exc)
+        return web.json_response(result)
 
     async def _today(self, request: web.Request) -> web.Response:
         profile = _profile(request)

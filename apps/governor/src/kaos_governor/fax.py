@@ -427,9 +427,10 @@ class FaxService:
             prompt_id = state["prompts"].pop(str(source_metadata.get("messageId") or ""), 0)
             if prompt_id:
                 source_metadata["instructionMessageId"] = int(prompt_id)
+            source = str(source_metadata.get("source") or "discord").strip() or "discord"
             job = {
                 **manifest,
-                "source": "discord",
+                "source": source,
                 "sourceMetadata": source_metadata,
                 "status": "queued",
             }
@@ -451,6 +452,7 @@ class FaxService:
         status = str(response.get("status") or "queued")
         if status not in {"queued", "submitted", "sent", "failed"}:
             status = "queued"
+        source = str(source_metadata.get("source") or "discord").strip() or "discord"
         job = {
             "version": 1,
             "jobId": job_id,
@@ -460,7 +462,7 @@ class FaxService:
             "filename": request.filename,
             "pdfSha256": request.pdf_sha256,
             "createdAt": _timestamp(),
-            "source": "discord",
+            "source": source,
             "sourceMetadata": source_metadata,
             "status": status,
             "connectorResult": response,

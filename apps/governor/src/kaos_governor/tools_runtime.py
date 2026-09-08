@@ -74,10 +74,13 @@ class GovernorToolsRuntime:
 
         governor_token = _secret(source, "GOVERNOR_API_TOKEN")
         shortcuts_token = _secret(source, "IOS_SHORTCUTS_TOKEN")
+        fax_shortcut_token = _secret(source, "IOS_FAX_SHORTCUT_TOKEN")
         if not governor_token:
             raise ToolRuntimeConfigurationError("GOVERNOR_API_TOKEN is required")
         if not shortcuts_token:
             raise ToolRuntimeConfigurationError("IOS_SHORTCUTS_TOKEN is required")
+        if not fax_shortcut_token:
+            raise ToolRuntimeConfigurationError("IOS_FAX_SHORTCUT_TOKEN is required")
 
         calendar_url = source.get(
             "CALENDAR_ADAPTER_INTERNAL_URL",
@@ -107,6 +110,7 @@ class GovernorToolsRuntime:
             self._port,
             governor_api_token=governor_token,
             ios_shortcuts_token=shortcuts_token,
+            ios_fax_shortcut_token=fax_shortcut_token,
             calendar_adapter=calendar,
             memos=memos,
             paperless=paperless,
@@ -117,6 +121,10 @@ class GovernorToolsRuntime:
             system_status_provider=self.system_status,
             import_items_provider=lambda: fax.recent_items(limit=50),
             fax_document_provider=fax.incoming_document,
+            fax_service=fax,
+            fax_stage_root=Path(
+                source.get("FAX_PROPOSAL_STAGE_ROOT", "/data/tools/fax-proposals")
+            ),
             mail_messages_provider=lambda limit: mail.list_messages(limit=limit),
             imaging_second_look=ImagingSecondLookClient(
                 ImagingSecondLookConfig(
