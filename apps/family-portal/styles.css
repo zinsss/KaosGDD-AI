@@ -2747,6 +2747,21 @@ h3 {
   background: var(--raised);
 }
 
+.weatherDetailTrigger {
+  cursor: pointer;
+  transition: background-color 140ms ease, outline-color 140ms ease;
+}
+
+.weatherDetailTrigger:hover {
+  background: var(--raised);
+}
+
+.weatherDetailTrigger:focus-visible {
+  z-index: 1;
+  outline: 2px solid var(--nord8);
+  outline-offset: -3px;
+}
+
 .weatherPopupTrigger:focus-visible {
   z-index: 1;
   outline: 2px solid var(--nord8);
@@ -2858,6 +2873,128 @@ h3 {
 
 .weatherLocationStatus.isError {
   color: var(--nord11);
+}
+
+.weatherDetail {
+  display: grid;
+}
+
+.weatherDetailSummary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.weatherDetailSummary strong {
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.weatherDetailSummary span {
+  color: var(--text);
+  font-family: var(--weather-icon-font);
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+html.kaosWeatherIconsReady .weatherDetailSummary span,
+html.kaosWeatherIconsReady .weatherDetailPeriod header span {
+  font-family: "Kaos Weather Icons", var(--weather-icon-font);
+}
+
+.weatherDetailSummary em,
+.weatherDetailPeriod header em {
+  color: var(--text);
+  font-family: "Sarasa Gothic Mono", ui-monospace, monospace;
+  font-style: normal;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.weatherDetailPeriods {
+  display: grid;
+}
+
+.weatherDetailPeriod {
+  display: grid;
+  gap: 10px;
+  padding: 13px 16px;
+}
+
+.weatherDetailPeriod + .weatherDetailPeriod {
+  border-top: 1px solid var(--line);
+}
+
+.weatherDetailPeriod header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.weatherDetailPeriod header strong {
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.weatherDetailPeriod header span {
+  color: var(--text);
+  font-family: var(--weather-icon-font);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.weatherDetailPeriod dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.weatherDetailMetric {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.weatherDetailMetric dt {
+  overflow: hidden;
+  color: var(--dim);
+  font-size: 0.66rem;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.weatherDetailMetric dd {
+  margin: 0;
+  color: var(--text);
+  font-family: "Sarasa Gothic Mono", ui-monospace, monospace;
+  font-size: 0.8rem;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.weatherDetailSource {
+  margin: 0;
+  padding: 10px 16px;
+  border-top: 1px solid var(--line);
+  color: var(--dim);
+  font-size: 0.65rem;
+}
+
+@media (max-width: 520px) {
+  .weatherDetailPeriod dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .weatherLocationRow {

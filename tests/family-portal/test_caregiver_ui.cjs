@@ -15,5 +15,5 @@ test("caregiver page rendering is delegated to the view module", () => {
   assert.match(caregiverViewSource, /data-caregiver-copy-month/);
   assert.match(caregiverViewSource, /class="caregiverMonthGrid"/);
   assert.match(indexSource, /src="\/caregiver-view\.js\?v=1"/);
-  assert.ok(indexSource.indexOf('src="/caregiver-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=328"'));
+  assert.ok(indexSource.indexOf('src="/caregiver-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=329"'));
 });

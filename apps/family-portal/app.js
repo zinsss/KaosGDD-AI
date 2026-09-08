@@ -1739,6 +1739,33 @@ async function openWeatherLocationPopup(dateValue) {
   if (state.weatherLocationPopup.open && getRoute() === "calendar") render();
 }
 
+function openWeatherDetailPopup(dateValue, cityValue) {
+  const city = String(cityValue || state.weatherLocation).trim() || state.weatherLocation;
+  const option = WEATHER_LOCATION_OPTIONS.find((location) => location.id === city) || {
+    id: city,
+    label: city,
+    translationKey: "",
+  };
+  const existing = state.weatherLocationPopup.items.find(
+    (item) => item.id === city && item.weather?.date === dateValue,
+  );
+  const cachedWeather = activeCalendarData().weather?.find(
+    (weather) => weather.date === dateValue && weather.city === city,
+  );
+  const item = existing || (cachedWeather ? { ...option, weather: cachedWeather } : null);
+  state.weatherLocationPopup = {
+    open: true,
+    mode: "detail",
+    key: `detail:${city}:${dateValue}`,
+    date: dateValue,
+    loading: false,
+    error: item ? "" : uiText("weather.unavailable", "Weather unavailable"),
+    items: item ? [item] : [],
+  };
+  render();
+  document.querySelector("[data-close-weather-locations]")?.focus();
+}
+
 function currentPosition() {
   if (!navigator.geolocation) {
     return Promise.reject(new Error(uiText("weather.locationUnsupported", "Current location is not supported.")));
@@ -1845,6 +1872,10 @@ function normalizeWeatherItems(items) {
             condition: String(part?.condition || ""),
             minTemp: part?.minTemp ?? "",
             maxTemp: part?.maxTemp ?? "",
+            precipitationProbability: part?.precipitationProbability ?? "",
+            precipitationMm: part?.precipitationMm ?? "",
+            humidityPercent: part?.humidityPercent ?? "",
+            windSpeedKmh: part?.windSpeedKmh ?? "",
           }))
         : [],
     }))
@@ -5791,6 +5822,66 @@ function renderWeatherParts(dayparts) {
     .join("");
 }
 
+function weatherMetric(value, suffix) {
+  if (value === "" || value === null || value === undefined) return "";
+  const number = Number(value);
+  return Number.isFinite(number) ? `${number}${suffix}` : "";
+}
+
+function renderWeatherDetailMetric(label, value) {
+  if (!value) return "";
+  return `
+    <div class="weatherDetailMetric">
+      <dt>${escapeHtml(label)}</dt>
+      <dd>${escapeHtml(value)}</dd>
+    </div>
+  `;
+}
+
+function renderWeatherDetail(item) {
+  const weather = item?.weather;
+  if (!weather) return `<p class="weatherLocationStatus">${uiText("weather.unavailable", "Weather unavailable")}</p>`;
+  const locationLabel = item.translationKey ? uiText(item.translationKey, item.label) : item.label;
+  const dayparts = Array.isArray(weather.dayparts) ? weather.dayparts : [];
+  return `
+    <div class="weatherDetail">
+      <div class="weatherDetailSummary">
+        <strong>${escapeHtml(locationLabel)}</strong>
+        <span>${escapeHtml(weatherGlyph(weather))}</span>
+        <em>${escapeHtml(tempRange(weather))}</em>
+      </div>
+      <div class="weatherDetailPeriods">
+        ${dayparts
+          .map((part) => {
+            const localizedLabel = {
+              Morning: uiText("weather.morning", "Morning"),
+              Afternoon: uiText("weather.afternoon", "Afternoon"),
+              Evening: uiText("weather.evening", "Evening"),
+              Night: uiText("weather.night", "Night"),
+            }[part.label] || part.label;
+            return `
+              <section class="weatherDetailPeriod">
+                <header>
+                  <strong>${escapeHtml(localizedLabel)}</strong>
+                  <span>${escapeHtml(weatherGlyph(part))}</span>
+                  <em>${escapeHtml(tempRange(part))}</em>
+                </header>
+                <dl>
+                  ${renderWeatherDetailMetric(uiText("weather.precipitationProbability", "Rain chance"), weatherMetric(part.precipitationProbability, "%"))}
+                  ${renderWeatherDetailMetric(uiText("weather.precipitation", "Precipitation"), weatherMetric(part.precipitationMm, " mm"))}
+                  ${renderWeatherDetailMetric(uiText("weather.humidity", "Humidity"), weatherMetric(part.humidityPercent, "%"))}
+                  ${renderWeatherDetailMetric(uiText("weather.wind", "Wind"), weatherMetric(part.windSpeedKmh, " km/h"))}
+                </dl>
+              </section>
+            `;
+          })
+          .join("")}
+      </div>
+      ${weather.source ? `<p class="weatherDetailSource">${escapeHtml(weather.source)}</p>` : ""}
+    </div>
+  `;
+}
+
 function renderWeatherLocationRows(items) {
   return items
     .map(({ id, translationKey, label, weather }) => {
@@ -5807,7 +5898,16 @@ function renderWeatherLocationRows(items) {
                 </div>
                 ${
                   hasDetailedForecastLayout(weather)
-                    ? `<div class="weatherLocationParts">${renderWeatherParts(weather.dayparts || [])}</div>`
+                    ? `
+                      <div
+                        class="weatherLocationParts weatherDetailTrigger"
+                        data-open-weather-detail="${escapeHtml(weather.date)}"
+                        data-weather-detail-city="${escapeHtml(id)}"
+                        role="button"
+                        tabindex="0"
+                        aria-label="${uiText("weather.openDetail", "Open detailed weather")}"
+                      >${renderWeatherParts(weather.dayparts || [])}</div>
+                    `
                     : `<span class="weatherLocationPastLabel">${uiText("weather.dailySummary", "Daily summary")}</span>`
                 }
               `
@@ -5848,7 +5948,12 @@ function renderWeatherLocationPopup() {
   const popup = state.weatherLocationPopup;
   if (!popup.open) return "";
   const currentMode = popup.mode === "current";
-  const locationAttribution = currentMode ? popup.items[0]?.weather?.locationAttribution : "";
+  const detailMode = popup.mode === "detail";
+  const detailItem = detailMode ? popup.items[0] : null;
+  const detailLocationLabel = detailItem
+    ? (detailItem.translationKey ? uiText(detailItem.translationKey, detailItem.label) : detailItem.label)
+    : "";
+  const locationAttribution = (currentMode || detailMode) ? popup.items[0]?.weather?.locationAttribution : "";
   return `
     <div class="weatherLocationOverlay">
       <div class="weatherLocationBackdrop" data-close-weather-locations></div>
@@ -5862,7 +5967,13 @@ function renderWeatherLocationPopup() {
           <div>
             <p class="label">${escapeHtml(compactDateLabel(popup.date))}</p>
             <h2 id="weatherLocationPopupTitle">
-              ${currentMode ? uiText("weather.currentLocation", "Current location") : uiText("weather.allLocations", "All locations")}
+              ${
+                detailMode
+                  ? `${escapeHtml(detailLocationLabel)} ${uiText("weather.detail", "Weather detail")}`
+                  : currentMode
+                    ? uiText("weather.currentLocation", "Current location")
+                    : uiText("weather.allLocations", "All locations")
+              }
             </h2>
           </div>
           <button
@@ -5882,6 +5993,8 @@ function renderWeatherLocationPopup() {
                 }</p>`
               : popup.error
                 ? `<p class="weatherLocationStatus isError">${escapeHtml(popup.error)}</p>`
+              : detailMode
+                ? renderWeatherDetail(detailItem)
               : !currentMode && isPastDate(popup.date)
                 ? renderPastWeatherLocationGrid(popup.items)
                 : renderWeatherLocationRows(popup.items)
@@ -5952,16 +6065,23 @@ function renderSelectedWeather(weather) {
     `;
   }
   if (hasDetailedForecastLayout(weather)) {
+    const detailAttributes = `
+      data-open-weather-detail="${escapeHtml(weather.date)}"
+      data-weather-detail-city="${escapeHtml(weather.city || state.weatherLocation)}"
+      role="button"
+      tabindex="0"
+      aria-label="${uiText("weather.openDetail", "Open detailed weather")}"
+    `;
     return `
-      <div class="selectedDayWeather weatherPopupTrigger" ${actionAttributes}>
+      <div class="selectedDayWeather">
         ${renderSelectedWeatherDate(weather.date)}
-        <div class="selectedWeatherSummary">
+        <div class="selectedWeatherSummary weatherPopupTrigger" ${actionAttributes}>
           <span class="selectedWeatherLocation">${escapeHtml(locationLabel)}</span>
           <span class="selectedWeatherGlyph">${escapeHtml(weatherGlyph(weather))}</span>
           <span class="selectedWeatherRange">${escapeHtml(tempRange(weather))}</span>
           ${renderCurrentLocationWeatherButton(weather.date)}
         </div>
-        <div class="selectedWeatherParts">
+        <div class="selectedWeatherParts weatherDetailTrigger" ${detailAttributes}>
           ${renderWeatherParts(dayparts)}
         </div>
       </div>
@@ -9705,6 +9825,15 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const openWeatherDetail = event.target.closest("[data-open-weather-detail]");
+  if (openWeatherDetail) {
+    await openWeatherDetailPopup(
+      openWeatherDetail.dataset.openWeatherDetail || state.selectedDate,
+      openWeatherDetail.dataset.weatherDetailCity || state.weatherLocation,
+    );
+    return;
+  }
+
   const openWeatherLocations = event.target.closest("[data-open-weather-locations]");
   if (openWeatherLocations) {
     await openWeatherLocationPopup(openWeatherLocations.dataset.openWeatherLocations || state.selectedDate);
@@ -10966,7 +11095,7 @@ document.addEventListener("keydown", (event) => {
     closeWeatherLocationPopup();
     return;
   }
-  const weatherTrigger = event.target.closest("[data-open-weather-locations]");
+  const weatherTrigger = event.target.closest("[data-open-weather-detail], [data-open-weather-locations]");
   if (
     !weatherTrigger
     || event.target.closest("[data-current-location-weather]")
