@@ -52,7 +52,7 @@ test("notifications stays routable without adding another main menu item", () =>
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=324"');
+  const styleIndex = index.indexOf('href="/styles.css?v=325"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=6"');
   const calendarViewIndex = index.indexOf('src="/calendar-view.js?v=1"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');

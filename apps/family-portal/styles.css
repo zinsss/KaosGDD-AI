@@ -4481,7 +4481,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   left: 6px;
   right: 6px;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
   justify-items: center;
   align-content: center;
   gap: 3px;
@@ -8254,25 +8254,38 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   }
 
   .rounyBlock {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     border-color: rgba(46, 52, 64, 0.28) !important;
     left: 5px;
     right: 5px;
-    grid-template-columns: none;
-    grid-template-rows: auto minmax(0, 1fr);
     gap: 2px;
     min-height: 16px;
     border-radius: 8px;
     padding: 4px 6px;
   }
 
+  .rounyBlockHandle {
+    display: none !important;
+  }
+
   .rounyBlockIcon {
-    width: 26px;
-    height: 18px;
-    border-radius: 6px;
+    flex: 0 0 auto;
+    width: auto;
+    height: auto;
     font-size: 10pt;
   }
 
   .rounyBlock strong {
+    display: block;
+    width: auto;
+    overflow: visible;
     font-size: 9pt;
+    text-overflow: clip;
+    white-space: nowrap;
+    overflow-wrap: normal;
+    -webkit-line-clamp: unset;
+    -webkit-box-orient: initial;
   }
 }

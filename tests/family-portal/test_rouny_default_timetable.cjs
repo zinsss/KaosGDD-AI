@@ -32,5 +32,15 @@ test("Rouny detail offers Make default and identifies the current default", () =
 test("Rouny timeline uses slightly taller hourly cells", () => {
   assert.match(appSource, /ROUNY_TIMELINE_HOUR_HEIGHT = 72/);
   assert.match(styles, /\.rounyTimelineHour \{[\s\S]*?height: 72px;/);
-  assert.match(indexSource, /href="\/styles\.css\?v=324"/);
+  assert.match(indexSource, /href="\/styles\.css\?v=325"/);
+});
+
+test("Rouny centers long blocks and compacts printed class labels", () => {
+  assert.match(styles, /\.rounyBlock \{[\s\S]*?grid-template-rows: auto auto;[\s\S]*?align-content: center;/);
+  assert.match(
+    styles,
+    /@media print \{[\s\S]*?\.rounyBlock \{[\s\S]*?display: flex;[\s\S]*?align-items: center;[\s\S]*?justify-content: center;/,
+  );
+  assert.match(styles, /@media print \{[\s\S]*?\.rounyBlockHandle \{\s*display: none !important;/);
+  assert.match(styles, /@media print \{[\s\S]*?\.rounyBlock strong \{[\s\S]*?white-space: nowrap;/);
 });
