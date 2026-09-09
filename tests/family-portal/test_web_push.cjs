@@ -12,7 +12,7 @@ const nginx = fs.readFileSync(path.join(root, "deploy/h3-backend/family-portal/n
 
 test("personal PWA registers Web Push without adding a navigation item", () => {
   assert.match(index, /src="\/web-push\.js\?v=1"/);
-  assert.ok(index.indexOf('src="/web-push.js?v=1"') < index.indexOf('src="/app.js?v=334"'));
+  assert.ok(index.indexOf('src="/web-push.js?v=1"') < index.indexOf('src="/app.js?v=335"'));
   assert.match(client, /family\.kaosgdd\.net/);
   assert.match(client, /navigator\.serviceWorker\.register\("\/sw\.js"/);
   assert.doesNotMatch(app.slice(0, app.indexOf("const familyRoutes")), /web-push/);

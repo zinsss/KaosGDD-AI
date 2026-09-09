@@ -198,6 +198,10 @@ services:
       AI_TASKS_BRAIN_URL: "${AI_TASKS_BRAIN_URL:-}"
       AI_TASKS_BRAIN_TOKEN_FILE: "/run/secrets/governor_api_token"
       AI_TASKS_BRAIN_TIMEOUT_SECONDS: "${AI_TASKS_BRAIN_TIMEOUT_SECONDS:-60}"
+      WEB_PUSH_ENABLED: "${WEB_PUSH_ENABLED:-false}"
+      WEB_PUSH_SUBSCRIPTIONS_PATH: "/data/notifications/web-push-subscriptions.json"
+      WEB_PUSH_OUTBOX_PATH: "/data/notifications/web-push-outbox.json"
+      WEB_PUSH_TIMEOUT_SECONDS: "${WEB_PUSH_TIMEOUT_SECONDS:-10}"
       AI_TASK_TEXTBOOK_SEARCH_ENABLED: "${AI_TASK_TEXTBOOK_SEARCH_ENABLED:-true}"
       AI_TASK_TEXTBOOK_INDEX_PATH: "${AI_TASK_TEXTBOOK_INDEX_PATH:-/data/textbooks/harrison/index/harrison22.index.sqlite}"
       FAX_DISCORD_ENABLED: "false"
@@ -233,6 +237,7 @@ services:
       - ${GOVERNOR_STATE_ROOT:-/srv/kaosgdd/kaosgovernor}/mail:/data/mail:ro
       - ${GOVERNOR_STATE_ROOT:-/srv/kaosgdd/kaosgovernor}/documents:/data/documents
       - ${GOVERNOR_STATE_ROOT:-/srv/kaosgdd/kaosgovernor}/ai-tasks:/data/ai-tasks
+      - ${GOVERNOR_STATE_ROOT:-/srv/kaosgdd/kaosgovernor}/notifications:/data/notifications
       - ${KAOS_ROOT:-/srv/kaos}/reference/textbooks:/data/textbooks:ro
     entrypoint: ["kaos-governor-api"]
     healthcheck:

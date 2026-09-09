@@ -67,6 +67,19 @@ class WebPushTests(unittest.TestCase):
                 }
             )
 
+    def test_publisher_config_does_not_load_vapid_private_key(self) -> None:
+        config = WebPushConfig.publisher_from_env(
+            {
+                "WEB_PUSH_ENABLED": "true",
+                "WEB_PUSH_SUBSCRIPTIONS_PATH": "/tmp/subscriptions.json",
+                "WEB_PUSH_OUTBOX_PATH": "/tmp/outbox.json",
+            }
+        )
+
+        self.assertTrue(config.enabled)
+        self.assertEqual(config.private_key, "")
+        self.assertEqual(config.subject, "")
+
     def test_subscription_endpoint_is_restricted_to_push_providers(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             store = WebPushSubscriptionStore(Path(temporary) / "subscriptions.json")
@@ -105,6 +118,16 @@ class WebPushTests(unittest.TestCase):
         self.assertNotIn("Patient name", payload)
         self.assertNotIn("Sensitive fax", payload)
         self.assertEqual(status["pendingCount"], 0)
+
+    def test_ai_task_delivery_is_generic_and_opens_ai_task_archive(self) -> None:
+        payload = WebPushService._payload("ai-task:ait-secret:completed", "ai_task", 0)
+        failed_payload = WebPushService._payload("ai-task:ait-secret:failed", "ai_task_failed", 1)
+
+        self.assertEqual(payload["body"], "AI Task is ready.")
+        self.assertEqual(payload["url"], "/#/ai-tasks")
+        self.assertEqual(failed_payload["body"], "AI Task needs attention.")
+        self.assertEqual(failed_payload["url"], "/#/ai-tasks")
+        self.assertNotIn("ait-secret", str(payload))
 
     def test_expired_subscription_is_removed_without_blocking_outbox(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

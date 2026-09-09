@@ -187,6 +187,7 @@ def _normalized_notification(
     notification: TextNotification,
     *,
     fallback_priority: int,
+    allowed_categories: frozenset[str] = MIRRORED_CATEGORIES,
 ) -> TextNotification:
     key = str(notification.key).strip()
     category = str(notification.category).strip().lower()
@@ -198,7 +199,7 @@ def _normalized_notification(
     )
     if not key or len(key) > 512 or "\n" in key:
         raise NotificationError("notification_key_invalid")
-    if category not in MIRRORED_CATEGORIES:
+    if category not in allowed_categories:
         raise NotificationError("notification_category_not_mirrored")
     if not message:
         raise NotificationError("notification_text_required")

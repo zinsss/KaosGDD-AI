@@ -82,6 +82,6 @@ test("family preset text assets include styles, translations, and cache-busted b
   assert.match(indexSource, /href="\/styles\.css\?v=328"/);
   assert.match(indexSource, /src="\/translations\.js\?v=185"/);
   assert.match(indexSource, /src="\/text-presets\.js\?v=1"/);
-  assert.match(indexSource, /src="\/app\.js\?v=334"/);
-  assert.ok(indexSource.indexOf('src="/text-presets.js?v=1"') < indexSource.indexOf('src="/app.js?v=334"'));
+  assert.match(indexSource, /src="\/app\.js\?v=335"/);
+  assert.ok(indexSource.indexOf('src="/text-presets.js?v=1"') < indexSource.indexOf('src="/app.js?v=335"'));
 });

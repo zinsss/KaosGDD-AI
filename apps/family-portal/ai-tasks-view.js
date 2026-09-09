@@ -20,6 +20,8 @@ window.KAOS_AI_TASKS_VIEW = (() => {
           saveMemo: "메모 저장",
           saving: "저장 중",
           saved: "저장됨",
+          delete: "삭제",
+          deleting: "삭제 중",
           run: "실행",
           starting: "시작 중",
           clear: "지우기",
@@ -59,6 +61,8 @@ window.KAOS_AI_TASKS_VIEW = (() => {
           saveMemo: "SAVE MEMO",
           saving: "SAVING",
           saved: "SAVED",
+          delete: "DELETE",
+          deleting: "DELETING",
           run: "RUN",
           starting: "STARTING",
           clear: "CLEAR",
@@ -269,6 +273,7 @@ window.KAOS_AI_TASKS_VIEW = (() => {
           </div>
           <div class="archiveActions">
             ${preview?.archived ? `<button class="archiveAction" type="button" data-ai-task-close>${deps.escapeHtml(text.back)}</button>` : ""}
+            ${preview?.archived && !isRunning ? `<button class="archiveAction" type="button" data-ai-task-delete ${deps.state.aiTasks.deleting ? "disabled" : ""}>${deps.escapeHtml(deps.state.aiTasks.deleting ? text.deleting : text.delete)}</button>` : ""}
             ${canSearchGeneralWeb ? `<button class="archiveAction" type="button" data-ai-task-general-web>${deps.escapeHtml(text.searchWeb)}</button>` : ""}
             ${canCopy ? `<button class="archiveAction" type="button" data-ai-task-copy>${deps.escapeHtml(text.copy)}</button>` : ""}
             <button class="archiveAction" type="button" data-ai-tasks-refresh>↻</button>
@@ -406,6 +411,7 @@ window.KAOS_AI_TASKS_VIEW = (() => {
                   </div>
                   <div class="archiveActions">
                     ${isArchivedPreview ? `<button class="archiveAction" type="button" data-ai-task-close>${deps.escapeHtml(labels.back)}</button>` : ""}
+                    ${isArchivedPreview ? `<button class="archiveAction" type="button" data-ai-task-delete ${aiTasks.deleting ? "disabled" : ""}>${deps.escapeHtml(aiTasks.deleting ? labels.deleting : labels.delete)}</button>` : ""}
                     ${
                       canSearchGeneralWeb
                         ? `<button class="archiveAction" type="button" data-ai-task-general-web ${aiTasks.previewing ? "disabled" : ""}>${aiTasks.previewing ? deps.escapeHtml(labels.searching) : deps.escapeHtml(labels.searchWeb)}</button>`
@@ -460,6 +466,7 @@ window.KAOS_AI_TASKS_VIEW = (() => {
                   </div>
                   <div class="archiveActions">
                     ${isArchivedPreview ? `<button class="archiveAction" type="button" data-ai-task-close>${deps.escapeHtml(labels.back)}</button>` : ""}
+                    ${isArchivedPreview ? `<button class="archiveAction" type="button" data-ai-task-delete ${aiTasks.deleting ? "disabled" : ""}>${deps.escapeHtml(aiTasks.deleting ? labels.deleting : labels.delete)}</button>` : ""}
                     <button class="archiveAction" type="button" data-ai-task-copy>${deps.escapeHtml(labels.copy)}</button>
                     ${
                       canSavePreview

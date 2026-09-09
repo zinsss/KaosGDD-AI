@@ -35,12 +35,15 @@ ALLOWED_PUSH_HOSTS = frozenset(
     }
 )
 GENERIC_MESSAGES = {
+    "ai_task": "AI Task is ready.",
+    "ai_task_failed": "AI Task needs attention.",
     "daily": "Daily update ready.",
     "fax": "Fax needs attention.",
     "mail": "Mail needs attention.",
     "maintenance": "Maintenance needs attention.",
     "system": "System needs attention.",
 }
+WEB_PUSH_CATEGORIES = frozenset(GENERIC_MESSAGES)
 
 
 class WebPushError(NotificationError):
@@ -93,6 +96,27 @@ class WebPushConfig:
         if enabled:
             config.public_key()
         return config
+
+    @classmethod
+    def publisher_from_env(cls, env: Mapping[str, str] | None = None) -> "WebPushConfig":
+        """Build an enqueue-only config without loading the VAPID private key."""
+        source = os.environ if env is None else env
+        return cls(
+            enabled=_bool(source, "WEB_PUSH_ENABLED"),
+            subscriptions_path=Path(
+                source.get(
+                    "WEB_PUSH_SUBSCRIPTIONS_PATH",
+                    "/data/notifications/web-push-subscriptions.json",
+                )
+            ),
+            outbox_path=Path(
+                source.get(
+                    "WEB_PUSH_OUTBOX_PATH",
+                    "/data/notifications/web-push-outbox.json",
+                )
+            ),
+            timeout_seconds=_int(source, "WEB_PUSH_TIMEOUT_SECONDS", 10, 1),
+        )
 
     def public_key(self) -> str:
         if not self.private_key:
@@ -342,7 +366,11 @@ class WebPushService:
     def enqueue(self, notification: TextNotification) -> bool:
         if not self.config.enabled:
             return False
-        normalized = _normalized_notification(notification, fallback_priority=0)
+        normalized = _normalized_notification(
+            notification,
+            fallback_priority=0,
+            allowed_categories=WEB_PUSH_CATEGORIES,
+        )
         targets = [str(item["id"]) for item in self.store.list()]
         if not targets:
             return False
@@ -361,11 +389,12 @@ class WebPushService:
 
     @staticmethod
     def _payload(key: str, category: str, priority: int) -> dict[str, object]:
+        url = "/#/ai-tasks" if category in {"ai_task", "ai_task_failed"} else "/#/notifications"
         return {
             "title": "KaosGDD",
             "body": GENERIC_MESSAGES.get(category, "Something needs attention."),
             "tag": f"kaos-{hashlib.sha256(key.encode('utf-8')).hexdigest()[:16]}",
-            "url": "/#/notifications",
+            "url": url,
             "icon": "/icons/main/android-chrome-192x192.png",
             "badge": "/icons/main/android-chrome-192x192.png",
             "priority": priority,

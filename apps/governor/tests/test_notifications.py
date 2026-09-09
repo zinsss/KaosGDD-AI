@@ -236,6 +236,12 @@ class NotificationTests(unittest.TestCase):
             with self.assertRaisesRegex(NotificationError, "category_not_mirrored"):
                 service.enqueue(self.notification(category="task", key="task:event-1"))
 
+    def test_ai_tasks_are_web_push_only_not_pushover_categories(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            service = TextNotificationService(self.config(Path(temporary)))
+            with self.assertRaisesRegex(NotificationError, "category_not_mirrored"):
+                service.enqueue(self.notification(category="ai_task", key="ai-task:ait-1:completed"))
+
     def test_empty_title_is_allowed_for_minimal_watch_alert(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             client = mock.Mock()

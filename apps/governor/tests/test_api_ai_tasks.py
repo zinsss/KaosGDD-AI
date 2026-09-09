@@ -9,7 +9,7 @@ import unittest
 import urllib.error
 import urllib.parse
 import zipfile
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from kaos_governor import api
 from kaos_governor.ai_tasks import AITaskArchive, AITaskError
@@ -219,6 +219,44 @@ class GovernorAITaskTests(unittest.TestCase):
                 self.assertTrue(personal_path.exists())
                 self.assertTrue(family_path.exists())
                 api.ai_task_archive.cache_clear()
+
+    def test_ai_task_archive_delete_is_profile_isolated(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            personal = AITaskArchive(Path(temporary_directory) / "archive.json")
+            family = AITaskArchive(Path(temporary_directory) / "archive.family.json")
+            personal_record = personal.add_result(
+                kind="web",
+                prompt="personal",
+                source={"type": "official_web_search"},
+                result={"title": "Personal", "content": "personal result"},
+            )
+            family.add_result(
+                kind="web",
+                prompt="family",
+                source={"type": "official_web_search"},
+                result={"title": "Family", "content": "family result"},
+            )
+
+            payload = api.delete_ai_task_payload(personal_record.task_id, personal)
+
+            self.assertTrue(payload["deleted"])
+            self.assertEqual(personal.list_records(), [])
+            self.assertEqual([record.prompt for record in family.list_records()], ["family"])
+
+    def test_running_ai_task_cannot_be_deleted(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            archive = AITaskArchive(Path(temporary_directory) / "archive.json")
+            record = archive.add_running(kind="web", prompt="working", source={"type": "official_web_search"})
+
+            with self.assertRaisesRegex(AITaskError, "ai_task_running_cannot_delete"):
+                archive.delete(record.task_id)
+
+            self.assertEqual(archive.list_records()[0].status, "running")
+
+    def test_ai_task_delete_path_accepts_only_archive_record_route(self) -> None:
+        self.assertEqual(api.ai_task_delete_id("/api/ai-tasks/ait-123"), "ait-123")
+        self.assertEqual(api.ai_task_delete_id("/api/ai-tasks/ait%20record"), "ait record")
+        self.assertEqual(api.ai_task_delete_id("/api/ai-tasks/ait-123/complete"), "")
 
     def test_family_ai_task_archive_default_lives_beside_personal_archive(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -633,6 +671,54 @@ class GovernorAITaskTests(unittest.TestCase):
             record = archive.list_records()[0]
             self.assertEqual(record.status, "previewed")
             self.assertEqual(record.result["title"], "공식 자료 요약")
+
+    def test_ai_task_worker_notifies_personal_completion_without_result_content(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            archive = AITaskArchive(Path(temporary_directory) / "ai-tasks.json")
+            record = archive.add_running(kind="web", prompt="공식 자료 찾아서 요약", source={"type": "official_web_search"})
+            notifier = Mock()
+            with (
+                patch.object(api, "AI_TASKS_BRAIN_URL", "http://brain.internal:8099/internal/ai-tasks/official-doc-memo/preview"),
+                patch.object(api, "AI_TASKS_WEB_BRAIN_URL", ""),
+                patch.object(api, "AI_TASKS_BRAIN_TOKEN", "secret"),
+            ):
+                api.run_ai_task_worker(
+                    record.task_id,
+                    {"prompt": "공식 자료 찾아서 요약"},
+                    source_task=False,
+                    archive=archive,
+                    profile="personal",
+                    notifier=notifier,
+                    urlopen=fake_web_brain_urlopen,
+                )
+
+            notifier.assert_called_once_with(record.task_id, "completed", "personal")
+
+    def test_ai_task_worker_notifies_personal_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            archive = AITaskArchive(Path(temporary_directory) / "ai-tasks.json")
+            record = archive.add_running(kind="official_doc_memo", prompt="요약", source={"type": "text"})
+            notifier = Mock()
+
+            api.run_ai_task_worker(
+                record.task_id,
+                {"prompt": "요약", "sourceText": "공식 문서"},
+                source_task=True,
+                archive=archive,
+                profile="personal",
+                notifier=notifier,
+                urlopen=fake_brain_urlopen,
+            )
+
+            notifier.assert_called_once_with(record.task_id, "failed", "personal")
+
+    def test_family_ai_task_web_push_is_not_enqueued(self) -> None:
+        service = Mock()
+
+        created = api.enqueue_ai_task_web_push("ait-family", "completed", "family", service=service)
+
+        self.assertFalse(created)
+        service.enqueue.assert_not_called()
 
     def test_ai_task_worker_archives_failure_status(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

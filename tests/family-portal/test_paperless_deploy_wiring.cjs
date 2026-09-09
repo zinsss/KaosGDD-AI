@@ -32,3 +32,13 @@ test("H3 env template documents the AI Task textbook override knobs", () => {
   assert.match(envExample, /^AI_TASK_TEXTBOOK_SEARCH_ENABLED=true$/m);
   assert.match(envExample, /^AI_TASK_TEXTBOOK_INDEX_PATH=\/data\/textbooks\/harrison\/index\/harrison22\.index\.sqlite$/m);
 });
+
+test("governor-api can enqueue generic AI Task Web Push without a VAPID secret", () => {
+  const governorBlock = composeServices.match(/  governor-api:\n[\s\S]*?    entrypoint:/);
+
+  assert.ok(governorBlock, "governor-api block should exist in compose.services.yaml");
+  assert.match(governorBlock[0], /WEB_PUSH_ENABLED:\s*"\$\{WEB_PUSH_ENABLED:-false\}"/);
+  assert.match(governorBlock[0], /WEB_PUSH_OUTBOX_PATH:\s*"\/data\/notifications\/web-push-outbox\.json"/);
+  assert.match(governorBlock[0], /\/notifications:\/data\/notifications(?!:ro)/);
+  assert.doesNotMatch(governorBlock[0], /web_push_vapid_private_key/);
+});

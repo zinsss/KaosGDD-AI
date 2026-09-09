@@ -205,6 +205,20 @@ class AITaskArchive:
             raise AITaskError("ai_task_id_required")
         return self._replace(normalized_id, status="applied", result={"memoName": _clean_text(memo_name, 160)}, error="")
 
+    def delete(self, task_id: str) -> AITaskRecord:
+        normalized_id = str(task_id or "").strip()
+        if not normalized_id:
+            raise AITaskError("ai_task_id_required")
+        with _ARCHIVE_LOCK:
+            records = self._read_unlocked()
+            deleted = next((record for record in records if record.task_id == normalized_id), None)
+            if deleted is None:
+                raise AITaskError("ai_task_not_found")
+            if deleted.status == "running":
+                raise AITaskError("ai_task_running_cannot_delete")
+            self._write_unlocked([record for record in records if record.task_id != normalized_id])
+            return deleted
+
     def _replace(
         self,
         task_id: str,

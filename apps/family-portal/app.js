@@ -210,6 +210,7 @@ const state = {
     previewing: false,
     polling: false,
     applying: false,
+    deleting: false,
     error: "",
     mode: "web",
     selectedId: "",
@@ -2458,6 +2459,8 @@ function aiTaskErrorMessage(code) {
     ai_task_brain_invalid_memo: "KaosBrain returned an incomplete memo draft.",
     ai_task_archive_write_failed: "AI draft was made, but Governor could not write the AI Task archive.",
     ai_task_archive_unavailable: "AI Tasks archive is unavailable.",
+    ai_task_delete_failed: "Could not delete the AI Task archive record.",
+    ai_task_running_cannot_delete: "A running AI Task cannot be deleted.",
     ai_task_network_failed: "Network request did not reach Governor. Refresh or re-open Cloudflare Access, then retry.",
     ai_task_start_failed: "Could not start the AI Task.",
     ai_task_background_failed: "AI Task stopped before finishing.",
@@ -2656,6 +2659,45 @@ function closeAiTaskArchive() {
   };
   render();
   if (taskId) document.querySelector(`[data-ai-task-open="${cssIdentifier(taskId)}"]`)?.focus();
+}
+
+async function deleteAiTaskArchive() {
+  const taskId = String(state.aiTasks.selectedId || state.aiTasks.preview?.taskId || "").trim();
+  if (!taskId || state.aiTasks.deleting) return;
+  const family = portalProfile() === "family";
+  const question = family
+    ? "이 AI 기록을 삭제할까요? 삭제 후에는 복구할 수 없어요."
+    : "Delete this AI Task archive record? This cannot be undone.";
+  if (!window.confirm(question)) return;
+  state.aiTasks = { ...state.aiTasks, deleting: true, error: "" };
+  render();
+  try {
+    const response = await fetch(`/api/ai-tasks/${encodeURIComponent(taskId)}`, {
+      method: "DELETE",
+      headers: { Accept: "application/json" },
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    state.aiTasks = {
+      ...state.aiTasks,
+      deleting: false,
+      checked: false,
+      selectedId: "",
+      preview: null,
+      error: "",
+      items: state.aiTasks.items.filter((item) => item.id !== taskId),
+    };
+    await loadAiTasks({ force: true });
+  } catch (error) {
+    state.aiTasks = {
+      ...state.aiTasks,
+      deleting: false,
+      error: aiTaskErrorMessage(aiTaskErrorCode(error, "ai_task_delete_failed")),
+    };
+    render();
+  }
 }
 
 function aiTaskViewContext() {
@@ -10773,6 +10815,12 @@ document.addEventListener("click", async (event) => {
   if (event.target.closest("[data-ai-task-close]")) {
     event.preventDefault();
     closeAiTaskArchive();
+    return;
+  }
+
+  if (event.target.closest("[data-ai-task-delete]")) {
+    event.preventDefault();
+    await deleteAiTaskArchive();
     return;
   }
 

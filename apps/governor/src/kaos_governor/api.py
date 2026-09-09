@@ -23,6 +23,7 @@ import threading
 import ipaddress
 import zipfile
 from html.parser import HTMLParser
+from typing import Callable
 
 from kaos_governor import ledger
 from kaos_governor.ai_tasks import AITaskArchive, AITaskError
@@ -48,6 +49,8 @@ from kaos_governor.official_search import (
 from kaos_governor.tasks import PostgresRecurringTaskStore, RecurringTaskDefinition, RecurringTaskError, RecurringTaskService, validate_payload
 from kaos_governor.textbook_search import search_textbook_sources
 from kaos_governor.system_updates import SystemUpdatesError, read_system_updates
+from kaos_governor.notifications import TextNotification
+from kaos_governor.web_push import WebPushConfig, WebPushService
 
 
 PORT = int(os.environ.get("GOVERNOR_API_PORT", "8096"))
@@ -639,6 +642,44 @@ def ai_task_archive(profile: str = "personal") -> AITaskArchive:
     return AITaskArchive(_ai_task_archive_path(profile))
 
 
+@lru_cache(maxsize=1)
+def ai_task_web_push_service() -> WebPushService:
+    return WebPushService(WebPushConfig.publisher_from_env())
+
+
+def enqueue_ai_task_web_push(
+    task_id: str,
+    status: str,
+    profile: str = "personal",
+    *,
+    service: WebPushService | None = None,
+) -> bool:
+    if profile != "personal":
+        return False
+    category = "ai_task_failed" if status == "failed" else "ai_task"
+    return (service or ai_task_web_push_service()).enqueue(
+        TextNotification(
+            key=f"ai-task:{task_id}:{status}",
+            category=category,
+            title="",
+            message="AI Task status changed.",
+            priority=1 if status == "failed" else 0,
+        )
+    )
+
+
+def notify_ai_task_status(
+    task_id: str,
+    status: str,
+    profile: str,
+    notifier: Callable[[str, str, str], object] | None = None,
+) -> None:
+    try:
+        (notifier or enqueue_ai_task_web_push)(task_id, status, profile)
+    except Exception as exc:
+        print(f"AI task Web Push enqueue failed: {type(exc).__name__}", flush=True)
+
+
 def paperless_status_for_error(exc: Exception) -> int:
     if isinstance(exc, memos_relay.MemosRelayError):
         return exc.status
@@ -910,6 +951,8 @@ def ai_task_status_for_error(exc: Exception) -> int:
     code = exc.code if isinstance(exc, AITaskError) else str(exc)
     if code in {"main_profile_required", "ai_task_profile_required", "ai_task_not_found"}:
         return 404
+    if code == "ai_task_running_cannot_delete":
+        return 409
     if code in {
         "invalid_body_length",
         "invalid_json_payload",
@@ -970,6 +1013,11 @@ def ai_task_complete_id(path: str) -> str:
     return urllib.parse.unquote(match.group(1)) if match else ""
 
 
+def ai_task_delete_id(path: str) -> str:
+    match = re.fullmatch(r"/api/ai-tasks/([^/]+)", path)
+    return urllib.parse.unquote(match.group(1)) if match else ""
+
+
 def complete_ai_task_payload(
     task_id: str,
     payload: dict[str, object],
@@ -980,6 +1028,14 @@ def complete_ai_task_payload(
     active_archive = archive or ai_task_archive()
     record = active_archive.complete(task_id, memo_name=str(payload.get("memoName") or ""))
     return {"ok": True, "applied": True, "task": record.as_dict()}
+
+
+def delete_ai_task_payload(
+    task_id: str,
+    archive: AITaskArchive | None = None,
+) -> dict[str, object]:
+    record = (archive or ai_task_archive()).delete(task_id)
+    return {"ok": True, "deleted": True, "id": record.task_id}
 
 
 def _ai_task_prompt(payload: dict[str, object], *, web: bool = False) -> str:
@@ -1247,6 +1303,8 @@ def run_ai_task_worker(
     *,
     source_task: bool,
     archive: AITaskArchive | None = None,
+    profile: str = "personal",
+    notifier: Callable[[str, str, str], object] | None = None,
     urlopen=urllib.request.urlopen,
 ) -> None:
     active_archive = archive or ai_task_archive()
@@ -1259,6 +1317,7 @@ def run_ai_task_worker(
             prompt = _ai_task_prompt(next_payload)
             source, memo = _official_doc_memo_result(prompt, next_payload, urlopen=urlopen)
             active_archive.finish_preview(task_id, source=source, memo=memo)
+            notify_ai_task_status(task_id, "completed", profile, notifier)
         else:
             prompt = _ai_task_prompt(payload, web=True)
             request = {
@@ -1320,6 +1379,7 @@ def run_ai_task_worker(
             if not source["sources"]:
                 source["sources"] = _ai_task_source_summaries(source_payloads)
             active_archive.finish_result(task_id, source=source, result=result)
+            notify_ai_task_status(task_id, "completed", profile, notifier)
     except AITaskError as exc:
         fail_kwargs: dict[str, object] = {}
         if partial_source is not None:
@@ -1331,6 +1391,7 @@ def run_ai_task_worker(
                 "content": str(partial_result.get("content") or ""),
             }
         active_archive.fail(task_id, error=exc.code, **fail_kwargs)
+        notify_ai_task_status(task_id, "failed", profile, notifier)
     except Exception as exc:
         print(f"AI task worker failed: {type(exc).__name__}", flush=True)
         try:
@@ -1344,6 +1405,7 @@ def run_ai_task_worker(
             if partial_result:
                 fail_kwargs["result"] = partial_result
             active_archive.fail(task_id, error="ai_task_background_failed", **fail_kwargs)
+            notify_ai_task_status(task_id, "failed", profile, notifier)
         except AITaskError:
             pass
 
@@ -1353,6 +1415,7 @@ def start_ai_task_payload(
     archive: AITaskArchive | None = None,
     *,
     start_worker: bool = True,
+    profile: str = "personal",
     urlopen=urllib.request.urlopen,
 ) -> dict[str, object]:
     source_task = _payload_has_ai_task_source(payload)
@@ -1371,6 +1434,7 @@ def start_ai_task_payload(
                 "payload": payload,
                 "source_task": source_task,
                 "archive": active_archive,
+                "profile": profile,
                 "urlopen": urlopen,
             },
             daemon=True,
@@ -1514,11 +1578,18 @@ def start_ai_task_request_payload(
     archive: AITaskArchive | None = None,
     *,
     start_worker: bool = True,
+    profile: str = "personal",
     urlopen=urllib.request.urlopen,
 ) -> dict[str, object]:
     content_type = handler.headers.get("Content-Type") or ""
     if "multipart/form-data" not in content_type.lower():
-        return start_ai_task_payload(json_request(handler), archive, start_worker=start_worker, urlopen=urlopen)
+        return start_ai_task_payload(
+            json_request(handler),
+            archive,
+            start_worker=start_worker,
+            profile=profile,
+            urlopen=urlopen,
+        )
     fields, files = multipart_form_request(handler, max_bytes=OFFICIAL_MEMO_MAX_PDF_BYTES + MAX_MULTIPART_OVERHEAD_BYTES)
     payload: dict[str, object] = {
         "prompt": fields.get("prompt") or "",
@@ -1530,7 +1601,7 @@ def start_ai_task_request_payload(
     filename, content = files.get("sourcePdf") or files.get("pdf") or files.get("file") or ("", b"")
     if filename or content:
         payload["_sourcePdf"] = (Path(filename).name[:200], content)
-    return start_ai_task_payload(payload, archive, start_worker=start_worker, urlopen=urlopen)
+    return start_ai_task_payload(payload, archive, start_worker=start_worker, profile=profile, urlopen=urlopen)
 
 
 def official_memo_source_payload(
@@ -3863,7 +3934,11 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/ai-tasks/run":
             try:
                 profile = require_ai_task_access(self.headers)
-                json_response(self, 202, start_ai_task_request_payload(self, ai_task_archive(profile)))
+                json_response(
+                    self,
+                    202,
+                    start_ai_task_request_payload(self, ai_task_archive(profile), profile=profile),
+                )
             except (ValueError, AITaskError, DocumentIntakeError, memos_relay.MemosRelayError) as exc:
                 code = exc.code if isinstance(exc, (AITaskError, memos_relay.MemosRelayError)) else str(exc)
                 json_response(self, ai_task_status_for_error(exc), {"ok": False, "error": code})
@@ -4101,6 +4176,18 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_DELETE(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
+        deleted_ai_task_id = ai_task_delete_id(parsed.path)
+        if deleted_ai_task_id:
+            try:
+                profile = require_ai_task_access(self.headers)
+                json_response(self, 200, delete_ai_task_payload(deleted_ai_task_id, ai_task_archive(profile)))
+            except (ValueError, AITaskError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, (AITaskError, memos_relay.MemosRelayError)) else str(exc)
+                json_response(self, ai_task_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"AI task delete failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "ai_task_delete_failed"})
+            return
         push_subscription_id = web_push_subscription_id(parsed.path)
         if push_subscription_id:
             try:

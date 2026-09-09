@@ -8,9 +8,11 @@ parallel observation with Pushover remain.
 
 ## Decision
 
-All KaosGDD operational notifications have one durable source of truth in
+KaosGDD attention notifications have one durable source of truth in
 KaosGovernor. The personal PWA and iOS Shortcuts are clients of that inbox;
-neither owns notification state.
+neither owns notification state. AI Task completion is the deliberate narrow
+exception described below: its archive record is already the durable state, so
+completion Web Push does not duplicate it in the attention inbox.
 
 ```text
 mail / fax / digest / maintenance producers
@@ -97,6 +99,22 @@ Web Push services.
 Web Push does not replace the durable inbox. Failed or delayed push delivery
 does not lose the record, and the on-demand Shortcut can always read the current
 pending state directly.
+
+### AI Task completion
+
+When a personal AI Task reaches `previewed` or `failed`, Governor enqueues an
+ephemeral Web Push that opens `/#/ai-tasks`. The lock-screen messages are fixed
+to `AI Task is ready.` and `AI Task needs attention.`; prompts, results, source
+titles, medical content, record ids, and user identity never enter the payload.
+The API process receives write access only to the shared subscription/outbox
+files and does not receive the VAPID private key; Governor Worker remains the
+only sender.
+
+These events do not create a Notification Inbox record, require an ACK, or use
+Pushover. The personal AI Task archive is the durable source of truth. Family
+AI Tasks have a separate archive and do not send Web Push until that profile has
+an explicit device-enrollment design. AI Task execution, archive deletion, and
+completion signaling belong to Governor, not n8n.
 
 ### Optional ChatGPT Access
 
