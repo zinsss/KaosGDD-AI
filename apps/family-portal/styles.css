@@ -4503,18 +4503,18 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   position: absolute;
   z-index: 4;
   top: 2px;
-  right: -7px;
+  left: -7px;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 18px;
   height: 18px;
-  border: 1px solid rgba(129, 161, 193, 0.72);
+  border: 1px solid rgba(129, 161, 193, 0.42);
   border-radius: 50%;
   padding: 0 0 4px;
   background: #fbf7fc;
   color: rgba(46, 52, 64, 0.48);
-  box-shadow: 0 1px 3px rgba(46, 52, 64, 0.18);
+  box-shadow: 0 1px 2px rgba(46, 52, 64, 0.1);
   font-family: "Pretendard", sans-serif;
   font-size: 0.72rem;
   font-weight: 900;
@@ -4523,10 +4523,6 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   cursor: grab;
   pointer-events: auto;
   touch-action: none;
-}
-
-.rounyTimelineDayColumn:last-child .rounyBlockHandle {
-  right: 1px;
 }
 
 .rounyBlockIcon {

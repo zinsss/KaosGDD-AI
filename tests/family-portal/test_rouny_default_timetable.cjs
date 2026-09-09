@@ -32,7 +32,7 @@ test("Rouny detail offers Make default and identifies the current default", () =
 test("Rouny timeline uses slightly taller hourly cells", () => {
   assert.match(appSource, /ROUNY_TIMELINE_HOUR_HEIGHT = 72/);
   assert.match(styles, /\.rounyTimelineHour \{[\s\S]*?height: 72px;/);
-  assert.match(indexSource, /href="\/styles\.css\?v=327"/);
+  assert.match(indexSource, /href="\/styles\.css\?v=328"/);
 });
 
 test("Rouny uses one centered line on screen and compacts printed class labels", () => {
@@ -42,9 +42,9 @@ test("Rouny uses one centered line on screen and compacts printed class labels",
   );
   assert.match(
     styles,
-    /\.rounyBlockHandle \{[\s\S]*?top: 2px;[\s\S]*?right: -7px;[\s\S]*?border-radius: 50%;/,
+    /\.rounyBlockHandle \{[\s\S]*?top: 2px;[\s\S]*?left: -7px;[\s\S]*?border-radius: 50%;/,
   );
-  assert.match(styles, /\.rounyTimelineDayColumn:last-child \.rounyBlockHandle \{\s*right: 1px;/);
+  assert.doesNotMatch(styles, /\.rounyTimelineDayColumn:last-child \.rounyBlockHandle/);
   assert.match(styles, /\.rounyBlock strong \{[\s\S]*?white-space: nowrap;/);
   assert.match(
     styles,
