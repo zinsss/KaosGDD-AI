@@ -9549,16 +9549,6 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
-  const notificationAck = event.target.closest("[data-notification-ack]");
-  if (notificationAck) {
-    try {
-      await acknowledgeNotification(notificationAck.dataset.notificationAck || "");
-    } catch (error) {
-      window.alert(`Could not acknowledge notification: ${error.message || "unknown error"}`);
-    }
-    return;
-  }
-
   const topAddMenuAction = event.target.closest("[data-top-add-menu-action]");
   if (topAddMenuAction) {
     event.preventDefault();
@@ -11234,6 +11224,20 @@ document.addEventListener("keydown", (event) => {
 });
 
 document.addEventListener("change", async (event) => {
+  const notificationCheck = event.target.closest("[data-notification-ack]");
+  if (notificationCheck) {
+    if (!notificationCheck.checked) return;
+    notificationCheck.disabled = true;
+    try {
+      await acknowledgeNotification(notificationCheck.dataset.notificationAck || "");
+    } catch (error) {
+      notificationCheck.checked = false;
+      notificationCheck.disabled = false;
+      window.alert(`Could not acknowledge notification: ${error.message || "unknown error"}`);
+    }
+    return;
+  }
+
   const mainMenu = event.target.closest("[data-main-menu]");
   if (mainMenu) {
     const route = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(mainMenu.value) || "today";

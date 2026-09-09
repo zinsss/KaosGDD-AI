@@ -8014,10 +8014,46 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   white-space: pre-wrap;
 }
 
-.notificationRecord > .archiveAction {
+.notificationAck {
   grid-column: 2;
   grid-row: 1 / span 3;
   align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--archive-cyan);
+  cursor: pointer;
+  letter-spacing: 0.06em;
+}
+
+.notificationAck input {
+  appearance: none;
+  display: grid;
+  place-content: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0;
+  border: 1px solid var(--archive-cyan);
+  border-radius: 2px;
+  background: transparent;
+  accent-color: var(--archive-cyan);
+}
+
+.notificationAck input::after {
+  content: "✓";
+  color: var(--archive-cyan);
+  font-size: 0.95rem;
+  line-height: 1;
+  opacity: 0;
+}
+
+.notificationAck input:checked::after {
+  opacity: 1;
+}
+
+.notificationAck:has(input:disabled) {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .notificationEmpty {
@@ -8030,7 +8066,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
     grid-template-columns: 1fr;
   }
 
-  .notificationRecord > .archiveAction {
+  .notificationAck {
     grid-column: 1;
     grid-row: auto;
     justify-self: start;

@@ -12,7 +12,14 @@ window.KAOS_NOTIFICATIONS_VIEW = (() => {
             </header>
             ${item.title ? `<strong>${deps.escapeHtml(item.title)}</strong>` : ""}
             <p>${deps.escapeHtml(item.message || "")}</p>
-            <button class="archiveAction" type="button" data-notification-ack="${deps.escapeHtml(item.id || "")}">ACK</button>
+            <label class="notificationAck">
+              <input
+                type="checkbox"
+                data-notification-ack="${deps.escapeHtml(item.id || "")}"
+                aria-label="Mark notification checked"
+              />
+              <span>CHECKED</span>
+            </label>
           </li>
         `;
       })
