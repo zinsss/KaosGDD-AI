@@ -2,29 +2,31 @@
 
 Decision date: 2026-09-09
 
-Status: Governor inbox, personal PWA, and read-only Shortcut API implemented;
-ChatGPT app connection and hourly Scheduled Task pending production setup.
+Status: Governor inbox, personal PWA, and read-only on-demand Shortcut API
+implemented; PWA Web Push is the target alert transport.
 
 ## Decision
 
 All KaosGDD operational notifications have one durable source of truth in
-KaosGovernor. ChatGPT, the personal PWA, and iOS Shortcuts are clients of that
-inbox; none of them owns notification state.
+KaosGovernor. The personal PWA and iOS Shortcuts are clients of that inbox;
+neither owns notification state.
 
 ```text
 mail / fax / digest / maintenance producers
                     |
                     v
         Governor notification inbox
-          |            |             |
-          v            v             v
-     personal PWA  iOS Shortcut  ChatGPT app
-        + ACK        read-only     hourly monitor
+          |                         |
+          v                         v
+     PWA + Web Push          iOS Shortcut
+        + ACK              read-only, on demand
 ```
 
-The target has no Discord, Telegram, or Pushover notification dependency.
-Pushover remains a reversible transition transport until ChatGPT mobile
-delivery has completed an observation window without missed alerts.
+The target has no Discord, Telegram, ChatGPT polling, or Pushover notification
+dependency. Pushover remains a reversible transition transport until PWA Web
+Push has completed an observation window without missed alerts. A future
+ChatGPT/MCP connection may query the inbox conversationally, but is not part of
+notification delivery.
 
 ## Durable State
 
@@ -61,7 +63,8 @@ Authorization: Bearer <IOS_SHORTCUTS_TOKEN>
 
 The route is tailnet-only and read-only. It returns both structured `items` and
 a `text` field ready for Quick Look or Show Result. It does not acknowledge,
-delete, or mutate an item.
+delete, or mutate an item. The Shortcut is deliberately retained as a live
+on-demand check even after Web Push is enabled.
 
 Suggested Shortcut actions:
 
@@ -71,36 +74,35 @@ Suggested Shortcut actions:
    `https://kaosgdd.net/#/notifications`.
 4. Acknowledge from the protected PWA after reviewing the item.
 
-### ChatGPT Scheduled Task
+### PWA Web Push
 
-Do not put the Shortcut or Governor bearer token in a ChatGPT task prompt or a
-URL. ChatGPT must access a narrow read-only KaosGDD app/connector that returns
-the same public inbox fields and cannot acknowledge or perform other Governor
-operations.
+Governor will send an event-driven Web Push when a new inbox record is created.
+The notification opens `https://kaosgdd.net/#/notifications`; review and
+acknowledgement remain in the protected PWA. Lock-screen payloads should be
+minimal so mail, fax, and medical details are not exposed before the PWA opens.
 
-After that app is connected, create one hourly monitoring task:
+Web Push does not replace the durable inbox. Failed or delayed push delivery
+does not lose the record, and the on-demand Shortcut can always read the current
+pending state directly.
 
-```text
-Every hour, check my KaosGDD notification inbox through the connected KaosGDD
-app. Notify me only when there are pending notification IDs that you have not
-reported before, or when the inbox cannot be reached. Include priority, title,
-message, and a link to https://kaosgdd.net/#/notifications. Stay silent when
-nothing changed. Never acknowledge or modify an item.
-```
+### Optional ChatGPT Access
 
-ChatGPT mobile push must be enabled in ChatGPT Settings > Notifications. The
-standard scheduled-task interval is hourly; do not simulate 30 minutes with
-two overlapping tasks.
+Do not put the Shortcut or Governor bearer token in a ChatGPT prompt or URL. If
+conversational inbox access is added later, expose it through a narrow read-only
+OAuth-protected MCP server. Do not use scheduled ChatGPT polling as the routine
+notification transport.
 
 ## Cutover
 
-1. Deploy and verify Governor inbox, PWA, and Shortcut reads.
-2. Connect the narrow KaosGDD ChatGPT app and run a synthetic low-priority test.
-3. Observe ChatGPT and Pushover in parallel for seven days.
+1. Keep the verified Governor inbox, PWA acknowledgement, and on-demand
+   Shortcut read operational.
+2. Implement PWA Web Push and run a synthetic low-priority test.
+3. Observe Web Push and Pushover in parallel for seven days.
 4. Disable Pushover without deleting its secrets or prior outbox state.
 5. After a rollback window, remove the Pushover transport and credentials.
 
-This workflow belongs to Governor and ChatGPT. n8n may monitor scheduled
-workflow health, but it does not own notification records or acknowledgements.
+This workflow belongs to Governor and its clients. n8n may monitor scheduled
+workflow health, but it does not own notification records, delivery, or
+acknowledgements.
 
-Reference: [Scheduled tasks in ChatGPT](https://help.openai.com/en/articles/10291617).
+Reference: [Web Push for Web Apps on iOS and iPadOS](https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/).
