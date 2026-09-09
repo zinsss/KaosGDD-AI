@@ -57,6 +57,7 @@ class WebPushTests(unittest.TestCase):
             )
         self.assertTrue(config.public_key().startswith("B"))
         self.assertEqual(len(config.public_key()), 87)
+        self.assertEqual(len(config.encoded_private_key()), 43)
         with self.assertRaisesRegex(WebPushError, "VAPID_SUBJECT"):
             WebPushConfig.from_env(
                 {
@@ -96,6 +97,9 @@ class WebPushTests(unittest.TestCase):
         self.assertTrue(created)
         self.assertEqual(delivered, 1)
         sender.assert_called_once()
+        private_key = sender.call_args.kwargs["vapid_private_key"]
+        self.assertEqual(len(private_key), 43)
+        self.assertNotIn("BEGIN", private_key)
         payload = sender.call_args.kwargs["data"]
         self.assertIn("Fax needs attention.", payload)
         self.assertNotIn("Patient name", payload)

@@ -97,6 +97,19 @@ class WebPushConfig:
     def public_key(self) -> str:
         if not self.private_key:
             return ""
+        key = self._ec_private_key()
+        numbers = key.public_key().public_numbers()
+        uncompressed = b"\x04" + numbers.x.to_bytes(32, "big") + numbers.y.to_bytes(32, "big")
+        return base64.urlsafe_b64encode(uncompressed).decode("ascii").rstrip("=")
+
+    def encoded_private_key(self) -> str:
+        """Return the RFC 8292 raw P-256 scalar expected by py-vapid."""
+        if not self.private_key:
+            return ""
+        value = self._ec_private_key().private_numbers().private_value.to_bytes(32, "big")
+        return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
+
+    def _ec_private_key(self) -> ec.EllipticCurvePrivateKey:
         try:
             key = serialization.load_pem_private_key(
                 self.private_key.encode("utf-8"),
@@ -108,9 +121,7 @@ class WebPushConfig:
             key.curve, ec.SECP256R1
         ):
             raise WebPushError("web_push_vapid_private_key_invalid")
-        numbers = key.public_key().public_numbers()
-        uncompressed = b"\x04" + numbers.x.to_bytes(32, "big") + numbers.y.to_bytes(32, "big")
-        return base64.urlsafe_b64encode(uncompressed).decode("ascii").rstrip("=")
+        return key
 
 
 def _subscription_id(endpoint: str) -> str:
@@ -251,7 +262,7 @@ class WebPushClient:
                     "keys": subscription["keys"],
                 },
                 data=json.dumps(payload, ensure_ascii=False),
-                vapid_private_key=self.config.private_key,
+                vapid_private_key=self.config.encoded_private_key(),
                 vapid_claims={"sub": self.config.subject},
                 timeout=self.config.timeout_seconds,
             )
