@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 import io
 from pathlib import Path
 import tempfile
@@ -415,6 +415,14 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
             paperless=self.paperless,  # type: ignore[arg-type]
             calendar_refresh_callback=refresh_calendar_surfaces,
             today_provider=lambda: date(2026, 8, 14),
+            now_provider=lambda: datetime(
+                2026,
+                8,
+                14,
+                12,
+                0,
+                tzinfo=timezone(timedelta(hours=9)),
+            ),
             fax_service=self.fax,  # type: ignore[arg-type]
             fax_stage_root=Path(self.temporary.name) / "fax-proposals",
         )
@@ -537,6 +545,61 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["criticalCount"], 1)
         self.assertEqual(payload["items"][0]["category"], "fax")
         self.assertEqual(payload["text"], "Fax received\nOpen the Fax archive.")
+
+    async def test_shortcut_briefing_grows_into_a_same_day_log_with_planned_items(self) -> None:
+        self.calendar.tasks.append(
+            {
+                "uid": "TASK-LATE",
+                "summary": "Something Important",
+                "due": "2026-08-14",
+                "dueTime": "21:00",
+                "status": "NEEDS-ACTION",
+                "collection": "zin:tasks",
+            }
+        )
+        with mock.patch(
+            "kaos_governor.notifications._timestamp",
+            return_value="2026-08-14T02:30:00Z",
+        ):
+            self.notification_inbox.enqueue(
+                TextNotification(
+                    key="fax:service:down:briefing",
+                    category="fax",
+                    title="Fax service DOWN!",
+                    message="Check the office connector.",
+                    priority=1,
+                )
+            )
+            notification_id = self.notification_inbox.list_items()["items"][0]["id"]
+            self.notification_inbox.acknowledge(notification_id, actor="pwa")
+
+        response = await self.client.get(
+            "/shortcuts/briefing",
+            headers=self.shortcut_headers(),
+        )
+        payload = await response.json()
+
+        self.assertEqual(response.status, 200)
+        self.assertTrue(payload["readOnly"])
+        self.assertEqual(payload["date"], "2026-08-14")
+        self.assertEqual(payload["pendingNotificationCount"], 0)
+        self.assertEqual(payload["criticalNotificationCount"], 0)
+        self.assertEqual(payload["plannedCount"], 1)
+        self.assertIn("# 2026 August 14 Friday", payload["text"])
+        self.assertIn("10:00 Task Call mom", payload["text"])
+        self.assertIn("10:50 Event Clinic", payload["text"])
+        self.assertIn(
+            "11:30 Fax Fax service DOWN! — Check the office connector.",
+            payload["text"],
+        )
+        self.assertIn("# Planned\n21:00 Task Something Important", payload["text"])
+        fax_item = next(item for item in payload["items"] if item["kind"] == "Fax")
+        self.assertTrue(fax_item["acknowledged"])
+        self.assertTrue(
+            self.notification_inbox.list_items(include_acknowledged=True)["items"][0][
+                "acknowledged"
+            ]
+        )
 
     async def test_tool_notification_acknowledgement_requires_governor_token(self) -> None:
         self.notification_inbox.enqueue(

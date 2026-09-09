@@ -77,6 +77,21 @@ Suggested Shortcut actions:
    `https://kaosgdd.net/#/notifications`.
 4. Acknowledge from the protected PWA after reviewing the item.
 
+For a live day briefing rather than the raw pending inbox, use:
+
+```text
+GET https://<H3_MAGICDNS_NAME>/shortcuts/briefing
+Authorization: Bearer <IOS_SHORTCUTS_TOKEN>
+```
+
+This read-only endpoint builds one transient text view from the existing main
+Calendar, Tasks, and Notification Inbox data. It renders today's elapsed items
+and notification history in time order, retains acknowledged notifications in
+the same-day log, and places later timed events/tasks under `# Planned`.
+Calendar-derived `daily` notifications are omitted to avoid duplicating their
+source event rows. It does not persist another log, acknowledge notifications,
+or introduce a scheduler.
+
 ### PWA Web Push
 
 Governor sends an event-driven Web Push when a new inbox record is created and

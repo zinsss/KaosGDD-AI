@@ -47,6 +47,29 @@ SECOND_LOOK_RATE_LIMIT_WINDOW = timedelta(minutes=10)
 SECOND_LOOK_RATE_LIMIT_COUNT = 6
 SECOND_LOOK_RESPONSE_CACHE_TTL = timedelta(minutes=30)
 KST = timezone(timedelta(hours=9), "KST")
+BRIEFING_MONTHS = (
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+)
+BRIEFING_WEEKDAYS = (
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+)
 
 
 def kst_today(now: datetime | None = None) -> date:
@@ -54,6 +77,13 @@ def kst_today(now: datetime | None = None) -> date:
     if current.tzinfo is None:
         current = current.replace(tzinfo=timezone.utc)
     return current.astimezone(KST).date()
+
+
+def kst_now(now: datetime | None = None) -> datetime:
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    return current.astimezone(KST)
 
 
 async def _optional_json_object(request: web.Request) -> dict[str, Any]:
@@ -391,6 +421,7 @@ class BrainToolServer:
         fax_document_provider: Callable[[str], Mapping[str, object]] | None = None,
         mail_messages_provider: Callable[[int], Mapping[str, object]] | None = None,
         today_provider: Callable[[], date] | None = None,
+        now_provider: Callable[[], datetime] | None = None,
         durable_store: DurableOperationStore | None = None,
         task_mutations: TaskMutationService | None = None,
         memo_mutations: MemoMutationService | None = None,
@@ -421,6 +452,7 @@ class BrainToolServer:
         self._fax_document_provider = fax_document_provider
         self._mail_messages_provider = mail_messages_provider
         self._today_provider = today_provider or kst_today
+        self._now_provider = now_provider or kst_now
         self._operations = GovernorOperations(durable_store)
         self._fax_mutations = (
             FaxMutationService(
@@ -448,6 +480,7 @@ class BrainToolServer:
         app.router.add_get("/health", self._health)
         app.router.add_get("/shortcuts/supplies", self._shortcut_supplies)
         app.router.add_get("/shortcuts/notifications", self._list_notifications)
+        app.router.add_get("/shortcuts/briefing", self._shortcut_briefing)
         app.router.add_post("/shortcuts/fax/send/proposals", self._propose_fax_send)
         app.router.add_post(
             "/shortcuts/fax/send/proposals/{confirmation_id}/approve",
@@ -608,6 +641,26 @@ class BrainToolServer:
                 "text": text or "No pending notifications.",
                 "readOnly": request.path.startswith("/shortcuts/"),
             }
+        )
+
+    async def _shortcut_briefing(self, _request: web.Request) -> web.Response:
+        current = kst_now(self._now_provider())
+        try:
+            bootstrap = await asyncio.to_thread(self._calendar_adapter.bootstrap, "main")
+        except CalendarAdapterError as exc:
+            return web.json_response({"error": str(exc)}, status=502)
+        inbox = self._notification_inbox
+        notifications = (
+            await asyncio.to_thread(
+                inbox.list_items,
+                include_acknowledged=True,
+                limit=200,
+            )
+            if inbox is not None and inbox.config.enabled
+            else {"items": [], "pendingCount": 0, "criticalCount": 0}
+        )
+        return web.json_response(
+            shortcut_briefing_payload(bootstrap, notifications, current=current)
         )
 
     async def _acknowledge_notification(self, request: web.Request) -> web.Response:
@@ -2247,6 +2300,149 @@ def today_payload(bootstrap: Mapping[str, Any], *, profile: str, current: date) 
         "tasks": tasks,
         "weather": weather_payload(weather),
         "source": "calendar-adapter-live",
+    }
+
+
+def _briefing_line_text(*values: object) -> str:
+    return " — ".join(
+        part
+        for part in (" ".join(str(value or "").split()) for value in values)
+        if part
+    )
+
+
+def _briefing_clock(value: object) -> str:
+    candidate = str(value or "").strip()[:5]
+    try:
+        parsed = datetime.strptime(candidate, "%H:%M")
+    except ValueError:
+        return ""
+    return parsed.strftime("%H:%M")
+
+
+def _briefing_created_at(value: object) -> datetime | None:
+    candidate = str(value or "").strip()
+    if not candidate:
+        return None
+    try:
+        parsed = datetime.fromisoformat(candidate.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(KST)
+
+
+def shortcut_briefing_payload(
+    bootstrap: Mapping[str, Any],
+    notifications: Mapping[str, Any],
+    *,
+    current: datetime,
+) -> dict[str, object]:
+    """Build a read-only, same-day timeline for the iOS Shortcut."""
+    now = kst_now(current)
+    today = now.date()
+    now_clock = now.strftime("%H:%M")
+    log: list[dict[str, object]] = []
+    planned: list[dict[str, object]] = []
+
+    def add_scheduled(*, kind: str, title: object, clock_value: object, completed: bool = False) -> None:
+        clock = _briefing_clock(clock_value)
+        item = {
+            "time": clock or "ALL DAY",
+            "kind": kind,
+            "title": _briefing_line_text(title) or "Untitled",
+            "source": "calendar",
+        }
+        if clock and clock > now_clock and not completed:
+            planned.append(item)
+        else:
+            log.append(item)
+
+    for event in items(bootstrap, "events"):
+        if item_date(event, "startDate") == today:
+            add_scheduled(
+                kind="Event",
+                title=event.get("summary"),
+                clock_value=event.get("startTime"),
+            )
+
+    for task in items(bootstrap, "tasks"):
+        if item_date(task, "due") == today:
+            add_scheduled(
+                kind="Task",
+                title=task.get("summary"),
+                clock_value=task.get("dueTime"),
+                completed=is_completed_task(task),
+            )
+
+    notification_items = notifications.get("items")
+    if isinstance(notification_items, list):
+        for notification in notification_items:
+            if not isinstance(notification, Mapping):
+                continue
+            category = " ".join(
+                str(notification.get("category") or "Notification").split()
+            ).lower()
+            # Morning/event notices are projections of the calendar rows above.
+            if category == "daily":
+                continue
+            created_at = _briefing_created_at(notification.get("createdAt"))
+            if created_at is None or created_at.date() != today:
+                continue
+            log.append(
+                {
+                    "time": created_at.strftime("%H:%M"),
+                    "kind": category.title(),
+                    "title": _briefing_line_text(
+                        notification.get("title"),
+                        notification.get("message"),
+                    )
+                    or "Notification",
+                    "source": "notification",
+                    "priority": int(notification.get("priority") or 0),
+                    "acknowledged": bool(notification.get("acknowledged")),
+                }
+            )
+
+    def sort_key(item: Mapping[str, object]) -> tuple[str, str, str]:
+        clock = str(item.get("time") or "")
+        return (
+            "00:00" if clock == "ALL DAY" else clock,
+            str(item.get("kind") or ""),
+            str(item.get("title") or ""),
+        )
+
+    log.sort(key=sort_key)
+    planned.sort(key=sort_key)
+    header = (
+        f"# {today.year} {BRIEFING_MONTHS[today.month - 1]} "
+        f"{today.day} {BRIEFING_WEEKDAYS[today.weekday()]}"
+    )
+
+    def render(item: Mapping[str, object]) -> str:
+        return f"{item['time']} {item['kind']} {item['title']}"
+
+    lines = [header]
+    lines.extend(render(item) for item in log)
+    if not log:
+        lines.append("No activity yet.")
+    lines.extend(("", "# Planned"))
+    lines.extend(render(item) for item in planned)
+    if not planned:
+        lines.append("Nothing else planned.")
+    return {
+        "ok": True,
+        "date": today.isoformat(),
+        "generatedAt": now.isoformat(),
+        "logCount": len(log),
+        "plannedCount": len(planned),
+        "pendingNotificationCount": int(notifications.get("pendingCount") or 0),
+        "criticalNotificationCount": int(notifications.get("criticalCount") or 0),
+        "items": log,
+        "planned": planned,
+        "text": "\n".join(lines),
+        "readOnly": True,
     }
 
 
