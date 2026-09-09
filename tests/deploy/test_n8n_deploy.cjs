@@ -50,7 +50,9 @@ test("H3 helper owns a separate n8n lifecycle", () => {
 
 test("migration plan preserves Governor authority and one workflow owner", () => {
   assert.match(migrationPlan, /KaosGovernor remains the authority/);
-  assert.match(migrationPlan, /No live KaosGDD workflow has\s+> moved to n8n/);
+  assert.match(migrationPlan, /first active n8n schedule/);
+  assert.match(migrationPlan, /owns no KaosGDD domain\s+> state and sends no notifications/);
+  assert.match(migrationPlan, /no duplicate scheduler or poller should be enabled/);
   assert.match(migrationPlan, /Stop the native owner before activating the n8n owner/);
   assert.match(migrationPlan, /System updates, reboot, shell scripts \| Do not migrate/);
 });
