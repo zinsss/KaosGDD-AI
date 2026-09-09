@@ -242,6 +242,7 @@ window.KAOS_TRANSLATIONS = {
     "task.priorityMedium": "보통",
     "task.priorityHigh": "높음",
     "task.create": "할 일 추가",
+    "task.serverRequired": "할 일 서버에 연결한 후 다시 시도해 주세요.",
     "task.shareFamily": "가족과 공유",
     "task.details": "할 일 상세",
     "task.selectTask": "할 일을 선택하세요",

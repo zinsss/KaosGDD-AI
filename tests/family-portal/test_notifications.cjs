@@ -16,7 +16,7 @@ test("personal PWA exposes the Governor notification inbox", () => {
   assert.doesNotMatch(viewSource, />ACK<\/button>/);
   assert.match(viewSource, /No pending notifications\./);
   assert.match(indexSource, /src="\/notifications-view\.js\?v=2"/);
-  assert.ok(indexSource.indexOf('src="/notifications-view.js?v=2"') < indexSource.indexOf('src="/app.js?v=333"'));
+  assert.ok(indexSource.indexOf('src="/notifications-view.js?v=2"') < indexSource.indexOf('src="/app.js?v=334"'));
 });
 
 test("notification acknowledgement uses the protected same-origin API", () => {

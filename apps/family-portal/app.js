@@ -6948,7 +6948,7 @@ function renderTaskEditorForm(task = null, draft = {}) {
           </label>
           <div class="formActions">
             ${editing ? `<button class="dangerButton" type="button" data-delete-task data-task-id="${escapeHtml(task.id)}" data-collection-id="${escapeHtml(task.collection)}">${uiText("task.delete", "Delete task")}</button>` : ""}
-            <button class="primaryButton" type="submit">${editing ? uiText("common.save", "Save task") : uiText("task.create", "Create local task")}</button>
+            <button class="primaryButton" type="submit">${editing ? uiText("common.save", "Save task") : uiText("task.create", "Create task")}</button>
           </div>
         </div>
       </section>
@@ -11033,10 +11033,8 @@ document.addEventListener("submit", async (event) => {
       }
       return;
     }
-    mockAdapter.createTask(formData);
-    state.addTaskDraft = null;
-    window.location.hash = "#/tasks";
-    render();
+    window.alert(uiText("task.serverRequired", "Task server unavailable. Reconnect and try again."));
+    return;
   }
 
   const editTaskForm = event.target.closest("[data-edit-task]");

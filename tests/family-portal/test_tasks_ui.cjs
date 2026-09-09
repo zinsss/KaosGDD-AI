@@ -32,3 +32,10 @@ test("task timestamps are created and displayed in Korea time", () => {
   assert.doesNotMatch(appSource, /completed = new Date\(\)\.toISOString\(\)\.slice\(0, 19\)/);
   assert.doesNotMatch(appSource, /lastModified = new Date\(\)\.toISOString\(\)\.slice\(0, 19\)/);
 });
+
+test("task creation is server-backed and never presented as local", () => {
+  assert.match(appSource, /uiText\("task\.create", "Create task"\)/);
+  assert.doesNotMatch(appSource, /Create local task/);
+  assert.doesNotMatch(appSource, /mockAdapter\.createTask\(formData\)/);
+  assert.match(appSource, /uiText\("task\.serverRequired", "Task server unavailable\. Reconnect and try again\."\)/);
+});

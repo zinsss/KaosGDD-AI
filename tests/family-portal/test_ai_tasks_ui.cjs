@@ -73,7 +73,7 @@ test("AI Tasks official document memo flow previews before saving to Memos", () 
   assert.match(appSource, /await createMemo\(content\)/);
   assert.match(appSource, /\/api\/ai-tasks\/\$\{encodeURIComponent\(taskId\)\}\/complete/);
   assert.match(indexSource, /src="\/ai-tasks-view\.js\?v=1"/);
-  assert.ok(indexSource.indexOf('src="/ai-tasks-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=333"'));
+  assert.ok(indexSource.indexOf('src="/ai-tasks-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=334"'));
 });
 
 test("Family AI Tasks keeps its own light theme surface", () => {
