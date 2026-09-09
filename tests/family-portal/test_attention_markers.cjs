@@ -41,3 +41,9 @@ test("main logo and menu dots use amber attention and red critical colors", () =
   assert.match(styles, /\.mainMenuAttentionDot \{[\s\S]*color: var\(--nord13\);/);
   assert.match(styles, /\.mainMenuAttentionDot\.is-critical \{[\s\S]*color: var\(--nord11\);/);
 });
+
+test("main identity opens the hidden notification inbox", () => {
+  assert.match(appSource, /identity\.dataset\.notificationsOpen = "";/);
+  assert.match(appSource, /event\.target\.closest\("\[data-notifications-open\]"\)[\s\S]*window\.location\.hash = "#\/notifications";/);
+  assert.match(styles, /\.app\[data-profile="main"\] \.appIdentity\[data-notifications-open\] \{/);
+});

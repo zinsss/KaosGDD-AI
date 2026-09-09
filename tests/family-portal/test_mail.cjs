@@ -93,5 +93,5 @@ test("mail board rendering is delegated to the view module", () => {
   assert.match(mailViewSource, /data-mail-unread-apply/);
   assert.match(mailViewSource, /mailReloginUrl/);
   assert.match(indexSource, /src="\/mail-view\.js\?v=1"/);
-  assert.ok(indexSource.indexOf('src="/mail-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=332"'));
+  assert.ok(indexSource.indexOf('src="/mail-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=333"'));
 });

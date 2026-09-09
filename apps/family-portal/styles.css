@@ -614,6 +614,20 @@ html.isAgendaSuppliesEmbed body {
   white-space: nowrap;
 }
 
+.app[data-profile="main"] .appIdentity[data-notifications-open] {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.app[data-profile="main"] .appIdentity[data-notifications-open]:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--nord8) 70%, transparent);
+  outline-offset: 4px;
+}
+
+.app[data-profile="main"] .appIdentity[data-notifications-open]:active {
+  opacity: 0.68;
+}
+
 .app[data-profile="main"][data-attention="attention"] .appIdentity .kicker {
   color: var(--nord13);
 }

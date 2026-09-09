@@ -10,7 +10,6 @@ test("personal menu has the accepted labels and order", () => {
     personalMenu.map((item) => [item.route, item.label]),
     [
       ["today", "Agenda"],
-      ["notifications", "Notifications"],
       ["calendar", "Calendar"],
       ["tasks", "Tasks"],
       ["supplies", "Supplies"],
@@ -46,15 +45,20 @@ test("unknown personal routes safely select Agenda", () => {
   assert.equal(selectedPersonalRoute("not-a-route"), "today");
 });
 
+test("notifications stays routable without adding another main menu item", () => {
+  assert.equal(personalMenu.some((item) => item.route === "notifications"), false);
+  assert.equal(selectedPersonalRoute("notifications"), "notifications");
+});
+
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=323"');
-  const navigationIndex = index.indexOf('src="/navigation.js?v=5"');
+  const styleIndex = index.indexOf('href="/styles.css?v=324"');
+  const navigationIndex = index.indexOf('src="/navigation.js?v=6"');
   const calendarViewIndex = index.indexOf('src="/calendar-view.js?v=1"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
   const faxIndex = index.indexOf('src="/fax.js?v=2"');
   const mailIndex = index.indexOf('src="/mail.js?v=7"');
-  const applicationIndex = index.indexOf('src="/app.js?v=332"');
+  const applicationIndex = index.indexOf('src="/app.js?v=333"');
   assert.ok(styleIndex >= 0);
   assert.ok(navigationIndex >= 0);
   assert.ok(calendarViewIndex > navigationIndex);
@@ -76,7 +80,7 @@ test("calendar month panel rendering is delegated to the view module", () => {
   assert.match(calendarViewSource, /data-date="\$\{cell\.value\}"/);
   assert.match(calendarViewSource, /data-calendar-add-event/);
   assert.match(index, /src="\/calendar-view\.js\?v=1"/);
-  assert.ok(index.indexOf('src="/calendar-view.js?v=1"') < index.indexOf('src="/app.js?v=332"'));
+  assert.ok(index.indexOf('src="/calendar-view.js?v=1"') < index.indexOf('src="/app.js?v=333"'));
 });
 
 test("calendar title uses native month and year dropdowns", () => {

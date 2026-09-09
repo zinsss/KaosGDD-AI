@@ -59,7 +59,7 @@ test("fax archive board uses the common no date title header", () => {
   assert.match(faxViewSource, /id="faxIndexTitle">RECORD BOARD[\s\S]*<span>NO\.<\/span><span>DATE<\/span><span>TITLE<\/span>/);
   assert.doesNotMatch(faxViewSource, /<span>ID<\/span><span>DATE<\/span><span>REMOTE<\/span><span>TITLE<\/span>/);
   assert.match(indexSource, /src="\/fax-view\.js\?v=1"/);
-  assert.ok(indexSource.indexOf('src="/fax-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=332"'));
+  assert.ok(indexSource.indexOf('src="/fax-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=333"'));
 });
 
 test("failed fax detail exposes ACK and attention markers use unacknowledged failures", () => {

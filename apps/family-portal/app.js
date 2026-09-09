@@ -5521,6 +5521,7 @@ function routeTitle(route) {
   app.dataset.route = route;
   app.dataset.profile = portalProfile();
   if (identity && portalProfile() === "family") {
+    delete identity.dataset.notificationsOpen;
     identity.dataset.appReload = "";
     identity.setAttribute("role", "button");
     identity.setAttribute("tabindex", "0");
@@ -5528,10 +5529,11 @@ function routeTitle(route) {
     identity.setAttribute("title", "새로고침");
   } else if (identity) {
     delete identity.dataset.appReload;
-    identity.removeAttribute("role");
-    identity.removeAttribute("tabindex");
-    identity.removeAttribute("aria-label");
-    identity.removeAttribute("title");
+    identity.dataset.notificationsOpen = "";
+    identity.setAttribute("role", "button");
+    identity.setAttribute("tabindex", "0");
+    identity.setAttribute("aria-label", "Open notifications");
+    identity.setAttribute("title", "Notifications");
   }
   if (portalProfile() === "main") {
     const severity = mainAttentionSeverity();
@@ -9537,6 +9539,12 @@ function updateTopBarShadow() {
 }
 
 document.addEventListener("click", async (event) => {
+  if (event.target.closest("[data-notifications-open]")) {
+    event.preventDefault();
+    window.location.hash = "#/notifications";
+    return;
+  }
+
   if (event.target.closest("[data-app-reload]")) {
     event.preventDefault();
     window.location.reload();
@@ -11209,6 +11217,13 @@ document.addEventListener("input", (event) => {
 });
 
 document.addEventListener("keydown", (event) => {
+  const notificationsTrigger = event.target.closest("[data-notifications-open]");
+  if (notificationsTrigger && (event.key === "Enter" || event.key === " ")) {
+    event.preventDefault();
+    notificationsTrigger.click();
+    return;
+  }
+
   if (event.key === "Escape" && state.weatherLocationPopup.open) {
     closeWeatherLocationPopup();
     return;

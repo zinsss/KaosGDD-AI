@@ -5,7 +5,6 @@
 })(typeof globalThis === "object" ? globalThis : this, function createPortalNavigation() {
   const personalMenu = Object.freeze([
     Object.freeze({ route: "today", label: "Agenda" }),
-    Object.freeze({ route: "notifications", label: "Notifications" }),
     Object.freeze({ route: "calendar", label: "Calendar" }),
     Object.freeze({ route: "tasks", label: "Tasks" }),
     Object.freeze({ route: "supplies", label: "Supplies" }),
@@ -17,7 +16,7 @@
     Object.freeze({ route: "services", label: "Utils" }),
     Object.freeze({ route: "settings", label: "Settings" }),
   ]);
-  const personalRoutes = new Set(personalMenu.map((item) => item.route));
+  const personalRoutes = new Set([...personalMenu.map((item) => item.route), "notifications"]);
   const aliases = Object.freeze({
     add: "calendar",
     "add-event": "calendar",
