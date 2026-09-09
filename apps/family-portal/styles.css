@@ -7106,6 +7106,38 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   overflow-wrap: anywhere;
 }
 
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskPreview > .archiveDetailHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskPreview > .archiveDetailHeader > div:first-child,
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskPreview > .archiveDetailHeader h3 {
+  min-width: 0;
+  width: 100%;
+}
+
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskPreview > .archiveDetailHeader h3 {
+  overflow: hidden;
+  overflow-wrap: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskPreview > .archiveDetailHeader > .archiveActions {
+  width: 100%;
+  min-width: 0;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+}
+
+.app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"]) .aiTaskPreview > .archiveDetailHeader > .archiveActions > * {
+  flex: 0 0 auto;
+}
+
 .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"], [data-profile="family"][data-route="memos"]) .archiveStatusMessage {
   margin: 0;
   color: var(--archive-muted);

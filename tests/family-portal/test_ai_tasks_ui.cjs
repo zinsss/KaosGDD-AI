@@ -88,6 +88,12 @@ test("Family AI Tasks keeps its own light theme surface", () => {
   assert.match(stylesSource, /grid-template-columns: repeat\(9, auto\);/);
 });
 
+test("AI Task detail keeps its title and actions on separate single rows", () => {
+  assert.match(stylesSource, /\.aiTaskPreview > \.archiveDetailHeader \{[\s\S]*grid-template-columns: minmax\(0, 1fr\);/);
+  assert.match(stylesSource, /\.aiTaskPreview > \.archiveDetailHeader h3 \{[\s\S]*text-overflow: ellipsis;[\s\S]*white-space: nowrap;/);
+  assert.match(stylesSource, /\.aiTaskPreview > \.archiveDetailHeader > \.archiveActions \{[\s\S]*flex-wrap: nowrap;[\s\S]*overflow-x: auto;/);
+});
+
 test("AI Tasks preview errors use actionable messages", () => {
   assert.match(appSource, /function aiTaskErrorMessage\(code\)/);
   assert.match(appSource, /kaosbrain_web_search_not_configured: "KaosBrain web search is not configured\."/);
