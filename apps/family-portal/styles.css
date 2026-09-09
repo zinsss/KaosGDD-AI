@@ -7952,6 +7952,91 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   color: #8c4f83;
 }
 
+.notificationInbox .archiveCommand > div {
+  display: grid;
+  gap: 4px;
+}
+
+.notificationInbox .archiveCommand strong {
+  color: var(--archive-text);
+  letter-spacing: 0.05em;
+}
+
+.notificationRecordList {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.notificationRecord {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 16px;
+  padding: 16px;
+  border: 1px solid var(--archive-line);
+  background: var(--archive-surface);
+}
+
+.notificationRecord.isCritical {
+  border-color: color-mix(in srgb, var(--nord11) 62%, var(--archive-line));
+}
+
+.notificationRecord header,
+.notificationRecord strong,
+.notificationRecord p {
+  grid-column: 1;
+}
+
+.notificationRecord header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 16px;
+  color: var(--archive-muted);
+  font-size: 0.78rem;
+}
+
+.notificationCategory {
+  color: var(--archive-cyan);
+  letter-spacing: 0.08em;
+}
+
+.notificationRecord strong {
+  color: var(--archive-text);
+  font-size: 1rem;
+}
+
+.notificationRecord p {
+  margin: 0;
+  color: var(--archive-text);
+  white-space: pre-wrap;
+}
+
+.notificationRecord > .archiveAction {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  align-self: center;
+}
+
+.notificationEmpty {
+  padding: 22px 16px;
+  border: 1px solid var(--archive-line);
+}
+
+@media (max-width: 640px) {
+  .notificationRecord {
+    grid-template-columns: 1fr;
+  }
+
+  .notificationRecord > .archiveAction {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: start;
+  }
+}
+
 @media print {
   @page {
     size: A4 landscape;

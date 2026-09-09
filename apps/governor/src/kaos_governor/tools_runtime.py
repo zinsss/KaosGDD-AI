@@ -17,6 +17,7 @@ from .documents import PaperlessConfig, PaperlessDocumentService
 from .fax import FaxConfig, FaxService
 from .mail import MailOrganizerConfig, NaverMailConfig, NaverMailOrganizer, NaverMailPoller
 from .memos import MemoMutationService, MemosConfig, MemosService
+from .notifications import NotificationInbox, NotificationInboxConfig
 from .postgres_durable import PostgresDurableGovernorStore
 from .tasks import TaskMutationService
 from .tools import BrainToolServer, ImagingSecondLookClient, ImagingSecondLookConfig
@@ -111,6 +112,7 @@ class GovernorToolsRuntime:
             governor_api_token=governor_token,
             ios_shortcuts_token=shortcuts_token,
             ios_fax_shortcut_token=fax_shortcut_token,
+            notification_inbox=NotificationInbox(NotificationInboxConfig.from_env(source)),
             calendar_adapter=calendar,
             memos=memos,
             paperless=paperless,

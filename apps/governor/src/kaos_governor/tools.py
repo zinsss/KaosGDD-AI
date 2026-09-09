@@ -35,6 +35,7 @@ from .memos import (
     MemosError,
     MemosService,
 )
+from .notifications import NotificationError, NotificationInbox
 from .tasks import TaskMutationCommand, TaskMutationError, TaskMutationService
 from .tool_calendar import month_markers, visible_month_grid_range, weather_agenda_summary, weather_items_by_date
 from .tool_tasks import TASK_PRIORITIES, is_supplies_collection, normalize_supplies_due, validate_edit_due
@@ -397,6 +398,7 @@ class BrainToolServer:
         second_look_status_callback: Callable[[], Awaitable[None]] | None = None,
         ios_shortcuts_token: str = "",
         ios_fax_shortcut_token: str = "",
+        notification_inbox: NotificationInbox | None = None,
         fax_service: FaxService | None = None,
         fax_stage_root: Path | None = None,
     ) -> None:
@@ -405,6 +407,7 @@ class BrainToolServer:
         self._governor_api_token = governor_api_token
         self._ios_shortcuts_token = ios_shortcuts_token
         self._ios_fax_shortcut_token = ios_fax_shortcut_token
+        self._notification_inbox = notification_inbox
         self._calendar_adapter = calendar_adapter
         self._memos = memos
         self._paperless = paperless
@@ -441,6 +444,7 @@ class BrainToolServer:
         app.middlewares.append(self._auth_middleware)
         app.router.add_get("/health", self._health)
         app.router.add_get("/shortcuts/supplies", self._shortcut_supplies)
+        app.router.add_get("/shortcuts/notifications", self._list_notifications)
         app.router.add_post("/shortcuts/fax/send/proposals", self._propose_fax_send)
         app.router.add_post(
             "/shortcuts/fax/send/proposals/{confirmation_id}/approve",
@@ -452,6 +456,11 @@ class BrainToolServer:
         app.router.add_get("/tools/calendar/month-image", self._calendar_month_image)
         app.router.add_get("/tools/imports/recent", self._recent_imports)
         app.router.add_get("/tools/system/status", self._system_status)
+        app.router.add_get("/tools/notifications", self._list_notifications)
+        app.router.add_post(
+            "/tools/notifications/{notification_id}/acknowledge",
+            self._acknowledge_notification,
+        )
         app.router.add_get("/tools/imports/fax/{fax_id}/document", self._incoming_fax_document)
         app.router.add_get("/tools/mail/naver/list", self._list_naver_mail)
         app.router.add_get("/tools/tasks/active", self._active_tasks)
@@ -556,6 +565,61 @@ class BrainToolServer:
                 "text": "\n".join(f"• {title}" for title in titles) if titles else "No supplies.",
             }
         )
+
+    async def _list_notifications(self, request: web.Request) -> web.Response:
+        inbox = self._notification_inbox
+        if inbox is None or not inbox.config.enabled:
+            return web.json_response({"error": "notification_inbox_unavailable"}, status=503)
+        include_acknowledged = request.query.get("includeAcknowledged", "").strip().lower()
+        include_acknowledged = include_acknowledged in {"1", "true", "yes", "on"}
+        try:
+            limit = int(request.query.get("limit", "100"))
+        except ValueError:
+            return web.json_response({"error": "notification_limit_invalid"}, status=400)
+        payload = await asyncio.to_thread(
+            inbox.list_items,
+            include_acknowledged=include_acknowledged,
+            limit=limit,
+        )
+        items = payload.get("items") if isinstance(payload.get("items"), list) else []
+        text = "\n\n".join(
+            "\n".join(
+                part
+                for part in (
+                    str(item.get("title") or "").strip(),
+                    str(item.get("message") or "").strip(),
+                )
+                if part
+            )
+            for item in items
+            if isinstance(item, Mapping)
+        )
+        return web.json_response(
+            {
+                "ok": True,
+                **payload,
+                "text": text or "No pending notifications.",
+                "readOnly": request.path.startswith("/shortcuts/"),
+            }
+        )
+
+    async def _acknowledge_notification(self, request: web.Request) -> web.Response:
+        inbox = self._notification_inbox
+        if inbox is None or not inbox.config.enabled:
+            return web.json_response({"error": "notification_inbox_unavailable"}, status=503)
+        try:
+            body = await _optional_json_object(request)
+            actor_id = str(body.get("actorId") or "").strip()
+            item = await asyncio.to_thread(
+                inbox.acknowledge,
+                request.match_info["notification_id"],
+                actor=actor_id,
+            )
+        except (FaxError, NotificationError) as exc:
+            code = str(exc)
+            status = 404 if code == "notification_not_found" else 400
+            return web.json_response({"error": code}, status=status)
+        return web.json_response({"ok": True, "item": item})
 
     async def _propose_fax_send(self, request: web.Request) -> web.Response:
         service = self._fax_mutations

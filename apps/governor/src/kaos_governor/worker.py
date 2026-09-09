@@ -22,7 +22,13 @@ from .import_workers import (
     NaverMailLifecycleWorker,
 )
 from .mail import NaverMailConfig, NaverMailPoller
-from .notifications import PushoverConfig, TextNotification, TextNotificationService
+from .notifications import (
+    NotificationInbox,
+    NotificationInboxConfig,
+    PushoverConfig,
+    TextNotification,
+    TextNotificationService,
+)
 from .tasks import PostgresRecurringTaskStore, RecurringTaskPlan, RecurringTaskService
 
 
@@ -428,7 +434,10 @@ def main() -> None:
             digest_config,
             CalendarAdapterClient(CalendarAdapterConfig(calendar_url)),
         )
-    notifications = TextNotificationService(pushover)
+    notifications = TextNotificationService(
+        pushover,
+        inbox=NotificationInbox(NotificationInboxConfig.from_env()),
+    )
     mail_config = NaverMailConfig.from_env()
     mail_lifecycle = None
     if mail_config.enabled and mail_config.owner == "worker":

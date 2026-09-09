@@ -7,6 +7,8 @@ import urllib.parse
 from unittest import mock
 
 from kaos_governor.notifications import (
+    NotificationInbox,
+    NotificationInboxConfig,
     NotificationError,
     PushoverClient,
     PushoverConfig,
@@ -245,15 +247,52 @@ class NotificationTests(unittest.TestCase):
         self.assertEqual(delivered.title, "")
         self.assertEqual(delivered.message, "Fax received.")
 
-    def test_disabled_service_does_not_create_an_outbox(self) -> None:
+    def test_disabled_pushover_still_creates_transport_neutral_inbox_item(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             config = self.config(Path(temporary), enabled=False)
             service = TextNotificationService(config)
 
             created = service.notify(self.notification())
+            inbox = service.inbox.list_items()
 
-            self.assertFalse(created)
+            self.assertTrue(created)
             self.assertFalse(config.state_path.exists())
+            self.assertEqual(inbox["pendingCount"], 1)
+            self.assertEqual(inbox["items"][0]["title"], "KaosGDD Fax")
+
+    def test_inbox_lists_pending_and_acknowledges_idempotently(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            inbox = NotificationInbox(
+                NotificationInboxConfig(state_path=Path(temporary) / "inbox.json")
+            )
+            inbox.enqueue(self.notification(priority=1))
+            pending = inbox.list_items()
+            notification_id = pending["items"][0]["id"]
+
+            first = inbox.acknowledge(notification_id, actor="zin")
+            replay = inbox.acknowledge(notification_id, actor="zin")
+            after = inbox.list_items()
+            archive = inbox.list_items(include_acknowledged=True)
+
+        self.assertEqual(pending["pendingCount"], 1)
+        self.assertEqual(pending["criticalCount"], 1)
+        self.assertTrue(first["acknowledged"])
+        self.assertEqual(replay["acknowledgedAt"], first["acknowledgedAt"])
+        self.assertEqual(after["pendingCount"], 0)
+        self.assertEqual(len(after["items"]), 0)
+        self.assertEqual(len(archive["items"]), 1)
+
+    def test_inbox_does_not_expose_deduplication_key_or_actor(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            inbox = NotificationInbox(
+                NotificationInboxConfig(state_path=Path(temporary) / "inbox.json")
+            )
+            inbox.enqueue(self.notification(key="mail:secret-message-id", category="mail"))
+            item = inbox.list_items()["items"][0]
+
+        self.assertNotIn("key", item)
+        self.assertNotIn("acknowledgedBy", item)
+        self.assertRegex(item["id"], r"^[0-9a-f]{24}$")
 
 
 if __name__ == "__main__":

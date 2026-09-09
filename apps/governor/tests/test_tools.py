@@ -15,6 +15,11 @@ from kaos_governor import MemoryDurableGovernorStore, PendingOperationPayload
 from kaos_governor.durable import validate_pending_payload
 from kaos_governor.documents import PaperlessDocument, PaperlessSearchPage, PaperlessSearchResult, PaperlessTag
 from kaos_governor.memos import Memo, MemoSearchPage, MemoSearchResult
+from kaos_governor.notifications import (
+    NotificationInbox,
+    NotificationInboxConfig,
+    TextNotification,
+)
 from kaos_governor.tools import (
     BrainToolServer,
     ImagingSecondLookClient,
@@ -376,6 +381,11 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.memos = FakeMemos()
         self.paperless = FakePaperless()
         self.fax = FakeFaxService()
+        self.notification_inbox = NotificationInbox(
+            NotificationInboxConfig(
+                state_path=Path(self.temporary.name) / "notifications.json"
+            )
+        )
         self.calendar_refresh_count = 0
 
         async def refresh_calendar_surfaces() -> None:
@@ -387,6 +397,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
             governor_api_token="governor-secret",
             ios_shortcuts_token="shortcut-secret",
             ios_fax_shortcut_token="fax-shortcut-secret",
+            notification_inbox=self.notification_inbox,
             calendar_adapter=self.calendar,  # type: ignore[arg-type]
             memos=self.memos,  # type: ignore[arg-type]
             paperless=self.paperless,  # type: ignore[arg-type]
@@ -459,6 +470,58 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
             },
         )
         self.assertEqual(self.calendar.bootstrap_calls[-1], "supplies")
+
+    async def test_shortcut_notifications_are_read_only_and_ready_to_show(self) -> None:
+        self.notification_inbox.enqueue(
+            TextNotification(
+                key="fax:received:1",
+                category="fax",
+                title="Fax received",
+                message="Open the Fax archive.",
+                priority=1,
+            )
+        )
+
+        response = await self.client.get(
+            "/shortcuts/notifications",
+            headers=self.shortcut_headers(),
+        )
+        payload = await response.json()
+
+        self.assertEqual(response.status, 200)
+        self.assertTrue(payload["readOnly"])
+        self.assertEqual(payload["pendingCount"], 1)
+        self.assertEqual(payload["criticalCount"], 1)
+        self.assertEqual(payload["items"][0]["category"], "fax")
+        self.assertEqual(payload["text"], "Fax received\nOpen the Fax archive.")
+
+    async def test_tool_notification_acknowledgement_requires_governor_token(self) -> None:
+        self.notification_inbox.enqueue(
+            TextNotification(
+                key="system:down:1",
+                category="system",
+                title="System attention",
+                message="Mail is unavailable.",
+                priority=1,
+            )
+        )
+        notification_id = self.notification_inbox.list_items()["items"][0]["id"]
+
+        denied = await self.client.post(
+            f"/tools/notifications/{notification_id}/acknowledge",
+            headers=self.shortcut_headers(),
+            json={"actorId": "zin"},
+        )
+        accepted = await self.client.post(
+            f"/tools/notifications/{notification_id}/acknowledge",
+            headers=self.headers(),
+            json={"actorId": "zin"},
+        )
+
+        self.assertEqual(denied.status, 401)
+        self.assertEqual(accepted.status, 200)
+        self.assertTrue((await accepted.json())["item"]["acknowledged"])
+        self.assertEqual(self.notification_inbox.list_items()["pendingCount"], 0)
 
     async def test_shortcut_and_governor_tokens_are_isolated(self) -> None:
         shortcut_with_governor_token = await self.client.get(

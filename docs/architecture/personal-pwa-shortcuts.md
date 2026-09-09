@@ -275,6 +275,14 @@ Suggested iOS Shortcut actions:
 6. Show the returned job ID/status as the receipt. A later slice may deep-link
    this receipt into the PWA fax archive.
 
+## Notification inbox Shortcut
+
+The transport-neutral notification design and the exact read-only Shortcut
+contract are documented in
+[Governor Notification Inbox and ChatGPT Delivery](notification-inbox-chatgpt.md).
+The Shortcut token remains read-only; acknowledgement is performed through the
+personal PWA so a lost Shortcut token cannot clear operational attention.
+
 ## Native iOS Relationship
 
 Radicale remains authoritative regardless of which interface is visible. iOS
@@ -289,7 +297,8 @@ through Governor and ETag-safe adapters.
 - Do not embed the full PWA in Scriptable merely to hide that it is web-based.
 - Do not duplicate the Family and personal frontend into unrelated codebases.
 - Do not expose personal data through the Family hostname or family token.
-- Do not replace Pushover with unreliable background PWA polling.
+- Do not retire Pushover until ChatGPT scheduled delivery has passed its
+  parallel observation window; the PWA itself does not background-poll.
 - Do not remove native CalDAV synchronization merely because the native UI is
   not preferred.
 

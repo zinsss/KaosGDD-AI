@@ -27,6 +27,8 @@ from .fax import (
 )
 from .memos import Memo, MemoSearchPage, MemoSearchResult, MemosConfig, MemosError, MemosService
 from .notifications import (
+    NotificationInbox,
+    NotificationInboxConfig,
     NotificationError,
     PushoverClient,
     PushoverConfig,
@@ -78,6 +80,8 @@ __all__ = (
     "OperationSubmission",
     "PendingOperationPayload",
     "OfficeFaxConnectorClient",
+    "NotificationInbox",
+    "NotificationInboxConfig",
     "NotificationError",
     "PushoverClient",
     "PushoverConfig",

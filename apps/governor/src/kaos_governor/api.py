@@ -88,6 +88,13 @@ class SystemStatusError(RuntimeError):
         self.status = status
 
 
+class NotificationInboxAPIError(RuntimeError):
+    def __init__(self, code: str, status: int = 503) -> None:
+        super().__init__(code)
+        self.code = code
+        self.status = status
+
+
 def json_response(handler: BaseHTTPRequestHandler, status: int, payload: dict[str, object]) -> None:
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     handler.send_response(status)
@@ -262,6 +269,95 @@ def system_updates_payload(profile: str) -> dict[str, object]:
         "readOnly": True,
         "status": read_system_updates(),
     }
+
+
+def _notification_tool_payload(
+    path: str,
+    *,
+    method: str = "GET",
+    payload: dict[str, object] | None = None,
+    urlopen=urllib.request.urlopen,
+) -> dict[str, object]:
+    token = secret_value("GOVERNOR_API_TOKEN", default_file="/run/secrets/governor_api_token")
+    if not token:
+        raise NotificationInboxAPIError("notification_inbox_token_missing")
+    body = None
+    headers = {
+        "Accept": "application/json",
+        "Authorization": f"Bearer {token}",
+    }
+    if payload is not None:
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(
+        f"{SYSTEM_STATUS_TOOLS_BASE_URL}{path}",
+        data=body,
+        method=method,
+        headers=headers,
+    )
+    try:
+        with urlopen(request, timeout=SYSTEM_STATUS_TIMEOUT_SECONDS) as response:
+            raw = response.read()
+    except urllib.error.HTTPError as exc:
+        try:
+            error_payload = json.loads(exc.read().decode("utf-8"))
+            code = str(error_payload.get("error") or f"notification_inbox_http_{exc.code}")
+        except Exception:
+            code = f"notification_inbox_http_{exc.code}"
+        status = 404 if exc.code == 404 else 400 if exc.code == 400 else 502
+        raise NotificationInboxAPIError(code, status) from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise NotificationInboxAPIError("notification_inbox_unreachable") from exc
+    try:
+        result = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise NotificationInboxAPIError("notification_inbox_invalid_json", 502) from exc
+    if not isinstance(result, dict):
+        raise NotificationInboxAPIError("notification_inbox_invalid_payload", 502)
+    return result
+
+
+def notification_inbox_payload(
+    profile: str,
+    query_string: str,
+    *,
+    urlopen=urllib.request.urlopen,
+) -> dict[str, object]:
+    if profile != "main":
+        raise NotificationInboxAPIError("main_profile_required", 404)
+    params = urllib.parse.parse_qs(query_string, keep_blank_values=True)
+    forwarded: dict[str, str] = {}
+    for name in ("limit", "includeAcknowledged"):
+        if name in params:
+            forwarded[name] = str(params[name][0])
+    query = urllib.parse.urlencode(forwarded)
+    suffix = f"?{query}" if query else ""
+    return _notification_tool_payload(
+        f"/tools/notifications{suffix}",
+        urlopen=urlopen,
+    )
+
+
+def notification_acknowledge_id(path: str) -> str:
+    match = re.fullmatch(r"/api/notifications/([0-9a-fA-F]{24})/acknowledge", path)
+    return match.group(1).lower() if match else ""
+
+
+def notification_acknowledge_payload(
+    profile: str,
+    notification_id: str,
+    actor_id: str,
+    *,
+    urlopen=urllib.request.urlopen,
+) -> dict[str, object]:
+    if profile != "main":
+        raise NotificationInboxAPIError("main_profile_required", 404)
+    return _notification_tool_payload(
+        f"/tools/notifications/{notification_id}/acknowledge",
+        method="POST",
+        payload={"actorId": actor_id},
+        urlopen=urlopen,
+    )
 
 
 def supply_status_for_error(exc: Exception) -> int:
@@ -3533,6 +3629,28 @@ class Handler(BaseHTTPRequestHandler):
                 print(f"Settings status read failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "settings_status_unavailable"})
             return
+        if parsed.path == "/api/notifications":
+            try:
+                require_main_access(self.headers)
+                json_response(
+                    self,
+                    200,
+                    notification_inbox_payload(
+                        profile_from_headers(self.headers),
+                        parsed.query,
+                    ),
+                )
+            except (ValueError, NotificationInboxAPIError, memos_relay.MemosRelayError) as exc:
+                if isinstance(exc, NotificationInboxAPIError):
+                    json_response(self, exc.status, {"ok": False, "error": exc.code})
+                elif isinstance(exc, memos_relay.MemosRelayError):
+                    json_response(self, exc.status, {"ok": False, "error": exc.code})
+                else:
+                    json_response(self, 400, {"ok": False, "error": str(exc)})
+            except Exception as exc:
+                print(f"Notification inbox read failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "notification_inbox_unavailable"})
+            return
         if parsed.path == "/api/system/status":
             try:
                 require_main_access(self.headers)
@@ -3574,6 +3692,30 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
+        notification_id = notification_acknowledge_id(parsed.path)
+        if notification_id:
+            try:
+                actor_id = require_main_access(self.headers)
+                json_response(
+                    self,
+                    200,
+                    notification_acknowledge_payload(
+                        profile_from_headers(self.headers),
+                        notification_id,
+                        actor_id,
+                    ),
+                )
+            except (ValueError, NotificationInboxAPIError, memos_relay.MemosRelayError) as exc:
+                if isinstance(exc, NotificationInboxAPIError):
+                    json_response(self, exc.status, {"ok": False, "error": exc.code})
+                elif isinstance(exc, memos_relay.MemosRelayError):
+                    json_response(self, exc.status, {"ok": False, "error": exc.code})
+                else:
+                    json_response(self, 400, {"ok": False, "error": str(exc)})
+            except Exception as exc:
+                print(f"Notification acknowledge failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "notification_acknowledge_failed"})
+            return
         fax_ack_id = fax_acknowledge_job_id(parsed.path)
         if fax_ack_id:
             try:

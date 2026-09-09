@@ -9,6 +9,7 @@ const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/st
 test("main shell derives quiet attention markers from existing read-only state", () => {
   assert.match(appSource, /attention: \{\n    checked: false,\n    loading: false,/);
   assert.match(appSource, /function mainAttentionMarkers\(\) \{/);
+  assert.match(appSource, /Number\(state\.notifications\.pendingCount \|\| 0\) > 0/);
   assert.match(appSource, /Number\(state\.mail\.attention\.pendingCount \|\| 0\) > 0/);
   assert.doesNotMatch(appSource, /mailApi\.filterItems\(state\.mail\.items, "yeongdeok"\)\.length \+ mailApi\.filterItems\(state\.mail\.items, "tax"\)\.length/);
   assert.doesNotMatch(appSource, /state\.mail\.unreadItems\.length > 0/);
@@ -25,6 +26,7 @@ test("main shell shows markers in mobile dropdown and desktop open list", () => 
 
 test("main shell refreshes attention once from existing protected endpoints", () => {
   assert.match(appSource, /async function loadMainAttention\(\{ force = false \} = \{\}\) \{/);
+  assert.match(appSource, /loadNotifications\(\{ force \}\)/);
   assert.match(appSource, /loadMailAttention\(\{ force \}\)/);
   assert.match(appSource, /\/api\/mail\/attention\?\$\{params\.toString\(\)\}/);
   assert.match(appSource, /loadDocumentInbox\(\{ force \}\)/);

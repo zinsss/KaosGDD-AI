@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -140,6 +141,32 @@ class TextNotification:
     priority: int | None = None
 
 
+@dataclass(frozen=True)
+class NotificationInboxConfig:
+    enabled: bool = True
+    state_path: Path = Path("/data/notifications/inbox.json")
+    retained_acknowledged: int = 2000
+
+    @classmethod
+    def from_env(cls, env: Mapping[str, str] | None = None) -> "NotificationInboxConfig":
+        source = os.environ if env is None else env
+        return cls(
+            enabled=_bool(source, "NOTIFICATION_INBOX_ENABLED", True),
+            state_path=Path(
+                source.get(
+                    "NOTIFICATION_INBOX_STATE_PATH",
+                    "/data/notifications/inbox.json",
+                )
+            ),
+            retained_acknowledged=_int(
+                source,
+                "NOTIFICATION_INBOX_RETAINED_ACKNOWLEDGED",
+                2000,
+                100,
+            ),
+        )
+
+
 def _notification_priority(value: object, *, fallback: int) -> int:
     if value is None:
         return fallback
@@ -150,6 +177,189 @@ def _notification_priority(value: object, *, fallback: int) -> int:
     if priority not in {0, 1}:
         raise NotificationError("notification_priority_invalid")
     return priority
+
+
+def _normalized_notification(
+    notification: TextNotification,
+    *,
+    fallback_priority: int,
+) -> TextNotification:
+    key = str(notification.key).strip()
+    category = str(notification.category).strip().lower()
+    title = _plain_text(str(notification.title))[:250]
+    message = _plain_text(str(notification.message))[:1024]
+    priority = _notification_priority(
+        notification.priority,
+        fallback=fallback_priority,
+    )
+    if not key or len(key) > 512 or "\n" in key:
+        raise NotificationError("notification_key_invalid")
+    if category not in MIRRORED_CATEGORIES:
+        raise NotificationError("notification_category_not_mirrored")
+    if not message:
+        raise NotificationError("notification_text_required")
+    return TextNotification(
+        key=key,
+        category=category,
+        title=title,
+        message=message,
+        priority=priority,
+    )
+
+
+class NotificationInbox:
+    """Durable, transport-neutral notification attention state."""
+
+    def __init__(self, config: NotificationInboxConfig) -> None:
+        self.config = config
+        self._lock = threading.RLock()
+
+    @contextmanager
+    def _state_lock(self) -> Iterator[None]:
+        self.config.state_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = self.config.state_path.with_name(f"{self.config.state_path.name}.lock")
+        with self._lock, lock_path.open("a+", encoding="utf-8") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+    def _load(self) -> dict[str, object]:
+        try:
+            value = json.loads(self.config.state_path.read_text(encoding="utf-8"))
+        except (FileNotFoundError, OSError, json.JSONDecodeError):
+            value = {}
+        if not isinstance(value, dict):
+            value = {}
+        value["items"] = value.get("items") if isinstance(value.get("items"), dict) else {}
+        return value
+
+    def _save(self, state: dict[str, object]) -> None:
+        state["version"] = 1
+        _atomic_json(self.config.state_path, state)
+
+    @staticmethod
+    def _id(key: str) -> str:
+        return hashlib.sha256(key.encode("utf-8")).hexdigest()[:24]
+
+    @staticmethod
+    def _public_item(record: Mapping[str, object]) -> dict[str, object]:
+        return {
+            "id": str(record.get("id") or ""),
+            "category": str(record.get("category") or ""),
+            "title": str(record.get("title") or ""),
+            "message": str(record.get("message") or ""),
+            "priority": _notification_priority(record.get("priority"), fallback=0),
+            "createdAt": str(record.get("createdAt") or ""),
+            "acknowledged": bool(record.get("acknowledgedAt")),
+            "acknowledgedAt": str(record.get("acknowledgedAt") or ""),
+        }
+
+    def enqueue(self, notification: TextNotification, *, fallback_priority: int = 0) -> bool:
+        if not self.config.enabled:
+            return False
+        normalized = _normalized_notification(
+            notification,
+            fallback_priority=fallback_priority,
+        )
+        with self._state_lock():
+            state = self._load()
+            items = state["items"]
+            if normalized.key in items:
+                return False
+            items[normalized.key] = {
+                "id": self._id(normalized.key),
+                "category": normalized.category,
+                "title": normalized.title,
+                "message": normalized.message,
+                "priority": normalized.priority,
+                "createdAt": _timestamp(),
+                "acknowledgedAt": "",
+                "acknowledgedBy": "",
+            }
+            self._prune_acknowledged(items)
+            self._save(state)
+        return True
+
+    def _prune_acknowledged(self, items: dict[str, object]) -> None:
+        acknowledged = [
+            (key, record)
+            for key, record in items.items()
+            if isinstance(record, dict) and record.get("acknowledgedAt")
+        ]
+        acknowledged.sort(key=lambda item: str(item[1].get("acknowledgedAt") or ""))
+        excess = len(acknowledged) - self.config.retained_acknowledged
+        for key, _record in acknowledged[: max(0, excess)]:
+            items.pop(key, None)
+
+    def list_items(
+        self,
+        *,
+        include_acknowledged: bool = False,
+        limit: int = 100,
+    ) -> dict[str, object]:
+        if not self.config.enabled:
+            return {
+                "enabled": False,
+                "pendingCount": 0,
+                "criticalCount": 0,
+                "items": [],
+            }
+        with self._state_lock():
+            state = self._load()
+        records = [record for record in state["items"].values() if isinstance(record, dict)]
+        pending = [record for record in records if not record.get("acknowledgedAt")]
+        selected = records if include_acknowledged else pending
+        selected.sort(key=lambda record: str(record.get("createdAt") or ""), reverse=True)
+        bounded_limit = min(200, max(1, int(limit)))
+        return {
+            "enabled": True,
+            "pendingCount": len(pending),
+            "criticalCount": sum(
+                1
+                for record in pending
+                if _notification_priority(record.get("priority"), fallback=0) == 1
+            ),
+            "items": [self._public_item(record) for record in selected[:bounded_limit]],
+        }
+
+    def acknowledge(self, notification_id: str, *, actor: str) -> dict[str, object]:
+        if not self.config.enabled:
+            raise NotificationError("notification_inbox_disabled")
+        normalized_id = str(notification_id).strip().lower()
+        normalized_actor = " ".join(str(actor).split())[:200]
+        if not re.fullmatch(r"[0-9a-f]{24}", normalized_id):
+            raise NotificationError("notification_id_invalid")
+        if not normalized_actor:
+            raise NotificationError("notification_actor_required")
+        with self._state_lock():
+            state = self._load()
+            record = next(
+                (
+                    item
+                    for item in state["items"].values()
+                    if isinstance(item, dict) and item.get("id") == normalized_id
+                ),
+                None,
+            )
+            if record is None:
+                raise NotificationError("notification_not_found")
+            if not record.get("acknowledgedAt"):
+                record["acknowledgedAt"] = _timestamp()
+                record["acknowledgedBy"] = normalized_actor
+                self._prune_acknowledged(state["items"])
+                self._save(state)
+            return self._public_item(record)
+
+    def status(self) -> dict[str, object]:
+        summary = self.list_items(limit=1)
+        return {
+            "enabled": bool(summary["enabled"]),
+            "statePath": str(self.config.state_path),
+            "pendingCount": int(summary["pendingCount"]),
+            "criticalCount": int(summary["criticalCount"]),
+        }
 
 
 class PushoverClient:
@@ -200,9 +410,15 @@ class TextNotificationService:
         config: PushoverConfig,
         *,
         client: PushoverClient | None = None,
+        inbox: NotificationInbox | None = None,
     ) -> None:
         self.config = config
         self.client = client or PushoverClient(config)
+        self.inbox = inbox or NotificationInbox(
+            NotificationInboxConfig(
+                state_path=config.state_path.with_name("inbox.json"),
+            )
+        )
         self._lock = threading.RLock()
         self._delivery_lock = threading.Lock()
 
@@ -235,33 +451,27 @@ class TextNotificationService:
         _atomic_json(self.config.state_path, state)
 
     def enqueue(self, notification: TextNotification) -> bool:
-        if not self.config.enabled:
-            return False
-        key = str(notification.key).strip()
-        category = str(notification.category).strip().lower()
-        title = _plain_text(str(notification.title))[:250]
-        message = _plain_text(str(notification.message))[:1024]
-        priority = _notification_priority(
-            notification.priority,
-            fallback=self.config.priority,
+        normalized = _normalized_notification(
+            notification,
+            fallback_priority=self.config.priority,
         )
-        if not key or len(key) > 512 or "\n" in key:
-            raise NotificationError("notification_key_invalid")
-        if category not in MIRRORED_CATEGORIES:
-            raise NotificationError("notification_category_not_mirrored")
-        if not message:
-            raise NotificationError("notification_text_required")
+        inbox_created = self.inbox.enqueue(
+            normalized,
+            fallback_priority=self.config.priority,
+        )
+        if not self.config.enabled:
+            return inbox_created
         with self._state_lock():
             state = self._load()
             pending = state["pending"]
             delivered = state["delivered"]
-            if key in pending or key in delivered:
-                return False
-            pending[key] = {
-                "category": category,
-                "title": title,
-                "message": message,
-                "priority": priority,
+            if normalized.key in pending or normalized.key in delivered:
+                return inbox_created
+            pending[normalized.key] = {
+                "category": normalized.category,
+                "title": normalized.title,
+                "message": normalized.message,
+                "priority": normalized.priority,
                 "queuedAt": _timestamp(),
             }
             self._save(state)
@@ -355,4 +565,5 @@ class TextNotificationService:
             ),
             "mirroredCategories": sorted(MIRRORED_CATEGORIES),
             "tasksMirrored": False,
+            "inbox": self.inbox.status(),
         }

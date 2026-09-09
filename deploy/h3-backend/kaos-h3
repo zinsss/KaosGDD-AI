@@ -654,6 +654,9 @@ family_portal_source_preflight() {
   if ! grep -q 'location \^~ /api/system/' "${nginx_source}"; then
     die "family portal source must route the read-only System API explicitly"
   fi
+  if ! grep -q 'location \^~ /api/notifications' "${nginx_source}"; then
+    die "family portal source must route the Governor notification inbox explicitly"
+  fi
   if ! grep -q 'location = /api/settings/status' "${nginx_source}"; then
     die "family portal source must route the read-only Settings status API explicitly"
   fi

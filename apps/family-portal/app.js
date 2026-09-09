@@ -1,5 +1,6 @@
 const routes = {
   today: "Agenda",
+  notifications: "Notifications",
   calendar: "Calendar",
   caregiver: "Caregiver",
   tasks: "Tasks",
@@ -413,6 +414,14 @@ const state = {
     checked: false,
     loading: false,
     refreshedAt: "",
+  },
+  notifications: {
+    checked: false,
+    loading: false,
+    error: "",
+    pendingCount: 0,
+    criticalCount: 0,
+    items: [],
   },
   holidays: {
     checked: false,
@@ -2883,6 +2892,74 @@ async function deleteSupply(id) {
   await loadSupplies({ force: true });
 }
 
+async function loadNotifications(options = {}) {
+  if (portalProfile() !== "main") return;
+  if (state.notifications.loading) return;
+  if (state.notifications.checked && !options.force) return;
+  state.notifications.loading = true;
+  if (getRoute() === "notifications") render();
+  try {
+    const response = await fetch("/api/notifications?limit=100", {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    state.notifications = {
+      checked: true,
+      loading: false,
+      error: "",
+      pendingCount: Number(payload.pendingCount || 0),
+      criticalCount: Number(payload.criticalCount || 0),
+      items: Array.isArray(payload.items) ? payload.items : [],
+    };
+  } catch (error) {
+    state.notifications = {
+      ...state.notifications,
+      checked: true,
+      loading: false,
+      error: error.message || "Notifications are unavailable",
+      pendingCount: 0,
+      criticalCount: 0,
+      items: [],
+    };
+  }
+  refreshMainAttentionShell();
+  if (getRoute() === "notifications") render();
+}
+
+async function acknowledgeNotification(id) {
+  const response = await fetch(`/api/notifications/${encodeURIComponent(id)}/acknowledge`, {
+    method: "POST",
+    headers: { Accept: "application/json" },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+  state.notifications.checked = false;
+  await loadNotifications({ force: true });
+}
+
+function formatNotificationDate(value) {
+  const date = new Date(String(value || ""));
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en-CA", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Seoul",
+  }).format(date);
+}
+
+function renderNotifications() {
+  return window.KAOS_NOTIFICATIONS_VIEW.renderNotifications({
+    state,
+    escapeHtml,
+    formatNotificationDate,
+  });
+}
+
 async function loadDocuments(options = {}) {
   if (portalProfile() !== "main") return;
   if (state.documents.loading) return;
@@ -4757,7 +4834,7 @@ function getRoute() {
   const route = raw.split("?", 1)[0];
   if (!routes[route]) return profileConfig().defaultRoute;
   if (portalProfile() === "family" && route === "services") return profileConfig().defaultRoute;
-  if (portalProfile() === "family" && ["supplies", "documents", "add-document", "fax", "mail", "add-ai-task"].includes(route)) return profileConfig().defaultRoute;
+  if (portalProfile() === "family" && ["notifications", "supplies", "documents", "add-document", "fax", "mail", "add-ai-task"].includes(route)) return profileConfig().defaultRoute;
   if (portalProfile() === "main" && (route === "rouny" || route === "caregiver" || route === "text-presets" || route === "ledger")) return profileConfig().defaultRoute;
   return route;
 }
@@ -5044,6 +5121,10 @@ function mainAttentionMarkers() {
     markers[route] = mergeSeverity(markers[route] || "", severity);
   };
 
+  if (state.notifications.error) add("notifications", "critical");
+  else if (Number(state.notifications.criticalCount || 0) > 0) add("notifications", "critical");
+  else if (Number(state.notifications.pendingCount || 0) > 0) add("notifications", "attention");
+
   if (state.mail.error || state.mail.attention.error) add("mail", "critical");
   else if (Number(state.mail.attention.pendingCount || 0) > 0) add("mail", "attention");
 
@@ -5094,6 +5175,7 @@ async function loadMainAttention({ force = false } = {}) {
   state.attention.loading = true;
   refreshMainAttentionShell();
   await Promise.allSettled([
+    loadNotifications({ force }),
     loadMailAttention({ force }),
     loadDocumentInbox({ force }),
     loadFax({ force }),
@@ -9348,6 +9430,7 @@ function render() {
   document.documentElement.classList.remove("isAgendaSuppliesEmbed");
   routeTitle(route);
   if (route === "calendar") view.innerHTML = renderCalendar();
+  else if (route === "notifications") view.innerHTML = renderNotifications();
   else if (route === "caregiver") view.innerHTML = renderCaregiver();
   else if (route === "tasks") view.innerHTML = renderTasks();
   else if (route === "add") view.innerHTML = renderAdd();
@@ -9395,6 +9478,7 @@ function render() {
     window.setTimeout(() => document.querySelector('[data-create-supply] input[name="title"]')?.focus(), 0);
   }
   if (route === "memos") loadMemos();
+  if (route === "notifications") loadNotifications();
   if (route === "documents" && portalProfile() === "main") {
     loadDocumentTags();
     loadDocumentInbox();
@@ -9456,6 +9540,22 @@ document.addEventListener("click", async (event) => {
   if (event.target.closest("[data-app-reload]")) {
     event.preventDefault();
     window.location.reload();
+    return;
+  }
+
+  if (event.target.closest("[data-notifications-refresh]")) {
+    state.notifications.checked = false;
+    await loadNotifications({ force: true });
+    return;
+  }
+
+  const notificationAck = event.target.closest("[data-notification-ack]");
+  if (notificationAck) {
+    try {
+      await acknowledgeNotification(notificationAck.dataset.notificationAck || "");
+    } catch (error) {
+      window.alert(`Could not acknowledge notification: ${error.message || "unknown error"}`);
+    }
     return;
   }
 
