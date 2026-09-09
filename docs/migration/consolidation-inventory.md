@@ -148,12 +148,19 @@ trigger before enabling the n8n production trigger.
    handlers passed authenticated validation probes without model calls or
    writes. H4 doctor also passed; its checkout was behind only in paths that
    do not affect the H4 Brain deployment.
-4. Disable the H3 Discord container for an observation window, then remove it
-   and its credential only after history/rollback decisions are complete.
+4. **Observation active from 2026-09-09 09:23 KST:** only
+   `kaos-governor-discord` is stopped; its container, image, state, and
+   credentials are retained. The initial post-stop checks passed for the PWA,
+   Governor API, Calendar Adapter, standalone tools, worker, live
+   calendar/task/Paperless/mail reads, imaging status, and authenticated
+   H4-to-H3 access. The worker completed successive cycles with no error.
+   Observe through at least 2026-09-10 09:23 KST before considering removal.
    Before a rollback restart, account for the retained 2026-09-07 through
    2026-09-09 pending Discord digest publications so they cannot be replayed.
    Discord-side digest publishing is already disabled; worker-owned Pushover,
    mail/fax polling, recurring tasks, and digest scheduling remain independent.
+   The immediate rollback command is `docker start kaos-governor-discord`, but
+   use it only after confirming those pending publications remain suppressed.
 
 ### Phase 3: retire Discord as a Brain transport
 
