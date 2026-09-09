@@ -21,6 +21,7 @@ from .notifications import NotificationInbox, NotificationInboxConfig
 from .postgres_durable import PostgresDurableGovernorStore
 from .tasks import TaskMutationService
 from .tools import BrainToolServer, ImagingSecondLookClient, ImagingSecondLookConfig
+from .web_push import WebPushConfig, WebPushService
 
 
 LOGGER = logging.getLogger(__name__)
@@ -113,6 +114,7 @@ class GovernorToolsRuntime:
             ios_shortcuts_token=shortcuts_token,
             ios_fax_shortcut_token=fax_shortcut_token,
             notification_inbox=NotificationInbox(NotificationInboxConfig.from_env(source)),
+            web_push=WebPushService(WebPushConfig.from_env(source)),
             calendar_adapter=calendar,
             memos=memos,
             paperless=paperless,

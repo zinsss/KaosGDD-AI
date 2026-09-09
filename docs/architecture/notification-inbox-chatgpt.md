@@ -2,8 +2,9 @@
 
 Decision date: 2026-09-09
 
-Status: Governor inbox, personal PWA, and read-only on-demand Shortcut API
-implemented; PWA Web Push is the target alert transport.
+Status: Governor inbox, personal PWA, read-only on-demand Shortcut API, and
+personal PWA Web Push are implemented. Device enrollment and the seven-day
+parallel observation with Pushover remain.
 
 ## Decision
 
@@ -76,10 +77,22 @@ Suggested Shortcut actions:
 
 ### PWA Web Push
 
-Governor will send an event-driven Web Push when a new inbox record is created.
+Governor sends an event-driven Web Push when a new inbox record is created and
+at least one personal device is subscribed. Enable or disable the current
+device from the personal PWA Settings page; `Send test` performs a synthetic
+low-priority delivery. On iPhone/iPad, KaosGDD must be installed on the Home
+Screen and permission must be granted from that user-initiated Enable action.
 The notification opens `https://kaosgdd.net/#/notifications`; review and
-acknowledgement remain in the protected PWA. Lock-screen payloads should be
-minimal so mail, fax, and medical details are not exposed before the PWA opens.
+acknowledgement remain in the protected PWA. Lock-screen payloads are generic
+category notices; mail, fax, phone, patient, and medical detail never enters
+the Web Push payload.
+
+Subscriptions and pending delivery are durable under
+`/data/notifications/`. The VAPID P-256 private key is generated once by
+`kaos-h3 setup`, mounted only into Governor Worker and Governor Tools, and is
+never exposed through the API. The PWA receives only its derived public key.
+Push endpoints are restricted server-side to known Apple, Google, and Mozilla
+Web Push services.
 
 Web Push does not replace the durable inbox. Failed or delayed push delivery
 does not lose the record, and the on-demand Shortcut can always read the current
@@ -96,8 +109,8 @@ notification transport.
 
 1. Keep the verified Governor inbox, PWA acknowledgement, and on-demand
    Shortcut read operational.
-2. Implement PWA Web Push and run a synthetic low-priority test.
-3. Observe Web Push and Pushover in parallel for seven days.
+2. Enable Web Push on the installed personal PWA and run `Send test`.
+3. Observe Web Push and Pushover in parallel for seven days after the test.
 4. Disable Pushover without deleting its secrets or prior outbox state.
 5. After a rollback window, remove the Pushover transport and credentials.
 

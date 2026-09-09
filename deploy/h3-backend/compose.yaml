@@ -99,6 +99,7 @@ services:
     secrets:
       - naver_mail_password
       - fax_connector_token
+      - web_push_vapid_private_key
       - pushover_app_token
       - pushover_user_key
     volumes:
@@ -156,6 +157,7 @@ services:
       - naver_mail_password
       - paperless_api_token
       - fax_connector_token
+      - web_push_vapid_private_key
     ports:
       - "${GOVERNOR_BRAIN_TOOLS_BIND_ADDRESS:-127.0.0.1}:${GOVERNOR_BRAIN_TOOLS_PORT:-8098}:8098"
     volumes:
@@ -213,3 +215,5 @@ secrets:
     file: ./secrets/pushover_app_token
   pushover_user_key:
     file: ./secrets/pushover_user_key
+  web_push_vapid_private_key:
+    file: ./secrets/web_push_vapid_private_key

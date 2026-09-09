@@ -30,6 +30,7 @@ from .notifications import (
     TextNotificationService,
 )
 from .tasks import PostgresRecurringTaskStore, RecurringTaskPlan, RecurringTaskService
+from .web_push import WebPushConfig, WebPushService
 
 
 LOGGER = logging.getLogger(__name__)
@@ -131,6 +132,7 @@ class GovernorWorker:
         fax_lifecycle: FaxLifecycleWorker | None = None,
         recurring_tasks: RecurringTaskService | None = None,
         recurring_task_config: RecurringTaskSyncConfig | None = None,
+        web_push: WebPushService | None = None,
     ) -> None:
         self.config = config
         self.notifications = notifications
@@ -139,6 +141,7 @@ class GovernorWorker:
         self.fax_lifecycle = fax_lifecycle
         self.recurring_tasks = recurring_tasks
         self.recurring_task_config = recurring_task_config or RecurringTaskSyncConfig(enabled=False)
+        self.web_push = web_push
         self._next_digest_check_at: datetime | None = None
         self._next_content_refresh_at: datetime | None = None
         self._next_mail_check_at: datetime | None = None
@@ -263,6 +266,11 @@ class GovernorWorker:
             delivered += self.notifications.deliver_pending()
         except Exception as exc:
             errors.append(f"{type(exc).__name__}: {exc}")
+        if self.web_push is not None:
+            try:
+                delivered += self.web_push.deliver_pending()
+            except Exception as exc:
+                errors.append(f"{type(exc).__name__}: {exc}")
         try:
             scheduled = self._schedule_daily_digest(now)
         except Exception as exc:
@@ -287,6 +295,11 @@ class GovernorWorker:
                 delivered += self.notifications.deliver_pending()
             except Exception as exc:
                 errors.append(f"{type(exc).__name__}: {exc}")
+            if self.web_push is not None:
+                try:
+                    delivered += self.web_push.deliver_pending()
+                except Exception as exc:
+                    errors.append(f"{type(exc).__name__}: {exc}")
         error = "; ".join(errors)
         self._write_status(
             status="degraded" if errors else "ready",
@@ -339,6 +352,7 @@ class GovernorWorker:
                 "lastFaxActionCount": fax_result.processed,
                 "lastError": error,
                 "pushover": self.notifications.status(),
+                "webPush": self.web_push.status() if self.web_push is not None else {"enabled": False},
                 "dailyDigest": self.daily_digest.status() if self.daily_digest is not None else {"enabled": False},
                 "naverMail": (
                     self.mail_lifecycle.poller.status()
@@ -434,9 +448,11 @@ def main() -> None:
             digest_config,
             CalendarAdapterClient(CalendarAdapterConfig(calendar_url)),
         )
+    web_push = WebPushService(WebPushConfig.from_env())
     notifications = TextNotificationService(
         pushover,
         inbox=NotificationInbox(NotificationInboxConfig.from_env()),
+        mirrors=(web_push,),
     )
     mail_config = NaverMailConfig.from_env()
     mail_lifecycle = None
@@ -474,6 +490,7 @@ def main() -> None:
                 fax_lifecycle,
                 recurring_tasks,
                 recurring_task_config,
+                web_push,
             )
         )
     )

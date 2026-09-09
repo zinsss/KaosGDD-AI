@@ -112,6 +112,7 @@ to every loop and host timer.
 | Naver mail intake | Governor worker, 60 seconds | Governor worker | Continuous mailbox polling and deduplication; do not recreate it as many n8n executions now. |
 | Fax lifecycle | Governor worker, 20 seconds; clinic bridge/connector | Native workers | Local transport, files, acknowledgement, and final-state dedupe justify continuous workers. |
 | Pushover outbox | Governor worker, 5 seconds | Governor worker | Durable queue consumer, not a calendar schedule. |
+| Personal PWA Web Push outbox | Governor worker, same lifecycle cycle | Governor worker | Durable event transport mirrored from the Governor inbox; Pushover remains parallel only during observation. |
 | Task due notifications | Governor/native calendar clients | Native authoritative clients | Avoid duplicate n8n reminders. |
 | H3/H4/clinic OS maintenance | systemd | systemd / KaosSystemOperator | Privileged host boundary. |
 | Full-host unresponsive detection | Not safely owned by H3 itself | External monitor on another host/provider | An H3-local n8n workflow cannot report that H3 is down. Notify only on a meaningful transition. |

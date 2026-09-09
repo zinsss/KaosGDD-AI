@@ -154,6 +154,9 @@ setup() {
   if [[ ! -s "$(secret_path ios_fax_shortcut_token)" ]]; then
     openssl rand -hex 32 > "$(secret_path ios_fax_shortcut_token)"
   fi
+  if [[ ! -s "$(secret_path web_push_vapid_private_key)" ]]; then
+    openssl ecparam -name prime256v1 -genkey -noout > "$(secret_path web_push_vapid_private_key)"
+  fi
   chmod 0640 "${SECRETS_DIR}"/discord_bot_token \
     "${SECRETS_DIR}"/governor_api_token \
     "${SECRETS_DIR}"/ios_shortcuts_token \
@@ -163,7 +166,8 @@ setup() {
     "${SECRETS_DIR}"/paperless_api_token \
     "${SECRETS_DIR}"/fax_connector_token \
     "${SECRETS_DIR}"/pushover_app_token \
-    "${SECRETS_DIR}"/pushover_user_key
+    "${SECRETS_DIR}"/pushover_user_key \
+    "${SECRETS_DIR}"/web_push_vapid_private_key
   info "Setup complete. Fill ${ENV_FILE} and ${SECRETS_DIR}/discord_bot_token, then run:"
   info "  ${0} test"
   info "  ${0} up"
@@ -225,6 +229,13 @@ preflight() {
   if [[ "${PUSHOVER_ENABLED:-false}" == "true" ]]; then
     require_secret pushover_app_token
     require_secret pushover_user_key
+  fi
+  if [[ "${WEB_PUSH_ENABLED:-false}" == "true" ]]; then
+    require_secret web_push_vapid_private_key
+    case "${WEB_PUSH_VAPID_SUBJECT:-}" in
+      mailto:*|https://*) ;;
+      *) die "WEB_PUSH_VAPID_SUBJECT must start with mailto: or https://" ;;
+    esac
   fi
   case "${PUSHOVER_DELIVERY_MODE:-worker}" in
     inline|worker) ;;
@@ -656,6 +667,9 @@ family_portal_source_preflight() {
   fi
   if ! grep -q 'location \^~ /api/notifications' "${nginx_source}"; then
     die "family portal source must route the Governor notification inbox explicitly"
+  fi
+  if ! grep -q 'location \^~ /api/web-push' "${nginx_source}"; then
+    die "family portal source must route Web Push explicitly"
   fi
   if ! grep -q 'location = /api/settings/status' "${nginx_source}"; then
     die "family portal source must route the read-only Settings status API explicitly"

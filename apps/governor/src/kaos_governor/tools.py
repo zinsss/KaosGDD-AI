@@ -36,6 +36,7 @@ from .memos import (
     MemosService,
 )
 from .notifications import NotificationError, NotificationInbox
+from .web_push import WebPushError, WebPushService
 from .tasks import TaskMutationCommand, TaskMutationError, TaskMutationService
 from .tool_calendar import month_markers, visible_month_grid_range, weather_agenda_summary, weather_items_by_date
 from .tool_tasks import TASK_PRIORITIES, is_supplies_collection, normalize_supplies_due, validate_edit_due
@@ -399,6 +400,7 @@ class BrainToolServer:
         ios_shortcuts_token: str = "",
         ios_fax_shortcut_token: str = "",
         notification_inbox: NotificationInbox | None = None,
+        web_push: WebPushService | None = None,
         fax_service: FaxService | None = None,
         fax_stage_root: Path | None = None,
     ) -> None:
@@ -408,6 +410,7 @@ class BrainToolServer:
         self._ios_shortcuts_token = ios_shortcuts_token
         self._ios_fax_shortcut_token = ios_fax_shortcut_token
         self._notification_inbox = notification_inbox
+        self._web_push = web_push
         self._calendar_adapter = calendar_adapter
         self._memos = memos
         self._paperless = paperless
@@ -461,6 +464,10 @@ class BrainToolServer:
             "/tools/notifications/{notification_id}/acknowledge",
             self._acknowledge_notification,
         )
+        app.router.add_get("/tools/web-push/config", self._web_push_config)
+        app.router.add_post("/tools/web-push/subscriptions", self._web_push_subscribe)
+        app.router.add_delete("/tools/web-push/subscriptions/{subscription_id}", self._web_push_unsubscribe)
+        app.router.add_post("/tools/web-push/test", self._web_push_test)
         app.router.add_get("/tools/imports/fax/{fax_id}/document", self._incoming_fax_document)
         app.router.add_get("/tools/mail/naver/list", self._list_naver_mail)
         app.router.add_get("/tools/tasks/active", self._active_tasks)
@@ -620,6 +627,56 @@ class BrainToolServer:
             status = 404 if code == "notification_not_found" else 400
             return web.json_response({"error": code}, status=status)
         return web.json_response({"ok": True, "item": item})
+
+    async def _web_push_config(self, _request: web.Request) -> web.Response:
+        service = self._web_push
+        if service is None:
+            return web.json_response({"enabled": False, "configured": False})
+        return web.json_response(service.status())
+
+    async def _web_push_subscribe(self, request: web.Request) -> web.Response:
+        service = self._web_push
+        if service is None:
+            return web.json_response({"error": "web_push_unavailable"}, status=503)
+        try:
+            body = await _optional_json_object(request)
+            subscription = body.get("subscription")
+            if not isinstance(subscription, Mapping):
+                raise WebPushError("web_push_subscription_invalid")
+            result = await asyncio.to_thread(service.subscribe, subscription)
+        except (FaxError, WebPushError) as exc:
+            status = 503 if str(exc) == "web_push_disabled" else 400
+            return web.json_response({"error": str(exc)}, status=status)
+        return web.json_response({"ok": True, "subscription": result}, status=201)
+
+    async def _web_push_unsubscribe(self, request: web.Request) -> web.Response:
+        service = self._web_push
+        if service is None:
+            return web.json_response({"error": "web_push_unavailable"}, status=503)
+        try:
+            removed = await asyncio.to_thread(
+                service.unsubscribe,
+                request.match_info["subscription_id"],
+            )
+        except WebPushError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+        return web.json_response({"ok": True, "removed": removed})
+
+    async def _web_push_test(self, request: web.Request) -> web.Response:
+        service = self._web_push
+        if service is None:
+            return web.json_response({"error": "web_push_unavailable"}, status=503)
+        try:
+            body = await _optional_json_object(request)
+            sent = await asyncio.to_thread(
+                service.send_test,
+                str(body.get("subscriptionId") or "").strip(),
+            )
+        except (FaxError, WebPushError) as exc:
+            code = str(exc)
+            status = 404 if code == "web_push_subscription_not_found" else 503 if code == "web_push_disabled" else 502
+            return web.json_response({"error": code}, status=status)
+        return web.json_response({"ok": True, "sent": sent})
 
     async def _propose_fax_send(self, request: web.Request) -> web.Response:
         service = self._fax_mutations

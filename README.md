@@ -18,7 +18,7 @@ Architecture, deterministic orchestration, AI integrations, and deployment plans
 - **n8n**: optional ready-made workflow backend for approved external integrations, retries, schedules, and review steps. It keeps its upstream name and interface; Governor remains the authority for KaosGDD state and confirmations.
 - **Authoritative backends**: Radicale, Memos, Paperless, HylaFAX, and other service-owned data stores.
 - **Family KaosGDD**: the retained family-scoped web interface and embedded family AI chat. Its canonical shared personal/family PWA source is `apps/family-portal`.
-- **Personal clients**: the retained `kaosgdd.net` PWA is the primary visual console; iOS Shortcuts provides system integration and quick actions, native Calendar/Reminders continue synchronization and scheduled notifications, and Pushover provides immediate alerts. Discord is a transitional Brain transport and receives no new domain or system-operation dependencies.
+- **Personal clients**: the retained `kaosgdd.net` PWA is the primary visual console and provides generic Web Push alerts; iOS Shortcuts provides system integration and on-demand checks, native Calendar/Reminders continue synchronization and scheduled notifications, and Pushover remains a temporary parallel alert transport during observation. Discord is a transitional Brain transport and receives no new domain or system-operation dependencies.
 
 KaosBrain and Family AI never become sources of truth. They call narrow KaosGovernor tools. KaosGovernor applies deterministic validation before changing an authoritative backend. Deterministic clients may call Governor without invoking Brain.
 

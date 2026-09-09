@@ -36,6 +36,8 @@ jobs:
           node --check apps/family-portal/deep-links.js
           node --check apps/family-portal/documents.js
           node --check apps/family-portal/navigation.js
+          node --check apps/family-portal/web-push.js
+          node --check apps/family-portal/sw.js
           node --check apps/family-portal/app.js
           node --test tests/family-portal/*.cjs
           node --test tests/deploy/*.cjs
@@ -61,6 +63,7 @@ jobs:
           : > deploy/h3-backend/secrets/naver_mail_password
           : > deploy/h3-backend/secrets/paperless_api_token
           : > deploy/h3-backend/secrets/fax_connector_token
+          openssl ecparam -name prime256v1 -genkey -noout > deploy/h3-backend/secrets/web_push_vapid_private_key
           docker compose \
             --project-directory deploy/h3-backend \
             --env-file deploy/h3-backend/.env \

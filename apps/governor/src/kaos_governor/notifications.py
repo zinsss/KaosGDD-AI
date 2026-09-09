@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 import re
 import threading
-from typing import Iterator, Literal, Mapping
+from typing import Iterator, Literal, Mapping, Protocol
 import urllib.parse
 import urllib.request
 
@@ -139,6 +139,10 @@ class TextNotification:
     title: str
     message: str
     priority: int | None = None
+
+
+class NotificationMirror(Protocol):
+    def enqueue(self, notification: TextNotification) -> bool: ...
 
 
 @dataclass(frozen=True)
@@ -411,6 +415,7 @@ class TextNotificationService:
         *,
         client: PushoverClient | None = None,
         inbox: NotificationInbox | None = None,
+        mirrors: tuple[NotificationMirror, ...] = (),
     ) -> None:
         self.config = config
         self.client = client or PushoverClient(config)
@@ -419,6 +424,7 @@ class TextNotificationService:
                 state_path=config.state_path.with_name("inbox.json"),
             )
         )
+        self.mirrors = mirrors
         self._lock = threading.RLock()
         self._delivery_lock = threading.Lock()
 
@@ -459,14 +465,17 @@ class TextNotificationService:
             normalized,
             fallback_priority=self.config.priority,
         )
+        mirror_created = False
+        for mirror in self.mirrors:
+            mirror_created = mirror.enqueue(normalized) or mirror_created
         if not self.config.enabled:
-            return inbox_created
+            return inbox_created or mirror_created
         with self._state_lock():
             state = self._load()
             pending = state["pending"]
             delivered = state["delivered"]
             if normalized.key in pending or normalized.key in delivered:
-                return inbox_created
+                return inbox_created or mirror_created
             pending[normalized.key] = {
                 "category": normalized.category,
                 "title": normalized.title,

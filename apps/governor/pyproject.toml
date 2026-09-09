@@ -15,6 +15,7 @@ dependencies = [
     "psycopg[binary]>=3.2,<4",
     "PyJWT[crypto]>=2.10,<3",
     "pypdf>=5,<7",
+    "pywebpush>=2,<3",
 ]
 
 [project.scripts]

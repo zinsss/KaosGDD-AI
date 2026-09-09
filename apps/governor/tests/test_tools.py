@@ -8,6 +8,7 @@ from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 import unittest
+from unittest import mock
 
 from aiohttp import FormData, web
 from aiohttp.test_utils import TestClient, TestServer
@@ -387,6 +388,16 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         self.calendar_refresh_count = 0
+        self.web_push = mock.Mock()
+        self.web_push.status.return_value = {
+            "enabled": True,
+            "configured": True,
+            "publicKey": "public-key",
+            "subscriptionCount": 0,
+        }
+        self.web_push.subscribe.return_value = {"id": "0123456789abcdef01234567"}
+        self.web_push.unsubscribe.return_value = True
+        self.web_push.send_test.return_value = 1
 
         async def refresh_calendar_surfaces() -> None:
             self.calendar_refresh_count += 1
@@ -398,6 +409,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
             ios_shortcuts_token="shortcut-secret",
             ios_fax_shortcut_token="fax-shortcut-secret",
             notification_inbox=self.notification_inbox,
+            web_push=self.web_push,
             calendar_adapter=self.calendar,  # type: ignore[arg-type]
             memos=self.memos,  # type: ignore[arg-type]
             paperless=self.paperless,  # type: ignore[arg-type]
@@ -421,6 +433,37 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
 
     def fax_shortcut_headers(self):
         return {"Authorization": "Bearer fax-shortcut-secret"}
+
+    async def test_web_push_routes_require_governor_auth_and_delegate(self) -> None:
+        unauthorized = await self.client.get("/tools/web-push/config")
+        self.assertEqual(unauthorized.status, 401)
+
+        config = await self.client.get("/tools/web-push/config", headers=self.headers())
+        self.assertEqual(config.status, 200)
+        self.assertEqual((await config.json())["publicKey"], "public-key")
+
+        created = await self.client.post(
+            "/tools/web-push/subscriptions",
+            headers=self.headers(),
+            json={"subscription": {"endpoint": "https://web.push.apple.com/value", "keys": {}}},
+        )
+        self.assertEqual(created.status, 201)
+        self.web_push.subscribe.assert_called_once()
+
+        tested = await self.client.post(
+            "/tools/web-push/test",
+            headers=self.headers(),
+            json={"subscriptionId": "0123456789abcdef01234567"},
+        )
+        self.assertEqual(tested.status, 200)
+        self.web_push.send_test.assert_called_once_with("0123456789abcdef01234567")
+
+        deleted = await self.client.delete(
+            "/tools/web-push/subscriptions/0123456789abcdef01234567",
+            headers=self.headers(),
+        )
+        self.assertEqual(deleted.status, 200)
+        self.web_push.unsubscribe.assert_called_once_with("0123456789abcdef01234567")
 
     @staticmethod
     def fax_form(*, destination: str = "02-284-8302", key: str = "shortcut-run-1") -> FormData:

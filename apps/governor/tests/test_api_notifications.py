@@ -42,6 +42,32 @@ class CaptureHandler(api.Handler):
 
 
 class NotificationInboxApiTests(unittest.TestCase):
+    def test_web_push_proxy_forwards_subscription_without_browser_credentials(self) -> None:
+        requests: list[api.urllib.request.Request] = []
+
+        def fake_urlopen(request: api.urllib.request.Request, timeout: float) -> FakeResponse:
+            requests.append(request)
+            return FakeResponse({"ok": True, "subscription": {"id": "0123456789abcdef01234567"}})
+
+        with patch.object(api, "secret_value", return_value="server-token"):
+            result = api.web_push_payload(
+                "main",
+                "/tools/web-push/subscriptions",
+                method="POST",
+                payload={"subscription": {"endpoint": "https://web.push.apple.com/value"}},
+                urlopen=fake_urlopen,
+            )
+
+        self.assertTrue(result["ok"])
+        request = requests[0]
+        self.assertEqual(request.method, "POST")
+        self.assertEqual(request.headers["Authorization"], "Bearer server-token")
+        self.assertNotIn("server-token", request.data.decode("utf-8"))
+
+    def test_family_profile_cannot_use_web_push(self) -> None:
+        with self.assertRaisesRegex(api.NotificationInboxAPIError, "main_profile_required"):
+            api.web_push_payload("family", "/tools/web-push/config")
+
     def test_read_proxy_forwards_only_supported_query_and_server_token(self) -> None:
         requests: list[api.urllib.request.Request] = []
 

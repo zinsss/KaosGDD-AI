@@ -360,6 +360,29 @@ def notification_acknowledge_payload(
     )
 
 
+def web_push_payload(
+    profile: str,
+    path: str,
+    *,
+    method: str = "GET",
+    payload: dict[str, object] | None = None,
+    urlopen=urllib.request.urlopen,
+) -> dict[str, object]:
+    if profile != "main":
+        raise NotificationInboxAPIError("main_profile_required", 404)
+    return _notification_tool_payload(
+        path,
+        method=method,
+        payload=payload,
+        urlopen=urlopen,
+    )
+
+
+def web_push_subscription_id(path: str) -> str:
+    match = re.fullmatch(r"/api/web-push/subscriptions/([0-9a-fA-F]{24})", path)
+    return match.group(1).lower() if match else ""
+
+
 def supply_status_for_error(exc: Exception) -> int:
     if isinstance(exc, memos_relay.MemosRelayError):
         return exc.status
@@ -3651,6 +3674,28 @@ class Handler(BaseHTTPRequestHandler):
                 print(f"Notification inbox read failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "notification_inbox_unavailable"})
             return
+        if parsed.path == "/api/web-push/config":
+            try:
+                require_main_access(self.headers)
+                json_response(
+                    self,
+                    200,
+                    web_push_payload(
+                        profile_from_headers(self.headers),
+                        "/tools/web-push/config",
+                    ),
+                )
+            except (ValueError, NotificationInboxAPIError, memos_relay.MemosRelayError) as exc:
+                if isinstance(exc, NotificationInboxAPIError):
+                    json_response(self, exc.status, {"ok": False, "error": exc.code})
+                elif isinstance(exc, memos_relay.MemosRelayError):
+                    json_response(self, exc.status, {"ok": False, "error": exc.code})
+                else:
+                    json_response(self, 400, {"ok": False, "error": str(exc)})
+            except Exception as exc:
+                print(f"Web Push config failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "web_push_unavailable"})
+            return
         if parsed.path == "/api/system/status":
             try:
                 require_main_access(self.headers)
@@ -3692,6 +3737,32 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
+        if parsed.path in {"/api/web-push/subscriptions", "/api/web-push/test"}:
+            try:
+                require_main_access(self.headers)
+                target = (
+                    "/tools/web-push/subscriptions"
+                    if parsed.path.endswith("/subscriptions")
+                    else "/tools/web-push/test"
+                )
+                result = web_push_payload(
+                    profile_from_headers(self.headers),
+                    target,
+                    method="POST",
+                    payload=json_request(self),
+                )
+                json_response(self, 201 if parsed.path.endswith("/subscriptions") else 200, result)
+            except (ValueError, NotificationInboxAPIError, memos_relay.MemosRelayError) as exc:
+                if isinstance(exc, NotificationInboxAPIError):
+                    json_response(self, exc.status, {"ok": False, "error": exc.code})
+                elif isinstance(exc, memos_relay.MemosRelayError):
+                    json_response(self, exc.status, {"ok": False, "error": exc.code})
+                else:
+                    json_response(self, 400, {"ok": False, "error": str(exc)})
+            except Exception as exc:
+                print(f"Web Push update failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "web_push_unavailable"})
+            return
         notification_id = notification_acknowledge_id(parsed.path)
         if notification_id:
             try:
@@ -4030,6 +4101,30 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_DELETE(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
+        push_subscription_id = web_push_subscription_id(parsed.path)
+        if push_subscription_id:
+            try:
+                require_main_access(self.headers)
+                json_response(
+                    self,
+                    200,
+                    web_push_payload(
+                        profile_from_headers(self.headers),
+                        f"/tools/web-push/subscriptions/{push_subscription_id}",
+                        method="DELETE",
+                    ),
+                )
+            except (ValueError, NotificationInboxAPIError, memos_relay.MemosRelayError) as exc:
+                if isinstance(exc, NotificationInboxAPIError):
+                    json_response(self, exc.status, {"ok": False, "error": exc.code})
+                elif isinstance(exc, memos_relay.MemosRelayError):
+                    json_response(self, exc.status, {"ok": False, "error": exc.code})
+                else:
+                    json_response(self, 400, {"ok": False, "error": str(exc)})
+            except Exception as exc:
+                print(f"Web Push delete failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "web_push_unavailable"})
+            return
         supply_uid = supply_delete_uid(parsed.path)
         if supply_uid:
             try:

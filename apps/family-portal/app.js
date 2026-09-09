@@ -9192,7 +9192,7 @@ function renderMainSettingsMap() {
           ["Documents", "Paperless archive + Documents Inbox audit"],
           ["Fax", "HylaFAX archive + Governor notification/workflow"],
           ["Mail", "Naver IMAP view/actions through Governor"],
-          ["Notifications", "Pushover + iOS-native task notices"],
+          ["Notifications", "Web Push + Pushover observation + iOS-native task notices"],
           ["Brain", "Discord #brain as AI/system gateway"],
         ])}
       </dl>
@@ -9224,6 +9224,35 @@ function renderMainSettingsLinks() {
   `;
 }
 
+function renderWebPushSettings() {
+  const push = window.KAOS_WEB_PUSH?.state || {};
+  let status = "Checking this device...";
+  if (push.checked && !push.supported) status = "Not supported on this device.";
+  else if (push.checked && !push.installed) status = "Add KaosGDD to the iPhone Home Screen first.";
+  else if (push.permission === "denied") status = "Blocked in iOS notification settings.";
+  else if (push.enabled) status = "Enabled on this device.";
+  else if (push.checked && !push.configured) status = "Not configured on the server.";
+  else if (push.checked) status = "Off on this device.";
+  return `
+    <section class="settingsStatusPanel settingsWebPush">
+      <div class="settingsStatusHeader">
+        <strong>Web Push</strong>
+        <small>PERSONAL PWA</small>
+      </div>
+      <div class="settingsPolicyNote">
+        <strong>${push.enabled ? "ON" : "OFF"}</strong>
+        <span>${escapeHtml(push.error || status)} Sensitive notification text stays inside KaosGDD.</span>
+      </div>
+      <div class="settingsLinkGrid">
+        ${push.enabled
+          ? `<button class="archiveAction" type="button" data-web-push-disable ${push.saving ? "disabled" : ""}>Disable</button>
+             <button class="archiveAction" type="button" data-web-push-test ${push.testing || push.saving ? "disabled" : ""}>Send test</button>`
+          : `<button class="archiveAction" type="button" data-web-push-enable ${push.saving || !push.supported || !push.installed || push.permission === "denied" || (push.checked && !push.configured) ? "disabled" : ""}>Enable on this device</button>`}
+      </div>
+    </section>
+  `;
+}
+
 function renderMainSettings() {
   return `
     <section class="archiveTerminal settingsTerminal" aria-label="KaosGDD settings">
@@ -9246,6 +9275,7 @@ function renderMainSettings() {
       </section>
       ${renderSystemStatusPanel()}
       ${renderGovernorSettingsStatus({ showRecurringDetails: false })}
+      ${renderWebPushSettings()}
       ${renderMainSettingsMap()}
       ${renderMainSettingsLinks()}
     </section>
@@ -9504,6 +9534,11 @@ function render() {
   if (route === "settings") {
     loadSystemStatus();
     loadGovernorSettingsStatus();
+    if (portalProfile() === "main" && !window.KAOS_WEB_PUSH?.state.checked && !window.KAOS_WEB_PUSH?.state.loading) {
+      window.KAOS_WEB_PUSH?.refresh().then(() => {
+        if (getRoute() === "settings") render();
+      });
+    }
     if (portalProfile() !== "main") {
       loadWeatherSettings();
       loadHolidays();
@@ -9539,6 +9574,36 @@ function updateTopBarShadow() {
 }
 
 document.addEventListener("click", async (event) => {
+  if (event.target.closest("[data-web-push-enable]")) {
+    try {
+      await window.KAOS_WEB_PUSH.enable();
+    } catch (_error) {
+      // The settings panel displays the actionable error.
+    }
+    render();
+    return;
+  }
+
+  if (event.target.closest("[data-web-push-disable]")) {
+    try {
+      await window.KAOS_WEB_PUSH.disable();
+    } catch (_error) {
+      // The settings panel displays the actionable error.
+    }
+    render();
+    return;
+  }
+
+  if (event.target.closest("[data-web-push-test]")) {
+    try {
+      await window.KAOS_WEB_PUSH.test();
+    } catch (_error) {
+      // The settings panel displays the actionable error.
+    }
+    render();
+    return;
+  }
+
   if (event.target.closest("[data-notifications-open]")) {
     event.preventDefault();
     window.location.hash = "#/notifications";
