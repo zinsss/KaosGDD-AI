@@ -64,7 +64,8 @@ BRIEFING_KIND_LABELS = {
     "System": "시스템",
     "Notification": "알림",
 }
-BRIEFING_NOTIFICATION_TRANSLATIONS = {
+BRIEFING_TITLE_TRANSLATIONS = {
+    "Market Day": "장날",
     "Mail received.": "메일 수신",
     "Fax received.": "팩스 수신",
     "Fax sent.": "팩스 전송 완료",
@@ -2336,7 +2337,7 @@ def _briefing_created_at(value: object) -> datetime | None:
 
 def _briefing_display_title(value: object) -> str:
     title = str(value or "")
-    for source, translated in BRIEFING_NOTIFICATION_TRANSLATIONS.items():
+    for source, translated in BRIEFING_TITLE_TRANSLATIONS.items():
         if title == source:
             return translated
         if title.startswith(f"{source} — "):
@@ -2352,6 +2353,16 @@ def _briefing_render_item(item: Mapping[str, object], *, include_time: bool = Tr
     parts.append(BRIEFING_KIND_LABELS.get(kind, kind or "알림"))
     parts.append(_briefing_display_title(item.get("title")) or "제목 없음")
     return " · ".join(part for part in parts if part)
+
+
+def _briefing_render_plain_item(
+    item: Mapping[str, object], *, include_time: bool = True
+) -> str:
+    parts: list[str] = []
+    if include_time:
+        parts.append(str(item.get("time") or ""))
+    parts.append(_briefing_display_title(item.get("title")) or "제목 없음")
+    return "  ".join(part for part in parts if part)
 
 
 def shortcut_briefing_payload(
@@ -2466,6 +2477,30 @@ def shortcut_briefing_payload(
     lines.extend(f"- {_briefing_render_item(item)}" for item in planned)
     if not planned:
         lines.append("- 오늘 남은 일정 없음")
+
+    plain_lines = [
+        f"### {today.year}년 {today.month}월 {today.day}일 ({BRIEFING_WEEKDAYS_KO[today.weekday()][0]})"
+    ]
+    if all_day:
+        plain_lines.extend(
+            f"• {_briefing_render_plain_item(item, include_time=False)}"
+            for item in all_day
+        )
+    if timeline:
+        plain_lines.extend(("", "<시간표>"))
+        plain_lines.extend(_briefing_render_plain_item(item) for item in timeline)
+    if routine_mail:
+        last_mail = str(routine_mail[-1].get("time") or "")
+        plain_lines.extend(
+            ("", "<알림>", f"메일 {len(routine_mail)}건 · 최근 {last_mail}")
+        )
+    if not all_day and not timeline and not routine_mail:
+        plain_lines.extend(("", "지금까지 기록 없음"))
+    if planned:
+        plain_lines.extend(("", "<예정>"))
+        plain_lines.extend(_briefing_render_plain_item(item) for item in planned)
+    else:
+        plain_lines.extend(("", "오늘 남은 일정 없음"))
     return {
         "ok": True,
         "date": today.isoformat(),
@@ -2477,6 +2512,7 @@ def shortcut_briefing_payload(
         "items": log,
         "planned": planned,
         "text": "\n".join(lines),
+        "plainText": "\n".join(plain_lines),
         "readOnly": True,
     }
 

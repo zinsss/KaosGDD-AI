@@ -593,6 +593,10 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
             payload["text"],
         )
         self.assertIn("## 예정\n- 21:00 · 할 일 · Something Important", payload["text"])
+        self.assertIn("### 2026년 8월 14일 (금)", payload["plainText"])
+        self.assertIn("10:00  Call mom", payload["plainText"])
+        self.assertIn("<시간표>", payload["plainText"])
+        self.assertIn("<예정>\n21:00  Something Important", payload["plainText"])
         fax_item = next(item for item in payload["items"] if item["kind"] == "Fax")
         self.assertTrue(fax_item["acknowledged"])
         self.assertTrue(
@@ -625,6 +629,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response.status, 200)
         self.assertIn("## 알림\n- 메일 2건 · 09:05–11:45", payload["text"])
+        self.assertIn("<알림>\n메일 2건 · 최근 11:45", payload["plainText"])
         self.assertNotIn("Mail received.", payload["text"])
         self.assertEqual(
             len([item for item in payload["items"] if item["kind"] == "Mail"]),
