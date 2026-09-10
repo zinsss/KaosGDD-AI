@@ -50,6 +50,11 @@ from kaos_governor.tasks import PostgresRecurringTaskStore, RecurringTaskDefinit
 from kaos_governor.textbook_search import search_textbook_sources
 from kaos_governor.system_updates import SystemUpdatesError, read_system_updates
 from kaos_governor.notifications import TextNotification
+from kaos_governor.scribble import (
+    MAX_SCRIBBLE_FILE_BYTES,
+    ScribbleError,
+    ScribbleStore,
+)
 from kaos_governor.web_push import WebPushConfig, WebPushService
 
 
@@ -624,6 +629,90 @@ def paperless_service() -> PaperlessDocumentService:
 @lru_cache(maxsize=1)
 def document_intake_store() -> DocumentIntakeStore:
     return DocumentIntakeStore(Path(os.environ.get("DOCUMENT_INTAKE_STATE_PATH", "/data/documents/intake.json")))
+
+
+@lru_cache(maxsize=1)
+def scribble_store() -> ScribbleStore:
+    return ScribbleStore(Path(os.environ.get("SCRIBBLE_STATE_PATH", "/data/scribble/index.json")))
+
+
+def scribble_item_id(path: str) -> str:
+    match = re.fullmatch(r"/api/scribble/(scribble-[A-Za-z0-9-]+)", path)
+    return match.group(1) if match else ""
+
+
+def scribble_file_id(path: str) -> str:
+    match = re.fullmatch(r"/api/scribble/(scribble-[A-Za-z0-9-]+)/file", path)
+    return match.group(1) if match else ""
+
+
+def scribble_list_payload(store: ScribbleStore | None = None) -> dict[str, object]:
+    active_store = store or scribble_store()
+    items = active_store.list_items()
+    return {"ok": True, "count": len(items), "items": [item.as_dict() for item in items]}
+
+
+def scribble_create_payload(
+    handler: BaseHTTPRequestHandler,
+    *,
+    store: ScribbleStore | None = None,
+) -> dict[str, object]:
+    active_store = store or scribble_store()
+    content_type = handler.headers.get("Content-Type") or ""
+    if "multipart/form-data" in content_type.lower():
+        fields, files = multipart_form_request(
+            handler,
+            max_bytes=MAX_SCRIBBLE_FILE_BYTES + MAX_MULTIPART_OVERHEAD_BYTES,
+        )
+        filename, content = files.get("file") or files.get("document") or ("", b"")
+        item = active_store.create(
+            title=fields.get("title") or "",
+            text=fields.get("text") or "",
+            filename=filename,
+            content=content,
+            content_type=fields.get("contentType") or "",
+            source="pwa",
+        )
+    else:
+        payload = json_request(handler)
+        item = active_store.create(
+            title=str(payload.get("title") or ""),
+            text=str(payload.get("text") or ""),
+            source="pwa",
+        )
+    return {"ok": True, "item": item.as_dict()}
+
+
+def scribble_update_payload(
+    item_id: str,
+    payload: dict[str, object],
+    *,
+    store: ScribbleStore | None = None,
+) -> dict[str, object]:
+    item = (store or scribble_store()).update(
+        item_id,
+        title=str(payload.get("title") or ""),
+        text=str(payload.get("text") or ""),
+    )
+    return {"ok": True, "item": item.as_dict()}
+
+
+def scribble_delete_payload(
+    item_id: str,
+    *,
+    store: ScribbleStore | None = None,
+) -> dict[str, object]:
+    item = (store or scribble_store()).delete(item_id)
+    return {"ok": True, "deleted": True, "id": item.item_id}
+
+
+def scribble_status_for_error(exc: Exception) -> int:
+    code = exc.code if isinstance(exc, ScribbleError) else str(exc)
+    if code in {"scribble_not_found", "scribble_file_not_found"}:
+        return 404
+    if code == "scribble_file_too_large":
+        return 413
+    return 400
 
 
 def _ai_task_archive_path(profile: str = "personal") -> Path:
@@ -3447,6 +3536,32 @@ class Handler(BaseHTTPRequestHandler):
                 },
             )
             return
+        if parsed.path == "/api/scribble":
+            try:
+                require_main_access(self.headers)
+                json_response(self, 200, scribble_list_payload())
+            except (ValueError, ScribbleError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, (ScribbleError, memos_relay.MemosRelayError)) else str(exc)
+                status = exc.status if isinstance(exc, memos_relay.MemosRelayError) else scribble_status_for_error(exc)
+                json_response(self, status, {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Scribble read failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "scribble_unavailable"})
+            return
+        scribble_attachment_id = scribble_file_id(parsed.path)
+        if scribble_attachment_id:
+            try:
+                require_main_access(self.headers)
+                item, content = scribble_store().read_file(scribble_attachment_id)
+                inline_file_response(self, content, item.filename, item.content_type)
+            except (ValueError, ScribbleError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, (ScribbleError, memos_relay.MemosRelayError)) else str(exc)
+                status = exc.status if isinstance(exc, memos_relay.MemosRelayError) else scribble_status_for_error(exc)
+                json_response(self, status, {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Scribble file read failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "scribble_file_unavailable"})
+            return
         if parsed.path == "/api/ledger":
             try:
                 require_family_profile(self.headers)
@@ -3808,6 +3923,23 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == "/api/scribble":
+            try:
+                require_main_access(self.headers)
+                json_response(self, 201, scribble_create_payload(self))
+            except (ValueError, ScribbleError, DocumentIntakeError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, (ScribbleError, DocumentIntakeError, memos_relay.MemosRelayError)) else str(exc)
+                if isinstance(exc, memos_relay.MemosRelayError):
+                    status = exc.status
+                elif isinstance(exc, ScribbleError):
+                    status = scribble_status_for_error(exc)
+                else:
+                    status = 400
+                json_response(self, status, {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Scribble create failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "scribble_create_failed"})
+            return
         if parsed.path in {"/api/web-push/subscriptions", "/api/web-push/test"}:
             try:
                 require_main_access(self.headers)
@@ -4119,6 +4251,19 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_PUT(self) -> None:
         path = urllib.parse.urlparse(self.path).path
+        scribble_id = scribble_item_id(path)
+        if scribble_id:
+            try:
+                require_main_access(self.headers)
+                json_response(self, 200, scribble_update_payload(scribble_id, json_request(self)))
+            except (ValueError, ScribbleError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, (ScribbleError, memos_relay.MemosRelayError)) else str(exc)
+                status = exc.status if isinstance(exc, memos_relay.MemosRelayError) else scribble_status_for_error(exc)
+                json_response(self, status, {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Scribble update failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "scribble_update_failed"})
+            return
         recurring_id = recurring_task_id(path)
         if recurring_id:
             try:
@@ -4176,6 +4321,19 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_DELETE(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
+        scribble_id = scribble_item_id(parsed.path)
+        if scribble_id:
+            try:
+                require_main_access(self.headers)
+                json_response(self, 200, scribble_delete_payload(scribble_id))
+            except (ValueError, ScribbleError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, (ScribbleError, memos_relay.MemosRelayError)) else str(exc)
+                status = exc.status if isinstance(exc, memos_relay.MemosRelayError) else scribble_status_for_error(exc)
+                json_response(self, status, {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Scribble delete failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "scribble_delete_failed"})
+            return
         deleted_ai_task_id = ai_task_delete_id(parsed.path)
         if deleted_ai_task_id:
             try:

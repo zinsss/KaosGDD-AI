@@ -8110,6 +8110,197 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   }
 }
 
+.scribbleBoard {
+  display: grid;
+  gap: 16px;
+}
+
+.scribbleCapture,
+.scribbleList,
+.scribbleEditor {
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  padding: 16px;
+}
+
+.scribbleCapture {
+  display: grid;
+  gap: 10px;
+}
+
+.scribbleCaptureLine {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.scribbleCapture input,
+.scribbleCapture textarea,
+.scribbleEditor input,
+.scribbleEditor textarea {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  padding: 11px 12px;
+}
+
+.scribbleCapture textarea,
+.scribbleEditor textarea {
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.scribbleCapture > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.scribbleFilePicker {
+  justify-self: start;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.scribbleFilePicker input {
+  max-width: min(100%, 360px);
+  margin-left: 8px;
+  padding: 6px;
+}
+
+.scribbleWorkspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+.scribbleWorkspace.hasDetail {
+  grid-template-columns: minmax(250px, 0.8fr) minmax(320px, 1.2fr);
+}
+
+.scribbleList > header,
+.scribbleEditorHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--accent);
+  letter-spacing: 0.06em;
+}
+
+.scribbleList > header span {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.scribbleList ol {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+
+.scribbleRow button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  padding: 13px 4px;
+  text-align: left;
+}
+
+.scribbleRow.isSelected button,
+.scribbleRow button:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.scribbleKind {
+  color: var(--accent);
+  font-size: 1.2rem;
+}
+
+.scribbleRowText {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.scribbleRowText strong,
+.scribbleRowText small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scribbleRowText small {
+  color: var(--muted);
+}
+
+.scribbleEditor {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.scribbleEditorHeader button {
+  margin-left: auto;
+}
+
+.scribbleEditor label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.scribbleFile {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  padding: 10px;
+}
+
+.scribbleFile span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scribbleFile small {
+  color: var(--muted);
+}
+
+.scribbleActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 760px) {
+  .scribbleWorkspace.hasDetail {
+    grid-template-columns: 1fr;
+  }
+
+  .scribbleFile {
+    grid-template-columns: 1fr auto;
+  }
+
+  .scribbleFile .archiveAction {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
+
 @media print {
   @page {
     size: A4 landscape;

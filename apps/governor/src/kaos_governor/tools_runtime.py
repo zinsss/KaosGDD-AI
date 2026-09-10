@@ -18,6 +18,7 @@ from .fax import FaxConfig, FaxService
 from .mail import MailOrganizerConfig, NaverMailConfig, NaverMailOrganizer, NaverMailPoller
 from .memos import MemoMutationService, MemosConfig, MemosService
 from .notifications import NotificationInbox, NotificationInboxConfig
+from .scribble import ScribbleStore
 from .postgres_durable import PostgresDurableGovernorStore
 from .tasks import TaskMutationService
 from .tools import BrainToolServer, ImagingSecondLookClient, ImagingSecondLookConfig
@@ -77,12 +78,15 @@ class GovernorToolsRuntime:
         governor_token = _secret(source, "GOVERNOR_API_TOKEN")
         shortcuts_token = _secret(source, "IOS_SHORTCUTS_TOKEN")
         fax_shortcut_token = _secret(source, "IOS_FAX_SHORTCUT_TOKEN")
+        scribble_shortcut_token = _secret(source, "IOS_SCRIBBLE_SHORTCUT_TOKEN")
         if not governor_token:
             raise ToolRuntimeConfigurationError("GOVERNOR_API_TOKEN is required")
         if not shortcuts_token:
             raise ToolRuntimeConfigurationError("IOS_SHORTCUTS_TOKEN is required")
         if not fax_shortcut_token:
             raise ToolRuntimeConfigurationError("IOS_FAX_SHORTCUT_TOKEN is required")
+        if not scribble_shortcut_token:
+            raise ToolRuntimeConfigurationError("IOS_SCRIBBLE_SHORTCUT_TOKEN is required")
 
         calendar_url = source.get(
             "CALENDAR_ADAPTER_INTERNAL_URL",
@@ -113,6 +117,7 @@ class GovernorToolsRuntime:
             governor_api_token=governor_token,
             ios_shortcuts_token=shortcuts_token,
             ios_fax_shortcut_token=fax_shortcut_token,
+            ios_scribble_shortcut_token=scribble_shortcut_token,
             notification_inbox=NotificationInbox(NotificationInboxConfig.from_env(source)),
             web_push=WebPushService(WebPushConfig.from_env(source)),
             calendar_adapter=calendar,
@@ -138,6 +143,9 @@ class GovernorToolsRuntime:
                 )
             ),
             second_look_status_path=self._tool_status_path,
+            scribble_store=ScribbleStore(
+                Path(source.get("SCRIBBLE_STATE_PATH", "/data/scribble/index.json"))
+            ),
         )
 
     def _worker_status(self) -> dict[str, object]:

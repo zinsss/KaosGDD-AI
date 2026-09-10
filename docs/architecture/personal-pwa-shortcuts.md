@@ -200,9 +200,39 @@ https://kaosgdd.net/#/tasks
 https://kaosgdd.net/#/supplies
 https://kaosgdd.net/#/memos
 https://kaosgdd.net/#/documents
+https://kaosgdd.net/#/scribble
 ```
 
 Deep links select presentation state only. They do not authorize a mutation.
+
+### Scribble Share Sheet contract
+
+`Scribble` is a small staging inbox, not another notes or document archive.
+Items and their staged files are automatically removed 30 days after capture.
+From day 25, the PWA title progressively changes toward red to warn about the
+approaching expiry.
+Text can be reviewed and handed to Memos; PDF files can be reviewed and handed
+to the existing Paperless intake. A successful handoff removes the staging
+copy. Unreviewed items remain in `/data/scribble`.
+
+Share Sheet capture uses the tailnet-only Governor Tools origin and a dedicated
+write-only credential. It does not reuse the notification/Today read token or
+the fax credential.
+
+```text
+POST /shortcuts/scribble
+Authorization: Bearer <IOS_SCRIBBLE_SHORTCUT_TOKEN>
+Content-Type: multipart/form-data
+
+title=<optional text>
+text=<optional text>
+file=<optional single file, 25 MiB maximum>
+```
+
+At least text or one file is required. The PWA supports the same fields at
+`https://kaosgdd.net/#/scribble`. Non-PDF files may wait in Scribble, but the
+first Paperless handoff intentionally accepts PDF only; iOS Shortcuts should
+use Make PDF before uploading an image or other compatible input.
 
 ### Fax Share Sheet contract
 

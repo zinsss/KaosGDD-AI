@@ -5,6 +5,7 @@
 })(typeof globalThis === "object" ? globalThis : this, function createPortalNavigation() {
   const personalMenu = Object.freeze([
     Object.freeze({ route: "today", label: "Agenda" }),
+    Object.freeze({ route: "scribble", label: "Scribble" }),
     Object.freeze({ route: "calendar", label: "Calendar" }),
     Object.freeze({ route: "tasks", label: "Tasks" }),
     Object.freeze({ route: "supplies", label: "Supplies" }),

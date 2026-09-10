@@ -21,6 +21,7 @@ from kaos_governor.notifications import (
     NotificationInboxConfig,
     TextNotification,
 )
+from kaos_governor.scribble import ScribbleStore
 from kaos_governor.tools import (
     BrainToolServer,
     ImagingSecondLookClient,
@@ -408,6 +409,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
             governor_api_token="governor-secret",
             ios_shortcuts_token="shortcut-secret",
             ios_fax_shortcut_token="fax-shortcut-secret",
+            ios_scribble_shortcut_token="scribble-shortcut-secret",
             notification_inbox=self.notification_inbox,
             web_push=self.web_push,
             calendar_adapter=self.calendar,  # type: ignore[arg-type]
@@ -425,6 +427,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
             ),
             fax_service=self.fax,  # type: ignore[arg-type]
             fax_stage_root=Path(self.temporary.name) / "fax-proposals",
+            scribble_store=ScribbleStore(Path(self.temporary.name) / "scribble" / "index.json"),
         )
         self.client = TestClient(TestServer(server.application()))
         await self.client.start_server()
@@ -521,6 +524,42 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
             },
         )
         self.assertEqual(self.calendar.bootstrap_calls[-1], "supplies")
+
+    async def test_shortcut_scribble_accepts_shared_text_and_file(self) -> None:
+        denied_response = await self.client.post(
+            "/shortcuts/scribble",
+            headers=self.shortcut_headers(),
+            json={"text": "must stay read-only"},
+        )
+        self.assertEqual(denied_response.status, 401)
+
+        text_response = await self.client.post(
+            "/shortcuts/scribble",
+            headers={"Authorization": "Bearer scribble-shortcut-secret"},
+            json={"text": "quick note"},
+        )
+        text_payload = await text_response.json()
+        self.assertEqual(text_response.status, 201)
+        self.assertEqual(text_payload["item"]["kind"], "text")
+        self.assertEqual(text_payload["item"]["source"], "shortcut")
+
+        form = FormData()
+        form.add_field("title", "Referral")
+        form.add_field(
+            "file",
+            b"%PDF-1.4 test",
+            filename="referral.pdf",
+            content_type="application/pdf",
+        )
+        file_response = await self.client.post(
+            "/shortcuts/scribble",
+            headers={"Authorization": "Bearer scribble-shortcut-secret"},
+            data=form,
+        )
+        file_payload = await file_response.json()
+        self.assertEqual(file_response.status, 201)
+        self.assertEqual(file_payload["item"]["filename"], "referral.pdf")
+        self.assertEqual(file_payload["item"]["kind"], "file")
 
     async def test_shortcut_notifications_are_read_only_and_ready_to_show(self) -> None:
         self.notification_inbox.enqueue(

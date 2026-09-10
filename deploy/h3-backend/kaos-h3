@@ -104,6 +104,7 @@ install_state_directories() {
     "${root}/ai-tasks"
     "${root}/documents"
     "${root}/notifications"
+    "${root}/scribble"
     "${root}/tools"
   )
   if mkdir -p "${paths[@]}" 2>/dev/null \
@@ -154,6 +155,9 @@ setup() {
   if [[ ! -s "$(secret_path ios_fax_shortcut_token)" ]]; then
     openssl rand -hex 32 > "$(secret_path ios_fax_shortcut_token)"
   fi
+  if [[ ! -s "$(secret_path ios_scribble_shortcut_token)" ]]; then
+    openssl rand -hex 32 > "$(secret_path ios_scribble_shortcut_token)"
+  fi
   if [[ ! -s "$(secret_path web_push_vapid_private_key)" ]]; then
     openssl ecparam -name prime256v1 -genkey -noout > "$(secret_path web_push_vapid_private_key)"
   fi
@@ -161,6 +165,7 @@ setup() {
     "${SECRETS_DIR}"/governor_api_token \
     "${SECRETS_DIR}"/ios_shortcuts_token \
     "${SECRETS_DIR}"/ios_fax_shortcut_token \
+    "${SECRETS_DIR}"/ios_scribble_shortcut_token \
     "${SECRETS_DIR}"/memos_access_token \
     "${SECRETS_DIR}"/naver_mail_password \
     "${SECRETS_DIR}"/paperless_api_token \
@@ -185,6 +190,7 @@ preflight() {
   fi
   require_secret ios_shortcuts_token
   require_secret ios_fax_shortcut_token
+  require_secret ios_scribble_shortcut_token
   [[ "${DISCORD_GUILD_ID:-}" != "123456789012345678" ]] || die "replace the example Discord guild ID"
   [[ "${DISCORD_ALLOWED_USER_IDS:-}" != *"123456789012345678"* ]] || die "replace the example Discord user ID"
   [[ "${DISCORD_ALLOWED_CHANNEL_IDS:-}" != *"123456789012345678"* ]] || die "replace the example Discord channel IDs"
@@ -544,6 +550,8 @@ services_preflight() {
   require_file "${root}/config/family-portal/nginx.conf"
   require_dir "${root}/data/family-portal"
   require_file "${root}/data/family-portal/index.html"
+  require_file "${root}/data/family-portal/scribble.js"
+  require_file "${root}/data/family-portal/scribble-view.js"
   if grep -q 'kaosgdd-gov' "${root}/config/family-portal/nginx.conf"; then
     die "family portal still references retired kaosgdd-gov upstream"
   fi
@@ -583,6 +591,9 @@ services_preflight() {
   if ! grep -A8 'location \^~ /api/memos/' "${root}/config/family-portal/nginx.conf" | grep -Eq 'proxy_pass (http://governor-api:8096|\$governor_api);'; then
     die "family portal must route /api/memos to governor-api"
   fi
+  if ! grep -q 'location \^~ /api/scribble' "${root}/config/family-portal/nginx.conf"; then
+    die "family portal must route the Scribble API explicitly"
+  fi
   if ! grep -q 'location \^~ /api/ai-tasks/' "${root}/config/family-portal/nginx.conf"; then
     die "family portal must route the scoped AI Tasks API explicitly"
   fi
@@ -609,6 +620,8 @@ family_portal_source_preflight() {
   require_file "${app_source}/documents.js"
   require_file "${app_source}/fax.js"
   require_file "${app_source}/navigation.js"
+  require_file "${app_source}/scribble.js"
+  require_file "${app_source}/scribble-view.js"
   require_file "${app_source}/translations.js"
   if [ -d "${app_source}/app" ]; then
     fail "Family portal source must not contain a nested app/ duplicate"
@@ -655,6 +668,9 @@ family_portal_source_preflight() {
   fi
   if ! grep -A8 'location \^~ /api/memos/' "${nginx_source}" | grep -Eq 'proxy_pass (http://governor-api:8096|\$governor_api);'; then
     die "family portal source must route /api/memos to governor-api"
+  fi
+  if ! grep -q 'location \^~ /api/scribble' "${nginx_source}"; then
+    die "family portal source must route the Scribble API explicitly"
   fi
   if ! grep -q 'location \^~ /api/ai-tasks/' "${nginx_source}"; then
     die "family portal source must route the scoped AI Tasks API explicitly"

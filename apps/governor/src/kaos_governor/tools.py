@@ -36,6 +36,7 @@ from .memos import (
     MemosService,
 )
 from .notifications import NotificationError, NotificationInbox
+from .scribble import MAX_SCRIBBLE_FILE_BYTES, ScribbleError, ScribbleStore
 from .web_push import WebPushError, WebPushService
 from .tasks import TaskMutationCommand, TaskMutationError, TaskMutationService
 from .tool_calendar import month_markers, visible_month_grid_range, weather_agenda_summary, weather_items_by_date
@@ -432,17 +433,21 @@ class BrainToolServer:
         second_look_status_callback: Callable[[], Awaitable[None]] | None = None,
         ios_shortcuts_token: str = "",
         ios_fax_shortcut_token: str = "",
+        ios_scribble_shortcut_token: str = "",
         notification_inbox: NotificationInbox | None = None,
         web_push: WebPushService | None = None,
         fax_service: FaxService | None = None,
         fax_stage_root: Path | None = None,
+        scribble_store: ScribbleStore | None = None,
     ) -> None:
         self._host = host
         self._port = port
         self._governor_api_token = governor_api_token
         self._ios_shortcuts_token = ios_shortcuts_token
         self._ios_fax_shortcut_token = ios_fax_shortcut_token
+        self._ios_scribble_shortcut_token = ios_scribble_shortcut_token
         self._notification_inbox = notification_inbox
+        self._scribble_store = scribble_store
         self._web_push = web_push
         self._calendar_adapter = calendar_adapter
         self._memos = memos
@@ -483,6 +488,7 @@ class BrainToolServer:
         app.router.add_get("/shortcuts/supplies", self._shortcut_supplies)
         app.router.add_get("/shortcuts/notifications", self._list_notifications)
         app.router.add_get("/shortcuts/briefing", self._shortcut_briefing)
+        app.router.add_post("/shortcuts/scribble", self._shortcut_scribble_create)
         app.router.add_post("/shortcuts/fax/send/proposals", self._propose_fax_send)
         app.router.add_post(
             "/shortcuts/fax/send/proposals/{confirmation_id}/approve",
@@ -569,6 +575,10 @@ class BrainToolServer:
         if request.path.startswith("/shortcuts/fax/"):
             if not self._authorized(request, self._ios_fax_shortcut_token):
                 return web.json_response({"error": "fax_shortcut_api_unauthorized"}, status=401)
+            return await handler(request)
+        if request.path == "/shortcuts/scribble":
+            if not self._authorized(request, self._ios_scribble_shortcut_token):
+                return web.json_response({"error": "scribble_shortcut_api_unauthorized"}, status=401)
             return await handler(request)
         if request.path.startswith("/shortcuts/"):
             if not self._authorized(request, self._ios_shortcuts_token):
@@ -664,6 +674,58 @@ class BrainToolServer:
         return web.json_response(
             shortcut_briefing_payload(bootstrap, notifications, current=current)
         )
+
+    async def _shortcut_scribble_create(self, request: web.Request) -> web.Response:
+        store = self._scribble_store
+        if store is None:
+            return web.json_response({"error": "scribble_unavailable"}, status=503)
+        try:
+            title = ""
+            text = ""
+            filename = ""
+            content_type = ""
+            content = b""
+            if request.content_type.startswith("multipart/"):
+                reader = await request.multipart()
+                while part := await reader.next():
+                    if part.filename and part.name in {"file", "document"}:
+                        filename = part.filename
+                        content_type = part.headers.get("Content-Type", "")
+                        chunks: list[bytes] = []
+                        size = 0
+                        while chunk := await part.read_chunk():
+                            size += len(chunk)
+                            if size > MAX_SCRIBBLE_FILE_BYTES:
+                                raise ScribbleError("scribble_file_too_large")
+                            chunks.append(chunk)
+                        content = b"".join(chunks)
+                    elif part.name in {"title", "text"}:
+                        value = (await part.text()).strip()
+                        if part.name == "title":
+                            title = value
+                        else:
+                            text = value
+            else:
+                payload = await request.json()
+                if not isinstance(payload, Mapping):
+                    raise ScribbleError("scribble_invalid_payload")
+                title = str(payload.get("title") or "")
+                text = str(payload.get("text") or "")
+            item = await asyncio.to_thread(
+                store.create,
+                title=title,
+                text=text,
+                filename=filename,
+                content=content,
+                content_type=content_type,
+                source="shortcut",
+            )
+        except ScribbleError as exc:
+            status = 413 if exc.code == "scribble_file_too_large" else 400
+            return web.json_response({"error": exc.code}, status=status)
+        except (json.JSONDecodeError, ValueError, aiohttp.ContentTypeError):
+            return web.json_response({"error": "scribble_invalid_payload"}, status=400)
+        return web.json_response({"ok": True, "item": item.as_dict()}, status=201)
 
     async def _acknowledge_notification(self, request: web.Request) -> web.Response:
         inbox = self._notification_inbox

@@ -208,6 +208,7 @@ services:
       FAX_DISCORD_MESSAGE_INTAKE: "false"
       FAX_DISCORD_STATE_PATH: "/data/fax/state.json"
       DOCUMENT_INTAKE_STATE_PATH: "/data/documents/intake.json"
+      SCRIBBLE_STATE_PATH: "/data/scribble/index.json"
       MAIL_NAVER_ENABLED: "${MAIL_NAVER_ENABLED:-false}"
       MAIL_NAVER_HOST: "${MAIL_NAVER_HOST:-imap.naver.com}"
       MAIL_NAVER_PORT: "${MAIL_NAVER_PORT:-993}"
@@ -236,6 +237,7 @@ services:
       - ${GOVERNOR_STATE_ROOT:-/srv/kaosgdd/kaosgovernor}/fax:/data/fax
       - ${GOVERNOR_STATE_ROOT:-/srv/kaosgdd/kaosgovernor}/mail:/data/mail:ro
       - ${GOVERNOR_STATE_ROOT:-/srv/kaosgdd/kaosgovernor}/documents:/data/documents
+      - ${GOVERNOR_STATE_ROOT:-/srv/kaosgdd/kaosgovernor}/scribble:/data/scribble
       - ${GOVERNOR_STATE_ROOT:-/srv/kaosgdd/kaosgovernor}/ai-tasks:/data/ai-tasks
       - ${GOVERNOR_STATE_ROOT:-/srv/kaosgdd/kaosgovernor}/notifications:/data/notifications
       - ${KAOS_ROOT:-/srv/kaos}/reference/textbooks:/data/textbooks:ro

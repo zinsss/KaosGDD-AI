@@ -1,5 +1,6 @@
 const routes = {
   today: "Agenda",
+  scribble: "Scribble",
   notifications: "Notifications",
   calendar: "Calendar",
   caregiver: "Caregiver",
@@ -203,6 +204,14 @@ const state = {
     selectedName: "",
     detailLoading: false,
     detailError: "",
+  },
+  scribble: {
+    checked: false,
+    loading: false,
+    saving: false,
+    error: "",
+    items: [],
+    selectedId: "",
   },
   aiTasks: {
     checked: false,
@@ -2014,6 +2023,121 @@ async function createMemo(content) {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.error || payload.message || `HTTP ${response.status}`);
   return payload;
+}
+
+function scribbleMeta(item) {
+  const date = archiveDateParts(item.createdAt);
+  const source = item.source === "shortcut" ? "SHORTCUT" : "PWA";
+  const file = item.hasFile ? `${item.filename} · ${formatBytes(item.sizeBytes)}` : "TEXT";
+  return `${date.label} · ${source} · ${file}`;
+}
+
+async function loadScribbles(options = {}) {
+  if (portalProfile() !== "main" || state.scribble.loading) return;
+  if (state.scribble.checked && !options.force) return;
+  state.scribble.loading = true;
+  if (getRoute() === "scribble") render();
+  try {
+    const response = await fetch("/api/scribble", { headers: { Accept: "application/json" } });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    const normalized = window.KAOS_PORTAL_SCRIBBLE.normalizeList(payload);
+    state.scribble = {
+      ...state.scribble,
+      checked: true,
+      loading: false,
+      error: "",
+      items: [...normalized.items],
+      selectedId: normalized.items.some((item) => item.id === state.scribble.selectedId) ? state.scribble.selectedId : "",
+    };
+  } catch (error) {
+    state.scribble = {
+      ...state.scribble,
+      checked: true,
+      loading: false,
+      error: error.message || "Scribble is unavailable",
+    };
+  }
+  refreshMainAttentionShell();
+  if (getRoute() === "scribble") render();
+}
+
+async function createScribble(form) {
+  const formData = new FormData(form);
+  const file = formData.get("file");
+  if (file && typeof file === "object" && Number(file.size) > 0) formData.set("contentType", file.type || "application/octet-stream");
+  else formData.delete("file");
+  const response = await fetch("/api/scribble", {
+    method: "POST",
+    headers: { Accept: "application/json" },
+    body: formData,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+  state.scribble.selectedId = String(payload.item?.id || "");
+  state.scribble.checked = false;
+  await loadScribbles({ force: true });
+}
+
+async function updateScribble(itemId, form) {
+  const formData = new FormData(form);
+  const response = await fetch(`/api/scribble/${encodeURIComponent(itemId)}`, {
+    method: "PUT",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify({
+      title: String(formData.get("title") || ""),
+      text: String(formData.get("text") || ""),
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+  const item = window.KAOS_PORTAL_SCRIBBLE.normalizeItem(payload.item);
+  state.scribble.items = state.scribble.items.map((current) => current.id === item.id ? item : current);
+  return item;
+}
+
+async function deleteScribble(itemId) {
+  const response = await fetch(`/api/scribble/${encodeURIComponent(itemId)}`, {
+    method: "DELETE",
+    headers: { Accept: "application/json" },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+  state.scribble.items = state.scribble.items.filter((item) => item.id !== itemId);
+  if (state.scribble.selectedId === itemId) state.scribble.selectedId = "";
+  refreshMainAttentionShell();
+}
+
+async function saveScribbleToMemos(form) {
+  const itemId = String(form.dataset.scribbleEdit || "");
+  const item = await updateScribble(itemId, form);
+  if (!item.text.trim()) throw new Error("scribble_text_required");
+  const content = item.title ? `# ${item.title}\n\n${item.text}` : item.text;
+  await createMemo(content);
+  await deleteScribble(item.id);
+}
+
+async function saveScribbleToPaperless(form) {
+  const itemId = String(form.dataset.scribbleEdit || "");
+  const item = await updateScribble(itemId, form);
+  if (!item.hasFile) throw new Error("scribble_file_required");
+  const fileResponse = await fetch(`/api/scribble/${encodeURIComponent(item.id)}/file`, {
+    headers: { Accept: item.contentType || "application/octet-stream" },
+  });
+  if (!fileResponse.ok) throw new Error(`HTTP ${fileResponse.status}`);
+  const document = await fileResponse.blob();
+  const upload = new FormData();
+  upload.set("title", item.title);
+  upload.set("document", document, item.filename);
+  const response = await fetch("/api/paperless/documents/upload", {
+    method: "POST",
+    headers: { Accept: "application/json" },
+    body: upload,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+  await deleteScribble(item.id);
+  state.documents.inboxChecked = false;
 }
 
 function normalizeAiTask(item) {
@@ -4876,7 +5000,7 @@ function getRoute() {
   const route = raw.split("?", 1)[0];
   if (!routes[route]) return profileConfig().defaultRoute;
   if (portalProfile() === "family" && route === "services") return profileConfig().defaultRoute;
-  if (portalProfile() === "family" && ["notifications", "supplies", "documents", "add-document", "fax", "mail", "add-ai-task"].includes(route)) return profileConfig().defaultRoute;
+  if (portalProfile() === "family" && ["notifications", "scribble", "supplies", "documents", "add-document", "fax", "mail", "add-ai-task"].includes(route)) return profileConfig().defaultRoute;
   if (portalProfile() === "main" && (route === "rouny" || route === "caregiver" || route === "text-presets" || route === "ledger")) return profileConfig().defaultRoute;
   return route;
 }
@@ -5174,6 +5298,9 @@ function mainAttentionMarkers() {
   if (state.documents.inboxItems.some((item) => item.status === "failed")) add("documents", "critical");
   else if (state.documents.inboxItems.length > 0) add("documents", "attention");
 
+  if (state.scribble.error) add("scribble", "critical");
+  else if (state.scribble.items.length > 0) add("scribble", "attention");
+
   if (state.fax.error || Number(state.fax.attention?.failed || 0) > 0) add("fax", "critical");
 
   if (systemStatusIsCritical()) add("settings", "critical");
@@ -5220,6 +5347,7 @@ async function loadMainAttention({ force = false } = {}) {
     loadNotifications({ force }),
     loadMailAttention({ force }),
     loadDocumentInbox({ force }),
+    loadScribbles({ force }),
     loadFax({ force }),
     loadSystemStatus({ force }),
   ]);
@@ -5234,6 +5362,7 @@ async function loadMainAttention({ force = false } = {}) {
 function topAddActionForRoute(route) {
   const selectedRoute = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(activeNavRoute(route)) || "today";
   if (selectedRoute === "settings") return "";
+  if (selectedRoute === "scribble") return "scribble";
   if (selectedRoute === "today" || selectedRoute === "calendar") return "event";
   if (selectedRoute === "tasks") return "task";
   if (selectedRoute === "supplies") return "supply";
@@ -5248,6 +5377,7 @@ function topAddActionForRoute(route) {
 function topAddMenuItems(route) {
   const currentAction = topAddActionForRoute(route);
   const items = [
+    { action: "scribble", label: "Scribble" },
     { action: "task", label: "Task" },
     { action: "event", label: "Event" },
     { action: "supply", label: "Supply" },
@@ -5370,6 +5500,11 @@ async function runTopAddAction(action) {
   }
   if (action === "memo") {
     window.location.hash = "#/add-memo";
+    return;
+  }
+  if (action === "scribble") {
+    window.location.hash = "#/scribble";
+    window.setTimeout(() => document.querySelector("[data-scribble-capture-text]")?.focus(), 0);
     return;
   }
   if (action === "document") {
@@ -7238,6 +7373,16 @@ function renderCalendarTasksSuppliesEmbed() {
 
 function renderDocuments() {
   return window.KAOS_DOCUMENTS_VIEW.renderDocuments(documentsViewContext());
+}
+
+function renderScribble() {
+  return window.KAOS_SCRIBBLE_VIEW.renderScribble({
+    state,
+    escapeHtml,
+    formatBytes,
+    scribbleMeta,
+    scribbleExpiryTitleColor: window.KAOS_PORTAL_SCRIBBLE.expiryTitleColor,
+  });
 }
 
 function documentsViewContext() {
@@ -9504,6 +9649,7 @@ function render() {
   document.documentElement.classList.remove("isAgendaSuppliesEmbed");
   routeTitle(route);
   if (route === "calendar") view.innerHTML = renderCalendar();
+  else if (route === "scribble") view.innerHTML = renderScribble();
   else if (route === "notifications") view.innerHTML = renderNotifications();
   else if (route === "caregiver") view.innerHTML = renderCaregiver();
   else if (route === "tasks") view.innerHTML = renderTasks();
@@ -9552,6 +9698,7 @@ function render() {
     window.setTimeout(() => document.querySelector('[data-create-supply] input[name="title"]')?.focus(), 0);
   }
   if (route === "memos") loadMemos();
+  if (route === "scribble") loadScribbles();
   if (route === "notifications") loadNotifications();
   if (route === "documents" && portalProfile() === "main") {
     loadDocumentTags();
@@ -9825,6 +9972,74 @@ document.addEventListener("click", async (event) => {
     await loadDocumentDetail(openPaperless.dataset.paperlessOpen || "");
     document.querySelector("[data-paperless-detail]")?.focus();
     document.getElementById("view")?.scrollTo({ top: 0, behavior: "smooth" });
+    return;
+  }
+
+  const openScribble = event.target.closest("[data-scribble-open]");
+  if (openScribble) {
+    event.preventDefault();
+    state.scribble.selectedId = openScribble.dataset.scribbleOpen || "";
+    render();
+    return;
+  }
+
+  if (event.target.closest("[data-scribble-close]")) {
+    event.preventDefault();
+    state.scribble.selectedId = "";
+    render();
+    return;
+  }
+
+  if (event.target.closest("[data-scribble-refresh]")) {
+    event.preventDefault();
+    state.scribble.checked = false;
+    await loadScribbles({ force: true });
+    return;
+  }
+
+  if (event.target.closest("[data-scribble-delete]")) {
+    event.preventDefault();
+    const form = event.target.closest("[data-scribble-edit]");
+    if (!form || !window.confirm("Delete this Scribble item?")) return;
+    try {
+      await deleteScribble(form.dataset.scribbleEdit || "");
+      render();
+    } catch (error) {
+      window.alert(error.message || "Could not delete Scribble item");
+    }
+    return;
+  }
+
+  if (event.target.closest("[data-scribble-to-memo]")) {
+    event.preventDefault();
+    const form = event.target.closest("[data-scribble-edit]");
+    if (!form) return;
+    state.scribble.saving = true;
+    try {
+      await saveScribbleToMemos(form);
+      state.memos.checked = false;
+    } catch (error) {
+      window.alert(error.message || "Could not save to Memos");
+    } finally {
+      state.scribble.saving = false;
+      render();
+    }
+    return;
+  }
+
+  if (event.target.closest("[data-scribble-to-paperless]")) {
+    event.preventDefault();
+    const form = event.target.closest("[data-scribble-edit]");
+    if (!form) return;
+    state.scribble.saving = true;
+    try {
+      await saveScribbleToPaperless(form);
+    } catch (error) {
+      window.alert(error.message || "Could not save to Paperless");
+    } finally {
+      state.scribble.saving = false;
+      render();
+    }
     return;
   }
 
@@ -10848,6 +11063,37 @@ document.addEventListener("click", async (event) => {
 
 document.addEventListener("submit", async (event) => {
   if (await window.KAOS_TEXT_PRESETS.handleSubmit(textPresetContext(), event)) {
+    return;
+  }
+
+  const scribbleCreateForm = event.target.closest("[data-scribble-create]");
+  if (scribbleCreateForm) {
+    event.preventDefault();
+    state.scribble.saving = true;
+    state.scribble.error = "";
+    try {
+      await createScribble(scribbleCreateForm);
+    } catch (error) {
+      state.scribble.error = error.message || "Could not capture Scribble item";
+    } finally {
+      state.scribble.saving = false;
+      render();
+    }
+    return;
+  }
+
+  const scribbleEditForm = event.target.closest("[data-scribble-edit]");
+  if (scribbleEditForm) {
+    event.preventDefault();
+    state.scribble.saving = true;
+    try {
+      await updateScribble(scribbleEditForm.dataset.scribbleEdit || "", scribbleEditForm);
+    } catch (error) {
+      window.alert(error.message || "Could not update Scribble item");
+    } finally {
+      state.scribble.saving = false;
+      render();
+    }
     return;
   }
 
