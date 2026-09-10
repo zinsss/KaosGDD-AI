@@ -585,20 +585,50 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["pendingNotificationCount"], 0)
         self.assertEqual(payload["criticalNotificationCount"], 0)
         self.assertEqual(payload["plannedCount"], 1)
-        self.assertIn("# 2026 August 14 Friday", payload["text"])
-        self.assertIn("10:00 Task Call mom", payload["text"])
-        self.assertIn("10:50 Event Clinic", payload["text"])
+        self.assertIn("# 2026년 8월 14일 금요일", payload["text"])
+        self.assertIn("- 10:00 · 할 일 · Call mom", payload["text"])
+        self.assertIn("- 10:50 · 일정 · Clinic", payload["text"])
         self.assertIn(
-            "11:30 Fax Fax service DOWN! — Check the office connector.",
+            "- 11:30 · 팩스 · 팩스 서비스 중단 — Check the office connector.",
             payload["text"],
         )
-        self.assertIn("# Planned\n21:00 Task Something Important", payload["text"])
+        self.assertIn("## 예정\n- 21:00 · 할 일 · Something Important", payload["text"])
         fax_item = next(item for item in payload["items"] if item["kind"] == "Fax")
         self.assertTrue(fax_item["acknowledged"])
         self.assertTrue(
             self.notification_inbox.list_items(include_acknowledged=True)["items"][0][
                 "acknowledged"
             ]
+        )
+
+    async def test_shortcut_briefing_collapses_routine_mail_in_rendered_text(self) -> None:
+        for key, timestamp in (
+            ("mail:briefing:1", "2026-08-14T00:05:00Z"),
+            ("mail:briefing:2", "2026-08-14T02:45:00Z"),
+        ):
+            with mock.patch("kaos_governor.notifications._timestamp", return_value=timestamp):
+                self.notification_inbox.enqueue(
+                    TextNotification(
+                        key=key,
+                        category="mail",
+                        title="",
+                        message="Mail received.",
+                        priority=0,
+                    )
+                )
+
+        response = await self.client.get(
+            "/shortcuts/briefing",
+            headers=self.shortcut_headers(),
+        )
+        payload = await response.json()
+
+        self.assertEqual(response.status, 200)
+        self.assertIn("## 알림\n- 메일 2건 · 09:05–11:45", payload["text"])
+        self.assertNotIn("Mail received.", payload["text"])
+        self.assertEqual(
+            len([item for item in payload["items"] if item["kind"] == "Mail"]),
+            2,
         )
 
     async def test_tool_notification_acknowledgement_requires_governor_token(self) -> None:

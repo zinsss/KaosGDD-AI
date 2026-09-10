@@ -47,29 +47,30 @@ SECOND_LOOK_RATE_LIMIT_WINDOW = timedelta(minutes=10)
 SECOND_LOOK_RATE_LIMIT_COUNT = 6
 SECOND_LOOK_RESPONSE_CACHE_TTL = timedelta(minutes=30)
 KST = timezone(timedelta(hours=9), "KST")
-BRIEFING_MONTHS = (
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
+BRIEFING_WEEKDAYS_KO = (
+    "월요일",
+    "화요일",
+    "수요일",
+    "목요일",
+    "금요일",
+    "토요일",
+    "일요일",
 )
-BRIEFING_WEEKDAYS = (
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday",
-    "Sunday",
-)
+BRIEFING_KIND_LABELS = {
+    "Event": "일정",
+    "Task": "할 일",
+    "Fax": "팩스",
+    "Mail": "메일",
+    "System": "시스템",
+    "Notification": "알림",
+}
+BRIEFING_NOTIFICATION_TRANSLATIONS = {
+    "Mail received.": "메일 수신",
+    "Fax received.": "팩스 수신",
+    "Fax sent.": "팩스 전송 완료",
+    "Fax send failed.": "팩스 전송 실패",
+    "Fax service DOWN!": "팩스 서비스 중단",
+}
 
 
 def kst_today(now: datetime | None = None) -> date:
@@ -2333,6 +2334,26 @@ def _briefing_created_at(value: object) -> datetime | None:
     return parsed.astimezone(KST)
 
 
+def _briefing_display_title(value: object) -> str:
+    title = str(value or "")
+    for source, translated in BRIEFING_NOTIFICATION_TRANSLATIONS.items():
+        if title == source:
+            return translated
+        if title.startswith(f"{source} — "):
+            return f"{translated}{title[len(source):]}"
+    return title
+
+
+def _briefing_render_item(item: Mapping[str, object], *, include_time: bool = True) -> str:
+    parts: list[str] = []
+    if include_time:
+        parts.append(str(item.get("time") or ""))
+    kind = str(item.get("kind") or "")
+    parts.append(BRIEFING_KIND_LABELS.get(kind, kind or "알림"))
+    parts.append(_briefing_display_title(item.get("title")) or "제목 없음")
+    return " · ".join(part for part in parts if part)
+
+
 def shortcut_briefing_payload(
     bootstrap: Mapping[str, Any],
     notifications: Mapping[str, Any],
@@ -2415,22 +2436,36 @@ def shortcut_briefing_payload(
 
     log.sort(key=sort_key)
     planned.sort(key=sort_key)
-    header = (
-        f"# {today.year} {BRIEFING_MONTHS[today.month - 1]} "
-        f"{today.day} {BRIEFING_WEEKDAYS[today.weekday()]}"
-    )
-
-    def render(item: Mapping[str, object]) -> str:
-        return f"{item['time']} {item['kind']} {item['title']}"
+    header = f"# {today.year}년 {today.month}월 {today.day}일 {BRIEFING_WEEKDAYS_KO[today.weekday()]}"
+    routine_mail = [
+        item
+        for item in log
+        if item.get("source") == "notification"
+        and item.get("kind") == "Mail"
+        and item.get("title") == "Mail received."
+    ]
+    visible_log = [item for item in log if item not in routine_mail]
+    all_day = [item for item in visible_log if item.get("time") == "ALL DAY"]
+    timeline = [item for item in visible_log if item.get("time") != "ALL DAY"]
 
     lines = [header]
-    lines.extend(render(item) for item in log)
-    if not log:
-        lines.append("No activity yet.")
-    lines.extend(("", "# Planned"))
-    lines.extend(render(item) for item in planned)
+    if all_day:
+        lines.extend(("", "## 종일"))
+        lines.extend(f"- {_briefing_render_item(item, include_time=False)}" for item in all_day)
+    if timeline:
+        lines.extend(("", "## 타임라인"))
+        lines.extend(f"- {_briefing_render_item(item)}" for item in timeline)
+    if routine_mail:
+        first_mail = str(routine_mail[0].get("time") or "")
+        last_mail = str(routine_mail[-1].get("time") or "")
+        mail_range = last_mail if first_mail == last_mail else f"{first_mail}–{last_mail}"
+        lines.extend(("", "## 알림", f"- 메일 {len(routine_mail)}건 · {mail_range}"))
+    if not all_day and not timeline and not routine_mail:
+        lines.extend(("", "## 지금까지", "- 기록 없음"))
+    lines.extend(("", "## 예정"))
+    lines.extend(f"- {_briefing_render_item(item)}" for item in planned)
     if not planned:
-        lines.append("Nothing else planned.")
+        lines.append("- 오늘 남은 일정 없음")
     return {
         "ok": True,
         "date": today.isoformat(),
