@@ -1350,6 +1350,18 @@ h3 {
   padding: 8px 0;
 }
 
+.familyAgendaDateGroup.isToday {
+  margin-inline: -8px;
+  padding-inline: 10px 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--nord8) 6%, transparent);
+  box-shadow: inset 2px 0 color-mix(in srgb, var(--nord8) 62%, transparent);
+}
+
+.familyAgendaDateGroup.isToday h3 {
+  color: color-mix(in srgb, var(--nord8) 72%, var(--text));
+}
+
 .familyAgendaDateGroup + .familyAgendaDateGroup {
   border-top: 1px solid var(--line);
 }

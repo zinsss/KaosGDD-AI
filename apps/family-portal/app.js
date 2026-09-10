@@ -6473,13 +6473,14 @@ function renderFamilyAgendaDateWeather(date) {
 function renderFamilyAgendaMixedList(events, tasks) {
   const items = familyAgendaMixedItems(events, tasks);
   if (!items.length) return `<p class="taskMeta">${uiText("agenda.noUpcomingItems", "No upcoming items")}</p>`;
+  const today = ymd(new Date());
   const groups = items.reduce((result, item) => {
     if (!result[item.date]) result[item.date] = [];
     result[item.date].push(item);
     return result;
   }, {});
   return Object.keys(groups).sort().map((date) => `
-    <section class="familyAgendaDateGroup">
+    <section class="familyAgendaDateGroup ${date === today ? "isToday" : ""}">
       <h3>
         <span>${escapeHtml(`${date} ${familyAgendaDateLabel(date).split(" ").slice(-1)[0]}`)}</span>
         ${renderFamilyAgendaDateWeather(date)}

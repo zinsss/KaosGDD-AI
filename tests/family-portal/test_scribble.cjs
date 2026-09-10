@@ -37,5 +37,5 @@ test("Scribble is a small staging inbox with both handoff actions", () => {
   assert.match(view, /data-scribble-to-paperless/);
   assert.match(index, /src="\/scribble\.js\?v=1"/);
   assert.match(index, /src="\/scribble-view\.js\?v=1"/);
-  assert.ok(index.indexOf('src="/scribble-view.js?v=1"') < index.indexOf('src="/app.js?v=336"'));
+  assert.ok(index.indexOf('src="/scribble-view.js?v=1"') < index.indexOf('src="/app.js?v=337"'));
 });
