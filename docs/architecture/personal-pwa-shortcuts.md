@@ -229,6 +229,12 @@ model through Open-Meteo, and MET Norway directly. A failed provider is shown
 as unavailable without suppressing the other results. Values are model-based
 current conditions, not direct weather-station observations.
 
+The Best Match request also supplies normalized `hourly` rows and appends a
+compact forecast from the current local hour through 23:00 to `text`. Each row
+contains the local time, condition and `glyph`, temperature, and precipitation
+probability. The other providers remain current-condition comparisons so the
+Shortcut output does not repeat four long forecasts.
+
 Do not scrape Naver Weather for this workflow. Its presentation HTML is not a
 stable API contract and would add a fragile dependency on an intermediary's
 page and attribution rules. A direct KMA APIHub integration may replace the

@@ -40,7 +40,18 @@ class WeatherComparisonServiceTests(unittest.TestCase):
                 "rain": 0,
                 "weather_code": code,
                 "wind_speed_10m": 5.4,
-            }
+            },
+            "hourly": {
+                "time": [
+                    "2026-09-12T08:00",
+                    "2026-09-12T09:00",
+                    "2026-09-12T10:00",
+                    "2026-09-13T00:00",
+                ],
+                "temperature_2m": [19, 20, 21, 18],
+                "precipitation_probability": [10, 20, 30, 40],
+                "weather_code": [0, 2, 61, 3],
+            },
         }
 
     @staticmethod
@@ -105,6 +116,11 @@ class WeatherComparisonServiceTests(unittest.TestCase):
         self.assertIn("⛅ KMA 모델: 구름 조금", payload["text"])
         self.assertIn("⛅ MET Norway: 구름 조금", payload["text"])
         self.assertIn("공급자 온도 차이 2.5°C", payload["text"])
+        self.assertIn("금일 시간대별", payload["text"])
+        self.assertIn("09:00  ⛅ 20°C · 강수 20%", payload["text"])
+        self.assertIn("10:00  🌧️ 21°C · 강수 30%", payload["text"])
+        self.assertNotIn("08:00  ☀️", payload["text"])
+        self.assertEqual([item["hour"] for item in payload["hourly"]], ["09:00", "10:00"])
         self.assertEqual(
             [source["glyph"] for source in payload["sources"]],
             ["☀️", "⛅", "☁️", "⛅"],

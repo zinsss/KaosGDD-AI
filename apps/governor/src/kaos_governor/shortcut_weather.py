@@ -16,6 +16,7 @@ CURRENT_FIELDS = (
     "temperature_2m,apparent_temperature,relative_humidity_2m,"
     "precipitation,rain,weather_code,wind_speed_10m"
 )
+HOURLY_FIELDS = "temperature_2m,precipitation_probability,weather_code"
 
 
 class ShortcutWeatherError(ValueError):
@@ -131,6 +132,43 @@ def _source_text(source: Mapping[str, Any]) -> str:
     return " · ".join(parts)
 
 
+def _hourly_rows(payload: Mapping[str, Any], observed_at: object) -> list[dict[str, Any]]:
+    hourly = payload.get("hourly")
+    if not isinstance(hourly, Mapping):
+        return []
+    times = hourly.get("time")
+    temperatures = hourly.get("temperature_2m")
+    probabilities = hourly.get("precipitation_probability")
+    codes = hourly.get("weather_code")
+    if not all(isinstance(items, list) for items in (times, temperatures, probabilities, codes)):
+        return []
+    try:
+        current_hour = datetime.fromisoformat(str(observed_at)).replace(minute=0, second=0, microsecond=0)
+    except ValueError:
+        return []
+
+    rows: list[dict[str, Any]] = []
+    for time_value, temperature, probability, code in zip(times, temperatures, probabilities, codes):
+        try:
+            forecast_time = datetime.fromisoformat(str(time_value))
+        except ValueError:
+            continue
+        if forecast_time.date() != current_hour.date() or forecast_time < current_hour:
+            continue
+        condition = _wmo_condition(code)
+        rows.append(
+            {
+                "time": str(time_value),
+                "hour": forecast_time.strftime("%H:%M"),
+                "condition": condition,
+                "glyph": _condition_glyph(condition),
+                "temperatureC": _number(temperature),
+                "precipitationProbabilityPercent": _number(probability, 0),
+            }
+        )
+    return rows
+
+
 class WeatherComparisonService:
     def __init__(
         self,
@@ -153,7 +191,11 @@ class WeatherComparisonService:
         lon = _coordinate(longitude, "longitude", -180, 180)
         label = " ".join(str(location_name or "").split())[:100]
         providers = (
-            ("open_meteo", "Open-Meteo Best Match", lambda: self._open_meteo(lat, lon)),
+            (
+                "open_meteo",
+                "Open-Meteo Best Match",
+                lambda: self._open_meteo(lat, lon, include_hourly=True),
+            ),
             ("kma", "KMA 모델", lambda: self._open_meteo(lat, lon, model="kma_seamless")),
             ("ecmwf", "ECMWF 모델", lambda: self._open_meteo(lat, lon, model="ecmwf_ifs025")),
             ("met_norway", "MET Norway", lambda: self._met_norway(lat, lon)),
@@ -171,6 +213,7 @@ class WeatherComparisonService:
                 except Exception:
                     errors[source_id] = "unavailable"
 
+        hourly = completed.get("open_meteo", {}).pop("hourly", [])
         sources = [completed[source_id] for source_id, _name, _fetch in providers if source_id in completed]
         temperatures = [float(item["temperatureC"]) for item in sources if item.get("temperatureC") is not None]
         spread = round(max(temperatures) - min(temperatures), 1) if len(temperatures) > 1 else None
@@ -188,6 +231,13 @@ class WeatherComparisonService:
                 lines.append(f"• {name}: 자료 없음")
         if spread is not None:
             lines.extend(("", f"공급자 온도 차이 {spread:g}°C"))
+        if hourly:
+            lines.extend(("", "금일 시간대별"))
+            for item in hourly:
+                temperature = _format_number(item.get("temperatureC"), "°C") or "기온 자료 없음"
+                probability = _format_number(item.get("precipitationProbabilityPercent"), "%")
+                precipitation = f" · 강수 {probability}" if probability else ""
+                lines.append(f"{item['hour']}  {item['glyph']} {temperature}{precipitation}")
         lines.append("현재값은 관측소 실측이 아니라 각 공급자의 최신 예보 모델 값입니다.")
         return {
             "ok": bool(sources),
@@ -200,6 +250,7 @@ class WeatherComparisonService:
                 for source_id, name, _fetch in providers
                 if source_id in errors
             ],
+            "hourly": hourly,
             "temperatureSpreadC": spread,
             "text": "\n".join(lines),
         }
@@ -212,7 +263,14 @@ class WeatherComparisonService:
             raise ShortcutWeatherError("weather_response_invalid")
         return payload
 
-    def _open_meteo(self, latitude: float, longitude: float, *, model: str = "") -> dict[str, Any]:
+    def _open_meteo(
+        self,
+        latitude: float,
+        longitude: float,
+        *,
+        model: str = "",
+        include_hourly: bool = False,
+    ) -> dict[str, Any]:
         query: dict[str, object] = {
             "latitude": latitude,
             "longitude": longitude,
@@ -222,12 +280,14 @@ class WeatherComparisonService:
         }
         if model:
             query["models"] = model
+        if include_hourly:
+            query["hourly"] = HOURLY_FIELDS
         payload = self._json(f"{OPEN_METEO_URL}?{urllib.parse.urlencode(query)}")
         current = payload.get("current")
         if not isinstance(current, Mapping) or _number(current.get("temperature_2m")) is None:
             raise ShortcutWeatherError("weather_no_data")
         condition = _wmo_condition(current.get("weather_code"))
-        return {
+        result = {
             "observedAt": str(current.get("time") or ""),
             "condition": condition,
             "glyph": _condition_glyph(condition),
@@ -239,6 +299,9 @@ class WeatherComparisonService:
             "attribution": "Open-Meteo",
             "attributionUrl": "https://open-meteo.com/",
         }
+        if include_hourly:
+            result["hourly"] = _hourly_rows(payload, current.get("time"))
+        return result
 
     def _met_norway(self, latitude: float, longitude: float) -> dict[str, Any]:
         query = urllib.parse.urlencode({"lat": latitude, "lon": longitude})

@@ -192,9 +192,11 @@ Content-Type: application/json
 {"latitude":36.019,"longitude":129.343,"locationName":"포항"}
 ```
 
-The response `text` includes weather emoji and is ready for Show Result. Each
-structured source also includes `glyph`. Coordinates and results are not
-persisted, and one upstream provider failure does not hide successful sources.
+The response `text` includes weather emoji and the Best Match forecast from the
+current hour through 23:00, ready for Show Result. Each structured source also
+includes `glyph`; the same forecast is available as normalized `hourly` rows.
+Coordinates and results are not persisted, and one upstream provider failure
+does not hide successful sources.
 
 KaosPACS-AIO temporary image second-look calls the same internal tool API:
 
