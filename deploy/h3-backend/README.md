@@ -192,7 +192,8 @@ Content-Type: application/json
 {"latitude":36.019,"longitude":129.343,"locationName":"포항"}
 ```
 
-The response `text` is ready for Show Result. Coordinates and results are not
+The response `text` includes weather emoji and is ready for Show Result. Each
+structured source also includes `glyph`. Coordinates and results are not
 persisted, and one upstream provider failure does not hide successful sources.
 
 KaosPACS-AIO temporary image second-look calls the same internal tool API:

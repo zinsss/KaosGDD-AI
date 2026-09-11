@@ -221,8 +221,9 @@ Content-Type: application/json
 }
 ```
 
-The read-only response includes normalized `sources`, provider failures,
-`temperatureSpreadC`, and a Korean `text` field ready for Show Result. It calls
+The read-only response includes normalized `sources` with a weather `glyph`,
+provider failures, `temperatureSpreadC`, and an emoji-prefixed Korean `text`
+field ready for Show Result. It calls
 Open-Meteo Best Match, the KMA seamless model through Open-Meteo, the ECMWF
 model through Open-Meteo, and MET Norway directly. A failed provider is shown
 as unavailable without suppressing the other results. Values are model-based

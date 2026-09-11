@@ -416,8 +416,10 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.weather.compare.return_value = {
             "ok": True,
             "readOnly": True,
-            "sources": [{"id": "kma", "name": "KMA 모델", "temperatureC": 21}],
-            "text": "현재 위치 날씨 비교\n• KMA 모델: 맑음 · 21°C",
+            "sources": [
+                {"id": "kma", "name": "KMA 모델", "glyph": "☀️", "temperatureC": 21}
+            ],
+            "text": "🌦️ 현재 위치 날씨 비교\n• ☀️ KMA 모델: 맑음 · 21°C",
         }
 
         async def refresh_calendar_surfaces() -> None:

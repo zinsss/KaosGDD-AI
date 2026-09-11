@@ -91,6 +91,21 @@ def _met_condition(value: object) -> str:
     return "알 수 없음"
 
 
+def _condition_glyph(condition: object) -> str:
+    return {
+        "맑음": "☀️",
+        "대체로 맑음": "🌤️",
+        "구름 조금": "⛅",
+        "흐림": "☁️",
+        "안개": "🌫️",
+        "이슬비": "🌦️",
+        "비": "🌧️",
+        "진눈깨비": "🌨️",
+        "눈": "❄️",
+        "뇌우": "⛈️",
+    }.get(str(condition), "🌡️")
+
+
 def _format_number(value: object, suffix: str) -> str:
     number = _number(value)
     return f"{number}{suffix}" if number is not None else ""
@@ -164,10 +179,11 @@ class WeatherComparisonService:
             current = current.replace(tzinfo=timezone.utc)
         generated_at = current.astimezone(KST)
         location_text = label or f"{lat:.4f}, {lon:.4f}"
-        lines = [f"현재 위치 날씨 비교 · {generated_at:%H:%M}", f"📍 {location_text}", ""]
+        lines = [f"🌦️ 현재 위치 날씨 비교 · {generated_at:%H:%M}", f"📍 {location_text}", ""]
         for source_id, name, _fetch in providers:
             if source_id in completed:
-                lines.append(f"• {name}: {_source_text(completed[source_id])}")
+                glyph = completed[source_id]["glyph"]
+                lines.append(f"• {glyph} {name}: {_source_text(completed[source_id])}")
             else:
                 lines.append(f"• {name}: 자료 없음")
         if spread is not None:
@@ -210,9 +226,11 @@ class WeatherComparisonService:
         current = payload.get("current")
         if not isinstance(current, Mapping) or _number(current.get("temperature_2m")) is None:
             raise ShortcutWeatherError("weather_no_data")
+        condition = _wmo_condition(current.get("weather_code"))
         return {
             "observedAt": str(current.get("time") or ""),
-            "condition": _wmo_condition(current.get("weather_code")),
+            "condition": condition,
+            "glyph": _condition_glyph(condition),
             "temperatureC": _number(current.get("temperature_2m")),
             "apparentTemperatureC": _number(current.get("apparent_temperature")),
             "humidityPercent": _number(current.get("relative_humidity_2m"), 0),
@@ -237,9 +255,11 @@ class WeatherComparisonService:
         summary = next_hour.get("summary") if isinstance(next_hour, Mapping) else None
         next_details = next_hour.get("details") if isinstance(next_hour, Mapping) else None
         wind_ms = _number(details.get("wind_speed"))
+        condition = _met_condition(summary.get("symbol_code") if isinstance(summary, Mapping) else "")
         return {
             "observedAt": str(row.get("time") or "") if isinstance(row, Mapping) else "",
-            "condition": _met_condition(summary.get("symbol_code") if isinstance(summary, Mapping) else ""),
+            "condition": condition,
+            "glyph": _condition_glyph(condition),
             "temperatureC": _number(details.get("air_temperature")),
             "apparentTemperatureC": None,
             "humidityPercent": _number(details.get("relative_humidity"), 0),

@@ -100,10 +100,15 @@ class WeatherComparisonServiceTests(unittest.TestCase):
             "met_norway",
         ])
         self.assertEqual(payload["temperatureSpreadC"], 2.5)
+        self.assertIn("🌦️ 현재 위치 날씨 비교", payload["text"])
         self.assertIn("📍 포항", payload["text"])
-        self.assertIn("KMA 모델: 구름 조금", payload["text"])
-        self.assertIn("MET Norway: 구름 조금", payload["text"])
+        self.assertIn("⛅ KMA 모델: 구름 조금", payload["text"])
+        self.assertIn("⛅ MET Norway: 구름 조금", payload["text"])
         self.assertIn("공급자 온도 차이 2.5°C", payload["text"])
+        self.assertEqual(
+            [source["glyph"] for source in payload["sources"]],
+            ["☀️", "⛅", "☁️", "⛅"],
+        )
         self.assertTrue(all(timeout == 8 for _request, timeout in self.requests))
         met_request = next(request for request, _timeout in self.requests if "api.met.no" in request.full_url)
         self.assertIn("KaosGDD/2.0", met_request.get_header("User-agent"))
