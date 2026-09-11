@@ -6,6 +6,7 @@ const test = require("node:test");
 const root = path.join(__dirname, "../..");
 const app = fs.readFileSync(path.join(root, "apps/family-portal/app.js"), "utf8");
 const index = fs.readFileSync(path.join(root, "apps/family-portal/index.html"), "utf8");
+const navigation = fs.readFileSync(path.join(root, "apps/family-portal/navigation.js"), "utf8");
 const view = fs.readFileSync(path.join(root, "apps/family-portal/scribble-view.js"), "utf8");
 const { expiryTitleColor, expiryUrgency, normalizeList } = require("../../apps/family-portal/scribble.js");
 
@@ -35,6 +36,8 @@ test("Scribble is a small staging inbox with both handoff actions", () => {
   assert.match(view, /data-scribble-create/);
   assert.match(view, /data-scribble-to-memo/);
   assert.match(view, /data-scribble-to-paperless/);
+  assert.match(navigation, /route: "scribble", label: "Scribble"/);
+  assert.match(index, /src="\/navigation\.js\?v=8"/);
   assert.match(index, /src="\/scribble\.js\?v=1"/);
   assert.match(index, /src="\/scribble-view\.js\?v=1"/);
   assert.ok(index.indexOf('src="/scribble-view.js?v=1"') < index.indexOf('src="/app.js?v=337"'));
