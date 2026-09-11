@@ -4475,16 +4475,28 @@ function caregiverMinutesTime(value) {
   return `${String(Math.floor(safe / 60)).padStart(2, "0")}:${String(safe % 60).padStart(2, "0")}`;
 }
 
+function caregiverTimeOptions(selectedValue) {
+  const selected = caregiverTimeMinutes(selectedValue) === null ? "" : String(selectedValue);
+  const values = Array.from({ length: 48 }, (_, index) => caregiverMinutesTime(index * 30));
+  if (selected && !values.includes(selected)) values.push(selected);
+  return values
+    .sort((left, right) => caregiverTimeMinutes(left) - caregiverTimeMinutes(right))
+    .map((value) => `<option value="${value}" ${value === selected ? "selected" : ""}>${value}</option>`)
+    .join("");
+}
+
 function caregiverSessionRowHtml(session = {}, index = 0) {
+  const start = session.start || "09:00";
+  const end = session.end || "10:00";
   return `
     <div class="caregiverSessionRow" data-caregiver-session>
       <span class="caregiverSessionNumber" data-caregiver-session-number>${index + 1}</span>
       <label class="caregiverTimeField">
-        <input name="sessionStart" type="time" step="300" value="${escapeHtml(session.start || "09:00")}" aria-label="${uiText("caregiver.startTime", "Start")}" required />
+        <select name="sessionStart" aria-label="${uiText("caregiver.startTime", "Start")}" required>${caregiverTimeOptions(start)}</select>
       </label>
       <span class="caregiverSessionSeparator" aria-hidden="true">~</span>
       <label class="caregiverTimeField">
-        <input name="sessionEnd" type="time" step="300" value="${escapeHtml(session.end || "10:00")}" aria-label="${uiText("caregiver.endTime", "End")}" required />
+        <select name="sessionEnd" aria-label="${uiText("caregiver.endTime", "End")}" required>${caregiverTimeOptions(end)}</select>
       </label>
       <button class="caregiverRemoveButton" type="button" data-caregiver-remove-session aria-label="${uiText("caregiver.removeTime", "Remove time")}" title="${uiText("caregiver.removeTime", "Remove time")}">×</button>
     </div>

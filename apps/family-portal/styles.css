@@ -5532,6 +5532,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 }
 
 .caregiverTimeField input,
+.caregiverTimeField select,
 .caregiverExtraRow input {
   display: block;
   width: 100%;
@@ -5547,12 +5548,21 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   font-size: 18px;
 }
 
-.caregiverTimeField input {
+.caregiverTimeField input,
+.caregiverTimeField select {
   height: 40px;
   padding: 4px 6px;
   text-align: center;
+}
+
+.caregiverTimeField input {
   -webkit-appearance: none;
   appearance: none;
+}
+
+.caregiverTimeField select {
+  padding-inline: 8px 24px;
+  cursor: pointer;
 }
 
 .caregiverTimeField input::-webkit-date-and-time-value {
