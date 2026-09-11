@@ -7,8 +7,10 @@ const root = path.join(__dirname, "../..");
 const app = fs.readFileSync(path.join(root, "apps/family-portal/app.js"), "utf8");
 const styles = fs.readFileSync(path.join(root, "apps/family-portal/styles.css"), "utf8");
 
-test("Agenda gives only today's date group a subtle highlight", () => {
+test("Agenda highlights today with date, marker, and time colors only", () => {
   assert.match(app, /familyAgendaDateGroup \$\{date === today \? "isToday" : ""\}/);
-  assert.match(styles, /\.familyAgendaDateGroup\.isToday\s*\{/);
-  assert.match(styles, /background:\s*color-mix\(in srgb, var\(--nord8\) 6%, transparent\)/);
+  assert.match(styles, /\.familyAgendaDateGroup\.isToday h3\s*\{[^}]*color:\s*var\(--nord8\)/s);
+  assert.match(styles, /\.familyAgendaDateGroup\.isToday \.familyAgendaEventMarker\s*\{/);
+  assert.match(styles, /\.familyAgendaDateGroup\.isToday \.familyAgendaMixedTime\s*\{/);
+  assert.doesNotMatch(styles, /\.familyAgendaDateGroup\.isToday\s*\{[^}]*(?:box-shadow|color-mix)/s);
 });
