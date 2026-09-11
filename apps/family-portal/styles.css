@@ -8124,15 +8124,13 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 
 .scribbleBoard {
   display: grid;
-  gap: 16px;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
 }
 
-.scribbleCapture,
-.scribbleList,
-.scribbleEditor {
-  border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--panel) 92%, transparent);
-  padding: 16px;
+.scribbleMasthead .archiveTitle {
+  color: var(--archive-amber);
 }
 
 .scribbleCapture {
@@ -8140,24 +8138,14 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   gap: 10px;
 }
 
-.scribbleCaptureLine {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
+.scribbleCapture .scribbleTextLine,
+.scribbleEditor .scribbleTextLine {
+  align-items: start;
 }
 
-.scribbleCapture input,
-.scribbleCapture textarea,
-.scribbleEditor input,
-.scribbleEditor textarea {
-  box-sizing: border-box;
-  width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 0;
-  background: var(--panel);
-  color: var(--text);
-  font: inherit;
-  padding: 11px 12px;
+.scribbleCapture .scribbleTextLine > span,
+.scribbleEditor .scribbleTextLine > span {
+  padding-top: 10px;
 }
 
 .scribbleCapture textarea,
@@ -8166,54 +8154,62 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   line-height: 1.55;
 }
 
-.scribbleCapture > p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.78rem;
+.scribbleCaptureFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-left: calc(5.25ch + 8px);
 }
 
-.scribbleFilePicker {
-  justify-self: start;
-  color: var(--accent);
-  cursor: pointer;
+.scribbleCaptureFooter .archiveStatusMessage {
+  margin: 0;
+  color: var(--archive-muted);
+  font-size: 0.72rem;
 }
 
 .scribbleFilePicker input {
-  max-width: min(100%, 360px);
-  margin-left: 8px;
-  padding: 6px;
+  color: var(--archive-muted);
+  cursor: pointer;
+}
+
+.scribbleFilePicker input::file-selector-button {
+  min-height: 30px;
+  margin-right: 10px;
+  border: 1px solid var(--archive-line);
+  border-radius: 0;
+  background: var(--archive-raised);
+  color: var(--archive-cyan);
+  padding: 0 10px;
+  font: 850 0.72rem/1 "Sarasa Gothic Mono", ui-monospace, monospace;
 }
 
 .scribbleWorkspace {
-  display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
 }
 
 .scribbleWorkspace.hasDetail {
   grid-template-columns: minmax(250px, 0.8fr) minmax(320px, 1.2fr);
 }
 
-.scribbleList > header,
-.scribbleEditorHeader {
+.scribbleListStatus {
   display: flex;
   align-items: center;
-  gap: 10px;
-  color: var(--accent);
-  letter-spacing: 0.06em;
+  gap: 8px;
+  color: var(--archive-muted);
+  font-size: 0.72rem;
+  white-space: nowrap;
 }
 
-.scribbleList > header span {
-  margin-left: auto;
-  color: var(--muted);
-  font-size: 0.78rem;
+.scribbleList .archiveIndexHeader {
+  align-items: center;
 }
 
 .scribbleList ol {
   list-style: none;
-  margin: 14px 0 0;
+  margin: 0;
   padding: 0;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--archive-line);
 }
 
 .scribbleRow button {
@@ -8222,21 +8218,29 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   gap: 12px;
   width: 100%;
   border: 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--archive-line);
   background: transparent;
-  color: var(--text);
-  padding: 13px 4px;
+  color: var(--archive-text);
+  padding: 13px 8px;
+  font: inherit;
   text-align: left;
+  cursor: pointer;
 }
 
 .scribbleRow.isSelected button,
 .scribbleRow button:hover {
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  background: rgba(136, 192, 208, 0.08);
 }
 
 .scribbleKind {
-  color: var(--accent);
-  font-size: 1.2rem;
+  display: grid;
+  place-items: center;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--archive-line);
+  color: var(--archive-cyan);
+  font-size: 1rem;
 }
 
 .scribbleRowText {
@@ -8253,49 +8257,52 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 }
 
 .scribbleRowText small {
-  color: var(--muted);
+  color: var(--archive-muted);
+  font-size: 0.72rem;
 }
 
 .scribbleEditor {
   display: grid;
   align-content: start;
-  gap: 14px;
-}
-
-.scribbleEditorHeader button {
-  margin-left: auto;
-}
-
-.scribbleEditor label {
-  display: grid;
-  gap: 6px;
-  color: var(--muted);
-  font-size: 0.78rem;
+  gap: 12px;
 }
 
 .scribbleFile {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: 5.25ch minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 10px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--archive-line);
+  background: rgba(20, 24, 31, 0.32);
   padding: 10px;
 }
 
-.scribbleFile span {
+.scribbleFileType {
+  color: var(--archive-amber);
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.scribbleFile strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--archive-text);
+  font-size: 0.82rem;
 }
 
 .scribbleFile small {
-  color: var(--muted);
+  color: var(--archive-muted);
 }
 
 .scribbleActions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  padding-top: 2px;
+  border-top: 1px solid var(--archive-line);
+}
+
+.scribbleActions .scribbleDeleteAction {
+  margin-left: auto;
+  color: var(--archive-error);
 }
 
 @media (max-width: 760px) {
@@ -8304,12 +8311,25 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   }
 
   .scribbleFile {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 5.25ch minmax(0, 1fr) auto;
   }
 
   .scribbleFile .archiveAction {
     grid-column: 1 / -1;
     justify-self: start;
+  }
+
+  .scribbleCaptureFooter {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .scribbleCaptureFooter .archiveCommandActions {
+    align-self: stretch;
+  }
+
+  .scribbleCaptureFooter .archiveCommandActions .archiveAction {
+    width: 100%;
   }
 }
 
