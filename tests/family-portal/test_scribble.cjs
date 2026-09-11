@@ -8,6 +8,7 @@ const app = fs.readFileSync(path.join(root, "apps/family-portal/app.js"), "utf8"
 const index = fs.readFileSync(path.join(root, "apps/family-portal/index.html"), "utf8");
 const navigation = fs.readFileSync(path.join(root, "apps/family-portal/navigation.js"), "utf8");
 const view = fs.readFileSync(path.join(root, "apps/family-portal/scribble-view.js"), "utf8");
+const deployHelper = fs.readFileSync(path.join(root, "deploy/h3-backend/kaos-h3"), "utf8");
 const { expiryTitleColor, expiryUrgency, normalizeList } = require("../../apps/family-portal/scribble.js");
 
 test("Scribble normalizes text and file captures", () => {
@@ -41,4 +42,8 @@ test("Scribble is a small staging inbox with both handoff actions", () => {
   assert.match(index, /src="\/scribble\.js\?v=1"/);
   assert.match(index, /src="\/scribble-view\.js\?v=1"/);
   assert.ok(index.indexOf('src="/scribble-view.js?v=1"') < index.indexOf('src="/app.js?v=337"'));
+});
+
+test("family portal deployment makes every static asset nginx-readable", () => {
+  assert.match(deployHelper, /rsync -a --chmod=D755,F644 --delete/);
 });

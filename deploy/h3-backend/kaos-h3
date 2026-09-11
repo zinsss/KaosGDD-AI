@@ -701,7 +701,9 @@ family_portal_sync() {
   local app_source=${FAMILY_PORTAL_APP_SOURCE:-${REPO_ROOT}/apps/family-portal}
   local nginx_source=${FAMILY_PORTAL_NGINX_SOURCE:-${DEPLOY_DIR}/family-portal/nginx.conf}
   install -d -m 0755 "${root}/data/family-portal" "${root}/config/family-portal"
-  rsync -a --delete --exclude '*.bak-*' "${app_source}/" "${root}/data/family-portal/"
+  # Static assets must remain readable by the unprivileged nginx worker even
+  # when a newly-created source file inherited a restrictive local umask.
+  rsync -a --chmod=D755,F644 --delete --exclude '*.bak-*' "${app_source}/" "${root}/data/family-portal/"
   install -m 0644 "${nginx_source}" "${root}/config/family-portal/nginx.conf"
   if docker ps --format '{{.Names}}' | grep -qx 'family-portal'; then
     "${SERVICES_COMPOSE[@]}" up --detach --no-deps --force-recreate family-portal
