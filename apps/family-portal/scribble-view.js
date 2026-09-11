@@ -51,13 +51,6 @@ window.KAOS_SCRIBBLE_VIEW = (() => {
     ` : "";
     return `
       <section class="archiveTerminal scribbleBoard" data-archive-kind="scribble" aria-label="Scribble staging inbox">
-        <header class="archiveMasthead scribbleMasthead">
-          <div>
-            <p class="archiveNodeLabel">QUICK CAPTURE</p>
-            <h2 class="archiveTitle">Scribble Inbox</h2>
-          </div>
-          <p class="archiveLinkState ${board.error ? "isError" : board.loading ? "isPending" : ""}">${board.error ? "OFFLINE" : board.loading ? "SYNC" : "READY"}</p>
-        </header>
         <form class="archiveCommand scribbleCapture" data-scribble-create>
           <label class="archiveCommandLine">
             <span>TITLE</span>

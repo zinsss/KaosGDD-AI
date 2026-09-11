@@ -41,10 +41,10 @@ test("Scribble is a small staging inbox with both handoff actions", () => {
   assert.match(index, /src="\/navigation\.js\?v=8"/);
   assert.match(index, /src="\/scribble\.js\?v=1"/);
   assert.match(index, /href="\/styles\.css\?v=333"/);
-  assert.match(index, /src="\/scribble-view\.js\?v=2"/);
-  assert.ok(index.indexOf('src="/scribble-view.js?v=2"') < index.indexOf('src="/app.js?v=337"'));
+  assert.match(index, /src="\/scribble-view\.js\?v=3"/);
+  assert.ok(index.indexOf('src="/scribble-view.js?v=3"') < index.indexOf('src="/app.js?v=337"'));
   assert.match(view, /class="archiveTerminal scribbleBoard"/);
-  assert.match(view, /QUICK CAPTURE/);
+  assert.doesNotMatch(view, /QUICK CAPTURE|Scribble Inbox/);
   assert.match(view, /STAGING QUEUE/);
 });
 
