@@ -14,7 +14,14 @@ from aiohttp import FormData, web
 from aiohttp.test_utils import TestClient, TestServer
 from kaos_governor import MemoryDurableGovernorStore, PendingOperationPayload
 from kaos_governor.durable import validate_pending_payload
-from kaos_governor.documents import PaperlessDocument, PaperlessSearchPage, PaperlessSearchResult, PaperlessTag
+from kaos_governor.documents import (
+    DocumentIntakeStore,
+    PaperlessDocument,
+    PaperlessResult,
+    PaperlessSearchPage,
+    PaperlessSearchResult,
+    PaperlessTag,
+)
 from kaos_governor.memos import Memo, MemoSearchPage, MemoSearchResult
 from kaos_governor.notifications import (
     NotificationInbox,
@@ -277,10 +284,16 @@ class FakeMemos:
 
 class FakePaperless:
     def __init__(self) -> None:
+        self.config = SimpleNamespace(max_document_bytes=2 * 1024 * 1024)
         self.search_calls = []
         self.get_calls = []
         self.update_calls = []
         self.existing_tag_calls = []
+        self.submit_calls = []
+
+    def submit_pdf(self, filename, content, *, title="", tags=(), source="discord"):
+        self.submit_calls.append((filename, content, title, tuple(tags), source))
+        return PaperlessResult(True, "paperless-task-1", filename, "sha256", len(content))
 
     def search_page(self, query, *, limit, page=1):
         self.search_calls.append((query, limit, page))
@@ -410,6 +423,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
             ios_shortcuts_token="shortcut-secret",
             ios_fax_shortcut_token="fax-shortcut-secret",
             ios_scribble_shortcut_token="scribble-shortcut-secret",
+            ios_paperless_shortcut_token="paperless-shortcut-secret",
             notification_inbox=self.notification_inbox,
             web_push=self.web_push,
             calendar_adapter=self.calendar,  # type: ignore[arg-type]
@@ -428,6 +442,9 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
             fax_service=self.fax,  # type: ignore[arg-type]
             fax_stage_root=Path(self.temporary.name) / "fax-proposals",
             scribble_store=ScribbleStore(Path(self.temporary.name) / "scribble" / "index.json"),
+            document_intake_store=DocumentIntakeStore(
+                Path(self.temporary.name) / "documents" / "intake.json"
+            ),
         )
         self.client = TestClient(TestServer(server.application()))
         await self.client.start_server()
@@ -444,6 +461,9 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
 
     def fax_shortcut_headers(self):
         return {"Authorization": "Bearer fax-shortcut-secret"}
+
+    def paperless_shortcut_headers(self):
+        return {"Authorization": "Bearer paperless-shortcut-secret"}
 
     async def test_web_push_routes_require_governor_auth_and_delegate(self) -> None:
         unauthorized = await self.client.get("/tools/web-push/config")
@@ -560,6 +580,81 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(file_response.status, 201)
         self.assertEqual(file_payload["item"]["filename"], "referral.pdf")
         self.assertEqual(file_payload["item"]["kind"], "file")
+
+    async def test_shortcut_paperless_accepts_pdf_and_deduplicates(self) -> None:
+        for token in (
+            "shortcut-secret",
+            "fax-shortcut-secret",
+            "scribble-shortcut-secret",
+            "governor-secret",
+        ):
+            denied = await self.client.post(
+                "/shortcuts/paperless",
+                headers={"Authorization": f"Bearer {token}"},
+                data={"title": "must stay isolated"},
+            )
+            self.assertEqual(denied.status, 401)
+
+        content = _one_page_pdf()
+        form = FormData()
+        form.add_field("title", "진료 의뢰서")
+        form.add_field(
+            "file",
+            content,
+            filename="referral.pdf",
+            content_type="application/pdf",
+        )
+        created = await self.client.post(
+            "/shortcuts/paperless",
+            headers=self.paperless_shortcut_headers(),
+            data=form,
+        )
+        payload = await created.json()
+
+        self.assertEqual(created.status, 201)
+        self.assertFalse(payload["duplicate"])
+        self.assertEqual(payload["item"]["title"], "진료 의뢰서")
+        self.assertEqual(payload["item"]["source"], "shortcut")
+        self.assertEqual(payload["documentsUrl"], "https://kaosgdd.net/#/documents")
+        self.assertEqual(len(self.paperless.submit_calls), 1)
+        self.assertEqual(self.paperless.submit_calls[0][0], "referral.pdf")
+        self.assertEqual(self.paperless.submit_calls[0][4], "shortcut")
+
+        duplicate_form = FormData()
+        duplicate_form.add_field(
+            "document",
+            content,
+            filename="copy.pdf",
+            content_type="application/pdf",
+        )
+        duplicate = await self.client.post(
+            "/shortcuts/paperless",
+            headers=self.paperless_shortcut_headers(),
+            data=duplicate_form,
+        )
+        duplicate_payload = await duplicate.json()
+
+        self.assertEqual(duplicate.status, 200)
+        self.assertTrue(duplicate_payload["duplicate"])
+        self.assertEqual(len(self.paperless.submit_calls), 1)
+
+    async def test_shortcut_paperless_rejects_non_pdf(self) -> None:
+        form = FormData()
+        form.add_field(
+            "file",
+            b"plain text",
+            filename="note.txt",
+            content_type="text/plain",
+        )
+        response = await self.client.post(
+            "/shortcuts/paperless",
+            headers=self.paperless_shortcut_headers(),
+            data=form,
+        )
+
+        self.assertEqual(response.status, 400)
+        self.assertEqual((await response.json())["error"], "pdf_attachment_required")
+        self.assertEqual(self.paperless.submit_calls, [])
 
     async def test_shortcut_notifications_are_read_only_and_ready_to_show(self) -> None:
         self.notification_inbox.enqueue(

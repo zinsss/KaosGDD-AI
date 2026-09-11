@@ -151,12 +151,14 @@ services:
       SCRIBBLE_STATE_PATH: "/data/scribble/index.json"
       IOS_FAX_SHORTCUT_TOKEN_FILE: "/run/secrets/ios_fax_shortcut_token"
       IOS_SCRIBBLE_SHORTCUT_TOKEN_FILE: "/run/secrets/ios_scribble_shortcut_token"
+      IOS_PAPERLESS_SHORTCUT_TOKEN_FILE: "/run/secrets/ios_paperless_shortcut_token"
     entrypoint: ["kaos-governor-tools"]
     secrets:
       - governor_api_token
       - ios_shortcuts_token
       - ios_fax_shortcut_token
       - ios_scribble_shortcut_token
+      - ios_paperless_shortcut_token
       - memos_access_token
       - naver_mail_password
       - paperless_api_token
@@ -170,6 +172,7 @@ services:
       - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/notifications:/data/notifications
       - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/tools:/data/tools
       - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/scribble:/data/scribble
+      - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/documents:/data/documents
     group_add:
       - "${KAOS_HOST_GID:-1000}"
     read_only: true
@@ -208,6 +211,8 @@ secrets:
     file: ./secrets/ios_shortcuts_token
   ios_scribble_shortcut_token:
     file: ./secrets/ios_scribble_shortcut_token
+  ios_paperless_shortcut_token:
+    file: ./secrets/ios_paperless_shortcut_token
   ios_fax_shortcut_token:
     file: ./secrets/ios_fax_shortcut_token
   memos_access_token:

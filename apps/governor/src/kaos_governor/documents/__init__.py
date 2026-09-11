@@ -12,6 +12,7 @@ from .paperless import (
     PaperlessTag,
     PaperlessTask,
 )
+from .submission import submit_pdf_to_inbox
 
 __all__ = (
     "DocumentIntakeError",
@@ -25,4 +26,5 @@ __all__ = (
     "PaperlessSearchResult",
     "PaperlessTag",
     "PaperlessTask",
+    "submit_pdf_to_inbox",
 )

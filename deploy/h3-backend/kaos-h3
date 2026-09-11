@@ -158,6 +158,9 @@ setup() {
   if [[ ! -s "$(secret_path ios_scribble_shortcut_token)" ]]; then
     openssl rand -hex 32 > "$(secret_path ios_scribble_shortcut_token)"
   fi
+  if [[ ! -s "$(secret_path ios_paperless_shortcut_token)" ]]; then
+    openssl rand -hex 32 > "$(secret_path ios_paperless_shortcut_token)"
+  fi
   if [[ ! -s "$(secret_path web_push_vapid_private_key)" ]]; then
     openssl ecparam -name prime256v1 -genkey -noout > "$(secret_path web_push_vapid_private_key)"
   fi
@@ -166,6 +169,7 @@ setup() {
     "${SECRETS_DIR}"/ios_shortcuts_token \
     "${SECRETS_DIR}"/ios_fax_shortcut_token \
     "${SECRETS_DIR}"/ios_scribble_shortcut_token \
+    "${SECRETS_DIR}"/ios_paperless_shortcut_token \
     "${SECRETS_DIR}"/memos_access_token \
     "${SECRETS_DIR}"/naver_mail_password \
     "${SECRETS_DIR}"/paperless_api_token \
@@ -191,6 +195,7 @@ preflight() {
   require_secret ios_shortcuts_token
   require_secret ios_fax_shortcut_token
   require_secret ios_scribble_shortcut_token
+  require_secret ios_paperless_shortcut_token
   [[ "${DISCORD_GUILD_ID:-}" != "123456789012345678" ]] || die "replace the example Discord guild ID"
   [[ "${DISCORD_ALLOWED_USER_IDS:-}" != *"123456789012345678"* ]] || die "replace the example Discord user ID"
   [[ "${DISCORD_ALLOWED_CHANNEL_IDS:-}" != *"123456789012345678"* ]] || die "replace the example Discord channel IDs"

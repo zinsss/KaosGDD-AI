@@ -234,6 +234,38 @@ At least text or one file is required. The PWA supports the same fields at
 first Paperless handoff intentionally accepts PDF only; iOS Shortcuts should
 use Make PDF before uploading an image or other compatible input.
 
+### Paperless Share Sheet contract
+
+PDFs that are already final do not need to pass through Scribble. The direct
+Paperless Shortcut uses its own upload-only credential and the same submission,
+duplicate detection, OCR queue, and Documents Inbox record as the PWA intake.
+The token cannot read documents or use the broader Governor tools API.
+
+```text
+POST /shortcuts/paperless
+Authorization: Bearer <IOS_PAPERLESS_SHORTCUT_TOKEN>
+Content-Type: multipart/form-data
+
+title=<optional text>
+file=<one PDF, PAPERLESS_INBOX_MAX_ATTACHMENT_MB maximum>
+```
+
+`document` is accepted as an alias for `file`. A new upload returns HTTP 201;
+an already-active matching PDF returns HTTP 200 with `duplicate: true` and is
+not submitted twice. The Shortcut-friendly response includes `text` for Show
+Result and `documentsUrl` for optional review in the PWA. Images should first
+use Make PDF in Shortcuts.
+
+### Planned Memos editing
+
+Add edit from the existing Memos detail view rather than another top-level
+menu. The editor will load the current title/body, provide Save and Cancel,
+and send the existing governed memo-edit proposal. Save must include the
+version or last-modified value that was loaded; if the memo changed elsewhere,
+the PWA shows a conflict and preserves the user's draft instead of silently
+overwriting the newer content. Create, edit, and delete continue to use Memos
+as the sole authority.
+
 ### Fax Share Sheet contract
 
 Outbound fax uses one transport-neutral `FaxMutationService`. The iOS route

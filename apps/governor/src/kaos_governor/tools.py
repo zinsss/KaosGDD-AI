@@ -25,7 +25,12 @@ from . import (
     PendingOperationPayload,
 )
 from .calendar import CalendarAdapterClient, CalendarAdapterError, profile_host, render_month_png
-from .documents import DocumentIntakeError, PaperlessDocumentService
+from .documents import (
+    DocumentIntakeError,
+    DocumentIntakeStore,
+    PaperlessDocumentService,
+    submit_pdf_to_inbox,
+)
 from .fax import FaxError, FaxService
 from .fax_mutations import FaxMutationService, fax_preview_payload
 from .memos import (
@@ -434,11 +439,13 @@ class BrainToolServer:
         ios_shortcuts_token: str = "",
         ios_fax_shortcut_token: str = "",
         ios_scribble_shortcut_token: str = "",
+        ios_paperless_shortcut_token: str = "",
         notification_inbox: NotificationInbox | None = None,
         web_push: WebPushService | None = None,
         fax_service: FaxService | None = None,
         fax_stage_root: Path | None = None,
         scribble_store: ScribbleStore | None = None,
+        document_intake_store: DocumentIntakeStore | None = None,
     ) -> None:
         self._host = host
         self._port = port
@@ -446,12 +453,14 @@ class BrainToolServer:
         self._ios_shortcuts_token = ios_shortcuts_token
         self._ios_fax_shortcut_token = ios_fax_shortcut_token
         self._ios_scribble_shortcut_token = ios_scribble_shortcut_token
+        self._ios_paperless_shortcut_token = ios_paperless_shortcut_token
         self._notification_inbox = notification_inbox
         self._scribble_store = scribble_store
         self._web_push = web_push
         self._calendar_adapter = calendar_adapter
         self._memos = memos
         self._paperless = paperless
+        self._document_intake_store = document_intake_store
         self._calendar_refresh_callback = calendar_refresh_callback or task_refresh_callback
         self._import_status_provider = import_status_provider
         self._system_status_provider = system_status_provider
@@ -489,6 +498,7 @@ class BrainToolServer:
         app.router.add_get("/shortcuts/notifications", self._list_notifications)
         app.router.add_get("/shortcuts/briefing", self._shortcut_briefing)
         app.router.add_post("/shortcuts/scribble", self._shortcut_scribble_create)
+        app.router.add_post("/shortcuts/paperless", self._shortcut_paperless_create)
         app.router.add_post("/shortcuts/fax/send/proposals", self._propose_fax_send)
         app.router.add_post(
             "/shortcuts/fax/send/proposals/{confirmation_id}/approve",
@@ -579,6 +589,10 @@ class BrainToolServer:
         if request.path == "/shortcuts/scribble":
             if not self._authorized(request, self._ios_scribble_shortcut_token):
                 return web.json_response({"error": "scribble_shortcut_api_unauthorized"}, status=401)
+            return await handler(request)
+        if request.path == "/shortcuts/paperless":
+            if not self._authorized(request, self._ios_paperless_shortcut_token):
+                return web.json_response({"error": "paperless_shortcut_api_unauthorized"}, status=401)
             return await handler(request)
         if request.path.startswith("/shortcuts/"):
             if not self._authorized(request, self._ios_shortcuts_token):
@@ -726,6 +740,60 @@ class BrainToolServer:
         except (json.JSONDecodeError, ValueError, aiohttp.ContentTypeError):
             return web.json_response({"error": "scribble_invalid_payload"}, status=400)
         return web.json_response({"ok": True, "item": item.as_dict()}, status=201)
+
+    async def _shortcut_paperless_create(self, request: web.Request) -> web.Response:
+        store = self._document_intake_store
+        if store is None:
+            return web.json_response({"error": "paperless_intake_unavailable"}, status=503)
+        if not request.content_type.startswith("multipart/"):
+            return web.json_response({"error": "multipart_form_required"}, status=400)
+        try:
+            title = ""
+            filename = ""
+            content = b""
+            reader = await request.multipart()
+            while part := await reader.next():
+                if part.filename and part.name in {"file", "document"}:
+                    filename = part.filename
+                    chunks: list[bytes] = []
+                    size = 0
+                    while chunk := await part.read_chunk():
+                        size += len(chunk)
+                        if size > self._paperless.config.max_document_bytes:
+                            raise DocumentIntakeError("pdf_size_invalid")
+                        chunks.append(chunk)
+                    content = b"".join(chunks)
+                elif part.name == "title":
+                    title = (await part.text()).strip()
+            payload = await asyncio.to_thread(
+                submit_pdf_to_inbox,
+                filename=filename,
+                content=content,
+                title=title,
+                source="shortcut",
+                service=self._paperless,
+                store=store,
+            )
+        except DocumentIntakeError as exc:
+            return _paperless_shortcut_error(exc)
+        except (ValueError, aiohttp.ContentTypeError):
+            return web.json_response({"error": "multipart_form_required"}, status=400)
+
+        duplicate = bool(payload.get("duplicate"))
+        message = (
+            "이미 Documents Inbox에 있는 PDF입니다."
+            if duplicate
+            else "Paperless에 접수했습니다. OCR 처리 중입니다."
+        )
+        return web.json_response(
+            {
+                **payload,
+                "message": message,
+                "text": message,
+                "documentsUrl": "https://kaosgdd.net/#/documents",
+            },
+            status=200 if duplicate else 201,
+        )
 
     async def _acknowledge_notification(self, request: web.Request) -> web.Response:
         inbox = self._notification_inbox
@@ -3545,4 +3613,18 @@ def _memos_error(error: ValueError | MemosError) -> web.Response:
 
 def _document_error(error: DocumentIntakeError) -> web.Response:
     status = 503 if error.code == "paperless_not_configured" else 400
+    return web.json_response({"error": error.code}, status=status)
+
+
+def _paperless_shortcut_error(error: DocumentIntakeError) -> web.Response:
+    if error.code == "pdf_size_invalid":
+        status = 413
+    elif error.code in {
+        "pdf_attachment_required",
+        "invalid_pdf_signature",
+        "multipart_form_required",
+    }:
+        status = 400
+    else:
+        status = 503
     return web.json_response({"error": error.code}, status=status)

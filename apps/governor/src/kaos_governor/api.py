@@ -34,6 +34,7 @@ from kaos_governor.documents import (
     DocumentIntakeError,
     PaperlessConfig,
     PaperlessDocumentService,
+    submit_pdf_to_inbox,
 )
 from kaos_governor.fax import FaxConfig, FaxError, FaxService
 from kaos_governor.mail import MailOrganizerConfig, MailOrganizerError, NaverMailOrganizer
@@ -2574,24 +2575,15 @@ def paperless_upload_payload(
     max_bytes = active_service.config.max_document_bytes + MAX_MULTIPART_OVERHEAD_BYTES
     fields, files = multipart_form_request(handler, max_bytes=max_bytes)
     filename, content = files.get("document") or files.get("file") or ("", b"")
-    if not filename or not content:
-        raise DocumentIntakeError("pdf_attachment_required")
-    if not str(filename).lower().endswith(".pdf"):
-        raise DocumentIntakeError("pdf_attachment_required")
-    sha256 = hashlib.sha256(content).hexdigest()
-    existing = active_store.find_active_by_sha(sha256)
-    if existing:
-        return {"ok": True, "duplicate": True, "item": existing.as_dict()}
     title = fields.get("title") or ""
-    result = active_service.submit_pdf(filename, content, title=title, source="pwa")
-    record = active_store.add_submitted(
-        title=title or result.filename,
-        filename=result.filename,
+    return submit_pdf_to_inbox(
+        filename=filename,
         content=content,
-        task_id=result.task_id,
+        title=title,
         source="pwa",
+        service=active_service,
+        store=active_store,
     )
-    return {"ok": True, "duplicate": False, "item": record.as_dict(), "paperless": result.as_dict()}
 
 
 def paperless_document_id(path: str) -> str:

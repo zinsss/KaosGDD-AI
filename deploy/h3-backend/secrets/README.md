@@ -6,6 +6,7 @@
 - `governor_api_token`
 - `ios_shortcuts_token`
 - `ios_scribble_shortcut_token`
+- `ios_paperless_shortcut_token`
 - `ios_fax_shortcut_token`
 - `memos_access_token`
 - `naver_mail_password`
@@ -33,6 +34,7 @@ committed. `kaos-h3 preflight` requires it whenever
 
 `ios_shortcuts_token` authenticates only read-only `/shortcuts/...` routes.
 `ios_scribble_shortcut_token` can only add items to the Scribble staging inbox.
+`ios_paperless_shortcut_token` can only submit shared PDFs to the Paperless intake.
 `ios_fax_shortcut_token` is a separate personal credential for the narrowly
 scoped, confirmation-required outbound fax routes. Neither token grants access
 to the powerful Governor API or the Office Fax Connector credential.

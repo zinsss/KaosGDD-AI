@@ -13,7 +13,7 @@ from typing import Mapping
 from . import __version__
 from .calendar import CalendarAdapterClient, CalendarAdapterConfig
 from .database import wait_for_database_and_migrate
-from .documents import PaperlessConfig, PaperlessDocumentService
+from .documents import DocumentIntakeStore, PaperlessConfig, PaperlessDocumentService
 from .fax import FaxConfig, FaxService
 from .mail import MailOrganizerConfig, NaverMailConfig, NaverMailOrganizer, NaverMailPoller
 from .memos import MemoMutationService, MemosConfig, MemosService
@@ -79,6 +79,7 @@ class GovernorToolsRuntime:
         shortcuts_token = _secret(source, "IOS_SHORTCUTS_TOKEN")
         fax_shortcut_token = _secret(source, "IOS_FAX_SHORTCUT_TOKEN")
         scribble_shortcut_token = _secret(source, "IOS_SCRIBBLE_SHORTCUT_TOKEN")
+        paperless_shortcut_token = _secret(source, "IOS_PAPERLESS_SHORTCUT_TOKEN")
         if not governor_token:
             raise ToolRuntimeConfigurationError("GOVERNOR_API_TOKEN is required")
         if not shortcuts_token:
@@ -87,6 +88,8 @@ class GovernorToolsRuntime:
             raise ToolRuntimeConfigurationError("IOS_FAX_SHORTCUT_TOKEN is required")
         if not scribble_shortcut_token:
             raise ToolRuntimeConfigurationError("IOS_SCRIBBLE_SHORTCUT_TOKEN is required")
+        if not paperless_shortcut_token:
+            raise ToolRuntimeConfigurationError("IOS_PAPERLESS_SHORTCUT_TOKEN is required")
 
         calendar_url = source.get(
             "CALENDAR_ADAPTER_INTERNAL_URL",
@@ -118,6 +121,7 @@ class GovernorToolsRuntime:
             ios_shortcuts_token=shortcuts_token,
             ios_fax_shortcut_token=fax_shortcut_token,
             ios_scribble_shortcut_token=scribble_shortcut_token,
+            ios_paperless_shortcut_token=paperless_shortcut_token,
             notification_inbox=NotificationInbox(NotificationInboxConfig.from_env(source)),
             web_push=WebPushService(WebPushConfig.from_env(source)),
             calendar_adapter=calendar,
@@ -145,6 +149,9 @@ class GovernorToolsRuntime:
             second_look_status_path=self._tool_status_path,
             scribble_store=ScribbleStore(
                 Path(source.get("SCRIBBLE_STATE_PATH", "/data/scribble/index.json"))
+            ),
+            document_intake_store=DocumentIntakeStore(
+                Path(source.get("DOCUMENT_INTAKE_STATE_PATH", "/data/documents/intake.json"))
             ),
         )
 
