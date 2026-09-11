@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
@@ -99,7 +100,10 @@ class NaverMailLifecycleWorkerTests(unittest.TestCase):
             self.assertEqual(marker, {"messageId": "imap:세무사:42"})
             return 1
 
-        poller = SimpleNamespace(scan=mock.Mock(side_effect=scan))
+        poller = SimpleNamespace(
+            config=SimpleNamespace(notification_folder_roots=("세무사", "영덕군보건소")),
+            scan=mock.Mock(side_effect=scan),
+        )
         notifications = SimpleNamespace(enqueue=mock.Mock(return_value=True))
         lifecycle = NaverMailLifecycleWorker(poller, notifications)  # type: ignore[arg-type]
 
@@ -111,6 +115,43 @@ class NaverMailLifecycleWorkerTests(unittest.TestCase):
         self.assertEqual(notification.message, "Mail received.")
         self.assertEqual(notification.priority, 0)
         self.assertEqual(notification.key, mail_text_notification(mail).key)
+
+    def test_inbox_mail_is_archived_without_notification(self) -> None:
+        mail = replace(self.message(), mailbox="INBOX")
+
+        def scan(summary_sender, _attachment_sender):
+            self.assertEqual(summary_sender(mail), {"messageId": "imap:INBOX:42"})
+            return 1
+
+        poller = SimpleNamespace(
+            config=SimpleNamespace(notification_folder_roots=("세무사", "영덕군보건소")),
+            scan=mock.Mock(side_effect=scan),
+        )
+        notifications = SimpleNamespace(enqueue=mock.Mock(return_value=True))
+
+        result = NaverMailLifecycleWorker(poller, notifications).run_once()  # type: ignore[arg-type]
+
+        self.assertEqual(result.processed, 1)
+        self.assertEqual(result.notification_count, 0)
+        notifications.enqueue.assert_not_called()
+
+    def test_nested_target_mailbox_still_notifies(self) -> None:
+        mail = replace(self.message(), mailbox="각종공문/영덕군보건소")
+
+        def scan(summary_sender, _attachment_sender):
+            summary_sender(mail)
+            return 1
+
+        poller = SimpleNamespace(
+            config=SimpleNamespace(notification_folder_roots=("세무사", "영덕군보건소")),
+            scan=mock.Mock(side_effect=scan),
+        )
+        notifications = SimpleNamespace(enqueue=mock.Mock(return_value=True))
+
+        result = NaverMailLifecycleWorker(poller, notifications).run_once()  # type: ignore[arg-type]
+
+        self.assertEqual(result.notification_count, 1)
+        notifications.enqueue.assert_called_once()
 
 
 if __name__ == "__main__":

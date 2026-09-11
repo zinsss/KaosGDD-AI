@@ -96,6 +96,7 @@ services:
       GOVERNOR_DB_PORT: "5432"
       RECURRING_TASK_SYNC_ENABLED: "${RECURRING_TASK_SYNC_ENABLED:-true}"
       RECURRING_TASK_SYNC_POLL_SECONDS: "${RECURRING_TASK_SYNC_POLL_SECONDS:-300}"
+      MAIL_NAVER_NOTIFICATION_FOLDERS: "${MAIL_NAVER_NOTIFICATION_FOLDERS:-세무사,영덕군보건소}"
     secrets:
       - naver_mail_password
       - fax_connector_token

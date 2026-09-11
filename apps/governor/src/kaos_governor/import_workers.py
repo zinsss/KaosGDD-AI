@@ -8,7 +8,7 @@ import tempfile
 from typing import Callable
 
 from .fax import FaxAction, FaxError, FaxService
-from .mail import Attachment, MailMessage, NaverMailPoller
+from .mail import Attachment, MailMessage, NaverMailPoller, mailbox_matches_folder
 from .notifications import TextNotification, TextNotificationService
 
 
@@ -126,6 +126,7 @@ class NaverMailLifecycleWorker:
     ) -> None:
         self.poller = poller
         self.notifications = notifications
+        self.notification_folders = poller.config.notification_folder_roots
         self.notification_count = 0
 
     def run_once(self) -> ImportCycleResult:
@@ -134,7 +135,11 @@ class NaverMailLifecycleWorker:
         return ImportCycleResult(archived, self.notification_count)
 
     def _record_mail(self, mail: MailMessage) -> dict[str, object]:
-        if self.notifications.enqueue(mail_text_notification(mail)):
+        should_notify = any(
+            mailbox_matches_folder(mail.mailbox, folder)
+            for folder in self.notification_folders
+        )
+        if should_notify and self.notifications.enqueue(mail_text_notification(mail)):
             self.notification_count += 1
         # The authoritative message and attachments stay in Naver IMAP. This
         # durable marker lets the existing retry checkpoint advance without a

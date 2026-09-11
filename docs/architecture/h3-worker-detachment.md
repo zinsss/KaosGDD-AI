@@ -74,7 +74,11 @@ organic 07:00 digest is the production observation gate.
 The third cutover was promoted on 2026-08-30 in commit `3d98e40`. With
 `MAIL_NAVER_OWNER=worker`, the Governor worker advances the existing IMAP
 checkpoint, retains messages and attachments in authoritative Naver IMAP, and
-queues only `Mail received.`. With `FAX_LIFECYCLE_OWNER=worker`, it reconciles
+queues only `Mail received.` for mail in the configured
+`MAIL_NAVER_NOTIFICATION_FOLDERS` (`세무사` and `영덕군보건소` by default).
+Other configured mailboxes, including `INBOX`, still advance their checkpoints
+without creating notification-inbox or Web Push alerts. With
+`FAX_LIFECYCLE_OWNER=worker`, it reconciles
 the existing Office Fax Connector state, stores incoming PDFs in the current
 H3 fax archive, and queues only final fax alerts. Shared fax JSON writes use a
 cross-process lock because transitional KaosDiscoord fax intake can still

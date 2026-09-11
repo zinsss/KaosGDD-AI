@@ -86,6 +86,7 @@ class NaverMailConfigTests(unittest.TestCase):
     def test_default_lifecycle_roots_include_inbox(self) -> None:
         config = NaverMailConfig.from_env({})
         self.assertEqual(config.folder_roots, ("INBOX", "세무사", "영덕군보건소"))
+        self.assertEqual(config.notification_folder_roots, ("세무사", "영덕군보건소"))
 
 
 class FakeIMAP:

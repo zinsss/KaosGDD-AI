@@ -41,6 +41,7 @@ class NaverMailConfig:
     preview_characters: int
     mark_existing_on_first_run: bool
     owner: str = "discord"
+    notification_folder_roots: tuple[str, ...] = ("세무사", "영덕군보건소")
 
     @property
     def configured(self) -> bool:
@@ -57,6 +58,14 @@ class NaverMailConfig:
             for value in source.get("MAIL_NAVER_FOLDERS", "INBOX,세무사,영덕군보건소").split(",")
             if value.strip()
         )
+        notification_roots = tuple(
+            value.strip()
+            for value in source.get(
+                "MAIL_NAVER_NOTIFICATION_FOLDERS",
+                "세무사,영덕군보건소",
+            ).split(",")
+            if value.strip()
+        )
         return cls(
             enabled=_env_bool(source, "MAIL_NAVER_ENABLED"),
             host=source.get("MAIL_NAVER_HOST", "imap.naver.com").strip(),
@@ -71,6 +80,7 @@ class NaverMailConfig:
             preview_characters=max(200, min(3000, int(source.get("MAIL_NAVER_PREVIEW_CHARS", "2200")))),
             mark_existing_on_first_run=_env_bool(source, "MAIL_NAVER_MARK_EXISTING_ON_FIRST_RUN", True),
             owner=owner,
+            notification_folder_roots=notification_roots,
         )
 
 
@@ -253,6 +263,11 @@ def _stored_mailbox_matches_filter(raw_name: str, display_name: str, target: str
     return False
 
 
+def mailbox_matches_folder(mailbox: str, target: str) -> bool:
+    """Match a visible mailbox name against an exact or nested folder segment."""
+    return _stored_mailbox_matches_filter(mailbox, mailbox, target)
+
+
 def format_sender(value: object) -> str:
     raw = " ".join(str(value or "").replace("\r", " ").replace("\n", " ").split())
     formatted: list[str] = []
@@ -391,6 +406,7 @@ class NaverMailPoller:
             "configured": self.config.configured,
             "started": started,
             "folders": list(self.config.folder_roots),
+            "notificationFolders": list(self.config.notification_folder_roots),
             "statePath": str(self.config.state_path),
             "pollSeconds": self.config.poll_seconds,
             "lastScanAt": last_scan_at,
