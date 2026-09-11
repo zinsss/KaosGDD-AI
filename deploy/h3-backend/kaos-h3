@@ -555,6 +555,7 @@ services_preflight() {
   require_file "${root}/config/family-portal/nginx.conf"
   require_dir "${root}/data/family-portal"
   require_file "${root}/data/family-portal/index.html"
+  require_file "${root}/data/family-portal/markdown-editor.js"
   require_file "${root}/data/family-portal/scribble.js"
   require_file "${root}/data/family-portal/scribble-view.js"
   if grep -q 'kaosgdd-gov' "${root}/config/family-portal/nginx.conf"; then
@@ -624,6 +625,7 @@ family_portal_source_preflight() {
   require_file "${app_source}/deep-links.js"
   require_file "${app_source}/documents.js"
   require_file "${app_source}/fax.js"
+  require_file "${app_source}/markdown-editor.js"
   require_file "${app_source}/navigation.js"
   require_file "${app_source}/scribble.js"
   require_file "${app_source}/scribble-view.js"

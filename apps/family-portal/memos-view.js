@@ -54,16 +54,37 @@ window.KAOS_MEMOS_VIEW = (() => {
                   <p>MEMO #${deps.escapeHtml(deps.memoDisplayNumber(selected))}</p>
                   <h3 id="memoDetailTitle">${deps.escapeHtml(selected.title)}</h3>
                 </div>
-                <button class="archiveAction" type="button" data-memo-close>BACK</button>
+                <div class="archiveActions memoDetailActions">
+                  ${memos.editing ? "" : `<button class="archiveAction isActive" type="button" data-memo-edit-start>EDIT</button>`}
+                  <button class="archiveAction" type="button" data-memo-close ${memos.editSaving ? "disabled" : ""}>BACK</button>
+                </div>
               </header>
-              <dl class="archiveMetadata">
-                ${deps.archiveMeta("Updated", selected.updated ? deps.formatDocumentDate(selected.updated) : "")}
-                ${deps.archiveMeta("Created", selected.created ? deps.formatDocumentDate(selected.created) : "")}
-              </dl>
-              <div class="archiveOcrRegion" role="region" aria-label="Memo content" tabindex="0">
-                <p>MEMO TEXT</p>
-                <pre>${deps.escapeHtml(selected.content || "No memo content.")}</pre>
-              </div>
+              ${
+                memos.editing
+                  ? `
+                    <form class="memoEditForm" data-memo-edit="${deps.escapeHtml(selected.name)}">
+                      <label>
+                        <span>MARKDOWN</span>
+                        <textarea name="content" rows="16" required data-memo-edit-content data-markdown-editor>${deps.escapeHtml(memos.editDraft)}</textarea>
+                      </label>
+                      ${memos.editError ? `<p class="formNote isError" role="alert">${deps.escapeHtml(memos.editError)}</p>` : ""}
+                      <div class="archiveActions memoEditFormActions">
+                        <button class="archiveAction" type="button" data-memo-edit-cancel ${memos.editSaving ? "disabled" : ""}>CANCEL</button>
+                        <button class="archiveAction isActive" type="submit" ${memos.editSaving ? "disabled" : ""}>${memos.editSaving ? "SAVING" : "SAVE"}</button>
+                      </div>
+                    </form>
+                  `
+                  : `
+                    <dl class="archiveMetadata">
+                      ${deps.archiveMeta("Updated", selected.updated ? deps.formatDocumentDate(selected.updated) : "")}
+                      ${deps.archiveMeta("Created", selected.created ? deps.formatDocumentDate(selected.created) : "")}
+                    </dl>
+                    <div class="archiveOcrRegion" role="region" aria-label="Memo content" tabindex="0">
+                      <p>MEMO TEXT</p>
+                      <pre>${deps.escapeHtml(selected.content || "No memo content.")}</pre>
+                    </div>
+                  `
+              }
             </section>
           `
           : "";

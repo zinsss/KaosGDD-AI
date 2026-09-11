@@ -31,7 +31,7 @@ window.KAOS_SCRIBBLE_VIEW = (() => {
         </label>
         <label class="archiveCommandLine scribbleTextLine">
           <span>TEXT</span>
-          <textarea name="text" rows="10" placeholder="Add a note or edit the captured text">${deps.escapeHtml(selected.text)}</textarea>
+          <textarea name="text" rows="10" placeholder="Add a note or edit the captured text" data-markdown-editor>${deps.escapeHtml(selected.text)}</textarea>
         </label>
         ${selected.hasFile ? `
           <div class="scribbleFile">
@@ -58,7 +58,7 @@ window.KAOS_SCRIBBLE_VIEW = (() => {
           </label>
           <label class="archiveCommandLine scribbleTextLine">
             <span>TEXT</span>
-            <textarea name="text" rows="4" placeholder="Write something to sort out later…" data-scribble-capture-text></textarea>
+            <textarea name="text" rows="4" placeholder="Write something to sort out later…" data-scribble-capture-text data-markdown-editor></textarea>
           </label>
           <label class="archiveCommandLine scribbleFilePicker">
             <span>FILE</span>

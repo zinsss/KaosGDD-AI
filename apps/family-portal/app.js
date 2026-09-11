@@ -204,6 +204,11 @@ const state = {
     selectedName: "",
     detailLoading: false,
     detailError: "",
+    editing: false,
+    editDraft: "",
+    editBaseUpdated: "",
+    editSaving: false,
+    editError: "",
   },
   scribble: {
     checked: false,
@@ -2025,6 +2030,36 @@ async function createMemo(content) {
   return payload;
 }
 
+async function updateMemoContent(name, content, expectedUpdated = "") {
+  const id = memoNameId(name);
+  const normalized = String(content || "").trim();
+  if (!id || !normalized) throw new Error("memo_content_required");
+  const detailUrl = `/api/memos/api/v1/memos/${encodeURIComponent(id)}`;
+  if (expectedUpdated) {
+    const currentResponse = await fetch(detailUrl, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    const currentPayload = await currentResponse.json().catch(() => ({}));
+    if (!currentResponse.ok) {
+      throw new Error(currentPayload.error || currentPayload.message || `HTTP ${currentResponse.status}`);
+    }
+    const current = normalizeMemo(currentPayload);
+    if (current.updated && current.updated !== expectedUpdated) throw new Error("memo_changed_elsewhere");
+  }
+  const response = await fetch(`${detailUrl}?updateMask=content`, {
+    method: "PATCH",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ content: normalized }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || payload.message || `HTTP ${response.status}`);
+  return normalizeMemo(payload);
+}
+
 function scribbleMeta(item) {
   const date = archiveDateParts(item.createdAt);
   const source = item.source === "shortcut" ? "SHORTCUT" : "PWA";
@@ -2985,6 +3020,11 @@ async function refreshMemos() {
   state.memos.selected = null;
   state.memos.selectedName = "";
   state.memos.detailError = "";
+  state.memos.editing = false;
+  state.memos.editDraft = "";
+  state.memos.editBaseUpdated = "";
+  state.memos.editSaving = false;
+  state.memos.editError = "";
   await loadMemos({ force: true });
 }
 
@@ -2995,6 +3035,11 @@ async function searchMemos(query) {
   state.memos.selected = null;
   state.memos.selectedName = "";
   state.memos.detailError = "";
+  state.memos.editing = false;
+  state.memos.editDraft = "";
+  state.memos.editBaseUpdated = "";
+  state.memos.editSaving = false;
+  state.memos.editError = "";
   render();
   await loadMemos({ force: true });
 }
@@ -3007,6 +3052,11 @@ async function loadMemoDetail(name) {
   state.memos.detailLoading = false;
   state.memos.detailError = selected ? "" : "Memo is unavailable";
   state.memos.selected = selected;
+  state.memos.editing = false;
+  state.memos.editDraft = "";
+  state.memos.editBaseUpdated = "";
+  state.memos.editSaving = false;
+  state.memos.editError = "";
   if (getRoute() === "memos") render();
 }
 
@@ -3016,6 +3066,11 @@ function closeMemoDetail() {
   state.memos.selected = null;
   state.memos.detailLoading = false;
   state.memos.detailError = "";
+  state.memos.editing = false;
+  state.memos.editDraft = "";
+  state.memos.editBaseUpdated = "";
+  state.memos.editSaving = false;
+  state.memos.editError = "";
   render();
   if (selectedName) document.querySelector(`[data-memo-open="${cssIdentifier(selectedName)}"]`)?.focus();
 }
@@ -8984,6 +9039,26 @@ function memosViewContext() {
   };
 }
 
+function startMemoEdit() {
+  if (!state.memos.selected) return;
+  state.memos.editing = true;
+  state.memos.editDraft = state.memos.selected.content || "";
+  state.memos.editBaseUpdated = state.memos.selected.updated || "";
+  state.memos.editSaving = false;
+  state.memos.editError = "";
+  render();
+  window.setTimeout(() => document.querySelector("[data-memo-edit-content]")?.focus(), 0);
+}
+
+function cancelMemoEdit() {
+  state.memos.editing = false;
+  state.memos.editDraft = "";
+  state.memos.editBaseUpdated = "";
+  state.memos.editSaving = false;
+  state.memos.editError = "";
+  render();
+}
+
 function renderAddMemo() {
   const composer = state.memoComposer;
   return `
@@ -9005,6 +9080,7 @@ function renderAddMemo() {
             placeholder="# Title&#10;memo body&#10;#tag"
             required
             data-memo-content
+            data-markdown-editor
           >${escapeHtml(composer.content)}</textarea>
         </label>
         ${
@@ -9693,6 +9769,7 @@ function render() {
   else if (route === "ledger") view.innerHTML = renderLedger();
   else if (route === "settings") view.innerHTML = renderSettings();
   else view.innerHTML = renderToday();
+  window.KAOS_MARKDOWN_EDITOR?.enhanceAll(view);
   if (overlayRoot) overlayRoot.innerHTML = route === "rouny" ? renderRounyOverlay() : "";
   updateOverlayMetrics();
   if (route === "calendar" || route === "today" || ((route === "add-event" || route === "edit-event") && isDesktopLayout())) {
@@ -10138,6 +10215,16 @@ document.addEventListener("click", async (event) => {
 
   if (event.target.closest("[data-memo-close]")) {
     closeMemoDetail();
+    return;
+  }
+
+  if (event.target.closest("[data-memo-edit-start]")) {
+    startMemoEdit();
+    return;
+  }
+
+  if (event.target.closest("[data-memo-edit-cancel]")) {
+    cancelMemoEdit();
     return;
   }
 
@@ -11187,6 +11274,36 @@ document.addEventListener("submit", async (event) => {
     return;
   }
 
+  const memoEditForm = event.target.closest("[data-memo-edit]");
+  if (memoEditForm) {
+    event.preventDefault();
+    const formData = new FormData(memoEditForm);
+    const content = String(formData.get("content") || "");
+    const selected = state.memos.selected;
+    if (!selected || state.memos.editSaving) return;
+    state.memos.editDraft = content;
+    state.memos.editSaving = true;
+    state.memos.editError = "";
+    render();
+    try {
+      const updated = await updateMemoContent(selected.name, content, state.memos.editBaseUpdated);
+      state.memos.items = state.memos.items.map((item) => item.name === updated.name ? updated : item);
+      state.memos.selected = updated;
+      state.memos.editing = false;
+      state.memos.editDraft = "";
+      state.memos.editBaseUpdated = "";
+      state.memos.editError = "";
+    } catch (error) {
+      state.memos.editError = error.message === "memo_changed_elsewhere"
+        ? "This memo changed elsewhere. Your draft was kept; close and reopen the memo before saving again."
+        : error.message || "Could not update memo";
+    } finally {
+      state.memos.editSaving = false;
+      render();
+    }
+    return;
+  }
+
   const memoForm = event.target.closest("[data-create-memo]");
   if (memoForm) {
     event.preventDefault();
@@ -11577,6 +11694,13 @@ document.addEventListener(
 document.addEventListener("input", (event) => {
   if (window.KAOS_FAMILY_SMART_EVENTS.handleInput(familySmartEventContext(), event)) {
     return;
+  }
+
+  if (event.target.matches("[data-memo-edit-content]")) {
+    state.memos.editDraft = event.target.value;
+  }
+  if (event.target.matches("[data-memo-content]")) {
+    state.memoComposer.content = event.target.value;
   }
 
   const caregiverForm = event.target.closest("[data-caregiver-day-form]");
