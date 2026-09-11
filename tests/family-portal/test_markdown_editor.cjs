@@ -51,7 +51,9 @@ test("Memos and Scribble share the lightweight editor", () => {
   assert.match(memosView, /data-memo-edit-content data-markdown-editor/);
   assert.match(scribbleView, /data-scribble-capture-text data-markdown-editor/);
   assert.match(scribbleView, /name="text" rows="10"[\s\S]*data-markdown-editor/);
-  assert.match(styles, /\.markdownEditorHighlight \.mdH1 \{ color: var\(--nord11\); \}/);
+  assert.match(styles, /--markdown-editor-red: var\(--nord11\);/);
+  assert.match(styles, /\.markdownEditorHighlight \.mdH1 \{ color: var\(--markdown-editor-red\); \}/);
+  assert.match(styles, /\.app\[data-profile="family"\] \.markdownEditor/);
   assert.match(styles, /\.markdownEditorToolbar/);
 });
 

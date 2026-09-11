@@ -8549,10 +8549,18 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 /* Shared source-level Markdown editor for Memos and Scribble. The native
    textarea remains the input surface so Korean IME behavior stays native. */
 .markdownEditor {
-  --markdown-editor-bg: var(--surface);
-  --markdown-editor-line: var(--line-strong);
-  --markdown-editor-text: var(--text);
-  --markdown-editor-muted: var(--dim);
+  --markdown-editor-bg: var(--nord0);
+  --markdown-editor-raised: var(--nord1);
+  --markdown-editor-line: var(--nord3);
+  --markdown-editor-text: var(--nord6);
+  --markdown-editor-muted: var(--nord4);
+  --markdown-editor-red: var(--nord11);
+  --markdown-editor-orange: var(--nord12);
+  --markdown-editor-yellow: var(--nord13);
+  --markdown-editor-green: var(--nord14);
+  --markdown-editor-purple: var(--nord15);
+  --markdown-editor-blue: var(--nord9);
+  --markdown-editor-cyan: var(--nord8);
   display: grid;
   gap: 6px;
   width: 100%;
@@ -8560,10 +8568,26 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 }
 
 .archiveTerminal .markdownEditor {
-  --markdown-editor-bg: rgba(20, 24, 31, 0.48);
-  --markdown-editor-line: var(--archive-line);
-  --markdown-editor-text: var(--archive-text);
-  --markdown-editor-muted: var(--archive-muted);
+  --markdown-editor-bg: var(--nord0);
+  --markdown-editor-raised: var(--nord1);
+  --markdown-editor-line: var(--nord3);
+  --markdown-editor-text: var(--nord6);
+  --markdown-editor-muted: var(--nord4);
+}
+
+.app[data-profile="family"] .markdownEditor {
+  --markdown-editor-bg: var(--nord6);
+  --markdown-editor-raised: var(--nord5);
+  --markdown-editor-line: color-mix(in srgb, var(--nord3) 42%, var(--nord5));
+  --markdown-editor-text: var(--nord0);
+  --markdown-editor-muted: var(--nord3);
+  --markdown-editor-red: color-mix(in srgb, var(--nord11) 82%, var(--nord0));
+  --markdown-editor-orange: color-mix(in srgb, var(--nord12) 78%, var(--nord0));
+  --markdown-editor-yellow: color-mix(in srgb, var(--nord13) 68%, var(--nord0));
+  --markdown-editor-green: color-mix(in srgb, var(--nord14) 72%, var(--nord0));
+  --markdown-editor-purple: color-mix(in srgb, var(--nord15) 80%, var(--nord0));
+  --markdown-editor-blue: color-mix(in srgb, var(--nord9) 82%, var(--nord0));
+  --markdown-editor-cyan: color-mix(in srgb, var(--nord8) 72%, var(--nord0));
 }
 
 .markdownEditorToolbar {
@@ -8580,7 +8604,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   min-height: 34px;
   border: 1px solid var(--markdown-editor-line);
   border-radius: 5px;
-  background: color-mix(in srgb, var(--markdown-editor-bg) 86%, transparent);
+  background: var(--markdown-editor-raised);
   color: var(--markdown-editor-muted);
   font: 700 1rem/1 "Sarasa Gothic Mono", ui-monospace, monospace;
   cursor: pointer;
@@ -8588,8 +8612,8 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 
 .markdownEditorToolbar button:active,
 .markdownEditorToolbar button:focus-visible {
-  border-color: var(--nord8);
-  color: var(--nord8);
+  border-color: var(--markdown-editor-cyan);
+  color: var(--markdown-editor-cyan);
   outline: none;
 }
 
@@ -8647,8 +8671,8 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 }
 
 .markdownEditorInput:focus {
-  border-color: color-mix(in srgb, var(--nord8) 70%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--nord8) 24%, transparent);
+  border-color: var(--markdown-editor-cyan);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--markdown-editor-cyan) 24%, transparent);
 }
 
 .markdownEditorInput::placeholder {
@@ -8660,20 +8684,20 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   font-weight: 700;
 }
 
-.markdownEditorHighlight .mdH1 { color: var(--nord11); }
-.markdownEditorHighlight .mdH2 { color: var(--nord12); }
-.markdownEditorHighlight .mdH3 { color: var(--nord13); }
-.markdownEditorHighlight .mdH4 { color: var(--nord14); }
-.markdownEditorHighlight .mdH5 { color: var(--nord15); }
-.markdownEditorHighlight .mdH6 { color: var(--nord9); }
-.markdownEditorHighlight .mdListMarker { color: var(--nord13); font-weight: 700; }
+.markdownEditorHighlight .mdH1 { color: var(--markdown-editor-red); }
+.markdownEditorHighlight .mdH2 { color: var(--markdown-editor-orange); }
+.markdownEditorHighlight .mdH3 { color: var(--markdown-editor-yellow); }
+.markdownEditorHighlight .mdH4 { color: var(--markdown-editor-green); }
+.markdownEditorHighlight .mdH5 { color: var(--markdown-editor-purple); }
+.markdownEditorHighlight .mdH6 { color: var(--markdown-editor-blue); }
+.markdownEditorHighlight .mdListMarker { color: var(--markdown-editor-yellow); font-weight: 700; }
 .markdownEditorHighlight .mdQuote { color: var(--markdown-editor-muted); font-style: italic; }
-.markdownEditorHighlight .mdRule { color: var(--nord3); }
+.markdownEditorHighlight .mdRule { color: var(--markdown-editor-line); }
 .markdownEditorHighlight .mdCodeFence,
 .markdownEditorHighlight .mdCodeBlock,
-.markdownEditorHighlight .mdInlineCode { color: var(--nord8); }
-.markdownEditorHighlight .mdStrong { color: var(--nord13); font-weight: 700; }
-.markdownEditorHighlight .mdLink { color: var(--nord15); text-decoration: underline; }
+.markdownEditorHighlight .mdInlineCode { color: var(--markdown-editor-cyan); }
+.markdownEditorHighlight .mdStrong { color: var(--markdown-editor-yellow); font-weight: 700; }
+.markdownEditorHighlight .mdLink { color: var(--markdown-editor-purple); text-decoration: underline; }
 
 .memoComposer .markdownEditorInput,
 .memoEditForm .markdownEditorInput,
