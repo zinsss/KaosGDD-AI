@@ -42,6 +42,7 @@ from .memos import (
 )
 from .notifications import NotificationError, NotificationInbox
 from .scribble import MAX_SCRIBBLE_FILE_BYTES, ScribbleError, ScribbleStore
+from .shortcut_weather import ShortcutWeatherError, WeatherComparisonService
 from .web_push import WebPushError, WebPushService
 from .tasks import TaskMutationCommand, TaskMutationError, TaskMutationService
 from .tool_calendar import month_markers, visible_month_grid_range, weather_agenda_summary, weather_items_by_date
@@ -446,6 +447,7 @@ class BrainToolServer:
         fax_stage_root: Path | None = None,
         scribble_store: ScribbleStore | None = None,
         document_intake_store: DocumentIntakeStore | None = None,
+        weather_comparison: WeatherComparisonService | None = None,
     ) -> None:
         self._host = host
         self._port = port
@@ -461,6 +463,7 @@ class BrainToolServer:
         self._memos = memos
         self._paperless = paperless
         self._document_intake_store = document_intake_store
+        self._weather_comparison = weather_comparison or WeatherComparisonService()
         self._calendar_refresh_callback = calendar_refresh_callback or task_refresh_callback
         self._import_status_provider = import_status_provider
         self._system_status_provider = system_status_provider
@@ -497,6 +500,7 @@ class BrainToolServer:
         app.router.add_get("/shortcuts/supplies", self._shortcut_supplies)
         app.router.add_get("/shortcuts/notifications", self._list_notifications)
         app.router.add_get("/shortcuts/briefing", self._shortcut_briefing)
+        app.router.add_post("/shortcuts/weather/compare", self._shortcut_weather_compare)
         app.router.add_post("/shortcuts/scribble", self._shortcut_scribble_create)
         app.router.add_post("/shortcuts/paperless", self._shortcut_paperless_create)
         app.router.add_post("/shortcuts/fax/send/proposals", self._propose_fax_send)
@@ -688,6 +692,24 @@ class BrainToolServer:
         return web.json_response(
             shortcut_briefing_payload(bootstrap, notifications, current=current)
         )
+
+    async def _shortcut_weather_compare(self, request: web.Request) -> web.Response:
+        try:
+            payload = await request.json()
+        except (json.JSONDecodeError, ValueError, aiohttp.ContentTypeError):
+            return web.json_response({"error": "weather_payload_invalid"}, status=400)
+        if not isinstance(payload, Mapping):
+            return web.json_response({"error": "weather_payload_invalid"}, status=400)
+        try:
+            result = await asyncio.to_thread(
+                self._weather_comparison.compare,
+                payload.get("latitude"),
+                payload.get("longitude"),
+                payload.get("locationName", ""),
+            )
+        except ShortcutWeatherError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+        return web.json_response(result, status=200 if result.get("ok") else 502)
 
     async def _shortcut_scribble_create(self, request: web.Request) -> web.Response:
         store = self._scribble_store

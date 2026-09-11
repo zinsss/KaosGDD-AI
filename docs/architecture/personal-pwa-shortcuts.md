@@ -203,6 +203,48 @@ https://kaosgdd.net/#/documents
 https://kaosgdd.net/#/scribble
 ```
 
+### Current-location weather comparison
+
+Calendar weather remains unchanged. An on-demand Shortcut may instead send the
+iPhone's current coordinates to Governor Tools and receive several current
+forecast-model snapshots side by side:
+
+```text
+POST /shortcuts/weather/compare
+Authorization: Bearer <IOS_SHORTCUTS_TOKEN>
+Content-Type: application/json
+
+{
+  "latitude": 36.019,
+  "longitude": 129.343,
+  "locationName": "포항"
+}
+```
+
+The read-only response includes normalized `sources`, provider failures,
+`temperatureSpreadC`, and a Korean `text` field ready for Show Result. It calls
+Open-Meteo Best Match, the KMA seamless model through Open-Meteo, the ECMWF
+model through Open-Meteo, and MET Norway directly. A failed provider is shown
+as unavailable without suppressing the other results. Values are model-based
+current conditions, not direct weather-station observations.
+
+Do not scrape Naver Weather for this workflow. Its presentation HTML is not a
+stable API contract and would add a fragile dependency on an intermediary's
+page and attribution rules. A direct KMA APIHub integration may replace the
+Open-Meteo KMA adapter later after a server-side KMA key is provisioned.
+
+iOS Shortcut shape:
+
+1. Get Current Location.
+2. Get Details of Locations for Latitude, Longitude, and City.
+3. Create a Dictionary with `latitude`, `longitude`, and `locationName`.
+4. Get Contents of `https://<H3_MAGICDNS_NAME>/shortcuts/weather/compare` using
+   POST, JSON request body, and the existing scoped bearer header.
+5. Get Dictionary Value `text`, then Show Result.
+
+Coordinates stay in the authenticated POST body instead of the URL query
+string. The endpoint does not save the coordinates or weather response.
+
 Deep links select presentation state only. They do not authorize a mutation.
 
 ### Scribble Share Sheet contract

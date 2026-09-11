@@ -181,6 +181,20 @@ Authorization: Bearer <IOS_SHORTCUTS_TOKEN>
 The JSON response includes `items` as an array and `text` as a ready-to-show
 bullet list. The route is fixed to the `supplies` profile and is read-only.
 
+The same scoped read token can request a transient multi-source weather
+comparison for coordinates supplied by iOS Current Location:
+
+```text
+POST https://<H3_MAGICDNS_NAME>/shortcuts/weather/compare
+Authorization: Bearer <IOS_SHORTCUTS_TOKEN>
+Content-Type: application/json
+
+{"latitude":36.019,"longitude":129.343,"locationName":"포항"}
+```
+
+The response `text` is ready for Show Result. Coordinates and results are not
+persisted, and one upstream provider failure does not hide successful sources.
+
 KaosPACS-AIO temporary image second-look calls the same internal tool API:
 
 ```text

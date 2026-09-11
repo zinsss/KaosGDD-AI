@@ -412,6 +412,13 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.web_push.subscribe.return_value = {"id": "0123456789abcdef01234567"}
         self.web_push.unsubscribe.return_value = True
         self.web_push.send_test.return_value = 1
+        self.weather = mock.Mock()
+        self.weather.compare.return_value = {
+            "ok": True,
+            "readOnly": True,
+            "sources": [{"id": "kma", "name": "KMA 모델", "temperatureC": 21}],
+            "text": "현재 위치 날씨 비교\n• KMA 모델: 맑음 · 21°C",
+        }
 
         async def refresh_calendar_surfaces() -> None:
             self.calendar_refresh_count += 1
@@ -445,6 +452,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
             document_intake_store=DocumentIntakeStore(
                 Path(self.temporary.name) / "documents" / "intake.json"
             ),
+            weather_comparison=self.weather,
         )
         self.client = TestClient(TestServer(server.application()))
         await self.client.start_server()
@@ -544,6 +552,36 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
             },
         )
         self.assertEqual(self.calendar.bootstrap_calls[-1], "supplies")
+
+    async def test_shortcut_weather_compares_current_location_without_writing(self) -> None:
+        denied = await self.client.post(
+            "/shortcuts/weather/compare",
+            headers=self.headers(),
+            json={"latitude": 36.019, "longitude": 129.343},
+        )
+        self.assertEqual(denied.status, 401)
+
+        response = await self.client.post(
+            "/shortcuts/weather/compare",
+            headers=self.shortcut_headers(),
+            json={"latitude": 36.019, "longitude": 129.343, "locationName": "포항"},
+        )
+
+        self.assertEqual(response.status, 200)
+        payload = await response.json()
+        self.assertTrue(payload["readOnly"])
+        self.assertIn("KMA 모델", payload["text"])
+        self.weather.compare.assert_called_once_with(36.019, 129.343, "포항")
+
+    async def test_shortcut_weather_rejects_non_object_json(self) -> None:
+        response = await self.client.post(
+            "/shortcuts/weather/compare",
+            headers=self.shortcut_headers(),
+            json=[36.019, 129.343],
+        )
+
+        self.assertEqual(response.status, 400)
+        self.assertEqual((await response.json())["error"], "weather_payload_invalid")
 
     async def test_shortcut_scribble_accepts_shared_text_and_file(self) -> None:
         denied_response = await self.client.post(
