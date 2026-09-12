@@ -2316,13 +2316,36 @@ def update_event(payload, profile="main"):
         raise ValueError("event_requires_native_client")
     if SYSTEM_EVENT_CATEGORY in item_categories(existing) or GOOGLE_HOLIDAY_CATEGORY in item_categories(existing):
         raise ValueError("system_event_readonly")
+    target_collection_id = str(payload.get("targetCollectionId") or collection["id"]).strip()
+    target_collection = select_collection(collections, target_collection_id, "VEVENT")
     item_account = account_for_collection(collection)
-    _, body = build_vevent(payload, existing)
+    built_uid, body = build_vevent(payload, existing)
+    if target_collection["id"] != collection["id"]:
+        target_account = account_for_collection(target_collection)
+        target_href = urllib.parse.urljoin(target_collection["href"], f"{built_uid}.ics")
+        radicale_request(
+            target_account,
+            "PUT",
+            target_href,
+            body,
+            {"Content-Type": "text/calendar; charset=utf-8", "If-None-Match": "*"},
+        )
+        source_headers = {"If-Match": existing["etag"]} if existing.get("etag") else {}
+        try:
+            radicale_request(item_account, "DELETE", existing["href"], "", source_headers)
+        except Exception:
+            # Keep the source event authoritative if the second half of the move fails.
+            try:
+                radicale_request(target_account, "DELETE", target_href, "", {})
+            except Exception:
+                pass
+            raise
+        return {"ok": True, "uid": uid, "collection": target_collection["id"], "moved": True}
     headers = {"Content-Type": "text/calendar; charset=utf-8"}
     if existing.get("etag"):
         headers["If-Match"] = existing["etag"]
     radicale_request(item_account, "PUT", existing["href"], body, headers)
-    return {"ok": True, "uid": uid, "collection": collection["id"]}
+    return {"ok": True, "uid": uid, "collection": collection["id"], "moved": False}
 
 
 def delete_component(payload, profile, component):

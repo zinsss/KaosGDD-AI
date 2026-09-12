@@ -170,6 +170,8 @@ window.KAOS_TRANSLATIONS = {
     "event.untitled": "제목 없는 일정",
     "event.preset": "프리셋",
     "event.shareFamily": "가족과 공유",
+    "event.calendar": "캘린더",
+    "event.calendarSelectorAria": "일정 캘린더 선택",
     "event.templates": "일정 프리셋",
     "event.new": "새 일정",
     "event.allDay": "하루 종일",

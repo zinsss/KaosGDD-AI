@@ -37,6 +37,11 @@ Family retains its existing direct navigation and family-only routes.
 
 Data enters the UI through adapter-shaped functions in `app.js`. Calendar and task reads/writes use `/api/calendar/*`; mock data remains a local fallback when the adapter is unavailable.
 
+Event create and edit forms select from the writable calendars exposed by the
+current profile. Changing an existing event's calendar is handled by Calendar
+Adapter as a target-first move with rollback, while Family remains restricted
+to its Family calendar.
+
 Family Rouny templates use `/api/rouny/templates`, owned by KaosGDD Brain.
 The shared document stores one explicit `defaultTemplateId`; the Family agenda
 uses that timetable while opening another timetable only selects it for viewing

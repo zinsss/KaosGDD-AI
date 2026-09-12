@@ -574,6 +574,7 @@ const mockAdapter = {
     rawEvent.allDay = allDay;
     rawEvent.repeat = String(formData.get("repeat") || "");
     rawEvent.alarmTime = String(formData.get("alarm") || "");
+    rawEvent.collection = writableCollectionIdFromForm(formData, "VEVENT");
     rawEvent.lastModified = localDateTimeStamp();
     state.selectedDate = startDate;
   },
@@ -792,8 +793,34 @@ function writableCollectionIdForOwner(owner, component) {
 }
 
 function writableCollectionIdFromForm(formData, component) {
-  const owner = formData.get("shareFamily") === "on" ? "family" : defaultPersonalOwner();
+  const requestedOwner = component === "VEVENT" ? String(formData.get("eventOwner") || "").trim() : "";
+  const owner = requestedOwner || (formData.get("shareFamily") === "on" ? "family" : defaultPersonalOwner());
   return writableCollectionIdForOwner(owner, component);
+}
+
+function eventOwnerChoices() {
+  const owners = activeCalendarData().collections
+    .filter((collection) => !collection.components?.length || collection.components.includes("VEVENT"))
+    .map((collection) => collection.owner)
+    .filter(Boolean);
+  const available = [...new Set(owners)];
+  if (portalProfile() === "family") return available.includes("family") ? ["family"] : available.slice(0, 1);
+  const preferred = ["zin", "family"];
+  return [...preferred.filter((owner) => available.includes(owner)), ...available.filter((owner) => !preferred.includes(owner))];
+}
+
+function renderEventOwnerSelect(selectedOwner) {
+  const owners = eventOwnerChoices();
+  const fallbackOwner = portalProfile() === "family" ? "family" : defaultPersonalOwner();
+  const selected = owners.includes(selectedOwner) ? selectedOwner : owners.includes(fallbackOwner) ? fallbackOwner : owners[0] || fallbackOwner;
+  return `
+    <label>
+      <span>${uiText("event.calendar", "Calendar")}</span>
+      <select name="eventOwner" data-event-owner aria-label="${uiText("event.calendarSelectorAria", "Event calendar")}">
+        ${owners.map((owner) => `<option value="${escapeHtml(owner)}" ${owner === selected ? "selected" : ""}>${escapeHtml(calendarOwnerLabel(owner))}</option>`).join("")}
+      </select>
+    </label>
+  `;
 }
 
 function defaultEventPreset() {
@@ -807,6 +834,7 @@ function defaultEventPreset() {
     alarm: "",
     memo: "",
     shareFamily: portalProfile() === "family",
+    owner: portalProfile() === "family" ? "family" : defaultPersonalOwner(),
   };
 }
 
@@ -964,7 +992,8 @@ function addEventDraftFromForm(form) {
     repeat: form.querySelector('[name="repeat"]')?.value || "",
     alarm: form.querySelector('[name="alarm"]')?.value || "",
     memo: form.querySelector('[name="memo"]')?.value || "",
-    shareFamily: form.querySelector('[name="shareFamily"]')?.checked || false,
+    owner: form.querySelector('[name="eventOwner"]')?.value || base.owner || defaultPersonalOwner(),
+    shareFamily: (form.querySelector('[name="eventOwner"]')?.value || base.owner) === "family",
   };
 }
 
@@ -4647,6 +4676,7 @@ function eventPayloadFromForm(formData) {
   return {
     uid: String(formData.get("uid") || ""),
     collectionId: String(formData.get("collectionId") || ""),
+    targetCollectionId: writableCollectionIdFromForm(formData, "VEVENT"),
     title: String(formData.get("title") || "").trim(),
     allDay: formData.get("allDay") === "on",
     startDate: String(formData.get("startDate") || state.selectedDate),
@@ -6933,7 +6963,7 @@ function renderEventFormPanel(draft, shareFamily, allDay) {
       <form class="composer" ${editing ? "data-edit-event" : "data-create-event"}>
         ${editing ? `<input name="uid" type="hidden" value="${escapeHtml(draft.eventId)}" />` : ""}
         ${editing ? `<input name="collectionId" type="hidden" value="${escapeHtml(draft.collection)}" />` : ""}
-        ${editing ? "" : renderFamilyShareToggle(shareFamily, "event")}
+        ${renderEventOwnerSelect(draft.owner || (shareFamily ? "family" : defaultPersonalOwner()))}
         <label>
           <span>${uiText("common.title", "Title")}</span>
           <input name="title" type="text" autocomplete="off" placeholder="${uiText("event.new", "New event")}" value="${escapeHtml(draft.title)}" required />
@@ -7037,6 +7067,7 @@ function renderEditEvent() {
         preserveRepeat: calendarEvent.preserveRepeat,
         alarm: calendarEvent.alarmTime,
         preserveAlarm: calendarEvent.preserveAlarm,
+        owner: collectionOwnerForItem(calendarEvent),
       },
       false,
       calendarEvent.allDay,
