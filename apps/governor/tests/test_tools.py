@@ -419,7 +419,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
             "sources": [
                 {"id": "kma", "name": "KMA 모델", "glyph": "☀️", "temperatureC": 21}
             ],
-            "text": "🌦️ 현재 위치 날씨 비교\n• ☀️ KMA 모델: 맑음 · 21°C",
+            "text": "🌦️ 현재 위치 날씨 비교\n• KMA ☀️ 21°C",
         }
 
         async def refresh_calendar_surfaces() -> None:
@@ -572,7 +572,7 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 200)
         payload = await response.json()
         self.assertTrue(payload["readOnly"])
-        self.assertIn("KMA 모델", payload["text"])
+        self.assertIn("KMA ☀️ 21°C", payload["text"])
         self.weather.compare.assert_called_once_with(36.019, 129.343, "포항")
 
     async def test_shortcut_weather_rejects_non_object_json(self) -> None:

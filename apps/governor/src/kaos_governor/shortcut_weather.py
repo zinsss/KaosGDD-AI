@@ -112,26 +112,6 @@ def _format_number(value: object, suffix: str) -> str:
     return f"{number}{suffix}" if number is not None else ""
 
 
-def _source_text(source: Mapping[str, Any]) -> str:
-    parts = [str(source.get("condition") or "알 수 없음")]
-    temperature = _format_number(source.get("temperatureC"), "°C")
-    apparent = _format_number(source.get("apparentTemperatureC"), "°C")
-    humidity = _format_number(source.get("humidityPercent"), "%")
-    wind = _format_number(source.get("windSpeedKmh"), "km/h")
-    precipitation = _format_number(source.get("precipitationMm"), "mm")
-    if temperature:
-        parts.append(temperature)
-    if apparent:
-        parts.append(f"체감 {apparent}")
-    if humidity:
-        parts.append(f"습도 {humidity}")
-    if wind:
-        parts.append(f"바람 {wind}")
-    if precipitation:
-        parts.append(f"강수 {precipitation}")
-    return " · ".join(parts)
-
-
 def _hourly_rows(payload: Mapping[str, Any], observed_at: object) -> list[dict[str, Any]]:
     hourly = payload.get("hourly")
     if not isinstance(hourly, Mapping):
@@ -223,12 +203,21 @@ class WeatherComparisonService:
         generated_at = current.astimezone(KST)
         location_text = label or f"{lat:.4f}, {lon:.4f}"
         lines = [f"🌦️ 현재 위치 날씨 비교 · {generated_at:%H:%M}", f"📍 {location_text}", ""]
-        for source_id, name, _fetch in providers:
-            if source_id in completed:
-                glyph = completed[source_id]["glyph"]
-                lines.append(f"• {glyph} {name}: {_source_text(completed[source_id])}")
-            else:
-                lines.append(f"• {name}: 자료 없음")
+        comparisons = []
+        display_names = {
+            "open_meteo": "Open-Meteo",
+            "kma": "KMA",
+            "ecmwf": "ECMWF",
+            "met_norway": "MET",
+        }
+        for source_id, _name, _fetch in providers:
+            if source_id not in completed:
+                continue
+            item = completed[source_id]
+            temperature = _format_number(item.get("temperatureC"), "°C")
+            if temperature:
+                comparisons.append(f"{display_names[source_id]} {item['glyph']} {temperature}")
+        lines.append("• " + " // ".join(comparisons) if comparisons else "• 현재 자료 없음")
         if spread is not None:
             lines.extend(("", f"공급자 온도 차이 {spread:g}°C"))
         if hourly:

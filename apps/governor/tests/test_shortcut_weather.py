@@ -113,8 +113,12 @@ class WeatherComparisonServiceTests(unittest.TestCase):
         self.assertEqual(payload["temperatureSpreadC"], 2.5)
         self.assertIn("🌦️ 현재 위치 날씨 비교", payload["text"])
         self.assertIn("📍 포항", payload["text"])
-        self.assertIn("⛅ KMA 모델: 구름 조금", payload["text"])
-        self.assertIn("⛅ MET Norway: 구름 조금", payload["text"])
+        self.assertIn(
+            "• Open-Meteo ☀️ 20.5°C // KMA ⛅ 19.5°C // ECMWF ☁️ 22°C // MET ⛅ 21°C",
+            payload["text"],
+        )
+        self.assertNotIn("Open-Meteo Best Match:", payload["text"])
+        self.assertNotIn("MET Norway:", payload["text"])
         self.assertIn("공급자 온도 차이 2.5°C", payload["text"])
         self.assertIn("금일 시간대별", payload["text"])
         self.assertIn("09:00  ⛅ 20°C · 강수 20%", payload["text"])
@@ -141,7 +145,8 @@ class WeatherComparisonServiceTests(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertEqual(len(payload["sources"]), 3)
         self.assertEqual(payload["errors"], [{"id": "kma", "name": "KMA 모델", "error": "unavailable"}])
-        self.assertIn("KMA 모델: 자료 없음", payload["text"])
+        self.assertNotIn("KMA 모델", payload["text"])
+        self.assertEqual(payload["text"].splitlines()[3].count("//"), 2)
 
     def test_rejects_invalid_coordinates_before_fetching(self) -> None:
         with self.assertRaisesRegex(ShortcutWeatherError, "invalid_latitude"):

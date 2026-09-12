@@ -235,6 +235,11 @@ contains the local time, condition and `glyph`, temperature, and precipitation
 probability. The other providers remain current-condition comparisons so the
 Shortcut output does not repeat four long forecasts.
 
+The current-condition display is one compact line of available provider values
+(`short provider title emoji temperature // ...`). Full provider names and
+normalized details remain in `sources`; unavailable providers are omitted from
+the display line.
+
 Do not scrape Naver Weather for this workflow. Its presentation HTML is not a
 stable API contract and would add a fragile dependency on an intermediary's
 page and attribution rules. A direct KMA APIHub integration may replace the

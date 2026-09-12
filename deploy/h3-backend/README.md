@@ -192,9 +192,10 @@ Content-Type: application/json
 {"latitude":36.019,"longitude":129.343,"locationName":"포항"}
 ```
 
-The response `text` includes weather emoji and the Best Match forecast from the
-current hour through 23:00, ready for Show Result. Each structured source also
-includes `glyph`; the same forecast is available as normalized `hourly` rows.
+The response `text` includes a compact one-line emoji/temperature comparison
+and the Best Match forecast from the current hour through 23:00, ready for Show
+Result. Each structured source also includes its name, `glyph`, and full current
+details; the same forecast is available as normalized `hourly` rows.
 Coordinates and results are not persisted, and one upstream provider failure
 does not hide successful sources.
 
