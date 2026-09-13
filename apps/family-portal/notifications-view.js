@@ -7,6 +7,16 @@ window.KAOS_NOTIFICATIONS_VIEW = (() => {
       : payload.generatedAt
         ? `UPDATED ${deps.escapeHtml(deps.formatNotificationDate(payload.generatedAt))}`
         : "TODAY";
+    const inspiration = payload.inspiration || {};
+    const bible = inspiration.bible || {};
+    const quote = inspiration.quote || {};
+    const hasStructuredBriefing = Boolean(payload.timelineText && (bible.text || quote.text));
+    const inspirationHtml = hasStructuredBriefing
+      ? `<div class="kaosTodayInspiration">
+          ${bible.text ? `<p><em>${deps.escapeHtml(bible.text)}</em>${bible.reference ? `<span>${deps.escapeHtml(bible.reference)}</span>` : ""}</p>` : ""}
+          ${quote.text ? `<p><em>${deps.escapeHtml(quote.text)}</em>${quote.author ? `<span>${deps.escapeHtml(quote.author)}</span>` : ""}</p>` : ""}
+        </div>`
+      : "";
     return `
       <section class="archiveTerminal notificationInbox kaosToday" aria-label="KaosToday">
         <div class="archiveCommand">
@@ -22,7 +32,7 @@ window.KAOS_NOTIFICATIONS_VIEW = (() => {
             : briefing.loading && !briefing.checked
               ? `<p class="archiveStatusMessage">Building today's briefing...</p>`
               : payload.plainText
-                ? `<pre class="kaosTodayText">${deps.escapeHtml(payload.plainText)}</pre>`
+                ? `<div class="kaosTodayBriefing"><pre class="kaosTodayText">${deps.escapeHtml(hasStructuredBriefing ? payload.timelineText : payload.plainText)}</pre>${inspirationHtml}</div>`
                 : `<p class="archiveStatusMessage notificationEmpty">No briefing available.</p>`
         }
       </section>

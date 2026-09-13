@@ -14,10 +14,13 @@ test("personal PWA renders the shared KaosToday briefing instead of an ACK list"
   assert.match(appSource, /KAOS_NOTIFICATIONS_VIEW\.renderNotifications/);
   assert.match(viewSource, /KAOS TODAY/);
   assert.match(viewSource, /payload\.plainText/);
+  assert.match(viewSource, /payload\.timelineText/);
+  assert.match(viewSource, /inspiration\.bible/);
+  assert.match(viewSource, /<em>/);
   assert.match(viewSource, /class="kaosTodayText"/);
   assert.doesNotMatch(viewSource, /data-notification-ack=/);
-  assert.match(indexSource, /src="\/notifications-view\.js\?v=3"/);
-  assert.ok(indexSource.indexOf('src="/notifications-view.js?v=3"') < indexSource.indexOf('src="/app.js?v=341"'));
+  assert.match(indexSource, /src="\/notifications-view\.js\?v=4"/);
+  assert.ok(indexSource.indexOf('src="/notifications-view.js?v=4"') < indexSource.indexOf('src="/app.js?v=341"'));
 });
 
 test("viewing KaosToday acknowledges only notification rows included in its briefing", () => {

@@ -45,6 +45,7 @@ from kaos_governor.tools import (
     _pending_mutation_from_record,
     _pending_mutation_record,
     kst_today,
+    shortcut_briefing_payload,
 )
 from pypdf import PdfWriter
 
@@ -209,6 +210,28 @@ class FakeFaxService:
 class TimezoneTests(unittest.TestCase):
     def test_kst_today_uses_korea_date_when_container_is_utc_previous_day(self) -> None:
         self.assertEqual(kst_today(datetime(2026, 8, 25, 23, 0, tzinfo=timezone.utc)), date(2026, 8, 26))
+
+    def test_kaos_today_ends_with_unlabeled_italic_inspiration(self) -> None:
+        payload = shortcut_briefing_payload(
+            {},
+            {},
+            current=datetime(2026, 9, 14, 8, 0, tzinfo=timezone(timedelta(hours=9))),
+            bible_reference="시편 119:105",
+            bible_text="주의 말씀은 내 발에 등이요 내 길에 빛이니이다",
+            quote_text="If you correct your mind, the rest of your life will fall into place.",
+            quote_author="Laozi",
+        )
+
+        self.assertEqual(
+            payload["plainText"],
+            "### 2026년 9월 14일 (월)\n\n"
+            "지금까지 기록 없음\n\n"
+            "오늘 남은 일정 없음\n\n"
+            "*주의 말씀은 내 발에 등이요 내 길에 빛이니이다*\n"
+            "시편 119:105\n\n"
+            "*If you correct your mind, the rest of your life will fall into place.*\n"
+            "Laozi",
+        )
 
 
 class PendingMutationSerializationTests(unittest.TestCase):
@@ -771,10 +794,13 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("10:00  Call mom", payload["plainText"])
         self.assertIn("<시간표>", payload["plainText"])
         self.assertIn("<예정>\n21:00  Something Important", payload["plainText"])
-        self.assertIn("<오늘의 성경 말씀>", payload["plainText"])
-        self.assertIn("<오늘의 명언>", payload["plainText"])
-        self.assertIn("## 오늘의 성경 말씀", payload["text"])
-        self.assertIn("## 오늘의 명언", payload["text"])
+        bible = payload["inspiration"]["bible"]
+        quote = payload["inspiration"]["quote"]
+        self.assertIn(f'*{bible["text"]}*\n{bible["reference"]}', payload["plainText"])
+        self.assertIn(f'*{quote["text"]}*', payload["plainText"])
+        self.assertNotIn("<오늘의 성경 말씀>", payload["plainText"])
+        self.assertNotIn("<오늘의 명언>", payload["plainText"])
+        self.assertNotIn(bible["text"], payload["timelineText"])
         fax_item = next(item for item in payload["items"] if item["kind"] == "Fax")
         self.assertEqual(fax_item["id"], notification_id)
         self.assertTrue(fax_item["acknowledged"])

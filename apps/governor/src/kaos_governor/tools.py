@@ -31,7 +31,7 @@ from .documents import (
     PaperlessDocumentService,
     submit_pdf_to_inbox,
 )
-from .daily_content import DailyContentError, DailyContentLibrary, render_quote
+from .daily_content import DailyContentError, DailyContentLibrary
 from .daily_digest import ENCOURAGEMENT_ROTATION, VERSE_ROTATION
 from .fax import FaxError, FaxService
 from .fax_mutations import FaxMutationService, fax_preview_payload
@@ -694,13 +694,17 @@ class BrainToolServer:
             if inbox is not None and inbox.config.enabled
             else {"items": [], "pendingCount": 0, "criticalCount": 0}
         )
-        bible_line = ""
-        quote_line = ""
+        bible_reference = ""
+        bible_text = ""
+        quote_text = ""
+        quote_author = ""
         if self._daily_content is not None:
             try:
                 bible, quote = self._daily_content.for_day(current.date().toordinal())
-                bible_line = bible.render()
-                quote_line = render_quote(quote)
+                bible_reference = bible.reference
+                bible_text = bible.text
+                quote_text = quote.text
+                quote_author = quote.author
             except DailyContentError:
                 pass
         return web.json_response(
@@ -708,8 +712,10 @@ class BrainToolServer:
                 bootstrap,
                 notifications,
                 current=current,
-                bible_line=bible_line,
-                quote_line=quote_line,
+                bible_reference=bible_reference,
+                bible_text=bible_text,
+                quote_text=quote_text,
+                quote_author=quote_author,
             )
         )
 
@@ -2542,8 +2548,10 @@ def shortcut_briefing_payload(
     notifications: Mapping[str, Any],
     *,
     current: datetime,
-    bible_line: str = "",
-    quote_line: str = "",
+    bible_reference: str = "",
+    bible_text: str = "",
+    quote_text: str = "",
+    quote_author: str = "",
 ) -> dict[str, object]:
     """Build a read-only, same-day timeline for the iOS Shortcut."""
     now = kst_now(current)
@@ -2653,13 +2661,18 @@ def shortcut_briefing_payload(
     if not planned:
         lines.append("- 오늘 남은 일정 없음")
 
-    if not bible_line:
-        reference, text = VERSE_ROTATION[today.toordinal() % len(VERSE_ROTATION)]
-        bible_line = f"{reference} — {text}"
-    if not quote_line:
-        quote_line = ENCOURAGEMENT_ROTATION[today.toordinal() % len(ENCOURAGEMENT_ROTATION)]
-    lines.extend(("", "## 오늘의 성경 말씀", f"- {bible_line}"))
-    lines.extend(("", "## 오늘의 명언", f"- {quote_line}"))
+    if not bible_reference or not bible_text:
+        bible_reference, bible_text = VERSE_ROTATION[
+            today.toordinal() % len(VERSE_ROTATION)
+        ]
+    if not quote_text:
+        quote_text = ENCOURAGEMENT_ROTATION[
+            today.toordinal() % len(ENCOURAGEMENT_ROTATION)
+        ]
+    lines.extend(("", f"*{bible_text}*", bible_reference))
+    lines.extend(("", f"*{quote_text}*"))
+    if quote_author:
+        lines.append(quote_author)
 
     plain_lines = [
         f"### {today.year}년 {today.month}월 {today.day}일 ({BRIEFING_WEEKDAYS_KO[today.weekday()][0]})"
@@ -2684,8 +2697,11 @@ def shortcut_briefing_payload(
         plain_lines.extend(_briefing_render_plain_item(item) for item in planned)
     else:
         plain_lines.extend(("", "오늘 남은 일정 없음"))
-    plain_lines.extend(("", "<오늘의 성경 말씀>", bible_line))
-    plain_lines.extend(("", "<오늘의 명언>", quote_line))
+    timeline_text = "\n".join(plain_lines)
+    plain_lines.extend(("", f"*{bible_text}*", bible_reference))
+    plain_lines.extend(("", f"*{quote_text}*"))
+    if quote_author:
+        plain_lines.append(quote_author)
     return {
         "ok": True,
         "date": today.isoformat(),
@@ -2697,6 +2713,11 @@ def shortcut_briefing_payload(
         "items": log,
         "planned": planned,
         "text": "\n".join(lines),
+        "timelineText": timeline_text,
+        "inspiration": {
+            "bible": {"text": bible_text, "reference": bible_reference},
+            "quote": {"text": quote_text, "author": quote_author},
+        },
         "plainText": "\n".join(plain_lines),
         "readOnly": True,
     }
