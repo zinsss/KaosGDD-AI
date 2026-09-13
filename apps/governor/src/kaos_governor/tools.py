@@ -2669,10 +2669,10 @@ def shortcut_briefing_payload(
         quote_text = ENCOURAGEMENT_ROTATION[
             today.toordinal() % len(ENCOURAGEMENT_ROTATION)
         ]
-    lines.extend(("", f"*{bible_text}*", bible_reference))
-    lines.extend(("", f"*{quote_text}*"))
-    if quote_author:
-        lines.append(quote_author)
+    bible_display = f"{bible_text} - {bible_reference}"
+    quote_attribution = f" - {quote_author}" if quote_author else ""
+    quote_display = f"{quote_text}{quote_attribution}"
+    lines.extend(("", bible_display, "", quote_display))
 
     plain_lines = [
         f"### {today.year}년 {today.month}월 {today.day}일 ({BRIEFING_WEEKDAYS_KO[today.weekday()][0]})"
@@ -2697,11 +2697,7 @@ def shortcut_briefing_payload(
         plain_lines.extend(_briefing_render_plain_item(item) for item in planned)
     else:
         plain_lines.extend(("", "오늘 남은 일정 없음"))
-    timeline_text = "\n".join(plain_lines)
-    plain_lines.extend(("", f"*{bible_text}*", bible_reference))
-    plain_lines.extend(("", f"*{quote_text}*"))
-    if quote_author:
-        plain_lines.append(quote_author)
+    plain_lines.extend(("", bible_display, "", quote_display))
     return {
         "ok": True,
         "date": today.isoformat(),
@@ -2713,11 +2709,6 @@ def shortcut_briefing_payload(
         "items": log,
         "planned": planned,
         "text": "\n".join(lines),
-        "timelineText": timeline_text,
-        "inspiration": {
-            "bible": {"text": bible_text, "reference": bible_reference},
-            "quote": {"text": quote_text, "author": quote_author},
-        },
         "plainText": "\n".join(plain_lines),
         "readOnly": True,
     }

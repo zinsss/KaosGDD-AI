@@ -94,9 +94,8 @@ Calendar, Tasks, and Notification Inbox data. It renders today's elapsed items
 and notification history in time order, retains acknowledged notifications in
 the same-day log, and places later timed events/tasks under `# Planned`.
 It also appends the shared Morning Digest Bible passage and encouragement. In
-the Shortcut text, each passage appears in italics with its reference or author
-on the next line; the PWA renders the same structure without exposing Markdown
-markers. The
+the Shortcut's plain text, each passage and its reference or author share one
+line separated by ` - `. The PWA renders that same plain-text format. The
 Bible rotation is restricted to a curated set of familiar passages and uses a
 deterministic shuffled cycle so every selected passage appears once before a
 new cycle begins.

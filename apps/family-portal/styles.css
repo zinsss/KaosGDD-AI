@@ -8021,43 +8021,16 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   letter-spacing: 0.05em;
 }
 
-.kaosTodayBriefing {
-  border: 1px solid var(--archive-line);
-  background: var(--archive-surface);
-}
-
 .kaosTodayText {
   margin: 0;
   padding: 18px 16px;
-  border: 0;
-  background: transparent;
+  border: 1px solid var(--archive-line);
+  background: var(--archive-surface);
   color: var(--archive-text);
   font: inherit;
   line-height: 1.75;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-
-.kaosTodayInspiration {
-  display: grid;
-  gap: 20px;
-  padding: 2px 16px 20px;
-  color: var(--archive-text);
-}
-
-.kaosTodayInspiration p {
-  display: grid;
-  gap: 4px;
-  margin: 0;
-  line-height: 1.6;
-}
-
-.kaosTodayInspiration em {
-  font-style: italic;
-}
-
-.kaosTodayInspiration span {
-  color: var(--archive-muted);
 }
 
 .notificationEmpty {
