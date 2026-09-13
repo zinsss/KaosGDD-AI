@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from kaos_governor.daily_content import DailyContentLibrary
+from kaos_governor.daily_content import BibleEntry, DailyContentLibrary
 
 
 class Response(io.BytesIO):
@@ -149,6 +149,38 @@ class DailyContentTests(unittest.TestCase):
         self.assertEqual(second_bible.reference, "시편 1:2")
         self.assertEqual(wrapped_bible.reference, "시편 1:1")
         self.assertEqual(second_quote.text, "second quote")
+
+    def test_preferred_bible_rotation_uses_only_selected_references_without_repeats(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            library = DailyContentLibrary(
+                cache_path=Path(temporary) / "content.json",
+                fallback_bible=(
+                    ("시편 1:2", "selected second"),
+                    ("시편 1:4", "selected fourth"),
+                    ("시편 1:6", "selected sixth"),
+                ),
+                fallback_quotes=("first quote", "second quote", "third quote"),
+                preferred_bible_references=("시편 1:2", "시편 1:4", "시편 1:6"),
+                shuffle_daily=True,
+            )
+
+            first_cycle = [library.for_day(day)[0].reference for day in range(7, 10)]
+
+        self.assertEqual(set(first_cycle), {"시편 1:2", "시편 1:4", "시편 1:6"})
+        self.assertEqual(len(first_cycle), len(set(first_cycle)))
+
+    def test_preferred_bible_range_combines_cached_source_verses(self) -> None:
+        combined = DailyContentLibrary._preferred_bible_entry(
+            "잠언 3:5-6",
+            {
+                "잠언 3:5": BibleEntry("PRO.3.5", "잠언 3:5", "첫 절"),
+                "잠언 3:6": BibleEntry("PRO.3.6", "잠언 3:6", "둘째 절"),
+            },
+        )
+
+        self.assertIsNotNone(combined)
+        self.assertEqual(combined.reference, "잠언 3:5-6")  # type: ignore[union-attr]
+        self.assertEqual(combined.text, "첫 절 둘째 절")  # type: ignore[union-attr]
 
 
 if __name__ == "__main__":

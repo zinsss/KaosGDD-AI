@@ -3,8 +3,10 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+import hashlib
 import json
 from pathlib import Path
+import re
 import threading
 from typing import Any
 import urllib.request
@@ -162,6 +164,8 @@ class DailyContentLibrary:
         urlopen: Callable[..., Any] | None = None,
         fallback_bible: tuple[tuple[str, str], ...] = (),
         fallback_quotes: tuple[str, ...] = (),
+        preferred_bible_references: tuple[str, ...] = (),
+        shuffle_daily: bool = False,
     ) -> None:
         self.cache_path = cache_path
         self.refresh_hours = refresh_hours
@@ -177,6 +181,8 @@ class DailyContentLibrary:
             QuoteEntry(f"fallback-quote-{index}", text, "")
             for index, text in enumerate(fallback_quotes)
         )
+        self._preferred_bible_references = tuple(preferred_bible_references)
+        self._shuffle_daily = shuffle_daily
         self._lock = threading.RLock()
         self._loaded = False
         self._bible: tuple[BibleEntry, ...] = ()
@@ -277,7 +283,45 @@ class DailyContentLibrary:
     def _available_bible(self) -> tuple[BibleEntry, ...]:
         with self._lock:
             self._load_cache()
-            return self._bible or self._fallback_bible
+            available = self._bible or self._fallback_bible
+            if not self._preferred_bible_references:
+                return available
+            by_reference = {entry.reference: entry for entry in self._bible}
+            fallback_by_reference = {
+                entry.reference: entry for entry in self._fallback_bible
+            }
+            preferred = tuple(
+                self._preferred_bible_entry(reference, by_reference)
+                or fallback_by_reference.get(reference)
+                for reference in self._preferred_bible_references
+            )
+            return tuple(entry for entry in preferred if entry is not None) or available
+
+    @staticmethod
+    def _preferred_bible_entry(
+        reference: str,
+        by_reference: Mapping[str, BibleEntry],
+    ) -> BibleEntry | None:
+        direct = by_reference.get(reference)
+        if direct is not None:
+            return direct
+        match = re.fullmatch(r"(.+ \d+):(\d+)-(\d+)", reference)
+        if match is None:
+            return None
+        prefix, first_raw, last_raw = match.groups()
+        first = int(first_raw)
+        last = int(last_raw)
+        if last < first or last - first > 10:
+            return None
+        verses = [by_reference.get(f"{prefix}:{number}") for number in range(first, last + 1)]
+        if any(verse is None for verse in verses):
+            return None
+        selected = tuple(verse for verse in verses if verse is not None)
+        return BibleEntry(
+            key="+".join(verse.key for verse in selected),
+            reference=reference,
+            text=" ".join(verse.text for verse in selected),
+        )
 
     def _available_quotes(self) -> tuple[QuoteEntry, ...]:
         with self._lock:
@@ -289,7 +333,23 @@ class DailyContentLibrary:
         quotes = self._available_quotes()
         if not bible or not quotes:
             raise DailyContentError("daily_content_unavailable")
-        return bible[ordinal % len(bible)], quotes[ordinal % len(quotes)]
+        if not self._shuffle_daily:
+            return bible[ordinal % len(bible)], quotes[ordinal % len(quotes)]
+        return (
+            self._cycle_entry(bible, ordinal, "bible"),
+            self._cycle_entry(quotes, ordinal, "quote"),
+        )
+
+    @staticmethod
+    def _cycle_entry(entries, ordinal: int, namespace: str):
+        offset = ordinal % len(entries)
+        ordered = sorted(
+            entries,
+            key=lambda entry: hashlib.sha256(
+                f"{namespace}:{entry.key}".encode("utf-8")
+            ).digest(),
+        )
+        return ordered[offset]
 
     def next_bible(self, current_line: str) -> BibleEntry:
         entries = self._available_bible()

@@ -10,6 +10,7 @@ from kaos_governor.daily_digest import (
     KST,
     digest_events,
     render_daily_digest,
+    VERSE_ROTATION,
 )
 
 
@@ -98,6 +99,7 @@ class DailyDigestTests(unittest.TestCase):
         self.assertIn("### 일일 힘을 주는 명언", rendered)
         self.assertIn("### Events\n-\n\n### Tasks\n-", rendered)
         self.assertLessEqual(len(rendered), 1024)
+        self.assertGreaterEqual(len(VERSE_ROTATION), 30)
 
     def test_build_uses_live_profile_weather_and_only_today_active_items(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

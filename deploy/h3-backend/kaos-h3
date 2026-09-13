@@ -612,6 +612,9 @@ services_preflight() {
   if ! grep -q 'location = /api/settings/status' "${root}/config/family-portal/nginx.conf"; then
     die "family portal must route the read-only Settings status API explicitly"
   fi
+  if ! grep -q 'location = /api/today' "${root}/config/family-portal/nginx.conf"; then
+    die "family portal must route the KaosToday briefing API explicitly"
+  fi
   "${SERVICES_COMPOSE[@]}" config --quiet
   info "Migrated service preflight passed."
 }
@@ -696,6 +699,9 @@ family_portal_source_preflight() {
   fi
   if ! grep -q 'location = /api/settings/status' "${nginx_source}"; then
     die "family portal source must route the read-only Settings status API explicitly"
+  fi
+  if ! grep -q 'location = /api/today' "${nginx_source}"; then
+    die "family portal source must route the KaosToday briefing API explicitly"
   fi
 }
 

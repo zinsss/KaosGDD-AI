@@ -771,7 +771,12 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("10:00  Call mom", payload["plainText"])
         self.assertIn("<시간표>", payload["plainText"])
         self.assertIn("<예정>\n21:00  Something Important", payload["plainText"])
+        self.assertIn("<오늘의 성경 말씀>", payload["plainText"])
+        self.assertIn("<오늘의 명언>", payload["plainText"])
+        self.assertIn("## 오늘의 성경 말씀", payload["text"])
+        self.assertIn("## 오늘의 명언", payload["text"])
         fax_item = next(item for item in payload["items"] if item["kind"] == "Fax")
+        self.assertEqual(fax_item["id"], notification_id)
         self.assertTrue(fax_item["acknowledged"])
         self.assertTrue(
             self.notification_inbox.list_items(include_acknowledged=True)["items"][0][
@@ -809,6 +814,17 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
             len([item for item in payload["items"] if item["kind"] == "Mail"]),
             2,
         )
+
+    async def test_governor_authenticated_briefing_matches_shortcut_content(self) -> None:
+        shortcut = await self.client.get(
+            "/shortcuts/briefing",
+            headers=self.shortcut_headers(),
+        )
+        internal = await self.client.get("/tools/briefing", headers=self.headers())
+
+        self.assertEqual(shortcut.status, 200)
+        self.assertEqual(internal.status, 200)
+        self.assertEqual((await shortcut.json())["plainText"], (await internal.json())["plainText"])
 
     async def test_tool_notification_acknowledgement_requires_governor_token(self) -> None:
         self.notification_inbox.enqueue(

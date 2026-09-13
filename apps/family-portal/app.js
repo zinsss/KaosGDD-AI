@@ -438,6 +438,12 @@ const state = {
     criticalCount: 0,
     items: [],
   },
+  todayBriefing: {
+    checked: false,
+    loading: false,
+    error: "",
+    data: null,
+  },
   holidays: {
     checked: false,
     loading: false,
@@ -3178,15 +3184,51 @@ async function loadNotifications(options = {}) {
   if (getRoute() === "notifications") render();
 }
 
-async function acknowledgeNotification(id) {
-  const response = await fetch(`/api/notifications/${encodeURIComponent(id)}/acknowledge`, {
+async function acknowledgeBriefingNotifications(items) {
+  const ids = [...new Set(
+    (Array.isArray(items) ? items : [])
+      .filter((item) => item?.source === "notification" && item.id && !item.acknowledged)
+      .map((item) => String(item.id)),
+  )];
+  if (!ids.length) return;
+  await Promise.allSettled(ids.map((id) => fetch(`/api/notifications/${encodeURIComponent(id)}/acknowledge`, {
     method: "POST",
     headers: { Accept: "application/json" },
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+  })));
   state.notifications.checked = false;
   await loadNotifications({ force: true });
+}
+
+async function loadTodayBriefing({ force = false } = {}) {
+  if (portalProfile() !== "main" || state.todayBriefing.loading) return;
+  if (state.todayBriefing.checked && !force) return;
+  state.todayBriefing.loading = true;
+  state.todayBriefing.error = "";
+  if (getRoute() === "notifications") render();
+  try {
+    const response = await fetch("/api/today", {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    state.todayBriefing = {
+      checked: true,
+      loading: false,
+      error: "",
+      data: payload,
+    };
+    if (getRoute() === "notifications") render();
+    await acknowledgeBriefingNotifications(payload.items);
+  } catch (error) {
+    state.todayBriefing = {
+      checked: true,
+      loading: false,
+      error: error.message || "KaosToday is unavailable",
+      data: null,
+    };
+    if (getRoute() === "notifications") render();
+  }
 }
 
 function formatNotificationDate(value) {
@@ -9820,7 +9862,9 @@ function render() {
   }
   if (route === "memos") loadMemos();
   if (route === "scribble") loadScribbles();
-  if (route === "notifications") loadNotifications();
+  if (route === "notifications") {
+    loadTodayBriefing();
+  }
   if (route === "documents" && portalProfile() === "main") {
     loadDocumentTags();
     loadDocumentInbox();
@@ -9927,8 +9971,8 @@ document.addEventListener("click", async (event) => {
   }
 
   if (event.target.closest("[data-notifications-refresh]")) {
-    state.notifications.checked = false;
-    await loadNotifications({ force: true });
+    state.todayBriefing.checked = false;
+    await loadTodayBriefing({ force: true });
     return;
   }
 
@@ -11764,20 +11808,6 @@ document.addEventListener("keydown", (event) => {
 });
 
 document.addEventListener("change", async (event) => {
-  const notificationCheck = event.target.closest("[data-notification-ack]");
-  if (notificationCheck) {
-    if (!notificationCheck.checked) return;
-    notificationCheck.disabled = true;
-    try {
-      await acknowledgeNotification(notificationCheck.dataset.notificationAck || "");
-    } catch (error) {
-      notificationCheck.checked = false;
-      notificationCheck.disabled = false;
-      window.alert(`Could not acknowledge notification: ${error.message || "unknown error"}`);
-    }
-    return;
-  }
-
   const mainMenu = event.target.closest("[data-main-menu]");
   if (mainMenu) {
     const route = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(mainMenu.value) || "today";

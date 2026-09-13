@@ -108,6 +108,23 @@ class NotificationInboxApiTests(unittest.TestCase):
         self.assertEqual(json.loads(request.data), {"actorId": "zin@example.com"})
         self.assertEqual(request.headers["Authorization"], "Bearer server-token")
 
+    def test_today_proxy_uses_internal_governor_auth(self) -> None:
+        requests: list[api.urllib.request.Request] = []
+
+        def fake_urlopen(request: api.urllib.request.Request, timeout: float) -> FakeResponse:
+            requests.append(request)
+            return FakeResponse({"ok": True, "plainText": "KaosToday"})
+
+        with patch.object(api, "secret_value", return_value="server-token"):
+            result = api.today_briefing_payload("main", urlopen=fake_urlopen)
+
+        self.assertEqual(result["plainText"], "KaosToday")
+        self.assertTrue(requests[0].full_url.endswith("/tools/briefing"))
+        self.assertEqual(requests[0].headers["Authorization"], "Bearer server-token")
+
+        with self.assertRaisesRegex(api.NotificationInboxAPIError, "main_profile_required"):
+            api.today_briefing_payload("family", urlopen=fake_urlopen)
+
     def test_handler_requires_personal_access_for_read_and_ack(self) -> None:
         read = CaptureHandler("/api/notifications", {"Host": "kaosgdd.net"})
         acknowledge = CaptureHandler(
@@ -154,6 +171,29 @@ class NotificationInboxApiTests(unittest.TestCase):
             "0123456789abcdef01234567",
             "zin@example.com",
         )
+
+    def test_handler_returns_kaos_today_after_personal_access(self) -> None:
+        today = CaptureHandler(
+            "/api/today",
+            {"Host": "kaosgdd.net", "Cf-Access-Jwt-Assertion": "verified"},
+        )
+
+        with (
+            patch.object(
+                api.memos_relay,
+                "verify_cloudflare_access",
+                return_value=("personal", "zin@example.com"),
+            ),
+            patch.object(
+                api,
+                "today_briefing_payload",
+                return_value={"ok": True, "plainText": "KaosToday"},
+            ) as briefing_payload,
+        ):
+            today.do_GET()
+
+        self.assertEqual(today.status, 200)
+        briefing_payload.assert_called_once_with("main")
 
 
 if __name__ == "__main__":

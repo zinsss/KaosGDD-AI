@@ -31,6 +31,8 @@ from .documents import (
     PaperlessDocumentService,
     submit_pdf_to_inbox,
 )
+from .daily_content import DailyContentError, DailyContentLibrary, render_quote
+from .daily_digest import ENCOURAGEMENT_ROTATION, VERSE_ROTATION
 from .fax import FaxError, FaxService
 from .fax_mutations import FaxMutationService, fax_preview_payload
 from .memos import (
@@ -448,6 +450,7 @@ class BrainToolServer:
         scribble_store: ScribbleStore | None = None,
         document_intake_store: DocumentIntakeStore | None = None,
         weather_comparison: WeatherComparisonService | None = None,
+        daily_content: DailyContentLibrary | None = None,
     ) -> None:
         self._host = host
         self._port = port
@@ -463,6 +466,7 @@ class BrainToolServer:
         self._memos = memos
         self._paperless = paperless
         self._document_intake_store = document_intake_store
+        self._daily_content = daily_content
         self._weather_comparison = weather_comparison or WeatherComparisonService()
         self._calendar_refresh_callback = calendar_refresh_callback or task_refresh_callback
         self._import_status_provider = import_status_provider
@@ -509,6 +513,7 @@ class BrainToolServer:
             self._approve_fax_send,
         )
         app.router.add_get("/tools/today", self._today)
+        app.router.add_get("/tools/briefing", self._shortcut_briefing)
         app.router.add_get("/tools/events/upcoming", self._upcoming_events)
         app.router.add_get("/tools/calendar/week", self._calendar_week)
         app.router.add_get("/tools/calendar/month-image", self._calendar_month_image)
@@ -689,8 +694,23 @@ class BrainToolServer:
             if inbox is not None and inbox.config.enabled
             else {"items": [], "pendingCount": 0, "criticalCount": 0}
         )
+        bible_line = ""
+        quote_line = ""
+        if self._daily_content is not None:
+            try:
+                bible, quote = self._daily_content.for_day(current.date().toordinal())
+                bible_line = bible.render()
+                quote_line = render_quote(quote)
+            except DailyContentError:
+                pass
         return web.json_response(
-            shortcut_briefing_payload(bootstrap, notifications, current=current)
+            shortcut_briefing_payload(
+                bootstrap,
+                notifications,
+                current=current,
+                bible_line=bible_line,
+                quote_line=quote_line,
+            )
         )
 
     async def _shortcut_weather_compare(self, request: web.Request) -> web.Response:
@@ -2522,6 +2542,8 @@ def shortcut_briefing_payload(
     notifications: Mapping[str, Any],
     *,
     current: datetime,
+    bible_line: str = "",
+    quote_line: str = "",
 ) -> dict[str, object]:
     """Build a read-only, same-day timeline for the iOS Shortcut."""
     now = kst_now(current)
@@ -2576,6 +2598,7 @@ def shortcut_briefing_payload(
                 continue
             log.append(
                 {
+                    "id": str(notification.get("id") or ""),
                     "time": created_at.strftime("%H:%M"),
                     "kind": category.title(),
                     "title": _briefing_line_text(
@@ -2630,6 +2653,14 @@ def shortcut_briefing_payload(
     if not planned:
         lines.append("- 오늘 남은 일정 없음")
 
+    if not bible_line:
+        reference, text = VERSE_ROTATION[today.toordinal() % len(VERSE_ROTATION)]
+        bible_line = f"{reference} — {text}"
+    if not quote_line:
+        quote_line = ENCOURAGEMENT_ROTATION[today.toordinal() % len(ENCOURAGEMENT_ROTATION)]
+    lines.extend(("", "## 오늘의 성경 말씀", f"- {bible_line}"))
+    lines.extend(("", "## 오늘의 명언", f"- {quote_line}"))
+
     plain_lines = [
         f"### {today.year}년 {today.month}월 {today.day}일 ({BRIEFING_WEEKDAYS_KO[today.weekday()][0]})"
     ]
@@ -2653,6 +2684,8 @@ def shortcut_briefing_payload(
         plain_lines.extend(_briefing_render_plain_item(item) for item in planned)
     else:
         plain_lines.extend(("", "오늘 남은 일정 없음"))
+    plain_lines.extend(("", "<오늘의 성경 말씀>", bible_line))
+    plain_lines.extend(("", "<오늘의 명언>", quote_line))
     return {
         "ok": True,
         "date": today.isoformat(),

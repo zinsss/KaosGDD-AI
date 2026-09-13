@@ -57,6 +57,11 @@ identity. The API facade supplies the powerful Governor credential only on the
 server side. Family access is rejected. The main menu and KaosGDD title use the
 existing quiet attention colors for pending and critical records.
 
+The hidden PWA attention destination renders `GET /api/today`, which is the
+same KaosToday `plainText` briefing used by the Shortcut rather than a second
+notification-list UI. Notifications included in the successfully displayed
+same-day briefing are acknowledged by the PWA; the Shortcut remains read-only.
+
 ### iOS Shortcut
 
 ```text
@@ -88,6 +93,10 @@ This read-only endpoint builds one transient text view from the existing main
 Calendar, Tasks, and Notification Inbox data. It renders today's elapsed items
 and notification history in time order, retains acknowledged notifications in
 the same-day log, and places later timed events/tasks under `# Planned`.
+It also appends the shared Morning Digest Bible passage and encouragement. The
+Bible rotation is restricted to a curated set of familiar passages and uses a
+deterministic shuffled cycle so every selected passage appears once before a
+new cycle begins.
 Calendar-derived `daily` notifications are omitted to avoid duplicating their
 source event rows. It does not persist another log, acknowledge notifications,
 or introduce a scheduler.

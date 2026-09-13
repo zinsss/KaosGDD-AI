@@ -8021,115 +8021,21 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   letter-spacing: 0.05em;
 }
 
-.notificationRecordList {
-  display: grid;
-  gap: 10px;
+.kaosTodayText {
   margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.notificationRecord {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px 16px;
-  padding: 16px;
+  padding: 18px 16px;
   border: 1px solid var(--archive-line);
   background: var(--archive-surface);
-}
-
-.notificationRecord.isCritical {
-  border-color: color-mix(in srgb, var(--nord11) 62%, var(--archive-line));
-}
-
-.notificationRecord header,
-.notificationRecord strong,
-.notificationRecord p {
-  grid-column: 1;
-}
-
-.notificationRecord header {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 8px 16px;
-  color: var(--archive-muted);
-  font-size: 0.78rem;
-}
-
-.notificationCategory {
-  color: var(--archive-cyan);
-  letter-spacing: 0.08em;
-}
-
-.notificationRecord strong {
   color: var(--archive-text);
-  font-size: 1rem;
-}
-
-.notificationRecord p {
-  margin: 0;
-  color: var(--archive-text);
+  font: inherit;
+  line-height: 1.75;
   white-space: pre-wrap;
-}
-
-.notificationAck {
-  grid-column: 2;
-  grid-row: 1 / span 3;
-  align-self: center;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--archive-cyan);
-  cursor: pointer;
-  letter-spacing: 0.06em;
-}
-
-.notificationAck input {
-  appearance: none;
-  display: grid;
-  place-content: center;
-  width: 1.15rem;
-  height: 1.15rem;
-  margin: 0;
-  border: 1px solid var(--archive-cyan);
-  border-radius: 2px;
-  background: transparent;
-  accent-color: var(--archive-cyan);
-}
-
-.notificationAck input::after {
-  content: "✓";
-  color: var(--archive-cyan);
-  font-size: 0.95rem;
-  line-height: 1;
-  opacity: 0;
-}
-
-.notificationAck input:checked::after {
-  opacity: 1;
-}
-
-.notificationAck:has(input:disabled) {
-  cursor: wait;
-  opacity: 0.65;
+  overflow-wrap: anywhere;
 }
 
 .notificationEmpty {
   padding: 22px 16px;
   border: 1px solid var(--archive-line);
-}
-
-@media (max-width: 640px) {
-  .notificationRecord {
-    grid-template-columns: 1fr;
-  }
-
-  .notificationAck {
-    grid-column: 1;
-    grid-row: auto;
-    justify-self: start;
-  }
 }
 
 .scribbleBoard {

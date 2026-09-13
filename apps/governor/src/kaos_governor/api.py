@@ -347,6 +347,16 @@ def notification_inbox_payload(
     )
 
 
+def today_briefing_payload(
+    profile: str,
+    *,
+    urlopen=urllib.request.urlopen,
+) -> dict[str, object]:
+    if profile != "main":
+        raise NotificationInboxAPIError("main_profile_required", 404)
+    return _notification_tool_payload("/tools/briefing", urlopen=urlopen)
+
+
 def notification_acknowledge_id(path: str) -> str:
     match = re.fullmatch(r"/api/notifications/([0-9a-fA-F]{24})/acknowledge", path)
     return match.group(1).lower() if match else ""
@@ -3851,6 +3861,25 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 print(f"Notification inbox read failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "notification_inbox_unavailable"})
+            return
+        if parsed.path == "/api/today":
+            try:
+                require_main_access(self.headers)
+                json_response(
+                    self,
+                    200,
+                    today_briefing_payload(profile_from_headers(self.headers)),
+                )
+            except (ValueError, NotificationInboxAPIError, memos_relay.MemosRelayError) as exc:
+                if isinstance(exc, NotificationInboxAPIError):
+                    json_response(self, exc.status, {"ok": False, "error": exc.code})
+                elif isinstance(exc, memos_relay.MemosRelayError):
+                    json_response(self, exc.status, {"ok": False, "error": exc.code})
+                else:
+                    json_response(self, 400, {"ok": False, "error": str(exc)})
+            except Exception as exc:
+                print(f"KaosToday read failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "today_briefing_unavailable"})
             return
         if parsed.path == "/api/web-push/config":
             try:

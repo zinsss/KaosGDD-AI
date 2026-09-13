@@ -8,21 +8,23 @@ const viewSource = fs.readFileSync(path.join(__dirname, "../../apps/family-porta
 const indexSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
 const nginxSource = fs.readFileSync(path.join(__dirname, "../../deploy/h3-backend/family-portal/nginx.conf"), "utf8");
 
-test("personal PWA exposes the Governor notification inbox", () => {
+test("personal PWA renders the shared KaosToday briefing instead of an ACK list", () => {
   assert.match(appSource, /fetch\("\/api\/notifications\?limit=100"/);
+  assert.match(appSource, /fetch\("\/api\/today"/);
   assert.match(appSource, /KAOS_NOTIFICATIONS_VIEW\.renderNotifications/);
-  assert.match(viewSource, /type="checkbox"/);
-  assert.match(viewSource, /data-notification-ack=/);
-  assert.doesNotMatch(viewSource, />ACK<\/button>/);
-  assert.match(viewSource, /No pending notifications\./);
-  assert.match(indexSource, /src="\/notifications-view\.js\?v=2"/);
-  assert.ok(indexSource.indexOf('src="/notifications-view.js?v=2"') < indexSource.indexOf('src="/app.js?v=340"'));
+  assert.match(viewSource, /KAOS TODAY/);
+  assert.match(viewSource, /payload\.plainText/);
+  assert.match(viewSource, /class="kaosTodayText"/);
+  assert.doesNotMatch(viewSource, /data-notification-ack=/);
+  assert.match(indexSource, /src="\/notifications-view\.js\?v=3"/);
+  assert.ok(indexSource.indexOf('src="/notifications-view.js?v=3"') < indexSource.indexOf('src="/app.js?v=341"'));
 });
 
-test("notification acknowledgement uses the protected same-origin API", () => {
+test("viewing KaosToday acknowledges only notification rows included in its briefing", () => {
   assert.match(appSource, /fetch\(`\/api\/notifications\/\$\{encodeURIComponent\(id\)\}\/acknowledge`/);
   assert.match(appSource, /method: "POST"/);
-  assert.match(appSource, /if \(!notificationCheck\.checked\) return/);
-  assert.match(appSource, /notificationCheck\.disabled = true/);
+  assert.match(appSource, /item\?\.source === "notification"/);
+  assert.match(appSource, /!item\.acknowledged/);
   assert.match(nginxSource, /location \^~ \/api\/notifications/);
+  assert.match(nginxSource, /location = \/api\/today/);
 });

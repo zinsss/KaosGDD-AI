@@ -14,6 +14,8 @@ from . import __version__
 from .calendar import CalendarAdapterClient, CalendarAdapterConfig
 from .database import wait_for_database_and_migrate
 from .documents import DocumentIntakeStore, PaperlessConfig, PaperlessDocumentService
+from .daily_content import DailyContentLibrary
+from .daily_digest import DailyDigestConfig, ENCOURAGEMENT_ROTATION, VERSE_ROTATION
 from .fax import FaxConfig, FaxService
 from .mail import MailOrganizerConfig, NaverMailConfig, NaverMailOrganizer, NaverMailPoller
 from .memos import MemoMutationService, MemosConfig, MemosService
@@ -102,6 +104,18 @@ class GovernorToolsRuntime:
         mail_config = NaverMailConfig.from_env(source)
         mail = NaverMailPoller(mail_config)
         mail_organizer = NaverMailOrganizer(MailOrganizerConfig.from_env(source), mail_config)
+        digest_config = DailyDigestConfig.from_env(source)
+        daily_content = DailyContentLibrary(
+            cache_path=digest_config.content_cache_path,
+            refresh_hours=digest_config.content_refresh_hours,
+            timeout_seconds=digest_config.content_timeout_seconds,
+            fallback_bible=VERSE_ROTATION,
+            fallback_quotes=ENCOURAGEMENT_ROTATION,
+            preferred_bible_references=tuple(
+                reference for reference, _text in VERSE_ROTATION
+            ),
+            shuffle_daily=True,
+        )
 
         imaging_url = source.get("IMAGING_SECOND_LOOK_URL", "").strip()
         imaging_token = _secret(source, "IMAGING_SECOND_LOOK_TOKEN") if imaging_url else ""
@@ -153,6 +167,7 @@ class GovernorToolsRuntime:
             document_intake_store=DocumentIntakeStore(
                 Path(source.get("DOCUMENT_INTAKE_STATE_PATH", "/data/documents/intake.json"))
             ),
+            daily_content=daily_content,
         )
 
     def _worker_status(self) -> dict[str, object]:
