@@ -55,6 +55,7 @@ test("Memos and Scribble share the lightweight editor", () => {
   assert.match(styles, /\.markdownEditorHighlight \.mdH1 \{ color: var\(--markdown-editor-red\); \}/);
   assert.match(styles, /\.app\[data-profile="family"\] \.markdownEditor/);
   assert.match(styles, /\.markdownEditorToolbar/);
+  assert.match(styles, /\.scribbleCapture \.markdownEditorInput \{[\s\S]*?min-height: 124px !important;/);
 });
 
 test("Memo edits use the scoped Memos PATCH endpoint", () => {

@@ -8586,6 +8586,12 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   -webkit-text-fill-color: var(--markdown-editor-muted);
 }
 
+/* The four-row Scribble textarea can otherwise be shorter than its 124px
+   highlight mirror, leaving the mirror visible as an empty strip below it. */
+.scribbleCapture .markdownEditorInput {
+  min-height: 124px !important;
+}
+
 .markdownEditorHighlight .mdHeading {
   font-weight: 700;
 }
