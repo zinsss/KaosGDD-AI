@@ -4342,7 +4342,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   max-width: 100%;
   overflow: visible;
   border: 1px solid rgba(129, 161, 193, 0.6);
-  border-radius: 14px;
+  border-radius: 0;
   background: #ffffff;
   touch-action: pan-y;
 }
@@ -4499,7 +4499,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   min-width: 0;
   overflow: visible;
   border: 1px solid rgba(129, 161, 193, 0.6);
-  border-radius: 10px;
+  border-radius: 0;
   padding: 5px 8px 6px;
   background: var(--surface);
   color: #2e3440;
@@ -5946,7 +5946,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
     right: 3px;
     gap: 2px;
     padding: 3px 4px;
-    border-radius: 8px;
+    border-radius: 0;
   }
 
   .rounyBlockHandle {
@@ -8383,7 +8383,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
     max-width: none !important;
     --rouny-timeline-height: var(--rouny-print-timeline-height) !important;
     grid-template-rows: 32px var(--rouny-timeline-height);
-    border-radius: 8px;
+    border-radius: 0;
     background: #ffffff !important;
     break-inside: avoid;
     page-break-inside: avoid;
@@ -8424,7 +8424,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
     right: 5px;
     gap: 2px;
     min-height: 16px;
-    border-radius: 8px;
+    border-radius: 0;
     padding: 4px 6px;
   }
 
