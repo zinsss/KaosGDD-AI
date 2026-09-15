@@ -5485,6 +5485,66 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   color: #8c5f83;
 }
 
+@media (max-width: 640px) {
+  .app[data-profile="family"][data-route="calendar"] .calendarMonthPanel .panelHeader {
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 4px;
+    padding: 9px 6px;
+  }
+
+  .app[data-profile="family"][data-route="calendar"] .calendarMonthPanel .panelHeader > div:first-child {
+    display: flex;
+    flex: 0 1 auto;
+    align-items: center;
+    overflow: hidden;
+  }
+
+  .app[data-profile="family"][data-route="calendar"] .calendarMonthPanel .panelHeader > div:first-child > .label {
+    display: none;
+  }
+
+  .app[data-profile="family"][data-route="calendar"] .calendarMonthTitle {
+    flex-wrap: nowrap;
+    gap: 2px;
+    white-space: nowrap;
+  }
+
+  .app[data-profile="family"][data-route="calendar"] .calendarTitleSelect {
+    padding-inline: 1px;
+  }
+
+  .app[data-profile="family"][data-route="calendar"] .calendarTitleSelect.isYearSelect {
+    width: 80px;
+  }
+
+  .app[data-profile="family"][data-route="calendar"] .calendarTitleSelect.isMonthSelect {
+    width: 46px;
+  }
+
+  .app[data-profile="family"][data-route="calendar"] .calendarHeaderActions {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    gap: 3px;
+  }
+
+  .app[data-profile="family"][data-route="calendar"] .monthNav {
+    grid-template-columns: 24px 44px 24px;
+    min-height: 32px;
+  }
+
+  .app[data-profile="family"][data-route="calendar"] :is(.monthNavButton, .monthTodayButton) {
+    min-height: 32px;
+  }
+
+  .app[data-profile="family"][data-route="calendar"] .calendarHeaderActions > .openButton {
+    min-width: 40px;
+    min-height: 32px;
+    padding-inline: 5px;
+    font-size: 0.72rem;
+  }
+}
+
 .app[data-profile="family"] .day.isMuted {
   border-color: rgba(122, 96, 132, 0.08);
   background: rgba(238, 228, 244, 0.48);

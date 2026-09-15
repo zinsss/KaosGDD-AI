@@ -54,7 +54,7 @@ test("notifications stays routable without adding another main menu item", () =>
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=349"');
+  const styleIndex = index.indexOf('href="/styles.css?v=350"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=8"');
   const calendarViewIndex = index.indexOf('src="/calendar-view.js?v=2"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
@@ -96,6 +96,13 @@ test("calendar month panel rendering is delegated to the view module", () => {
 test("family calendar event counters use a quiet theme color", () => {
   const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
   assert.match(styles, /\.app\[data-profile="family"\] \.dayEventCount\s*\{[^}]*color: #8c5f83;/s);
+});
+
+test("family mobile calendar header keeps its controls on one row", () => {
+  const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
+  assert.match(styles, /@media \(max-width: 640px\)[\s\S]*data-profile="family"\]\[data-route="calendar"\][\s\S]*\.calendarMonthPanel \.panelHeader\s*\{[^}]*flex-wrap: nowrap;/);
+  assert.match(styles, /data-route="calendar"\][^\n]*\.calendarMonthTitle\s*\{[^}]*flex-wrap: nowrap;/s);
+  assert.match(styles, /data-route="calendar"\][^\n]*\.calendarHeaderActions\s*\{[^}]*flex-wrap: nowrap;/s);
 });
 
 test("calendar title uses native month and year dropdowns", () => {
