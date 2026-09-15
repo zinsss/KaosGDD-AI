@@ -54,9 +54,9 @@ test("notifications stays routable without adding another main menu item", () =>
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=348"');
+  const styleIndex = index.indexOf('href="/styles.css?v=349"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=8"');
-  const calendarViewIndex = index.indexOf('src="/calendar-view.js?v=1"');
+  const calendarViewIndex = index.indexOf('src="/calendar-view.js?v=2"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
   const faxIndex = index.indexOf('src="/fax.js?v=2"');
   const mailIndex = index.indexOf('src="/mail.js?v=7"');
@@ -87,8 +87,15 @@ test("calendar month panel rendering is delegated to the view module", () => {
   assert.match(calendarViewSource, /data-month-shift="-1"/);
   assert.match(calendarViewSource, /data-date="\$\{cell\.value\}"/);
   assert.match(calendarViewSource, /data-calendar-add-event/);
-  assert.match(index, /src="\/calendar-view\.js\?v=1"/);
-  assert.ok(index.indexOf('src="/calendar-view.js?v=1"') < index.indexOf('src="/app.js?v=344"'));
+  assert.match(index, /src="\/calendar-view\.js\?v=2"/);
+  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=344"'));
+  assert.match(calendarViewSource, /dayCaregiverMark" role="img"/);
+  assert.match(calendarViewSource, /hasMarket \|\| eventCount \|\| taskCount/);
+});
+
+test("family calendar event counters use a quiet theme color", () => {
+  const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
+  assert.match(styles, /\.app\[data-profile="family"\] \.dayEventCount\s*\{[^}]*color: #8c5f83;/s);
 });
 
 test("calendar title uses native month and year dropdowns", () => {

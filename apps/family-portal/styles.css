@@ -2397,9 +2397,16 @@ h3 {
 }
 
 .dayCaregiverMark {
-  color: #b0528d;
-  font-size: 0.98rem;
-  line-height: 1;
+  position: absolute;
+  bottom: 7px;
+  left: 7px;
+  z-index: 1;
+  display: block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #a55b8f;
+  pointer-events: none;
 }
 
 .dayMarketMark {
@@ -5472,6 +5479,10 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   border-color: rgba(151, 124, 184, 0.34);
   background: rgba(231, 220, 244, 0.62);
   color: #755b98;
+}
+
+.app[data-profile="family"] .dayEventCount {
+  color: #8c5f83;
 }
 
 .app[data-profile="family"] .day.isMuted {

@@ -67,11 +67,11 @@ window.KAOS_CALENDAR_VIEW = (() => {
                     <span class="dayNumber">${cell.label}</span>
                   </span>
                   ${deps.weatherGlyph(weather) ? `<span class="dayWeatherGlyph">${deps.escapeHtml(deps.weatherGlyph(weather))}</span>` : ""}
+                  ${hasCaregiver ? `<span class="dayCaregiverMark" role="img" aria-label="${deps.uiText("caregiver.dayMarker", "Caregiver record")}"></span>` : ""}
                   ${
-                    hasCaregiver || hasMarket || eventCount || taskCount
+                    hasMarket || eventCount || taskCount
                       ? `
                         <span class="dayMarkers">
-                          ${hasCaregiver ? `<span class="dayCaregiverMark" aria-label="${deps.uiText("caregiver.dayMarker", "Caregiver record")}">•</span>` : ""}
                           ${hasMarket ? `<span class="dayMarketMark" aria-label="Market Day">•</span>` : ""}
                           ${eventCount ? `<span class="dayEventCount">${eventCount}</span>` : ""}
                           ${taskCount ? `<span class="dayTaskCount">${taskCount}</span>` : ""}
