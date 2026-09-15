@@ -21,6 +21,7 @@ test("gratitude journal module loads before the portal app", () => {
   assert.match(appSource, /gratitude: window\.KAOS_GRATITUDE_JOURNAL\.initialState\(\)/);
   assert.match(appSource, /renderGratitudeJournal\(today\)/);
   assert.match(styleSource, /\.gratitudePanel\s*\{[^}]*grid-column: 1 \/ -1/s);
+  assert.match(styleSource, /\.gratitudeField input::placeholder\s*\{[^}]*opacity: 0\.42;/s);
 });
 
 test("renders five text fields for both profiles", () => {

@@ -1394,6 +1394,7 @@ h3 {
 
 .gratitudeField input::placeholder {
   color: var(--muted);
+  opacity: 0.42;
 }
 
 .gratitudeActions {
