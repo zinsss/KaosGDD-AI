@@ -1305,6 +1305,102 @@ h3 {
   gap: 12px;
 }
 
+.gratitudePanel {
+  grid-column: 1 / -1;
+  min-height: 0 !important;
+}
+
+.gratitudeHeader {
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.gratitudeHeader::-webkit-details-marker {
+  display: none;
+}
+
+.gratitudeHeader h2 {
+  margin: 2px 0 0;
+}
+
+.gratitudeStatus {
+  margin: 0 0 0 auto;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-align: right;
+}
+
+.gratitudeStatus.isSaved {
+  color: var(--nord14);
+}
+
+.gratitudeStatus.isError {
+  max-width: 34rem;
+  color: var(--nord11);
+}
+
+.gratitudeToggle {
+  color: var(--accent);
+  font-size: 1.25rem;
+  line-height: 1;
+  transition: transform 140ms ease;
+}
+
+.gratitudePanel[open] .gratitudeToggle {
+  transform: rotate(180deg);
+}
+
+.gratitudeForm {
+  display: grid;
+  gap: 12px;
+}
+
+.gratitudeFields {
+  display: grid;
+  gap: 8px;
+}
+
+.gratitudeField {
+  display: grid;
+  grid-template-columns: 1.8rem minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.gratitudeField > span {
+  color: var(--accent);
+  font-weight: 800;
+  text-align: center;
+}
+
+.gratitudeField input {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  padding: 9px 11px;
+}
+
+.gratitudeField input:focus {
+  border-color: var(--accent);
+  outline: 2px solid color-mix(in srgb, var(--accent) 24%, transparent);
+  outline-offset: 1px;
+}
+
+.gratitudeField input::placeholder {
+  color: var(--muted);
+}
+
+.gratitudeActions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .familyAgendaOverview {
   display: flex;
   align-items: center;

@@ -35,6 +35,8 @@ RADICALE_SYSTEM_CAREGIVER_JOURNAL_NAME = os.environ.get("RADICALE_SYSTEM_CAREGIV
 RADICALE_SYSTEM_LOGS_JOURNAL_NAME = os.environ.get("RADICALE_SYSTEM_LOGS_JOURNAL_NAME", "Kaos_Logs")
 RADICALE_FAMILY_CALENDAR_NAME = os.environ.get("RADICALE_FAMILY_CALENDAR_NAME", "Family")
 RADICALE_GDD_CALENDAR_NAME = os.environ.get("RADICALE_GDD_CALENDAR_NAME", "Kaos_Calendar")
+RADICALE_GRATITUDE_JOURNAL_NAME = os.environ.get("RADICALE_GRATITUDE_JOURNAL_NAME", "감사")
+RADICALE_GRATITUDE_JOURNAL_ID = os.environ.get("RADICALE_GRATITUDE_JOURNAL_ID", "kaos-gratitude")
 TIMEOUT = float(os.environ.get("KAOSGDD_ADAPTER_TIMEOUT_SECONDS", "30"))
 LOCAL_TIMEZONE = timezone(timedelta(hours=int(os.environ.get("KAOSGDD_LOCAL_UTC_OFFSET_HOURS", "9"))))
 LOCAL_TZID = os.environ.get("KAOSGDD_LOCAL_TZID", "Asia/Seoul")
@@ -53,6 +55,8 @@ MAX_TEXT_PRESET_ID_LENGTH = 128
 MAX_TEXT_PRESET_NAME_LENGTH = 200
 MAX_TEXT_PRESET_BODY_LENGTH = 4000
 MAX_SMART_EVENT_PROPOSALS = 12
+MAX_GRATITUDE_ITEMS = 5
+MAX_GRATITUDE_ITEM_LENGTH = 500
 SMART_EVENTS_AI_URL = os.environ.get("CALENDAR_SMART_EVENTS_AI_URL", "").strip()
 SMART_EVENTS_AI_TOKEN = os.environ.get("CALENDAR_SMART_EVENTS_AI_TOKEN", "").strip()
 SMART_EVENTS_AI_TOKEN_FILE = os.environ.get("CALENDAR_SMART_EVENTS_AI_TOKEN_FILE", "").strip()
@@ -689,6 +693,184 @@ def build_vjournal(payload):
         lines.append(f"CATEGORIES:{escape_ics(category)}")
     lines.extend(["END:VJOURNAL", "END:VCALENDAR"])
     return uid, calendar_body(lines)
+
+
+class GratitudeConflict(Exception):
+    def __init__(self, current):
+        super().__init__("gratitude_etag_conflict")
+        self.current = current
+
+
+def gratitude_account(profile):
+    if profile == "family":
+        account_item = ACCOUNTS["family"]
+    elif profile == "main":
+        account_item = ACCOUNTS["zin"]
+    else:
+        raise ValueError("gratitude_profile_not_supported")
+    if not account_item["configured"]:
+        raise ValueError("gratitude_account_not_configured")
+    return account_item
+
+
+def find_gratitude_collection(account_item):
+    for collection in propfind_collections(account_item):
+        if collection.get("rawId") == RADICALE_GRATITUDE_JOURNAL_ID:
+            if collection.get("components") and "VJOURNAL" not in collection["components"]:
+                raise ValueError("gratitude_collection_component_mismatch")
+            return collection
+    return None
+
+
+def ensure_gratitude_collection(account_item):
+    collection = find_gratitude_collection(account_item)
+    if collection:
+        return collection
+
+    body = f"""<?xml version="1.0" encoding="utf-8" ?>
+<cal:mkcalendar xmlns:d="DAV:" xmlns:cal="urn:ietf:params:xml:ns:caldav">
+  <d:set>
+    <d:prop>
+      <d:displayname>{RADICALE_GRATITUDE_JOURNAL_NAME}</d:displayname>
+      <cal:supported-calendar-component-set><cal:comp name="VJOURNAL" /></cal:supported-calendar-component-set>
+    </d:prop>
+  </d:set>
+</cal:mkcalendar>"""
+    try:
+        radicale_request(
+            account_item,
+            "MKCALENDAR",
+            f"/{account_item['username']}/{RADICALE_GRATITUDE_JOURNAL_ID}/",
+            body,
+            {"Content-Type": "application/xml; charset=utf-8"},
+        )
+    except urllib.error.HTTPError as exc:
+        if exc.code not in {405, 409}:
+            raise
+
+    collection = find_gratitude_collection(account_item)
+    if not collection:
+        raise ValueError("gratitude_collection_not_found")
+    return collection
+
+
+def gratitude_uid(account_item, date_value):
+    return f"KAOS-GRATITUDE-{account_item['key'].upper()}-{date_value.replace('-', '')}"
+
+
+def gratitude_items_from_description(description):
+    items = str(description or "").split("\n")[:MAX_GRATITUDE_ITEMS]
+    return items + [""] * (MAX_GRATITUDE_ITEMS - len(items))
+
+
+def validate_gratitude_items(value):
+    if not isinstance(value, list) or len(value) > MAX_GRATITUDE_ITEMS:
+        raise ValueError("invalid_gratitude_items")
+    items = []
+    for value_item in value:
+        normalized = re.sub(r"\s+", " ", str(value_item or "")).strip()
+        if len(normalized) > MAX_GRATITUDE_ITEM_LENGTH:
+            raise ValueError("gratitude_item_too_long")
+        items.append(normalized)
+    items.extend([""] * (MAX_GRATITUDE_ITEMS - len(items)))
+    if not any(items):
+        raise ValueError("gratitude_item_required")
+    return items
+
+
+def find_gratitude_entry(account_item, collection, date_value):
+    expected_uid = gratitude_uid(account_item, date_value)
+    for item in report_collection(account_item, collection["href"]):
+        if item.get("component") != "VJOURNAL":
+            continue
+        parsed_date = parse_ics_datetime(item.get("DTSTART", ""))["date"]
+        if str(item.get("UID") or "").upper() == expected_uid or (
+            parsed_date == date_value and "KAOS-GRATITUDE" in str(item.get("CATEGORIES") or "").upper()
+        ):
+            return item
+    return None
+
+
+def gratitude_payload(profile, date_value, account_item, collection=None, item=None):
+    journal = normalize_journal(item, collection) if item and collection else {}
+    return {
+        "ok": True,
+        "configured": True,
+        "live": True,
+        "profile": profile,
+        "owner": account_item["key"],
+        "date": date_value,
+        "exists": bool(item),
+        "items": gratitude_items_from_description(journal.get("description", "")),
+        "etag": str(item.get("etag") or "") if item else "",
+        "lastModified": journal.get("lastModified", ""),
+    }
+
+
+def list_gratitude(profile, date_value=""):
+    date_value = validate_date(date_value) or datetime.now(LOCAL_TIMEZONE).date().isoformat()
+    account_item = gratitude_account(profile)
+    collection = find_gratitude_collection(account_item)
+    item = find_gratitude_entry(account_item, collection, date_value) if collection else None
+    return gratitude_payload(profile, date_value, account_item, collection, item)
+
+
+def build_gratitude_vjournal(account_item, date_value, items, existing=None):
+    existing = existing or {}
+    uid = gratitude_uid(account_item, date_value)
+    now = utc_stamp(datetime.now(timezone.utc))
+    created = existing.get("CREATED") or now
+    description = "\n".join(items)
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "CALSCALE:GREGORIAN",
+        "PRODID:-//KaosGDD//Gratitude Journal//EN",
+        "BEGIN:VJOURNAL",
+        f"UID:{uid}",
+        f"DTSTAMP:{now}",
+        f"CREATED:{created}",
+        f"LAST-MODIFIED:{now}",
+        f"DTSTART;VALUE=DATE:{date_value.replace('-', '')}",
+        "SUMMARY:5 Thankful Things",
+        f"DESCRIPTION:{escape_ics(description)}",
+        "CATEGORIES:KAOS-GRATITUDE",
+        "STATUS:FINAL",
+        "END:VJOURNAL",
+        "END:VCALENDAR",
+    ]
+    return uid, calendar_body(lines)
+
+
+def put_gratitude(payload, profile):
+    date_value = validate_date(payload.get("date"))
+    if not date_value:
+        raise ValueError("gratitude_date_required")
+    items = validate_gratitude_items(payload.get("items"))
+    submitted_etag = str(payload.get("etag") or "")
+    account_item = gratitude_account(profile)
+    collection = ensure_gratitude_collection(account_item)
+    existing = find_gratitude_entry(account_item, collection, date_value)
+    current = gratitude_payload(profile, date_value, account_item, collection, existing)
+    if existing and submitted_etag != str(existing.get("etag") or ""):
+        raise GratitudeConflict(current)
+    if not existing and submitted_etag:
+        raise GratitudeConflict(current)
+
+    uid, body = build_gratitude_vjournal(account_item, date_value, items, existing)
+    href = existing.get("href") if existing else urllib.parse.urljoin(collection["href"], f"{uid}.ics")
+    headers = {"Content-Type": "text/calendar; charset=utf-8"}
+    headers["If-Match" if existing else "If-None-Match"] = existing.get("etag") if existing else "*"
+    try:
+        radicale_request(account_item, "PUT", href, body, headers)
+    except urllib.error.HTTPError as exc:
+        if exc.code != 412:
+            raise
+        latest = find_gratitude_entry(account_item, collection, date_value)
+        raise GratitudeConflict(gratitude_payload(profile, date_value, account_item, collection, latest)) from exc
+
+    saved = find_gratitude_entry(account_item, collection, date_value)
+    return gratitude_payload(profile, date_value, account_item, collection, saved)
 
 
 def list_system_logs():
@@ -1574,8 +1756,14 @@ def bootstrap_payload(profile="main"):
 
     for item_account in accounts:
         account_collections = propfind_collections(item_account)
-        collections.extend(account_collections)
-        for collection in account_collections:
+        visible_collections = [
+            collection
+            for collection in account_collections
+            if not collection.get("components")
+            or any(component in {"VEVENT", "VTODO"} for component in collection.get("components", []))
+        ]
+        collections.extend(visible_collections)
+        for collection in visible_collections:
             collection_items = report_collection(item_account, collection["href"])
             event_counts = {}
             for item in collection_items:
@@ -3291,6 +3479,14 @@ class Handler(BaseHTTPRequestHandler):
             except (ET.ParseError, urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
                 json_response(self, 502, {"configured": configured(profile), "live": False, "profile": profile, "error": type(exc).__name__})
             return
+        if path == "/api/calendar/gratitude":
+            try:
+                json_response(self, 200, list_gratitude(profile, (query.get("date") or [""])[0]))
+            except ValueError as exc:
+                json_response(self, 400, {"ok": False, "error": str(exc)})
+            except (ET.ParseError, urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
+                json_response(self, 502, {"configured": configured(profile), "live": False, "profile": profile, "error": type(exc).__name__})
+            return
         if path == "/internal/system/logs":
             try:
                 json_response(self, 200, list_system_logs())
@@ -3438,6 +3634,16 @@ class Handler(BaseHTTPRequestHandler):
                 json_response(self, 200, update_task(read_json_request(self), profile))
             except ValueError as exc:
                 json_response(self, 400, {"error": str(exc)})
+            except (ET.ParseError, urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
+                json_response(self, 502, {"configured": configured(profile), "live": False, "profile": profile, "error": type(exc).__name__})
+            return
+        if path == "/api/calendar/gratitude":
+            try:
+                json_response(self, 200, put_gratitude(read_json_request(self), profile))
+            except GratitudeConflict as exc:
+                json_response(self, 409, {"ok": False, "error": "gratitude_etag_conflict", "current": exc.current})
+            except ValueError as exc:
+                json_response(self, 400, {"ok": False, "error": str(exc)})
             except (ET.ParseError, urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
                 json_response(self, 502, {"configured": configured(profile), "live": False, "profile": profile, "error": type(exc).__name__})
             return

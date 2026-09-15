@@ -252,6 +252,7 @@ const state = {
     events: [],
     tasks: [],
   },
+  gratitude: window.KAOS_GRATITUDE_JOURNAL.initialState(),
   weatherLocation: weatherLocationPreference(),
   remoteWeather: {
     checked: false,
@@ -3161,13 +3162,17 @@ async function loadNotifications(options = {}) {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    const notificationItems = Array.isArray(payload.items) ? payload.items : [];
+    const actionableItems = notificationItems.filter(
+      (item) => !item?.acknowledged && String(item?.category || "").toLowerCase() !== "daily",
+    );
     state.notifications = {
       checked: true,
       loading: false,
       error: "",
-      pendingCount: Number(payload.pendingCount || 0),
-      criticalCount: Number(payload.criticalCount || 0),
-      items: Array.isArray(payload.items) ? payload.items : [],
+      pendingCount: actionableItems.length,
+      criticalCount: actionableItems.filter((item) => Number(item?.priority || 0) > 0).length,
+      items: notificationItems,
     };
   } catch (error) {
     state.notifications = {
@@ -6726,6 +6731,7 @@ function renderFamilyAgenda() {
           <strong>${escapeHtml(weatherSummary)}</strong>
         </div>
       </section>
+      ${renderGratitudeJournal(today)}
       ${renderFamilyAgendaUpcoming(events, upcomingTasks)}
       ${renderFamilyAgendaSection(uiText("agenda.otherTasks", "Other tasks"), renderTaskRows(otherTasks))}
       ${renderFamilyAgendaRouny()}
@@ -6782,8 +6788,23 @@ function renderToday() {
         </div>
         <div class="panelBody">${renderTaskRows(tasks)}</div>
       </section>
+      ${renderGratitudeJournal(today)}
     </div>
   `;
+}
+
+function gratitudeJournalContext(date = ymd(new Date())) {
+  return {
+    journal: state.gratitude,
+    profile: portalProfile(),
+    date,
+    escapeHtml,
+    rerender: render,
+  };
+}
+
+function renderGratitudeJournal(date) {
+  return window.KAOS_GRATITUDE_JOURNAL.render(gratitudeJournalContext(date));
 }
 
 function renderCalendarMonthPanel(options = {}) {
@@ -9848,6 +9869,7 @@ function render() {
   if (route === "calendar" || route === "today" || ((route === "add-event" || route === "edit-event") && isDesktopLayout())) {
     loadRemoteWeatherForSelectedMonth();
   }
+  if (route === "today") window.KAOS_GRATITUDE_JOURNAL.load(gratitudeJournalContext());
   if (route === "caregiver" || (route === "calendar" && portalProfile() === "family")) loadCaregiverMonth();
   if (route === "supplies") {
     if (state.supplies.error && !state.supplies.errorRetried) {
@@ -11241,6 +11263,13 @@ document.addEventListener("submit", async (event) => {
     return;
   }
 
+  const gratitudeForm = event.target.closest("[data-gratitude-form]");
+  if (gratitudeForm) {
+    event.preventDefault();
+    await window.KAOS_GRATITUDE_JOURNAL.save(gratitudeJournalContext());
+    return;
+  }
+
   const scribbleCreateForm = event.target.closest("[data-scribble-create]");
   if (scribbleCreateForm) {
     event.preventDefault();
@@ -11762,6 +11791,7 @@ document.addEventListener(
     if (disclosure.matches("[data-holidays]")) state.holidays.expanded = disclosure.open;
     if (disclosure.matches("[data-custom-events]")) state.customEvents.expanded = disclosure.open;
     if (disclosure.matches("[data-mail-organizer]")) state.mailOrganizer.expanded = disclosure.open;
+    if (disclosure.matches("[data-gratitude-disclosure]")) state.gratitude.open = disclosure.open;
   },
   true,
 );
@@ -11770,6 +11800,8 @@ document.addEventListener("input", (event) => {
   if (window.KAOS_FAMILY_SMART_EVENTS.handleInput(familySmartEventContext(), event)) {
     return;
   }
+
+  if (window.KAOS_GRATITUDE_JOURNAL.handleInput(state.gratitude, event)) return;
 
   if (event.target.matches("[data-memo-edit-content]")) {
     state.memos.editDraft = event.target.value;
