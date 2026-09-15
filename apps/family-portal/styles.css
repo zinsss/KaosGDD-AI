@@ -222,6 +222,12 @@ svg {
   overflow: hidden;
 }
 
+@media (display-mode: standalone) {
+  .app[data-profile="main"] {
+    height: 100vh;
+  }
+}
+
 html.isAgendaSuppliesEmbed,
 html.isAgendaSuppliesEmbed body {
   background: var(--bg);
