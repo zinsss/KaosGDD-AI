@@ -223,10 +223,17 @@ svg {
 }
 
 @media (display-mode: standalone) {
+  html:has(.app[data-profile="main"]),
+  body:has(.app[data-profile="main"]) {
+    height: 100vh;
+    min-height: 100vh;
+  }
+
   .app[data-profile="main"] {
-    position: fixed;
-    inset: 0;
-    height: auto;
+    position: relative;
+    inset: auto;
+    height: 100vh;
+    min-height: 100vh;
   }
 }
 
@@ -5082,7 +5089,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 }
 
 .app[data-profile="main"] {
-  --page-bottom-reserve: 8px;
+  --page-bottom-reserve: 0px;
   --main-tab-active-border: rgba(180, 142, 173, 0.62);
   --main-tab-active-bg: rgba(180, 142, 173, 0.14);
   --main-tab-active-text: var(--nord15);
