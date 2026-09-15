@@ -43,6 +43,8 @@
         required: "감사한 일을 하나 이상 적어주세요.",
         conflict: "다른 기기에서 먼저 수정되었습니다. 지금 입력한 내용으로 덮어쓰려면 다시 저장하세요.",
         unavailable: "감사일기를 불러올 수 없습니다.",
+        calendarTitle: "감사한 일",
+        calendarNone: "기록 없음",
       };
     }
     return {
@@ -56,6 +58,8 @@
       required: "Write at least one thankful thing.",
       conflict: "This entry changed on another device. Save again to overwrite it with your current text.",
       unavailable: "Could not load the gratitude journal.",
+      calendarTitle: "Thankful Things",
+      calendarNone: "No gratitude entry.",
     };
   }
 
@@ -105,6 +109,26 @@
           </div>
         </form>
       </details>
+    `;
+  }
+
+  function renderReadOnly(context) {
+    const { journal, profile, date, escapeHtml, hasPrevious = false } = context;
+    const copy = labels(profile);
+    if (journal.date !== date) resetForDate(journal, date);
+    const items = normalizeItems(journal.items).map((item) => item.trim()).filter(Boolean);
+    const message = journal.error
+      ? `<p class="calendarGratitudeMessage isError" role="alert">${escapeHtml(journal.error)}</p>`
+      : journal.loading || !journal.checked
+        ? `<p class="calendarGratitudeMessage">${escapeHtml(copy.loading)}</p>`
+        : items.length
+          ? `<ol class="calendarGratitudeList">${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ol>`
+          : `<p class="calendarGratitudeMessage">${escapeHtml(copy.calendarNone)}</p>`;
+    return `
+      <div class="panelBody calendarGratitude ${hasPrevious ? "withDivider" : ""}">
+        <p class="label sectionLabel">${escapeHtml(copy.calendarTitle)}</p>
+        ${message}
+      </div>
     `;
   }
 
@@ -191,6 +215,7 @@
   window.KAOS_GRATITUDE_JOURNAL = {
     initialState,
     render,
+    renderReadOnly,
     load,
     save,
     handleInput,

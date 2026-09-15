@@ -253,6 +253,7 @@ const state = {
     tasks: [],
   },
   gratitude: window.KAOS_GRATITUDE_JOURNAL.initialState(),
+  calendarGratitude: window.KAOS_GRATITUDE_JOURNAL.initialState(),
   weatherLocation: weatherLocationPreference(),
   remoteWeather: {
     checked: false,
@@ -6121,8 +6122,11 @@ function renderCaregiverDayEditor() {
 
 function renderCalendarAgenda(events, tasks) {
   const weather = weatherForDate(state.selectedDate);
+  const gratitude = renderCalendarGratitude(
+    state.selectedDate,
+    Boolean(weather || events.length || tasks.length),
+  );
   const caregiver = renderCaregiverDayEditor();
-  if (!events.length && !tasks.length && !weather && !caregiver) return `<div class="panelBody"><p class="taskMeta">${uiText("common.noItems", "No items")}</p></div>`;
   return `
     ${weather ? renderSelectedWeather(weather) : ""}
     ${events.length ? renderTimeline(events, "") : ""}
@@ -6136,6 +6140,7 @@ function renderCalendarAgenda(events, tasks) {
         `
         : ""
     }
+    ${gratitude}
     ${caregiver}
   `;
 }
@@ -6793,9 +6798,9 @@ function renderToday() {
   `;
 }
 
-function gratitudeJournalContext(date = ymd(new Date())) {
+function gratitudeJournalContext(date = ymd(new Date()), journal = state.gratitude) {
   return {
-    journal: state.gratitude,
+    journal,
     profile: portalProfile(),
     date,
     escapeHtml,
@@ -6805,6 +6810,17 @@ function gratitudeJournalContext(date = ymd(new Date())) {
 
 function renderGratitudeJournal(date) {
   return window.KAOS_GRATITUDE_JOURNAL.render(gratitudeJournalContext(date));
+}
+
+function calendarGratitudeContext(date = state.selectedDate) {
+  return gratitudeJournalContext(date, state.calendarGratitude);
+}
+
+function renderCalendarGratitude(date, hasPrevious = false) {
+  return window.KAOS_GRATITUDE_JOURNAL.renderReadOnly({
+    ...calendarGratitudeContext(date),
+    hasPrevious,
+  });
 }
 
 function renderCalendarMonthPanel(options = {}) {
@@ -9870,6 +9886,7 @@ function render() {
     loadRemoteWeatherForSelectedMonth();
   }
   if (route === "today") window.KAOS_GRATITUDE_JOURNAL.load(gratitudeJournalContext());
+  if (route === "calendar") window.KAOS_GRATITUDE_JOURNAL.load(calendarGratitudeContext());
   if (route === "caregiver" || (route === "calendar" && portalProfile() === "family")) loadCaregiverMonth();
   if (route === "supplies") {
     if (state.supplies.error && !state.supplies.errorRetried) {

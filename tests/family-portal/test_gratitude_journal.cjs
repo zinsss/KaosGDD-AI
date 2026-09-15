@@ -17,11 +17,56 @@ function loadModule(fetchImpl = async () => ({ ok: true, json: async () => ({ ok
 }
 
 test("gratitude journal module loads before the portal app", () => {
-  assert.ok(indexSource.indexOf('src="/gratitude-journal.js?v=2"') < indexSource.indexOf('src="/app.js?v=343"'));
+  assert.ok(indexSource.indexOf('src="/gratitude-journal.js?v=3"') < indexSource.indexOf('src="/app.js?v=344"'));
   assert.match(appSource, /gratitude: window\.KAOS_GRATITUDE_JOURNAL\.initialState\(\)/);
+  assert.match(appSource, /calendarGratitude: window\.KAOS_GRATITUDE_JOURNAL\.initialState\(\)/);
   assert.match(appSource, /renderGratitudeJournal\(today\)/);
+  assert.match(appSource, /renderCalendarGratitude\(\s*state\.selectedDate,/);
+  assert.match(appSource, /route === "calendar"\) window\.KAOS_GRATITUDE_JOURNAL\.load\(calendarGratitudeContext\(\)\)/);
   assert.match(styleSource, /\.gratitudePanel\s*\{[^}]*grid-column: 1 \/ -1/s);
-  assert.match(styleSource, /\.gratitudeField input::placeholder\s*\{[^}]*opacity: 0\.42;/s);
+  assert.match(styleSource, /\.gratitudeField input::placeholder\s*\{[^}]*rgba\(216, 222, 233, 0\.26\)[^}]*opacity: 1;/s);
+  assert.match(styleSource, /\.app\[data-profile="main"\] \.gratitudeField input\s*\{[^}]*border-radius: 0;/s);
+  assert.match(styleSource, /\.gratitudeField input:focus\s*\{[^}]*outline: none;[^}]*inset 2px 0 0/s);
+});
+
+test("renders a selected day's gratitude as a read-only list", () => {
+  const journalModule = loadModule();
+  const journal = journalModule.initialState();
+  Object.assign(journal, {
+    date: "2026-09-15",
+    checked: true,
+    exists: true,
+    items: ["따뜻한 차", "무사한 하루", "", "", ""],
+  });
+
+  const html = journalModule.renderReadOnly({
+    journal,
+    profile: "family",
+    date: "2026-09-15",
+    escapeHtml: (value) => String(value),
+    hasPrevious: true,
+  });
+
+  assert.match(html, /calendarGratitude withDivider/);
+  assert.match(html, /감사한 일/);
+  assert.equal((html.match(/<li>/g) || []).length, 2);
+  assert.doesNotMatch(html, /data-gratitude-item/);
+});
+
+test("renders a quiet empty state for a day without an entry", () => {
+  const journalModule = loadModule();
+  const journal = journalModule.initialState();
+  Object.assign(journal, { date: "2026-09-15", checked: true });
+
+  const html = journalModule.renderReadOnly({
+    journal,
+    profile: "main",
+    date: "2026-09-15",
+    escapeHtml: (value) => String(value),
+  });
+
+  assert.match(html, /No gratitude entry\./);
+  assert.doesNotMatch(html, /withDivider/);
 });
 
 test("renders five text fields for both profiles", () => {

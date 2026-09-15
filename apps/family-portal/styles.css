@@ -1342,7 +1342,7 @@ h3 {
 }
 
 .gratitudeToggle {
-  color: var(--accent);
+  color: var(--nord8);
   font-size: 1.25rem;
   line-height: 1;
   transition: transform 140ms ease;
@@ -1370,7 +1370,7 @@ h3 {
 }
 
 .gratitudeField > span {
-  color: var(--accent);
+  color: var(--nord8);
   font-weight: 800;
   text-align: center;
 }
@@ -1387,19 +1387,66 @@ h3 {
 }
 
 .gratitudeField input:focus {
-  border-color: var(--accent);
-  outline: 2px solid color-mix(in srgb, var(--accent) 24%, transparent);
-  outline-offset: 1px;
+  border-color: rgba(136, 192, 208, 0.4);
+  outline: none;
+  box-shadow: inset 2px 0 0 rgba(136, 192, 208, 0.52);
 }
 
 .gratitudeField input::placeholder {
-  color: var(--muted);
-  opacity: 0.42;
+  color: rgba(216, 222, 233, 0.26);
+  opacity: 1;
+}
+
+.app[data-profile="main"] .gratitudeField input {
+  border-radius: 0;
+}
+
+.app[data-profile="family"] .gratitudeField > span,
+.app[data-profile="family"] .gratitudeToggle {
+  color: #7f6aa6;
+}
+
+.app[data-profile="family"] .gratitudeField input:focus {
+  border-color: rgba(155, 95, 143, 0.36);
+  box-shadow: inset 2px 0 0 rgba(155, 95, 143, 0.46);
+}
+
+.app[data-profile="family"] .gratitudeField input::placeholder {
+  color: rgba(89, 73, 100, 0.34);
 }
 
 .gratitudeActions {
   display: flex;
   justify-content: flex-end;
+}
+
+.calendarGratitude {
+  display: grid;
+  gap: 8px;
+}
+
+.calendarGratitudeList {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 1.8rem;
+}
+
+.calendarGratitudeList li::marker {
+  color: var(--nord8);
+}
+
+.calendarGratitudeMessage {
+  margin: 0;
+  color: var(--muted);
+}
+
+.calendarGratitudeMessage.isError {
+  color: var(--nord11);
+}
+
+.app[data-profile="family"] .calendarGratitudeList li::marker {
+  color: #7f6aa6;
 }
 
 .familyAgendaOverview {
