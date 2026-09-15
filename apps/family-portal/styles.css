@@ -4923,6 +4923,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 }
 
 .app[data-profile="main"] {
+  --page-bottom-reserve: 8px;
   --main-tab-active-border: rgba(180, 142, 173, 0.62);
   --main-tab-active-bg: rgba(180, 142, 173, 0.14);
   --main-tab-active-text: var(--nord15);

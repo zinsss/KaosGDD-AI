@@ -54,7 +54,7 @@ test("notifications stays routable without adding another main menu item", () =>
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=341"');
+  const styleIndex = index.indexOf('href="/styles.css?v=342"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=8"');
   const calendarViewIndex = index.indexOf('src="/calendar-view.js?v=1"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
@@ -68,6 +68,11 @@ test("the navigation contract loads before the portal application", () => {
   assert.ok(faxIndex > documentsIndex);
   assert.ok(mailIndex > faxIndex);
   assert.ok(applicationIndex > mailIndex);
+});
+
+test("main PWA does not reserve the iOS bottom safe area", () => {
+  const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
+  assert.match(styles, /\.app\[data-profile="main"\] \{\s*--page-bottom-reserve: 8px;/);
 });
 
 test("calendar month panel rendering is delegated to the view module", () => {
