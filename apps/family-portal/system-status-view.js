@@ -20,7 +20,6 @@ window.KAOS_SYSTEM_STATUS_VIEW = (() => {
     const brainTools = runtime.brainTools || {};
     const serviceStatus = runtime.serviceStatus || {};
     const worker = runtime.worker || {};
-    const brainUrl = String(data.brainChannelUrl || "").trim();
     return `
       <section class="settingsStatusPanel systemStatusPanel" data-system-status>
         <div class="settingsStatusHeader">
@@ -29,20 +28,15 @@ window.KAOS_SYSTEM_STATUS_VIEW = (() => {
         </div>
         <div class="settingsActionRow">
           <button class="openButton" type="button" data-system-status-retry>${status.loading ? "..." : "↻"}</button>
-          ${
-            brainUrl
-              ? `<a class="openButton" href="${deps.escapeHtml(brainUrl)}" target="_blank" rel="noopener noreferrer" data-brain-channel-link>#brain</a>`
-              : `<span class="settingsInlineLink isDisabled" data-brain-channel-missing>#brain link not configured</span>`
-          }
         </div>
         <div class="settingsStatusGrid">
           <div>
-            <span>KaosDiscoord</span>
+            <span>Governor</span>
             <strong>${deps.escapeHtml(String(runtime.version || "unknown"))}</strong>
           </div>
           <div>
-            <span>Discord</span>
-            <strong>${deps.escapeHtml(deps.statusReadyLabel(runtime.discordReady))}</strong>
+            <span>Runtime</span>
+            <strong>${deps.escapeHtml(String(runtime.runtime || "governor"))}</strong>
           </div>
           <div>
             <span>Startup</span>

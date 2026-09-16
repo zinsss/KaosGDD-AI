@@ -86,7 +86,7 @@ def normalize_reauth_payload(value: object) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "status": status,
         "verificationUrl": verification_url,
-        # Existing Discord code reads oauthUrl. Keep the alias during migration.
+        # Keep the older oauthUrl response alias for deployed PWA clients.
         "oauthUrl": verification_url,
         "startedAt": _reauth_timestamp(value.get("startedAt"), "started_at"),
         "completedAt": _reauth_timestamp(value.get("completedAt"), "completed_at"),

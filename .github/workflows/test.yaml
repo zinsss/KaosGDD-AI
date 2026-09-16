@@ -30,7 +30,19 @@ jobs:
       - name: Validate shell scripts
         run: |
           bash -n deploy/h3-backend/kaos-h3
+          bash -n deploy/kaosbrain/kaosbrain
           bash -n deploy/office-fax-connector/kaos-office-fax
+          unit_dir=$(mktemp -d)
+          sed \
+            -e 's|__KAOS_DEPLOY_USER__|runner|g' \
+            -e 's|__KAOS_DEPLOY_HOME__|/home/runner|g' \
+            deploy/h3-backend/kaos-h3-maintenance-report.service \
+            > "${unit_dir}/kaos-h3-maintenance-report.service"
+          cp deploy/h3-backend/kaos-h3-maintenance-report.timer \
+            "${unit_dir}/kaos-h3-maintenance-report.timer"
+          systemd-analyze verify \
+            "${unit_dir}/kaos-h3-maintenance-report.service" \
+            "${unit_dir}/kaos-h3-maintenance-report.timer"
       - name: Validate KaosGDD PWA JavaScript
         run: |
           node --check apps/family-portal/deep-links.js
@@ -46,10 +58,6 @@ jobs:
           cp deploy/h3-backend/.env.example deploy/h3-backend/.env
           sed -i \
             -e "s|^KAOS_ROOT=.*|KAOS_ROOT=${GITHUB_WORKSPACE}/.ci-kaos|" \
-            -e 's/^DISCORD_GUILD_ID=.*/DISCORD_GUILD_ID=900000000000000001/' \
-            -e 's/^DISCORD_ALLOWED_USER_IDS=.*/DISCORD_ALLOWED_USER_IDS=900000000000000002/' \
-            -e 's/^DISCORD_ALLOWED_CHANNEL_IDS=.*/DISCORD_ALLOWED_CHANNEL_IDS=900000000000000003,900000000000000004/' \
-            -e 's/^DISCORD_SYSTEM_CHANNEL_ID=.*/DISCORD_SYSTEM_CHANNEL_ID=900000000000000004/' \
             deploy/h3-backend/.env
           mkdir -p "${GITHUB_WORKSPACE}/.ci-kaos/secrets"
           printf 'POSTGRES_DB=kaos_governor_test\nPOSTGRES_USER=kaos_governor_test\nPOSTGRES_PASSWORD=phase2-test-password\n' \
@@ -57,13 +65,13 @@ jobs:
           printf 'POSTGRES_DB=n8n\nPOSTGRES_USER=n8n\nPOSTGRES_PASSWORD=test\nDB_POSTGRESDB_DATABASE=n8n\nDB_POSTGRESDB_USER=n8n\nDB_POSTGRESDB_PASSWORD=test\nN8N_ENCRYPTION_KEY=test-test-test-test\n' \
             > "${GITHUB_WORKSPACE}/.ci-kaos/secrets/n8n.env"
           mkdir -p "${GITHUB_WORKSPACE}/.ci-kaos/data/n8n" "${GITHUB_WORKSPACE}/.ci-kaos/data/n8n-postgres"
-          printf 'test\n' > deploy/h3-backend/secrets/discord_bot_token
           printf 'test\n' > deploy/h3-backend/secrets/governor_api_token
           : > deploy/h3-backend/secrets/memos_access_token
           : > deploy/h3-backend/secrets/naver_mail_password
           : > deploy/h3-backend/secrets/paperless_api_token
           : > deploy/h3-backend/secrets/fax_connector_token
           openssl ecparam -name prime256v1 -genkey -noout > deploy/h3-backend/secrets/web_push_vapid_private_key
+          ./deploy/h3-backend/kaos-h3 config >/dev/null
           docker compose \
             --project-directory deploy/h3-backend \
             --env-file deploy/h3-backend/.env \
@@ -86,9 +94,9 @@ jobs:
             -f deploy/office-fax-connector/compose.yaml \
             config --quiet
       - name: Build test image
-        run: docker build --target test --tag kaosgdd-ai-governor-discord:test --file integrations/discoord/Dockerfile .
+        run: docker build --target test --tag kaosgdd-ai-governor:test --file apps/governor/Dockerfile .
       - name: Run tests
-        run: docker run --rm kaosgdd-ai-governor-discord:test
+        run: docker run --rm kaosgdd-ai-governor:test
       - name: Run PostgreSQL Governor contract tests
         run: |
           docker run --rm --network host \
@@ -98,7 +106,7 @@ jobs:
             -e GOVERNOR_DB_NAME=kaos_governor_test \
             -e GOVERNOR_DB_USER=kaos_governor_test \
             -e GOVERNOR_DB_PASSWORD=phase2-test-password \
-            kaosgdd-ai-governor-discord:test \
+            kaosgdd-ai-governor:test \
             sh -c 'cd /tests/governor && python -m unittest -v test_postgres_durable'
       - name: Build Office fax connector test image
         run: docker build --target test --tag kaos-office-fax-connector:test --file apps/office-fax-connector/Dockerfile .

@@ -124,7 +124,6 @@ class GovernorToolRenderingTests(unittest.TestCase):
             {
                 "status": {
                     "version": "0.6.0",
-                    "discordReady": True,
                     "startupComplete": True,
                     "brainTools": {"enabled": True, "host": "127.0.0.1", "port": 8098},
                     "serviceStatus": {
@@ -142,8 +141,8 @@ class GovernorToolRenderingTests(unittest.TestCase):
         )
 
         self.assertIn("## System status", context)
-        self.assertIn("- KaosDiscoord: 0.6.0", context)
-        self.assertIn("- Discord: ready", context)
+        self.assertIn("- KaosGovernor: 0.6.0", context)
+        self.assertNotIn("Discord", context)
         self.assertIn("- Brain tools: enabled", context)
         self.assertIn("- Services healthy: 1", context)
         self.assertIn("- Down: Paperless (HTTP 502)", context)
@@ -231,7 +230,7 @@ class GovernorToolRenderingTests(unittest.TestCase):
         self.assertNotIn("#work", context)
         self.assertNotIn("Memos search:", context)
 
-    def test_memo_option_description_stays_within_discord_limit(self) -> None:
+    def test_memo_option_description_stays_within_client_limit(self) -> None:
         description = memo_option_description({"snippet": "x" * 200})
         self.assertLessEqual(len(description), 100)
 
@@ -998,12 +997,12 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
         payload = await client.propose_document_tags(
             DocumentTagRequest("42", ("medical", "receipt")),
             actor_id=994,
-            idempotency_key="discord:1",
+            idempotency_key="client:1",
         )
 
         self.assertEqual(payload["path"], "/tools/documents/42/tags/proposals")
         self.assertEqual(payload["payload"]["actorId"], "994")
-        self.assertEqual(payload["payload"]["idempotencyKey"], "discord:1")
+        self.assertEqual(payload["payload"]["idempotencyKey"], "client:1")
         self.assertEqual(payload["payload"]["tags"], ["medical", "receipt"])
 
     async def test_get_document_tag_context_gets_contract(self) -> None:
@@ -1045,7 +1044,7 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
         payload = await client.propose_task_due_update(
             TaskDueUpdateRequest("Call mom", "2026-08-17"),
             actor_id=994,
-            idempotency_key="discord:1",
+            idempotency_key="client:1",
         )
         self.assertEqual(payload["path"], "/tools/tasks/update-due/proposals")
         self.assertEqual(payload["payload"]["taskTitle"], "Call mom")
@@ -1070,7 +1069,7 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
         payload = await client.propose_task_create(
             TaskCreateRequest("오도리 문고리", "", "10:00", memo="문고리 사이즈 확인"),
             actor_id=994,
-            idempotency_key="discord:1",
+            idempotency_key="client:1",
         )
 
         self.assertEqual(payload["path"], "/tools/tasks/create/proposals")
@@ -1103,17 +1102,17 @@ class GovernorToolClientTests(unittest.IsolatedAsyncioTestCase):
         await client.propose_task_create(
             TaskCreateRequest("Soap", "", "", profile="supplies"),
             actor_id=994,
-            idempotency_key="discord:1",
+            idempotency_key="client:1",
         )
         await client.propose_task_action(
             TaskActionRequest("Soap", "reopen", profile="supplies", uid="SUPPLY-1"),
             actor_id=994,
-            idempotency_key="discord:2",
+            idempotency_key="client:2",
         )
         await client.propose_task_edit(
             TaskEditRequest("Soap", "Hand soap", profile="supplies", uid="SUPPLY-1"),
             actor_id=994,
-            idempotency_key="discord:3",
+            idempotency_key="client:3",
         )
         self.assertEqual(client.calls[0][1]["profile"], "supplies")
         self.assertEqual(client.calls[0][1]["collectionId"], "supplies:abc")

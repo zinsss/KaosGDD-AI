@@ -5654,7 +5654,7 @@ function systemStatusIsCritical() {
   const status = state.systemStatus;
   if (status.error) return true;
   const runtime = status.data?.status || {};
-  if (runtime.discordReady === false || runtime.startupComplete === false) return true;
+  if (runtime.startupComplete === false) return true;
   const checks = runtime.serviceStatus?.checks && typeof runtime.serviceStatus.checks === "object"
     ? runtime.serviceStatus.checks
     : {};
@@ -9851,8 +9851,8 @@ function renderMainSettingsMap() {
           ["Documents", "Paperless archive + Documents Inbox audit"],
           ["Fax", "HylaFAX archive + Governor notification/workflow"],
           ["Mail", "Naver IMAP view/actions through Governor"],
-          ["Notifications", "Web Push + Pushover observation + iOS-native task notices"],
-          ["Brain", "Discord #brain as AI/system gateway"],
+          ["Notifications", "Web Push + iOS-native task notices"],
+          ["Brain", "Headless KaosBrain + OpenClaw on H4"],
         ])}
       </dl>
     </section>
@@ -9926,7 +9926,7 @@ function renderMainSettings() {
             ["Default weather", mainSettingsWeatherLabel()],
             ["Source of truth", "Radicale + Memos + Paperless + HylaFAX + Naver"],
             ["Mobile", "PWA + iOS Shortcuts"],
-            ["Discord", "#brain only"],
+            ["AI runtime", "Headless H4 + OpenClaw"],
             ["System writes", "KaosSystemOperator / Codex, not PWA"],
             ["Font", "Sarasa Gothic Mono"],
           ])}

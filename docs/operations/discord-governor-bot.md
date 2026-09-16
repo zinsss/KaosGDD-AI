@@ -1,9 +1,11 @@
 # KaosGovernor Discord bot rollout
 
-Status update 2026-09-07: Discord is retiring as a Kaos operations surface.
-This document is retained for maintenance of the transitional runtime only.
-Do not add new Discord-facing mail/fax, notification, digest, or system
-operations features here.
+Status update 2026-09-17: **retired and archived**. The H3 Discord container is
+stopped with restart disabled, is absent from production Compose, and its token
+is quarantined outside active secrets. Do not follow the deployment steps in
+this document or add Discord-facing features. They remain only as historical
+rollback context; current deployment is documented in
+[`deploy/h3-backend/README.md`](../../deploy/h3-backend/README.md).
 
 KaosGovernor historically used its own deterministic bot for notifications,
 inbox/fax/mail workflows, confirmation buttons, timed jobs, and early

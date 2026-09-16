@@ -29,7 +29,6 @@ Then edit:
 
 ```text
 deploy/h3-backend/.env
-deploy/h3-backend/secrets/discord_bot_token
 ```
 
 Fresh installs keep project-owned Governor state under:
@@ -48,25 +47,21 @@ The setup command generates `governor_api_token`, the separate read-only
 `memos_access_token` only when Memos search is enabled, and
 `naver_mail_password` only when Naver mail is enabled.
 
-Governor text alerts can also bypass Discord's desktop/mobile routing and go
-directly to an iPhone and Apple Watch through Pushover. Install Pushover on the
+Governor writes alerts to the durable notification inbox and mirrors them to
+the personal PWA through Web Push. It can additionally send them to an iPhone
+and Apple Watch through Pushover. Install Pushover on the
 iPhone and Watch, create a Pushover application, place its application token
 and the account user key in `secrets/pushover_app_token` and
 `secrets/pushover_user_key`, then set `PUSHOVER_ENABLED=true`.
 
-Pushover delivery runs in the independent `kaos-governor-worker` container.
-KaosDiscoord only queues records into the shared durable outbox, and the worker
-delivers them within `PUSHOVER_POLL_SECONDS` (five seconds by default). The
-outbox is protected by a cross-process lock. `PUSHOVER_DELIVERY_MODE=inline`
-is retained only as the rollback mode and must not run together with the
-worker.
+Delivery and alert scheduling run only in the independent
+`kaos-governor-worker` container. The outboxes are protected by file locks and
+`PUSHOVER_DELIVERY_MODE` must remain `worker`.
 
 The durable outbox sends minimal one-line alerts: `Good Morning.`, one
 `Today. <event>.` line per daily event, final fax receipt/sent/failure states,
-`Mail received.`, unread-mail counts, service down/recovery transitions, auth
-renewal reminders, fresh actionable maintenance reports, and enabled
-system-startup alerts. Fax queued/sending stages stay in Discord to avoid watch
-noise. Task reminders are deliberately excluded because they already use the
+`Mail received.`, auth renewal reminders, and fresh actionable maintenance
+reports. Task reminders are deliberately excluded because they already use the
 native iOS calendar/reminder notification path. Control messages, Brain selector
 refreshes, archives, message details, document bodies, attachments, and fax PDFs
 are never sent to Pushover.
@@ -87,21 +82,11 @@ quotes come from the MIT-licensed Quotable data repository. The original local
 14-item rotations remain as the offline fallback, so delivery never depends on
 a successful web request at send time.
 
-With `DAILY_DIGEST_OWNER=worker`, the Governor worker owns initialization,
-due-time checking, aggregate reads, and the Pushover records. It writes the
-rendered digest to shared durable state. During the Discord retirement
-transition, KaosDiscoord only transports that pending rendered message and
-attaches the existing controls; it does not decide when the digest is due or
-queue a second Watch alert. Set the owner back to `discord` for the narrow
-daily-digest rollback.
-
-Discord digests have `Weather`, `Bible`, `Quote`, and `Close` controls. Weather
-deep-links to the existing KaosGDD calendar detailed-weather popup for that
-digest date; the shared view provides 포항, 대구, 영천, and 영덕 without a
-second Discord forecast implementation. Bible and Quote replace their
-corresponding line with the next cached item; Close removes the Discord digest
-message. On its first deployment after the scheduled time, Governor baselines
-that day and starts the following morning; later restarts use the durable
+The Governor worker is the only daily-digest owner. It queues the minimal
+morning/event alerts directly to the notification inbox and Web Push. On first
+startup after retirement it marks old pending transport publications as
+`retired` while retaining their rendered content and metadata for audit; they
+can never be replayed by the retired bot. Later restarts use the durable
 sent-date record to catch up a genuinely missed digest.
 
 Run:
@@ -111,15 +96,18 @@ Run:
 ./deploy/h3-backend/kaos-h3 up
 ```
 
-`up` runs preflight, builds locally, starts KaosDiscoord plus the Governor
-worker and tools runtimes, and waits for their health checks. It does not start
+`up` first validates configuration, builds the successor worker/tools images,
+and installs the maintenance timer. Only after those steps succeed does it
+disable restart and stop any existing H3 Discord container, move its token to
+the recoverable retired-secrets directory, and start the Governor worker and
+tools runtimes. It then waits for their health checks. It does not start
 Memos or Radicale and cannot touch PACS, DICOM, Paperless, HylaFAX, or
 RustDesk.
 
 Governor mutation proposals use PostgreSQL when
 `GOVERNOR_OPERATION_STORE=postgres`. This persists the operation,
 confirmation, and minimal versioned execution payload so a confirmation can be
-approved after a Discord/Governor restart. The payload is removed on
+approved after a Governor restart. The payload is removed on
 completion, failure, or confirmation expiry; attachments and credential-like
 fields are rejected. The long-lived operation record stores hashes instead of
 memo, task, or event body text.
@@ -131,7 +119,7 @@ window, then records `execution_interrupted` and removes it.
 
 PostgreSQL mode uses the existing `governor-postgres` service and
 `/srv/kaos/secrets/governor-postgres.env`. Start or verify that service before
-Governor. Governor API, tools, and Discord runtimes apply additive Governor
+Governor. Governor API, tools, and worker runtimes apply additive Governor
 migrations before serving, so they fail closed if the database cannot become
 ready.
 For a deliberately isolated installation without PostgreSQL, set
@@ -140,25 +128,15 @@ process restart.
 
 ## Network binding
 
-The default health binding is loopback only:
+KaosBrain uses the transport-neutral Governor tools service:
 
 ```text
-GOVERNOR_BIND_ADDRESS=127.0.0.1
-```
-
-KaosBrain should use the separate transport-neutral Governor tools service,
-not the Discord health port. The legacy environment-variable names are kept so
-existing H4 and Tailscale configuration does not need to change:
-
-```text
-GOVERNOR_BRAIN_TOOLS_ENABLED=true
 GOVERNOR_BRAIN_TOOLS_BIND_ADDRESS=<H3_TAILSCALE_IP>
 GOVERNOR_BRAIN_TOOLS_PORT=8098
 ```
 
-The `kaos-governor-tools` container owns port 8098. The Discord container does
-not bind that port and starts with its embedded compatibility server disabled.
-The tool API requires the `GOVERNOR_API_TOKEN` bearer token and exposes only
+The `kaos-governor-tools` container owns port 8098. The tool API requires the
+`GOVERNOR_API_TOKEN` bearer token and exposes only
 narrow `/tools/...` endpoints for Brain; `/health` is the sole unauthenticated
 route. Allow TCP 8098 only from H4 and personal tailnet devices that need
 Shortcuts access. Do not publish Governor tools through Caddy, cloudflared, or
@@ -226,6 +204,8 @@ kaos-h3 restart
 kaos-h3 status
 kaos-h3 logs
 kaos-h3 down
+kaos-h3 maintenance-report
+kaos-h3 maintenance-schedule
 kaos-h3 backends-preflight
 kaos-h3 backends-up
 kaos-h3 backends-down
@@ -252,11 +232,25 @@ delete volumes or host data.
 The host-side `kaos-h3 maintenance-report` command checks the configured
 `SYSTEM_MAINTENANCE_TARGETS` hosts for cached OS package updates, Docker
 package updates, reboot-required state, disk/memory, Docker container health
-counts, and repo status. It writes a JSON report under the Governor state
-directory. Discord `/maintenance-report` only reads that JSON file. Neither
-command runs upgrades, pulls Docker images, restarts services, or reboots hosts.
-Docker image update checks remain manual because checking them reliably
-requires an explicit image pull.
+counts, OpenClaw authentication status/expiry, and repo status. It writes only
+the bounded JSON report under `notifications/maintenance-report.json`. The
+system-level `kaos-h3-maintenance-report.timer` runs it after boot and every
+day at 05:00 KST (with a short randomized delay), as the deployment user so
+the existing SSH and H4 OpenClaw access remain host-side. `up` installs and
+starts the timer; `maintenance-schedule` repairs it explicitly. The Governor
+worker reads the report hourly and queues only fresh actionable items to the
+notification inbox/Web Push. Neither collector nor worker upgrades packages,
+pulls images, restarts services, or reboots hosts. Docker image update checks
+remain manual because checking them reliably requires an explicit image pull.
+
+Legacy state directories and filenames are retained, not deleted. The first
+`up` copies the old maintenance report and reminder deduplication keys into the
+neutral notification directory only when the new files do not exist. For an
+emergency rollback, stop the worker/tools, disable the system timer, restore
+the quarantined token to its original secret path, and deploy an explicitly
+retained pre-retirement revision. This repository no longer contains an H3
+Discord runtime definition; Discord-side application/token revocation is a
+separate manual action.
 
 ## n8n
 

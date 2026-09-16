@@ -2,9 +2,10 @@
 
 Architecture, deterministic orchestration, AI integrations, and deployment plans for the next KaosGDD platform.
 
-> Status (2026-09-08): H3 Governor/backends and H4 KaosBrain are in production.
-> The office Fax Connector and Fax Bridge are active beside HylaFAX. Current
-> work favors consolidation and Discord retirement over adding runtimes.
+> Status (2026-09-17): H3 Governor/backends and the headless H4 KaosBrain are
+> in production. Both Discord transports are retired; the office Fax Connector
+> and Fax Bridge remain active beside HylaFAX. Current work favors
+> consolidation over adding runtimes.
 > Migration remains incremental: clinic services and stateful data are never
 > moved or replaced automatically.
 
@@ -13,12 +14,12 @@ Architecture, deterministic orchestration, AI integrations, and deployment plans
 - **KaosAI**: optional model/planner implementation used by KaosBrain, currently an OpenClaw/hosted-or-local model slot when explicitly enabled.
 - **KaosBrain**: interpretation and reasoning layer on H4. It handles natural language and proposes guarded structured actions, but does not directly mutate authoritative services.
 - **KaosGovernor**: deterministic authority on the H3+ backend. It validates operations, owns domain workflows, records audit history, and calls backend services.
-- **KaosDiscoord**: replaceable Discord transport for messages, attachments, IDs, controls, and response formatting. Its canonical package is `integrations/discoord`; the historical H3 service name remains temporarily for rollback compatibility.
+- **KaosDiscoord archive**: retired source under `integrations/discoord`, kept only for bounded rollback/history. It is not built, deployed, or given an active bot token.
 - **Family AI**: a separately scoped assistant served by H4 or a future optional worker.
 - **n8n**: optional ready-made workflow backend for approved external integrations, retries, schedules, and review steps. It keeps its upstream name and interface; Governor remains the authority for KaosGDD state and confirmations.
 - **Authoritative backends**: Radicale, Memos, Paperless, HylaFAX, and other service-owned data stores.
 - **Family KaosGDD**: the retained family-scoped web interface and embedded family AI chat. Its canonical shared personal/family PWA source is `apps/family-portal`.
-- **Personal clients**: the retained `kaosgdd.net` PWA is the primary visual console and provides generic Web Push alerts; iOS Shortcuts provides system integration and on-demand checks, native Calendar/Reminders continue synchronization and scheduled notifications, and Pushover remains a temporary parallel alert transport during observation. Discord is a transitional Brain transport and receives no new domain or system-operation dependencies.
+- **Personal clients**: the retained `kaosgdd.net` PWA is the primary visual console and provides generic Web Push alerts; iOS Shortcuts provides system integration and on-demand checks, native Calendar/Reminders continue synchronization and scheduled notifications, and Pushover remains a temporary parallel alert transport during observation.
 
 KaosBrain and Family AI never become sources of truth. They call narrow KaosGovernor tools. KaosGovernor applies deterministic validation before changing an authoritative backend. Deterministic clients may call Governor without invoking Brain.
 
@@ -39,7 +40,7 @@ cd /srv/projects/KaosGDD-AI
 ./deploy/h3-backend/kaos-h3 setup
 ```
 
-Fill the generated `.env` and Discord token file, then run:
+Fill the generated `.env` and required service secret files, then run:
 
 ```bash
 ./deploy/h3-backend/kaos-h3 test
@@ -57,7 +58,7 @@ This repository will contain Kaos-owned orchestration code and deployment defini
 - KaosGovernor and its domain modules
 - KaosAI/OpenClaw integration and guarded planner contracts
 - Family AI gateway
-- Discord adapters
+- retained historical transport adapters (not part of the production runtime)
 - office Fax Connector
 - API, MCP, event, and job contracts
 - Docker Compose definitions for the planned hosts
@@ -83,7 +84,7 @@ Upstream applications will be referenced using pinned release versions or image 
 - [Current Brain conversion inventory](docs/migration/current-brain-inventory.md)
 - [Migration strategies and phased plan](docs/migration/migration-plan.md)
 - [Brain / Governor / Discoord / iOS implementation tracker](docs/migration/brain-governor-discoord-ios-plan.md)
-- [KaosGovernor Discord bot rollout](docs/operations/discord-governor-bot.md)
+- [Archived KaosGovernor Discord bot rollout](docs/operations/discord-governor-bot.md)
 - [Naver mail migration](docs/operations/naver-mail.md)
 - [Governor Memos search](docs/operations/memos-search.md)
 - [Current production and recovery map](docs/operations/production-recovery.md)

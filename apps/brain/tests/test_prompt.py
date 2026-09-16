@@ -13,7 +13,7 @@ class PromptTests(unittest.TestCase):
     def test_deep_prompt_is_advisory(self) -> None:
         prompt = system_prompt(Route.DEEP)
         self.assertIn("advisory only", prompt)
-        self.assertIn("suitable for Discord", prompt)
+        self.assertIn("suitable for the requesting client", prompt)
 
     def test_router_prompt_only_allows_route_words(self) -> None:
         self.assertIn("answer or deep", ROUTER_SYSTEM_PROMPT)

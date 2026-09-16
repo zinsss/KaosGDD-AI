@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 
-MAINTENANCE_REPORT_PATH = Path("/data/discord-system/maintenance.json")
+MAINTENANCE_REPORT_PATH = Path("/data/notifications/maintenance-report.json")
 MAX_REPORT_BYTES = 256 * 1024
 MAX_REPORT_AGE = timedelta(hours=48)
 MAX_FUTURE_SKEW = timedelta(minutes=5)

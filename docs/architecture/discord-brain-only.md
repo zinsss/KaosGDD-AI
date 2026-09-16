@@ -2,11 +2,11 @@
 
 Decision date: 2026-08-30
 
-Status: superseded in part by the 2026-09-08
-[consolidation inventory](../migration/consolidation-inventory.md). Discord is
-retiring as both the preferred system-operations surface and the long-term
-Brain transport; this document remains the channel-by-channel replacement
-record.
+Status: **completed and archived on 2026-09-17**. H3 now runs only the
+transport-neutral Governor worker/tools/API processes, and H4 runs KaosBrain as
+a headless internal HTTP service on port 8099. Neither host connects to
+Discord or requires a Discord token. The text below is retained as the
+channel-by-channel migration record and must not be used as a current runbook.
 
 This decision supersedes earlier plans that made several Discord channels the
 primary personal UI. The preferred replacement is the PWA-native

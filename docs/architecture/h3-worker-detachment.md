@@ -1,6 +1,21 @@
 # H3 Worker Detachment
 
-## Purpose
+## Retirement status
+
+H3 Discord transport is retired as of 2026-09-17. The production Compose
+runtime contains only Governor Worker and Governor Tools. `kaos-h3 up` first
+validates and builds those successors, then disables restart and stops the
+former container immediately before the replacement runtime starts.
+Maintenance reminders now originate in Governor Worker and reach the durable
+notification inbox/Web Push. The host-only collector is refreshed by a system
+timer, and old daily-digest publications are archived as `retired` before the
+worker schedules another digest. Legacy-named mail/fax state files remain in
+place because they are active checkpoints, not active Discord transports.
+
+The remainder of this document records the incremental cutover history and is
+not a rollback recommendation.
+
+## Historical purpose
 
 The H3 `kaos-governor-discord` process currently owns both the Discord gateway
 and several background lifecycles. The gateway cannot be retired until every

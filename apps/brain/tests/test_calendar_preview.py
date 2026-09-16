@@ -13,10 +13,6 @@ if AIOHTTP_AVAILABLE:
 
 
 BASE_ENV = {
-    "DISCORD_BOT_TOKEN": "not-a-real-token",
-    "DISCORD_GUILD_ID": "100",
-    "DISCORD_ALLOWED_USER_IDS": "200",
-    "DISCORD_BRAIN_CHANNEL_ID": "300",
     "KAOSBRAIN_CALENDAR_PREVIEW_API_TOKEN": "calendar-token",
 }
 

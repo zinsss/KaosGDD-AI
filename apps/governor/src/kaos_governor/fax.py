@@ -50,6 +50,19 @@ def _int(env: Mapping[str, str], name: str, default: int, minimum: int) -> int:
     return max(minimum, value)
 
 
+def _compat_value(
+    env: Mapping[str, str],
+    name: str,
+    legacy_name: str,
+    default: str,
+) -> str:
+    if name in env:
+        return env[name]
+    if legacy_name in env:
+        return env[legacy_name]
+    return default
+
+
 def _secret(env: Mapping[str, str], name: str) -> str:
     value = env.get(name, "").strip()
     path = env.get(f"{name}_FILE", "").strip()
@@ -82,7 +95,7 @@ class FaxConfig:
     connector_base_url: str = ""
     connector_token: str = ""
     connector_timeout_seconds: int = 20
-    owner: str = "discord"
+    owner: str = "worker"
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "FaxConfig":
@@ -90,14 +103,46 @@ class FaxConfig:
         transport = source.get("FAX_TRANSPORT", "local").strip().lower() or "local"
         if transport not in {"local", "connector"}:
             raise FaxError("FAX_TRANSPORT must be local or connector")
-        owner = source.get("FAX_LIFECYCLE_OWNER", "discord").strip().lower() or "discord"
-        if owner not in {"discord", "worker"}:
-            raise FaxError("FAX_LIFECYCLE_OWNER must be discord or worker")
-        enabled = _bool(source, "FAX_DISCORD_ENABLED")
+        owner = source.get("FAX_LIFECYCLE_OWNER", "worker").strip().lower() or "worker"
+        if owner != "worker":
+            raise FaxError("FAX_LIFECYCLE_OWNER must be worker")
+        neutral = dict(source)
+        neutral["FAX_ENABLED"] = _compat_value(
+            source,
+            "FAX_ENABLED",
+            "FAX_DISCORD_ENABLED",
+            "false",
+        )
+        neutral["FAX_MESSAGE_INTAKE_ENABLED"] = _compat_value(
+            source,
+            "FAX_MESSAGE_INTAKE_ENABLED",
+            "FAX_DISCORD_MESSAGE_INTAKE",
+            "false",
+        )
+        neutral["FAX_POLL_SECONDS"] = _compat_value(
+            source,
+            "FAX_POLL_SECONDS",
+            "FAX_DISCORD_POLL_SECONDS",
+            "20",
+        )
+        neutral["FAX_DELETE_SOURCE_ON_SUCCESS"] = _compat_value(
+            source,
+            "FAX_DELETE_SOURCE_ON_SUCCESS",
+            "FAX_DELETE_DISCORD_SOURCE_ON_SUCCESS",
+            "true",
+        )
+        enabled = _bool(neutral, "FAX_ENABLED")
         return cls(
             enabled=enabled,
-            message_intake=_bool(source, "FAX_DISCORD_MESSAGE_INTAKE"),
-            state_path=Path(source.get("FAX_DISCORD_STATE_PATH", "/data/fax/state.json")),
+            message_intake=_bool(neutral, "FAX_MESSAGE_INTAKE_ENABLED"),
+            state_path=Path(
+                _compat_value(
+                    source,
+                    "FAX_STATE_PATH",
+                    "FAX_DISCORD_STATE_PATH",
+                    "/data/fax/state.json",
+                )
+            ),
             queue_root=Path(source.get("FAX_OUTGOING_QUEUE_ROOT", "/integrations/fax-outgoing")),
             legacy_state_path=Path(
                 source.get("FAX_LEGACY_OUTGOING_STATE_PATH", "/integrations/fax-outgoing/state.json")
@@ -107,11 +152,15 @@ class FaxConfig:
                 source.get("FAX_HYLAFAX_XFERFAXLOG", "/integrations/hylafax/log/xferfaxlog")
             ),
             doneq=Path(source.get("FAX_HYLAFAX_DONEQ", "/integrations/hylafax/doneq")),
-            poll_seconds=_int(source, "FAX_DISCORD_POLL_SECONDS", 20, 5),
+            poll_seconds=_int(neutral, "FAX_POLL_SECONDS", 20, 5),
             minimum_file_age_seconds=_int(source, "FAX_MIN_FILE_AGE_SECONDS", 60, 0),
             max_pdf_bytes=_int(source, "FAX_MAX_PDF_MB", 20, 1) * 1024 * 1024,
             mark_existing_on_first_run=_bool(source, "FAX_MARK_EXISTING_ON_FIRST_RUN", True),
-            delete_source_on_success=_bool(source, "FAX_DELETE_DISCORD_SOURCE_ON_SUCCESS", True),
+            delete_source_on_success=_bool(
+                neutral,
+                "FAX_DELETE_SOURCE_ON_SUCCESS",
+                True,
+            ),
             transport=transport,
             connector_base_url=source.get("FAX_CONNECTOR_BASE_URL", "").strip().rstrip("/"),
             connector_token=_secret(source, "FAX_CONNECTOR_TOKEN"),
@@ -348,7 +397,7 @@ def _incoming_notification(*, filename: str, remote: str, pages: str) -> str:
         lines.append(f": from {remote}")
     if pages:
         lines.append(f": {pages} page{'s' if pages != '1' else ''}")
-    lines.extend((f": {filename}", ": Open #brain and select it under Fax Mail."))
+    lines.extend((f": {filename}", ": Open KaosGDD and select it under Fax."))
     return "\n".join(lines)
 
 
@@ -427,7 +476,7 @@ class FaxService:
             prompt_id = state["prompts"].pop(str(source_metadata.get("messageId") or ""), 0)
             if prompt_id:
                 source_metadata["instructionMessageId"] = int(prompt_id)
-            source = str(source_metadata.get("source") or "discord").strip() or "discord"
+            source = str(source_metadata.get("source") or "governor").strip() or "governor"
             job = {
                 **manifest,
                 "source": source,
@@ -452,7 +501,7 @@ class FaxService:
         status = str(response.get("status") or "queued")
         if status not in {"queued", "submitted", "sent", "failed"}:
             status = "queued"
-        source = str(source_metadata.get("source") or "discord").strip() or "discord"
+        source = str(source_metadata.get("source") or "governor").strip() or "governor"
         job = {
             "version": 1,
             "jobId": job_id,
@@ -638,7 +687,8 @@ class FaxService:
             self._reconcile_jobs(state)
             candidates = self._incoming_actions()
             for job_id, job in state["jobs"].items():
-                candidates.extend(self._job_actions("discord", job_id, job))
+                source = str(job.get("source") or "discord").strip() or "discord"
+                candidates.extend(self._job_actions(source, job_id, job))
             legacy = _read_json(self.config.legacy_state_path)
             legacy_jobs = legacy.get("jobs") if isinstance(legacy.get("jobs"), dict) else {}
             for job_id, job in legacy_jobs.items():
@@ -675,9 +725,10 @@ class FaxService:
             for job_id, job in state["jobs"].items():
                 if not isinstance(job, dict):
                     continue
+                source = str(job.get("source") or "discord").strip() or "discord"
                 actions.extend(
                     action
-                    for action in self._job_actions("discord", str(job_id), job)
+                    for action in self._job_actions(source, str(job_id), job)
                     if action.kind == "cleanup" and action.key not in state["delivered"]
                 )
             return actions

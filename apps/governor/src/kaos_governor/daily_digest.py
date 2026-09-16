@@ -119,7 +119,7 @@ def _portal_url(value: str) -> str:
 @dataclass(frozen=True)
 class DailyDigestConfig:
     enabled: bool = False
-    owner: Literal["discord", "worker"] = "discord"
+    owner: Literal["worker"] = "worker"
     send_time: time = time(7, 0)
     profile: str = "main"
     weather_city: str = "pohang"
@@ -137,9 +137,9 @@ class DailyDigestConfig:
         profile = source.get("DAILY_DIGEST_PROFILE", "main").strip().lower() or "main"
         if profile not in {"main", "family"}:
             raise DailyDigestError("DAILY_DIGEST_PROFILE must be main or family")
-        owner = source.get("DAILY_DIGEST_OWNER", "discord").strip().lower() or "discord"
-        if owner not in {"discord", "worker"}:
-            raise DailyDigestError("DAILY_DIGEST_OWNER must be discord or worker")
+        owner = source.get("DAILY_DIGEST_OWNER", "worker").strip().lower() or "worker"
+        if owner != "worker":
+            raise DailyDigestError("DAILY_DIGEST_OWNER must be worker")
         weather_city = source.get("DAILY_DIGEST_WEATHER_CITY", "pohang").strip().lower()
         if not re.fullmatch(r"[a-z0-9_-]{2,40}", weather_city):
             raise DailyDigestError("DAILY_DIGEST_WEATHER_CITY invalid")
@@ -491,6 +491,25 @@ class DailyDigestService:
             state["lastError"] = ""
             self._save(state)
             self.last_error = ""
+
+    def retire_pending_publications(self) -> int:
+        """Archive unsent Discord-era publications without deleting history."""
+        retired = 0
+        retired_at = datetime.now(KST).isoformat()
+        with self._state_lock():
+            state = self._load()
+            for publication in state["publications"].values():
+                if not isinstance(publication, dict) or publication.get("status") != "pending":
+                    continue
+                publication["status"] = "retired"
+                publication["retiredAt"] = retired_at
+                publication["retirementReason"] = "discord-transport-retired"
+                retired += 1
+            if retired:
+                state["lastStatus"] = "transport-retired"
+                state["lastError"] = ""
+                self._save(state)
+        return retired
 
     def pending_publication(self) -> dict[str, object] | None:
         with self._state_lock():

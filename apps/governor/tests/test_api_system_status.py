@@ -54,22 +54,19 @@ class SystemStatusApiTests(unittest.TestCase):
                     "source": "governor-runtime-health",
                     "status": {
                         "version": "0.6.0",
-                        "discordReady": True,
+                        "runtime": "governor-tools",
                         "startupComplete": True,
                         "brainTools": {"enabled": True},
                     },
                 }
             )
 
-        with (
-            patch.object(api, "secret_value", return_value="server-token"),
-            patch.object(api, "discord_brain_channel_url", return_value="https://discord.com/channels/1/2"),
-        ):
+        with patch.object(api, "secret_value", return_value="server-token"):
             payload = api.system_status_payload("main", urlopen=fake_urlopen)
 
         self.assertTrue(payload["ok"])
         self.assertTrue(payload["readOnly"])
-        self.assertEqual(payload["brainChannelUrl"], "https://discord.com/channels/1/2")
+        self.assertNotIn("brainChannelUrl", payload)
         self.assertEqual(payload["status"]["version"], "0.6.0")  # type: ignore[index]
         self.assertEqual(len(requests), 1)
         self.assertIn("/tools/system/status?profile=main", requests[0].full_url)

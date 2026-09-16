@@ -6,7 +6,6 @@ REPO_ROOT=$(cd -- "${DEPLOY_DIR}/../.." && pwd)
 KAOSGDD_ROOT=${KAOSGDD_ROOT:-/srv/kaosgdd}
 LEGACY_ROOT=${KAOSBRAIN_LEGACY_ROOT:-/srv/kaos}
 CANONICAL_ENV_DIR=${KAOSGDD_ROOT}/kaosbrain
-CANONICAL_STATE_DIR=${KAOSGDD_ROOT}/kaosbrain/state
 CANONICAL_SECRETS_DIR=${KAOSGDD_ROOT}/secrets
 if [[ -z "${KAOSBRAIN_ENV_DIR:-}" && -f "${LEGACY_ROOT}/brain/kaosbrain.env" && ! -f "${CANONICAL_ENV_DIR}/kaosbrain.env" ]]; then
   ENV_DIR=${LEGACY_ROOT}/brain
@@ -14,16 +13,17 @@ else
   ENV_DIR=${KAOSBRAIN_ENV_DIR:-${CANONICAL_ENV_DIR}}
 fi
 ENV_FILE=${KAOSBRAIN_ENV_FILE:-${ENV_DIR}/kaosbrain.env}
-STATE_DIR=${KAOSBRAIN_STATE_DIR:-${CANONICAL_STATE_DIR}}
-if [[ -z "${KAOSBRAIN_SECRETS_DIR:-}" && -f "${LEGACY_ROOT}/secrets/kaosbrain_discord_bot_token" && ! -f "${CANONICAL_SECRETS_DIR}/kaosbrain_discord_bot_token" ]]; then
+if [[ -z "${KAOSBRAIN_SECRETS_DIR:-}" && -f "${LEGACY_ROOT}/secrets/governor_api_token" && ! -f "${CANONICAL_SECRETS_DIR}/governor_api_token" ]]; then
   SECRETS_DIR=${LEGACY_ROOT}/secrets
 else
   SECRETS_DIR=${KAOSBRAIN_SECRETS_DIR:-${CANONICAL_SECRETS_DIR}}
 fi
-TOKEN_FILE=${KAOSBRAIN_TOKEN_FILE:-${SECRETS_DIR}/kaosbrain_discord_bot_token}
 GOVERNOR_TOKEN_FILE=${KAOSBRAIN_GOVERNOR_TOKEN_FILE:-${SECRETS_DIR}/governor_api_token}
 SERVICE_NAME=${KAOSBRAIN_SERVICE_NAME:-kaosbrain.service}
+SYSTEMD_UNIT_DIR=${KAOSBRAIN_SYSTEMD_UNIT_DIR:-/etc/systemd/system}
 IMAGE_NAME=${KAOSBRAIN_IMAGE_NAME:-kaos-brain:current}
+CANDIDATE_IMAGE_NAME=${KAOSBRAIN_CANDIDATE_IMAGE_NAME:-${IMAGE_NAME%:*}:candidate}
+ROLLBACK_IMAGE_NAME=${KAOSBRAIN_ROLLBACK_IMAGE_NAME:-${IMAGE_NAME%:*}:pre-headless-discord-retirement}
 CONTAINER_NAME=${KAOSBRAIN_CONTAINER_NAME:-kaos-brain}
 OPENCLAW_STATE_DIR=${KAOSAI_OPENCLAW_STATE_DIR:-${KAOSGDD_ROOT}/kaosai/openclaw}
 OPENCLAW_CONFIG_PATH=${KAOSAI_OPENCLAW_CONFIG_PATH:-${OPENCLAW_STATE_DIR}/openclaw.json}
@@ -98,14 +98,227 @@ set_env_value() {
 }
 
 ensure_upgrade_defaults() {
+  local preview=${1:-false}
   [[ -f "${ENV_FILE}" ]] || die "missing env file: ${ENV_FILE}; run ${0} setup"
   load_env
-  if [[ "${KAOSAI_REAUTH_ENABLED:-false}" == "true" \
-    && -z "${KAOSBRAIN_AI_TASK_API_TOKEN:-}" \
+  local retirement_backup="${ENV_FILE}.pre-headless-discord-retirement"
+  local retirement_pattern='^(DISCORD_|KAOSBRAIN_TOKEN_FILE=|KAOSBRAIN_(MAX_REPLY_CHARS|RESPOND_WITHOUT_MENTION|AUTO_ROUTE_ENABLED|ACTIVE_CONTROL_|HEALTH_ENABLED)|KAOSAI_(CHAT|DRY_RUN)_ENABLED=|KAOSBRAIN_GOVERNOR_HEALTH_URL=)'
+  local transport_pattern='^(DISCORD_|KAOSBRAIN_TOKEN_FILE=|KAOSBRAIN_(MAX_REPLY_CHARS|RESPOND_WITHOUT_MENTION|AUTO_ROUTE_ENABLED|ACTIVE_CONTROL_|HEALTH_ENABLED)|KAOSAI_(CHAT|DRY_RUN)_ENABLED=)'
+  if grep -Eq "${retirement_pattern}" "${ENV_FILE}"; then
+    if [[ "${preview}" != "true" && ! -e "${retirement_backup}" ]]; then
+      cp -p "${ENV_FILE}" "${retirement_backup}"
+      info "Saved permission-preserving pre-retirement env backup: ${retirement_backup}"
+    elif [[ "${preview}" != "true" ]]; then
+      info "Pre-retirement env backup already exists: ${retirement_backup}"
+    fi
+  fi
+  if grep -Eq "${transport_pattern}" "${ENV_FILE}"; then
+    sed -i -E "/${transport_pattern}/d" "${ENV_FILE}"
+    [[ "${preview}" == "true" ]] || info "Removed retired Discord/chat transport settings from ${ENV_FILE}."
+  fi
+  if grep -q '^KAOSBRAIN_GOVERNOR_HEALTH_URL=' "${ENV_FILE}"; then
+    local legacy_health_url=${KAOSBRAIN_GOVERNOR_HEALTH_URL:-}
+    if [[ -z "${KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL:-}" && "${legacy_health_url}" =~ ^(http://.+):8097(/health)?/?$ ]]; then
+      set_env_value KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL "${BASH_REMATCH[1]}:8098"
+      [[ "${preview}" == "true" ]] || info "Migrated Governor tools base URL from retired port 8097 to 8098."
+    fi
+    sed -i '/^KAOSBRAIN_GOVERNOR_HEALTH_URL=/d' "${ENV_FILE}"
+    [[ "${preview}" == "true" ]] || info "Removed retired KAOSBRAIN_GOVERNOR_HEALTH_URL; doctor now uses the Governor tools /health route."
+  fi
+  if [[ -z "${KAOSBRAIN_AI_TASK_API_TOKEN:-}" \
     && -z "${KAOSBRAIN_AI_TASK_API_TOKEN_FILE:-}" ]]; then
     set_env_value KAOSBRAIN_AI_TASK_API_TOKEN_FILE /run/secrets/governor_api_token
-    info "Added KAOSBRAIN_AI_TASK_API_TOKEN_FILE for the OpenClaw reauth proxy."
+    [[ "${preview}" == "true" ]] || info "Added KAOSBRAIN_AI_TASK_API_TOKEN_FILE for protected headless routes."
   fi
+}
+
+prospective_preflight() (
+  local source_env=${ENV_FILE}
+  local preview_dir
+  preview_dir=$(mktemp -d)
+  trap 'rm -rf -- "${preview_dir}"' EXIT
+  local ENV_FILE="${preview_dir}/kaosbrain.env"
+  cp -p "${source_env}" "${ENV_FILE}"
+  ensure_upgrade_defaults true
+  preflight
+)
+
+path_exists() {
+  [[ -e "$1" || -L "$1" ]]
+}
+
+declare -a RETIRED_DISCORD_SECRET_SOURCES=()
+declare -a RETIRED_DISCORD_SECRET_DESTINATIONS=()
+declare -a QUARANTINED_DISCORD_SECRET_SOURCES=()
+declare -a QUARANTINED_DISCORD_SECRET_DESTINATIONS=()
+
+add_retired_discord_secret() {
+  local source=$1
+  local destination=$2
+  local existing
+  [[ -n "${source}" ]] || return 0
+  for existing in "${RETIRED_DISCORD_SECRET_SOURCES[@]}"; do
+    [[ "${existing}" != "${source}" ]] || return 0
+  done
+  RETIRED_DISCORD_SECRET_SOURCES+=("${source}")
+  RETIRED_DISCORD_SECRET_DESTINATIONS+=("${destination}")
+}
+
+collect_retired_discord_secrets() {
+  local retired_dir="${CANONICAL_ENV_DIR}/retired-secrets"
+  local canonical_source="${CANONICAL_SECRETS_DIR}/kaosbrain_discord_bot_token"
+  local legacy_source="${LEGACY_ROOT}/secrets/kaosbrain_discord_bot_token"
+  local effective_source="${SECRETS_DIR}/kaosbrain_discord_bot_token"
+  local configured_host_source=${KAOSBRAIN_TOKEN_FILE:-}
+  local configured_runtime_source=${DISCORD_BOT_TOKEN_FILE:-}
+
+  if [[ -n "${configured_host_source}" ]]; then
+    configured_host_source=$(host_secret_path "${configured_host_source}")
+  fi
+  if [[ -n "${configured_runtime_source}" ]]; then
+    if [[ "${configured_runtime_source}" != /run/secrets/* ]]; then
+      printf 'ERROR: cannot safely resolve retired DISCORD_BOT_TOKEN_FILE outside /run/secrets: %s\n' "${configured_runtime_source}" >&2
+      return 1
+    fi
+    configured_runtime_source=$(host_secret_path "${configured_runtime_source}")
+  fi
+
+  RETIRED_DISCORD_SECRET_SOURCES=()
+  RETIRED_DISCORD_SECRET_DESTINATIONS=()
+  add_retired_discord_secret "${canonical_source}" "${retired_dir}/canonical-kaosbrain_discord_bot_token"
+  add_retired_discord_secret "${legacy_source}" "${retired_dir}/legacy-kaosbrain_discord_bot_token"
+  add_retired_discord_secret "${effective_source}" "${retired_dir}/effective-kaosbrain_discord_bot_token"
+  add_retired_discord_secret "${configured_host_source}" "${retired_dir}/configured-host-kaosbrain_discord_bot_token"
+  add_retired_discord_secret "${configured_runtime_source}" "${retired_dir}/configured-runtime-kaosbrain_discord_bot_token"
+}
+
+retired_discord_secret_is_active_headless_secret() {
+  local source=$1
+  local configured protected
+  local -a protected_paths=("${GOVERNOR_TOKEN_FILE}")
+  for configured in \
+    "${GOVERNOR_API_TOKEN_FILE:-/run/secrets/governor_api_token}" \
+    "${KAOSBRAIN_AI_TASK_API_TOKEN_FILE:-}" \
+    "${KAOSBRAIN_CALENDAR_PREVIEW_API_TOKEN_FILE:-}" \
+    "${KAOSBRAIN_DOCUMENT_TAG_API_TOKEN_FILE:-}" \
+    "${KAOSBRAIN_IMAGING_API_TOKEN_FILE:-}" \
+    "${KAOSAI_API_TOKEN_FILE:-}" \
+    "${KAOSAI_REAUTH_TOKEN_FILE:-}" \
+    "${KAOSBRAIN_OPENAI_API_KEY_FILE:-}"; do
+    [[ -n "${configured}" ]] || continue
+    protected_paths+=("$(host_secret_path "${configured}")")
+  done
+  for protected in "${protected_paths[@]}"; do
+    [[ -n "${protected}" ]] || continue
+    if [[ "${source}" == "${protected}" ]] \
+      || { path_exists "${source}" && path_exists "${protected}" && [[ "${source}" -ef "${protected}" ]]; }; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+validate_retired_discord_secret_quarantine() {
+  local retired_dir="${CANONICAL_ENV_DIR}/retired-secrets"
+  local found=false
+  local index source destination
+
+  collect_retired_discord_secrets || return 1
+  if [[ -L "${retired_dir}" || ( -e "${retired_dir}" && ! -d "${retired_dir}" ) ]]; then
+    printf 'ERROR: retired Discord secret quarantine path is not a regular directory: %s\n' "${retired_dir}" >&2
+    return 1
+  fi
+
+  for index in "${!RETIRED_DISCORD_SECRET_SOURCES[@]}"; do
+    source=${RETIRED_DISCORD_SECRET_SOURCES[index]}
+    destination=${RETIRED_DISCORD_SECRET_DESTINATIONS[index]}
+    if [[ "${source}" != /* ]]; then
+      printf 'ERROR: retired Discord secret path must be absolute: %s\n' "${source}" >&2
+      return 1
+    fi
+    if path_exists "${source}"; then
+      found=true
+      if retired_discord_secret_is_active_headless_secret "${source}"; then
+        printf 'ERROR: refusing to quarantine a Discord token path still configured for a headless secret: %s\n' "${source}" >&2
+        return 1
+      fi
+      if [[ -L "${source}" || ! -f "${source}" ]]; then
+        printf 'ERROR: refusing to quarantine a non-regular or symlinked Discord secret: %s\n' "${source}" >&2
+        return 1
+      fi
+      if path_exists "${destination}"; then
+        printf 'ERROR: refusing to overwrite retired Discord secret quarantine target: %s\n' "${destination}" >&2
+        return 1
+      fi
+    fi
+  done
+  [[ "${found}" == "true" ]] || return 0
+}
+
+quarantine_retired_discord_secrets() {
+  local retired_dir="${CANONICAL_ENV_DIR}/retired-secrets"
+  local index source destination
+
+  validate_retired_discord_secret_quarantine || return 1
+  QUARANTINED_DISCORD_SECRET_SOURCES=()
+  QUARANTINED_DISCORD_SECRET_DESTINATIONS=()
+  local found=false
+  for source in "${RETIRED_DISCORD_SECRET_SOURCES[@]}"; do
+    if path_exists "${source}"; then
+      found=true
+      break
+    fi
+  done
+  [[ "${found}" == "true" ]] || return 0
+
+  if ! sudo install -d -m 0700 -o "$(id -un)" -g "$(id -gn)" "${retired_dir}" \
+    || ! sudo chmod 0700 "${retired_dir}"; then
+    printf 'ERROR: failed to prepare retired Discord secret quarantine directory: %s\n' "${retired_dir}" >&2
+    return 1
+  fi
+  for index in "${!RETIRED_DISCORD_SECRET_SOURCES[@]}"; do
+    source=${RETIRED_DISCORD_SECRET_SOURCES[index]}
+    destination=${RETIRED_DISCORD_SECRET_DESTINATIONS[index]}
+    if ! path_exists "${source}"; then
+      continue
+    fi
+    if ! sudo mv -T -n -- "${source}" "${destination}"; then
+      printf 'ERROR: failed to quarantine retired Discord secret: %s\n' "${source}" >&2
+      return 1
+    fi
+    if ! path_exists "${source}" && path_exists "${destination}"; then
+      QUARANTINED_DISCORD_SECRET_SOURCES+=("${source}")
+      QUARANTINED_DISCORD_SECRET_DESTINATIONS+=("${destination}")
+    fi
+    if path_exists "${source}" || [[ -L "${destination}" || ! -f "${destination}" ]]; then
+      printf 'ERROR: failed to quarantine retired Discord secret without overwrite: %s\n' "${source}" >&2
+      return 1
+    fi
+    info "Quarantined retired Discord secret: ${destination}"
+  done
+}
+
+restore_quarantined_discord_secrets() {
+  local index source destination failures=0
+  for ((index=${#QUARANTINED_DISCORD_SECRET_SOURCES[@]} - 1; index >= 0; index--)); do
+    source=${QUARANTINED_DISCORD_SECRET_SOURCES[index]}
+    destination=${QUARANTINED_DISCORD_SECRET_DESTINATIONS[index]}
+    if path_exists "${source}"; then
+      printf 'ERROR: refusing to overwrite Discord secret while rolling back: %s\n' "${source}" >&2
+      failures=$((failures + 1))
+      continue
+    fi
+    if [[ -L "${destination}" || ! -f "${destination}" ]]; then
+      printf 'ERROR: quarantined Discord secret is no longer a regular file: %s\n' "${destination}" >&2
+      failures=$((failures + 1))
+      continue
+    fi
+    if ! sudo mv -T -n -- "${destination}" "${source}" || path_exists "${destination}" || ! path_exists "${source}"; then
+      printf 'ERROR: failed to restore quarantined Discord secret: %s\n' "${source}" >&2
+      failures=$((failures + 1))
+    fi
+  done
+  [[ "${failures}" -eq 0 ]]
 }
 
 validate_internal_http_url() {
@@ -142,44 +355,33 @@ validate_internal_http_url() {
 }
 
 install_service_unit() {
-  local unit_path="/etc/systemd/system/${SERVICE_NAME}"
+  local unit_path="${SYSTEMD_UNIT_DIR}/${SERVICE_NAME}"
   sudo sed \
-    -e "s/__KAOSBRAIN_TOKEN_FILE__/$(sed_escape "${TOKEN_FILE}")/g" \
     -e "s/__KAOSBRAIN_ENV_FILE__/$(sed_escape "${ENV_FILE}")/g" \
-    -e "s/__KAOSBRAIN_STATE_DIR__/$(sed_escape "${STATE_DIR}")/g" \
     -e "s/__KAOSBRAIN_SECRETS_DIR__/$(sed_escape "${SECRETS_DIR}")/g" \
     -e "s/__KAOSBRAIN_IMAGE_NAME__/$(sed_escape "${IMAGE_NAME}")/g" \
     -e "s/__KAOSBRAIN_CONTAINER_NAME__/$(sed_escape "${CONTAINER_NAME}")/g" \
     "${DEPLOY_DIR}/kaosbrain.service" | sudo tee "${unit_path}" >/dev/null
 }
 
-ensure_runtime_dirs() {
-  sudo install -d -m 0750 -o "$USER" -g "$(id -gn)" "${STATE_DIR}"
-}
-
 setup() {
   require_command docker
   require_command sudo
   sudo install -d -m 0750 -o "$USER" -g "$(id -gn)" "${ENV_DIR}" "${SECRETS_DIR}"
-  ensure_runtime_dirs
   if [[ ! -f "${ENV_FILE}" ]]; then
     cp "${DEPLOY_DIR}/.env.example" "${ENV_FILE}"
     sed -i "s/^KAOS_HOST_UID=.*/KAOS_HOST_UID=$(id -u)/" "${ENV_FILE}"
     sed -i "s/^KAOS_HOST_GID=.*/KAOS_HOST_GID=$(id -g)/" "${ENV_FILE}"
     info "Created ${ENV_FILE}"
   fi
-  if [[ ! -e "${TOKEN_FILE}" ]]; then
-    : > "${TOKEN_FILE}"
-  fi
   if [[ ! -e "${GOVERNOR_TOKEN_FILE}" ]]; then
     : > "${GOVERNOR_TOKEN_FILE}"
   fi
-  chmod 0640 "${TOKEN_FILE}"
   chmod 0640 "${GOVERNOR_TOKEN_FILE}"
   install_service_unit
   sudo systemctl daemon-reload
   sudo systemctl enable "${SERVICE_NAME}" >/dev/null
-  info "Setup complete. Fill ${ENV_FILE} and ${TOKEN_FILE}, then run:"
+  info "Setup complete. Fill ${ENV_FILE} and any enabled route/provider secret files, then run:"
   info "  ${0} test"
   info "  ${0} up"
 }
@@ -187,12 +389,9 @@ setup() {
 preflight() {
   require_command docker
   require_command curl
+  require_command python3
   require_command sudo
   load_env
-  [[ -s "${TOKEN_FILE}" ]] || die "missing or empty token file: ${TOKEN_FILE}"
-  [[ "${DISCORD_GUILD_ID:-}" != "123456789012345678" ]] || die "replace the example Discord guild ID"
-  [[ "${DISCORD_BRAIN_CHANNEL_ID:-}" != "123456789012345678" ]] || die "replace the example Discord brain channel ID"
-  [[ "${DISCORD_ALLOWED_USER_IDS:-}" != *"123456789012345678"* ]] || die "replace the example Discord user ID"
   if [[ "${KAOSBRAIN_GOVERNOR_TOOLS_ENABLED:-false}" == "true" ]]; then
     [[ -n "${KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL:-}" ]] || die "KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL is required"
     validate_internal_http_url "KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL" "${KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL}"
@@ -201,9 +400,6 @@ preflight() {
       governor_token_path=$(host_secret_path "${GOVERNOR_API_TOKEN_FILE:-/run/secrets/governor_api_token}")
       [[ -s "${governor_token_path}" ]] || die "missing or empty Governor token file: ${governor_token_path}"
     fi
-  fi
-  if [[ -n "${KAOSBRAIN_GOVERNOR_HEALTH_URL:-}" ]]; then
-    validate_internal_http_url "KAOSBRAIN_GOVERNOR_HEALTH_URL" "${KAOSBRAIN_GOVERNOR_HEALTH_URL}" true
   fi
   if [[ -z "${KAOSBRAIN_CALENDAR_PREVIEW_API_TOKEN:-}" && -n "${KAOSBRAIN_CALENDAR_PREVIEW_API_TOKEN_FILE:-}" ]]; then
     local calendar_preview_token_path
@@ -215,7 +411,9 @@ preflight() {
     document_tag_token_path=$(host_secret_path "${KAOSBRAIN_DOCUMENT_TAG_API_TOKEN_FILE}")
     [[ -s "${document_tag_token_path}" ]] || die "missing or empty KaosBrain document tag token file: ${document_tag_token_path}"
   fi
-  if [[ -z "${KAOSBRAIN_AI_TASK_API_TOKEN:-}" && -n "${KAOSBRAIN_AI_TASK_API_TOKEN_FILE:-}" ]]; then
+  if [[ -z "${KAOSBRAIN_AI_TASK_API_TOKEN:-}" && -z "${KAOSBRAIN_AI_TASK_API_TOKEN_FILE:-}" ]]; then
+    die "KAOSBRAIN_AI_TASK_API_TOKEN or KAOSBRAIN_AI_TASK_API_TOKEN_FILE is required for protected headless routes"
+  elif [[ -z "${KAOSBRAIN_AI_TASK_API_TOKEN:-}" ]]; then
     local ai_task_token_path
     ai_task_token_path=$(host_secret_path "${KAOSBRAIN_AI_TASK_API_TOKEN_FILE}")
     [[ -s "${ai_task_token_path}" ]] || die "missing or empty KaosBrain AI task token file: ${ai_task_token_path}"
@@ -246,9 +444,6 @@ preflight() {
       [[ -s "${kaosai_token_path}" ]] || die "missing or empty KaosBrain-OpenAI token file: ${kaosai_token_path}"
     fi
   fi
-  if [[ "${KAOSAI_DRY_RUN_ENABLED:-false}" == "true" && "${KAOSAI_ENABLED:-false}" != "true" ]]; then
-    die "KAOSAI_ENABLED=true is required when KAOSAI_DRY_RUN_ENABLED=true"
-  fi
   if [[ "${KAOSAI_REAUTH_ENABLED:-false}" == "true" ]]; then
     [[ -n "${KAOSAI_REAUTH_BASE_URL:-}" ]] || die "KAOSAI_REAUTH_BASE_URL is required when KAOSAI_REAUTH_ENABLED=true"
     validate_internal_http_url "KAOSAI_REAUTH_BASE_URL" "${KAOSAI_REAUTH_BASE_URL}"
@@ -276,25 +471,101 @@ test_image() {
 }
 
 build_image() {
+  local target_image=${1:-${IMAGE_NAME}}
   require_command docker
   docker build --target runtime \
-    --tag "${IMAGE_NAME}" \
+    --tag "${target_image}" \
     --file "${REPO_ROOT}/apps/brain/Dockerfile" \
     "${REPO_ROOT}"
 }
 
+smoke_authenticated_headless_route() {
+  local base_url=$1
+  local brain_api_token=${KAOSBRAIN_AI_TASK_API_TOKEN:-}
+  if [[ -z "${brain_api_token}" ]]; then
+    local token_path
+    token_path=$(host_secret_path "${KAOSBRAIN_AI_TASK_API_TOKEN_FILE:-}")
+    if [[ -z "${token_path}" || ! -r "${token_path}" ]]; then
+      printf 'ERROR: cannot read the token for the authenticated KaosBrain smoke check\n' >&2
+      return 1
+    fi
+    brain_api_token=$(<"${token_path}")
+  fi
+  if [[ -z "${brain_api_token}" || "${brain_api_token}" == *$'\r'* || "${brain_api_token}" == *$'\n'* ]]; then
+    unset brain_api_token
+    printf 'ERROR: invalid token for the authenticated KaosBrain smoke check\n' >&2
+    return 1
+  fi
+
+  local auth_code
+  if ! auth_code=$(printf 'Authorization: Bearer %s\n' "${brain_api_token}" \
+    | curl --header @- --silent --show-error --output /dev/null --write-out '%{http_code}' \
+      "${base_url}/internal/openclaw-auth/status"); then
+    unset brain_api_token
+    printf 'ERROR: authenticated KaosBrain route is unreachable\n' >&2
+    return 1
+  fi
+  unset brain_api_token
+  case "${auth_code}" in
+    200|503)
+      info "Authenticated KaosBrain route passed (HTTP ${auth_code})."
+      ;;
+    401)
+      printf 'ERROR: authenticated KaosBrain route rejected its configured token (HTTP 401)\n' >&2
+      return 1
+      ;;
+    *)
+      printf 'ERROR: authenticated KaosBrain route returned HTTP %s\n' "${auth_code:-000}" >&2
+      return 1
+      ;;
+  esac
+}
+
+headless_health_payload_is_valid() {
+  python3 - "$1" <<'PY' >/dev/null
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+if (
+    payload.get("status") != "ok"
+    or payload.get("service") != "kaos-brain"
+    or payload.get("runtime") != "headless"
+    or payload.get("httpReady") is not True
+    or "discordReady" in payload
+):
+    raise SystemExit(1)
+PY
+}
+
 smoke() {
   local attempt
+  local health_host=${KAOSBRAIN_HEALTH_HOST:-127.0.0.1}
+  case "${health_host}" in
+    0.0.0.0|::) health_host=127.0.0.1 ;;
+  esac
+  local base_url="http://${health_host}:${KAOSBRAIN_HEALTH_PORT:-8099}"
+  local health_url="${base_url}/health"
+  local health_payload
+  local ready=false
   for attempt in $(seq 1 20); do
-    if docker ps --filter "name=${CONTAINER_NAME}" --filter "status=running" --format '{{.Names}}' | grep -qx "${CONTAINER_NAME}"; then
-      docker logs --since 30s "${CONTAINER_NAME}" 2>&1 | tail -40
-      return
+    if docker ps --filter "name=${CONTAINER_NAME}" --filter "status=running" --format '{{.Names}}' | grep -qx "${CONTAINER_NAME}" \
+      && health_payload=$(curl --fail --silent --show-error "${health_url}" 2>/dev/null) \
+      && headless_health_payload_is_valid "${health_payload}"; then
+      ready=true
+      break
     fi
     sleep 1
   done
-  sudo systemctl status "${SERVICE_NAME}" --no-pager >&2 || true
-  docker logs --tail 80 "${CONTAINER_NAME}" >&2 || true
-  die "KaosBrain container did not become running"
+  if [[ "${ready}" != "true" ]]; then
+    sudo systemctl status "${SERVICE_NAME}" --no-pager >&2 || true
+    docker logs --tail 80 "${CONTAINER_NAME}" >&2 || true
+    printf 'ERROR: KaosBrain container did not become running and healthy\n' >&2
+    return 1
+  fi
+  docker logs --since 30s "${CONTAINER_NAME}" 2>&1 | tail -40 || true
+  info "KaosBrain headless API is ready at ${health_url}."
+  smoke_authenticated_headless_route "${base_url}"
 }
 
 check_line() {
@@ -353,16 +624,40 @@ doctor() {
     failures=$((failures + 1))
   fi
 
-  local kaosai_mode="disabled"
-  if [[ "${KAOSAI_ENABLED:-false}" == "true" ]]; then
-    if [[ "${KAOSAI_DRY_RUN_ENABLED:-false}" == "true" ]]; then
-      kaosai_mode="dry-run"
-    elif [[ "${KAOSAI_CHAT_ENABLED:-false}" == "true" ]]; then
-      kaosai_mode="chat"
+  local brain_health_host=${KAOSBRAIN_HEALTH_HOST:-127.0.0.1}
+  case "${brain_health_host}" in
+    0.0.0.0|::) brain_health_host=127.0.0.1 ;;
+  esac
+  local brain_health_url="http://${brain_health_host}:${KAOSBRAIN_HEALTH_PORT:-8099}/health"
+  local brain_health_payload
+  if brain_health_payload=$(curl --fail --silent --show-error "${brain_health_url}"); then
+    if python3 - "${brain_health_payload}" <<'PY' >/dev/null
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+if (
+    payload.get("status") != "ok"
+    or payload.get("service") != "kaos-brain"
+    or payload.get("runtime") != "headless"
+    or payload.get("httpReady") is not True
+    or "discordReady" in payload
+):
+    raise SystemExit(1)
+PY
+    then
+      check_line "Headless API" "ok" "${brain_health_url}"
     else
-      kaosai_mode="diagnostic"
+      check_line "Headless API" "fail" "unexpected health response"
+      failures=$((failures + 1))
     fi
+  else
+    check_line "Headless API" "fail" "${brain_health_url}"
+    failures=$((failures + 1))
   fi
+
+  local kaosai_mode="disabled"
+  [[ "${KAOSAI_ENABLED:-false}" != "true" ]] || kaosai_mode="enabled"
   check_line "KaosBrain-OpenAI mode" "ok" "${kaosai_mode}"
 
   local ollama_tags
@@ -397,6 +692,26 @@ PY
       check_line "Governor tools" "fail" "missing KAOSBRAIN_GOVERNOR_TOOLS_BASE_URL"
       failures=$((failures + 1))
     else
+      local tools_health_payload
+      if tools_health_payload=$(curl --fail --silent --show-error "${tools_url%/}/health"); then
+        if python3 - "${tools_health_payload}" <<'PY' >/dev/null
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+if payload.get("status") != "ok" or payload.get("service") != "kaos-governor-tools":
+    raise SystemExit(1)
+PY
+        then
+          check_line "Governor tools health" "ok" "${tools_url%/}/health"
+        else
+          check_line "Governor tools health" "fail" "unexpected response"
+          failures=$((failures + 1))
+        fi
+      else
+        check_line "Governor tools health" "fail" "${tools_url%/}/health"
+        failures=$((failures + 1))
+      fi
       local tools_code
       tools_code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
         "${tools_url%/}/tools/today?profile=${KAOSBRAIN_GOVERNOR_TOOLS_PROFILE:-main}" || true)
@@ -419,64 +734,193 @@ PY
     check_line "KaosBrain imaging" "disabled"
   fi
 
-  if [[ -n "${KAOSBRAIN_GOVERNOR_HEALTH_URL:-}" ]]; then
-    local health_url=${KAOSBRAIN_GOVERNOR_HEALTH_URL%/}
-    if [[ "${health_url}" != */health ]]; then
-      health_url="${health_url}/health"
-    fi
-    local health_payload
-    if health_payload=$(curl --fail --silent --show-error "${health_url}"); then
-      python3 - "$health_payload" <<'PY'
-import json
-import sys
-
-payload = json.loads(sys.argv[1])
-status = payload.get("status", "unknown")
-discord_ready = payload.get("discordReady", payload.get("discord_ready", "unknown"))
-brain_tools = payload.get("brainTools", payload.get("brain_tools", {}))
-service_status = payload.get("serviceStatus", payload.get("service_status", {}))
-raw_checks = service_status.get("checks", []) if isinstance(service_status, dict) else []
-if isinstance(raw_checks, dict):
-    checks = raw_checks.values()
-else:
-    checks = raw_checks
-states = {}
-for check in checks:
-    if not isinstance(check, dict):
-        continue
-    status_value = check.get("status", "unknown")
-    states[status_value] = states.get(status_value, 0) + 1
-state_text = ", ".join(f"{key}={value}" for key, value in sorted(states.items())) or "no services"
-host_text = payload.get("hostname") or payload.get("host") or "reachable"
-print(f"{'Governor health':<34} {status} ({host_text})")
-print(f"{'Governor Discord':<34} ok (ready={discord_ready})")
-if isinstance(brain_tools, dict):
-    print(f"{'Governor brain tools':<34} ok (enabled={brain_tools.get('enabled', 'unknown')})")
-if isinstance(service_status, dict):
-    print(f"{'System controller':<34} ok (enabled={service_status.get('enabled', 'unknown')}, {state_text})")
-PY
-    else
-      check_line "System controller" "fail" "${health_url}"
-      failures=$((failures + 1))
-    fi
-  else
-    check_line "System controller" "not configured" "KAOSBRAIN_GOVERNOR_HEALTH_URL"
-  fi
-
   if [[ "${failures}" -gt 0 ]]; then
     die "doctor found ${failures} failing check(s)"
   fi
 }
 
+preserve_pre_headless_rollback_artifacts() {
+  local old_image_id=$1
+  local unit_path=$2
+  local unit_existed=$3
+  local env_backup="${ENV_FILE}.pre-headless-discord-retirement"
+  local unit_backup="${ENV_FILE}.unit.pre-headless-discord-retirement"
+  local existing_rollback_image_id
+  existing_rollback_image_id=$(docker image inspect "${ROLLBACK_IMAGE_NAME}" --format '{{.Id}}' 2>/dev/null || true)
+
+  if [[ -n "${existing_rollback_image_id}" && "${existing_rollback_image_id}" != "${old_image_id}" ]]; then
+    if [[ -L "${env_backup}" || ! -f "${env_backup}" \
+      || ( "${unit_existed}" == "true" && ( -L "${unit_backup}" || ! -f "${unit_backup}" ) ) ]]; then
+      printf 'ERROR: rollback image tag already points elsewhere and its matching env/unit backups are incomplete: %s\n' "${ROLLBACK_IMAGE_NAME}" >&2
+      return 1
+    fi
+    info "Preserving existing pre-retirement rollback image and env/unit backups."
+    return 0
+  fi
+
+  if path_exists "${env_backup}" && [[ -L "${env_backup}" || ! -f "${env_backup}" ]]; then
+    printf 'ERROR: pre-retirement env backup is not a regular file: %s\n' "${env_backup}" >&2
+    return 1
+  fi
+  if [[ "${unit_existed}" == "true" ]] && path_exists "${unit_backup}" \
+    && [[ -L "${unit_backup}" || ! -f "${unit_backup}" ]]; then
+    printf 'ERROR: pre-retirement unit backup is not a regular file: %s\n' "${unit_backup}" >&2
+    return 1
+  fi
+
+  if ! path_exists "${env_backup}"; then
+    sudo cp -p "${ENV_FILE}" "${env_backup}" || return 1
+    info "Saved permission-preserving pre-retirement env backup: ${env_backup}"
+  fi
+  if [[ "${unit_existed}" == "true" ]] && ! path_exists "${unit_backup}"; then
+    sudo cp -p "${unit_path}" "${unit_backup}" || return 1
+    info "Saved permission-preserving pre-retirement unit backup: ${unit_backup}"
+  fi
+  if [[ -n "${old_image_id}" && -z "${existing_rollback_image_id}" ]]; then
+    docker image tag "${old_image_id}" "${ROLLBACK_IMAGE_NAME}" || return 1
+    info "Saved pre-retirement image tag: ${ROLLBACK_IMAGE_NAME}"
+  fi
+}
+
+rollback_headless_cutover() {
+  local rollback_dir=$1
+  local old_image_id=$2
+  local unit_existed=$3
+  local service_was_active=$4
+  local unit_path="${SYSTEMD_UNIT_DIR}/${SERVICE_NAME}"
+  local failures=0
+
+  info "Headless cutover failed; restoring the previous KaosBrain service."
+  if [[ "${unit_existed}" == "true" ]] || sudo test -f "${unit_path}"; then
+    if ! sudo systemctl stop "${SERVICE_NAME}" >/dev/null 2>&1; then
+      printf 'ERROR: failed to stop the failed KaosBrain cutover during rollback\n' >&2
+      failures=$((failures + 1))
+    fi
+  fi
+  if ! sudo cp -p "${rollback_dir}/kaosbrain.env" "${ENV_FILE}"; then
+    printf 'ERROR: failed to restore KaosBrain env during rollback\n' >&2
+    failures=$((failures + 1))
+  fi
+  if [[ "${unit_existed}" == "true" ]]; then
+    if ! sudo cp -p "${rollback_dir}/kaosbrain.service" "${unit_path}"; then
+      printf 'ERROR: failed to restore KaosBrain systemd unit during rollback\n' >&2
+      failures=$((failures + 1))
+    fi
+  elif ! sudo rm -f -- "${unit_path}"; then
+    printf 'ERROR: failed to remove the newly installed KaosBrain unit during rollback\n' >&2
+    failures=$((failures + 1))
+  fi
+
+  if [[ -n "${old_image_id}" ]]; then
+    if ! docker image tag "${old_image_id}" "${IMAGE_NAME}"; then
+      printf 'ERROR: failed to restore the previous KaosBrain image tag\n' >&2
+      failures=$((failures + 1))
+    fi
+  elif docker image inspect "${IMAGE_NAME}" >/dev/null 2>&1; then
+    if ! docker image rm "${IMAGE_NAME}" >/dev/null 2>&1; then
+      printf 'ERROR: failed to remove the new KaosBrain image tag during rollback\n' >&2
+      failures=$((failures + 1))
+    fi
+  fi
+
+  if ! restore_quarantined_discord_secrets; then
+    failures=$((failures + 1))
+  fi
+  if ! sudo systemctl daemon-reload; then
+    printf 'ERROR: failed to reload systemd during KaosBrain rollback\n' >&2
+    failures=$((failures + 1))
+  fi
+  if [[ "${service_was_active}" == "true" ]]; then
+    if [[ "${unit_existed}" != "true" ]] || ! sudo systemctl restart "${SERVICE_NAME}"; then
+      printf 'ERROR: failed to restart the previous KaosBrain service during rollback\n' >&2
+      failures=$((failures + 1))
+    fi
+  fi
+  [[ "${failures}" -eq 0 ]]
+}
+
 up() {
-  ensure_upgrade_defaults
-  preflight
-  ensure_runtime_dirs
-  install_service_unit
-  sudo systemctl daemon-reload
-  build_image
-  sudo systemctl restart "${SERVICE_NAME}"
-  smoke
+  [[ "${CANDIDATE_IMAGE_NAME}" != "${IMAGE_NAME}" ]] \
+    || die "KAOSBRAIN_CANDIDATE_IMAGE_NAME must differ from KAOSBRAIN_IMAGE_NAME"
+  [[ "${ROLLBACK_IMAGE_NAME}" != "${IMAGE_NAME}" && "${ROLLBACK_IMAGE_NAME}" != "${CANDIDATE_IMAGE_NAME}" ]] \
+    || die "KAOSBRAIN_ROLLBACK_IMAGE_NAME must differ from the live and candidate image names"
+
+  # Validate a migrated copy and build a separate image tag before touching the
+  # live env, unit, image tag, secrets, or running service.
+  prospective_preflight
+  load_env
+  validate_retired_discord_secret_quarantine
+  build_image "${CANDIDATE_IMAGE_NAME}"
+
+  local rollback_dir
+  rollback_dir=$(mktemp -d)
+  chmod 0700 "${rollback_dir}"
+  local unit_path="${SYSTEMD_UNIT_DIR}/${SERVICE_NAME}"
+  local unit_existed=false
+  local service_was_active=false
+  local old_image_id
+  old_image_id=$(docker image inspect "${IMAGE_NAME}" --format '{{.Id}}' 2>/dev/null || true)
+  if sudo test -f "${unit_path}"; then
+    unit_existed=true
+  fi
+  if sudo systemctl is-active --quiet "${SERVICE_NAME}"; then
+    service_was_active=true
+  fi
+  if ! sudo cp -p "${ENV_FILE}" "${rollback_dir}/kaosbrain.env"; then
+    sudo rm -rf -- "${rollback_dir}"
+    die "failed to snapshot the live KaosBrain deployment before cutover"
+  fi
+  if [[ "${unit_existed}" == "true" ]] \
+    && ! sudo cp -p "${unit_path}" "${rollback_dir}/kaosbrain.service"; then
+    sudo rm -rf -- "${rollback_dir}"
+    die "failed to snapshot the live KaosBrain systemd unit before cutover"
+  fi
+  if ! preserve_pre_headless_rollback_artifacts "${old_image_id}" "${unit_path}" "${unit_existed}"; then
+    sudo rm -rf -- "${rollback_dir}"
+    die "failed to preserve persistent pre-retirement rollback artifacts"
+  fi
+
+  local cutover_status
+  set +e
+  (
+    set -e
+    ensure_upgrade_defaults
+    preflight
+    docker image tag "${CANDIDATE_IMAGE_NAME}" "${IMAGE_NAME}"
+    install_service_unit
+    sudo systemctl daemon-reload
+  )
+  cutover_status=$?
+  set -e
+  if [[ "${cutover_status}" -eq 0 ]]; then
+    if ! quarantine_retired_discord_secrets; then
+      cutover_status=1
+    fi
+  fi
+  if [[ "${cutover_status}" -eq 0 ]]; then
+    set +e
+    (
+      set -e
+      load_env
+      sudo systemctl restart "${SERVICE_NAME}"
+      smoke
+    )
+    cutover_status=$?
+    set -e
+  fi
+
+  if [[ "${cutover_status}" -ne 0 ]]; then
+    if rollback_headless_cutover "${rollback_dir}" "${old_image_id}" "${unit_existed}" "${service_was_active}"; then
+      sudo rm -rf -- "${rollback_dir}"
+      die "KaosBrain headless cutover failed; the previous deployment was restored"
+    fi
+    printf 'ERROR: KaosBrain cutover and automatic rollback both failed; recovery snapshot retained at %s\n' "${rollback_dir}" >&2
+    return 1
+  fi
+
+  sudo rm -rf -- "${rollback_dir}"
+  docker image rm "${CANDIDATE_IMAGE_NAME}" >/dev/null 2>&1 || true
+  info "KaosBrain headless cutover completed and passed authenticated smoke checks."
 }
 
 deploy() {
@@ -488,62 +932,6 @@ deploy() {
 status() {
   sudo systemctl status "${SERVICE_NAME}" --no-pager
   docker ps --filter "name=${CONTAINER_NAME}" --format '{{.Names}} {{.Image}} {{.Status}}'
-}
-
-kaosai_mode() {
-  local mode=${1:-}
-  case "${mode}" in
-    disabled|diagnostic|dry-run|chat) ;;
-    "") die "usage: ${0} brain-openai-mode <disabled|diagnostic|dry-run|chat>" ;;
-    *) die "unknown KaosBrain-OpenAI mode: ${mode}" ;;
-  esac
-
-  [[ -f "${ENV_FILE}" ]] || die "missing env file: ${ENV_FILE}; run ${0} setup"
-  local backup
-  backup=$(mktemp "${ENV_FILE}.backup.XXXXXX")
-  cp -p "${ENV_FILE}" "${backup}"
-
-  enable_kaosai_defaults() {
-    set_env_value KAOSAI_ENABLED true
-    set_env_value KAOSAI_PROVIDER openclaw
-    if [[ -z "${KAOSAI_BASE_URL:-}" ]]; then
-      set_env_value KAOSAI_BASE_URL http://127.0.0.1:18789
-    fi
-    if [[ -z "${KAOSAI_API_TOKEN:-}" && -z "${KAOSAI_API_TOKEN_FILE:-}" ]]; then
-      set_env_value KAOSAI_API_TOKEN_FILE /run/secrets/openclaw_gateway_token
-    fi
-  }
-
-  case "${mode}" in
-    disabled)
-      set_env_value KAOSAI_ENABLED false
-      set_env_value KAOSAI_CHAT_ENABLED false
-      set_env_value KAOSAI_DRY_RUN_ENABLED false
-      ;;
-    diagnostic)
-      enable_kaosai_defaults
-      set_env_value KAOSAI_CHAT_ENABLED false
-      set_env_value KAOSAI_DRY_RUN_ENABLED false
-      ;;
-    dry-run)
-      enable_kaosai_defaults
-      set_env_value KAOSAI_CHAT_ENABLED false
-      set_env_value KAOSAI_DRY_RUN_ENABLED true
-      ;;
-    chat)
-      enable_kaosai_defaults
-      set_env_value KAOSAI_CHAT_ENABLED true
-      set_env_value KAOSAI_DRY_RUN_ENABLED false
-      ;;
-  esac
-
-  if ! preflight; then
-    cp -p "${backup}" "${ENV_FILE}"
-    rm -f "${backup}"
-    die "KaosBrain-OpenAI mode change failed preflight; restored ${ENV_FILE}"
-  fi
-  rm -f "${backup}"
-  info "KaosBrain-OpenAI mode set to ${mode}. Run ${0} up to restart Brain with this mode."
 }
 
 openclaw_reauth() {
@@ -630,12 +1018,8 @@ Commands:
   build      Build the runtime image
   up         Run preflight, build, restart, and smoke check
   deploy     git pull --ff-only origin main, then up
-  doctor     Check Brain service, Ollama, Governor tools, and system controller
+  doctor     Check the headless Brain API, Ollama, and Governor tools
   status     Show systemd and container status
-  brain-openai-mode <disabled|diagnostic|dry-run|chat>
-             Update KaosBrain-OpenAI mode in the Brain env and leave restart explicit
-  kaosai-mode <disabled|diagnostic|dry-run|chat>
-             Legacy alias for brain-openai-mode
   openclaw-reauth
              Renew the OpenClaw OpenAI/ChatGPT login and restart the OpenClaw gateway
   openclaw-reauth-agent-setup
@@ -657,8 +1041,6 @@ case "${1:-}" in
   deploy) deploy ;;
   doctor) doctor ;;
   status) status ;;
-  brain-openai-mode) shift; kaosai_mode "$@" ;;
-  kaosai-mode) shift; kaosai_mode "$@" ;;
   openclaw-reauth) openclaw_reauth ;;
   openclaw-reauth-agent-setup) openclaw_reauth_agent_setup ;;
   openclaw-reauth-agent-up) openclaw_reauth_agent_up ;;

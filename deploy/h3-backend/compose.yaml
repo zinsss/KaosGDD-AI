@@ -1,81 +1,6 @@
 name: kaosgdd-ai
 
 services:
-  governor-discord:
-    build:
-      context: ../..
-      dockerfile: integrations/discoord/Dockerfile
-      target: runtime
-    image: kaosgdd-ai-governor-discord:0.6.0
-    pull_policy: never
-    container_name: kaos-governor-discord
-    restart: unless-stopped
-    init: true
-    env_file:
-      - .env
-      - path: ${KAOS_ROOT:-/srv/kaos}/secrets/governor-postgres.env
-        format: raw
-    environment:
-      GOVERNOR_BRAIN_TOOLS_ENABLED: "false"
-      GOVERNOR_OPERATION_STORE: "${GOVERNOR_OPERATION_STORE:-postgres}"
-      GOVERNOR_DB_HOST: "governor-postgres"
-      GOVERNOR_DB_PORT: "5432"
-      PUSHOVER_DELIVERY_MODE: "${PUSHOVER_DELIVERY_MODE:-worker}"
-      MAIL_NAVER_ENABLED: "false"
-      MAIL_NAVER_OWNER: "worker"
-      MAIL_ORGANIZER_ENABLED: "false"
-      FAX_DISCORD_ENABLED: "false"
-      FAX_DISCORD_MESSAGE_INTAKE: "false"
-      DAILY_DIGEST_ENABLED: "false"
-      DISCORD_CALENDAR_ENABLED: "false"
-      DISCORD_TASKS_ENABLED: "false"
-      DISCORD_TASK_DUE_NOTIFICATIONS_ENABLED: "false"
-      DISCORD_TASK_DUE_REPEAT_NOTIFICATIONS_ENABLED: "false"
-      DISCORD_SUPPLIES_ENABLED: "false"
-      DISCORD_MEMOS_ENABLED: "false"
-      DISCORD_INBOX_ENABLED: "false"
-      DISCORD_SERVICE_STATUS_ENABLED: "false"
-      DISCORD_STARTUP_NOTIFICATION: "false"
-    secrets:
-      - discord_bot_token
-      - governor_api_token
-      - ios_shortcuts_token
-      - memos_access_token
-      - naver_mail_password
-      - paperless_api_token
-      - fax_connector_token
-      - pushover_app_token
-      - pushover_user_key
-    ports:
-      - "${GOVERNOR_BIND_ADDRESS:-127.0.0.1}:${HEALTH_PORT:-8097}:8097"
-    volumes:
-      - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/mail:/data/mail
-      - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/fax:/data/fax
-      - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/discord-calendar:/data/discord-calendar
-      - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/discord-tasks:/data/discord-tasks
-      - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/discord-supplies:/data/discord-supplies
-      - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/discord-inbox:/data/discord-inbox
-      - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/discord-system:/data/discord-system
-      - ${GOVERNOR_STATE_ROOT:-/srv/kaos/data/kaosgdd-ai/governor}/notifications:/data/notifications
-    group_add:
-      - "${KAOS_HOST_GID:-1000}"
-    read_only: true
-    tmpfs:
-      - /tmp:size=64m,mode=1777
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    mem_limit: 256m
-    pids_limit: 100
-    logging:
-      driver: json-file
-      options:
-        max-size: 5m
-        max-file: "2"
-    networks:
-      - backend
-
   governor-worker:
     build:
       context: ../..
@@ -87,7 +12,7 @@ services:
     restart: unless-stopped
     init: true
     env_file:
-      - .env
+      - secrets/governor-runtime.env
       - path: ${KAOS_ROOT:-/srv/kaos}/secrets/governor-postgres.env
         format: raw
     environment:
@@ -97,6 +22,8 @@ services:
       RECURRING_TASK_SYNC_ENABLED: "${RECURRING_TASK_SYNC_ENABLED:-true}"
       RECURRING_TASK_SYNC_POLL_SECONDS: "${RECURRING_TASK_SYNC_POLL_SECONDS:-300}"
       MAIL_NAVER_NOTIFICATION_FOLDERS: "${MAIL_NAVER_NOTIFICATION_FOLDERS:-세무사,영덕군보건소}"
+      SYSTEM_MAINTENANCE_REPORT_PATH: "/data/notifications/maintenance-report.json"
+      SYSTEM_MAINTENANCE_REMINDER_STATE_PATH: "/data/notifications/maintenance-reminders.json"
     secrets:
       - naver_mail_password
       - fax_connector_token
@@ -137,7 +64,7 @@ services:
     restart: unless-stopped
     init: true
     env_file:
-      - .env
+      - secrets/governor-runtime.env
       - path: ${KAOS_ROOT:-/srv/kaos}/secrets/governor-postgres.env
         format: raw
     environment:
@@ -203,8 +130,6 @@ networks:
     name: kaosgdd-backend
 
 secrets:
-  discord_bot_token:
-    file: ./secrets/discord_bot_token
   governor_api_token:
     file: ./secrets/governor_api_token
   ios_shortcuts_token:

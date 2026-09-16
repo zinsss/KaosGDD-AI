@@ -76,7 +76,7 @@ class GovernorWorkerTests(unittest.TestCase):
             build=mock.Mock(
                 return_value="# 2026.08.29(Sat)\n### Events\n- Christmas\n\n### Tasks\n-"
             ),
-            record_scheduled=mock.Mock(),
+            record_sent=mock.Mock(),
             record_error=mock.Mock(),
             status=mock.Mock(return_value={"enabled": True, "owner": "worker"}),
         )
@@ -100,7 +100,7 @@ class GovernorWorkerTests(unittest.TestCase):
         self.assertEqual(delivered, 2)
         self.assertEqual([item.message for item in queued], ["Good Morning.", "Today. Christmas."])
         self.assertEqual([item.priority for item in queued], [0, 0])
-        daily_digest.record_scheduled.assert_called_once_with(now.date(), daily_digest.build.return_value)
+        daily_digest.record_sent.assert_called_once_with(now.date())
         self.assertEqual(status["lastScheduledNotificationCount"], 2)
         self.assertEqual(status["dailyDigest"]["owner"], "worker")
 
@@ -183,6 +183,41 @@ class GovernorWorkerTests(unittest.TestCase):
         self.assertEqual(status["recurringTasks"]["enabled"], True)
         self.assertEqual(status["recurringTasks"]["lastSyncDate"], "2026-09-08")
         self.assertEqual(status["recurringTasks"]["lastSyncCount"], 1)
+
+    def test_worker_schedules_maintenance_then_flushes_web_push(self) -> None:
+        now = datetime(2026, 9, 17, 8, 0, tzinfo=timezone.utc)
+        notifications = SimpleNamespace(
+            config=SimpleNamespace(poll_seconds=5),
+            deliver_pending=mock.Mock(side_effect=[0, 0]),
+            enqueue=mock.Mock(return_value=True),
+            status=mock.Mock(return_value={"pendingCount": 0, "deliveryMode": "worker"}),
+        )
+        web_push = SimpleNamespace(
+            deliver_pending=mock.Mock(side_effect=[0, 2]),
+            status=mock.Mock(return_value={"enabled": True, "pendingCount": 0}),
+        )
+        maintenance = SimpleNamespace(
+            run_due=mock.Mock(return_value=2),
+            status=mock.Mock(return_value={"enabled": True, "lastScheduledCount": 2}),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            worker = GovernorWorker(
+                WorkerConfig(status_path=Path(temporary) / "worker.json"),
+                notifications,
+                web_push=web_push,
+                maintenance_reminders=maintenance,
+            )
+
+            delivered = worker.run_once(now)
+            status = json.loads(worker.config.status_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(delivered, 2)
+        maintenance.run_due.assert_called_once_with(now)
+        self.assertEqual(notifications.deliver_pending.call_count, 2)
+        self.assertEqual(web_push.deliver_pending.call_count, 2)
+        self.assertEqual(status["lastScheduledNotificationCount"], 2)
+        self.assertEqual(status["lastMaintenanceScheduledCount"], 2)
+        self.assertEqual(status["maintenance"]["lastScheduledCount"], 2)
 
     def test_missing_heartbeat_is_unhealthy(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

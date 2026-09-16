@@ -1,16 +1,19 @@
 # KaosDiscoord
 
-KaosDiscoord is the Discord transport adapter for Kaos. It owns Discord
-connections, IDs, commands, interactions, attachments, views, and message
-formatting. It calls KaosGovernor for deterministic operations and contains no
-AI or model-driven domain decisions.
+> **Retired 2026-09-17.** This source is retained only for bounded rollback and
+> historical reference. It is not built or tested by the production pipeline,
+> is absent from H3 Compose, and must not be deployed or given an active bot
+> token. Current notification delivery belongs to the Governor worker, Web
+> Push, native clients, and the KaosGDD PWA.
 
-The current H3 deployment still uses the historical
-`kaos-governor-discord` Compose service and container names while the adapter is
-being extracted. The canonical Python package and executable are now
-`kaosdiscoord`; the old Python import and executable remain temporary
-compatibility shims. This preserves the deployed state, volumes, credentials,
-and rollback path during migration.
+KaosDiscoord was the Discord transport adapter for Kaos. It owned Discord
+connections, IDs, commands, interactions, attachments, views, and message
+formatting. It called KaosGovernor for deterministic operations and contained
+no AI or model-driven domain decisions.
+
+The retired deployment used the historical `kaos-governor-discord` Compose
+service and container names. The old Python package and executable remain in
+Git only to explain preserved state and the bounded rollback path.
 
 Pushover delivery is no longer a KaosDiscoord-owned lifecycle when
 `PUSHOVER_DELIVERY_MODE=worker`. Discord producers append minimal alerts to the

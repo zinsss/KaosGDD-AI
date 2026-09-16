@@ -21,7 +21,7 @@ class BrainGuardTests(unittest.TestCase):
     def context(self) -> BrainGuardContext:
         return BrainGuardContext(
             actor_id=123,
-            idempotency_key="discord:message:1",
+            idempotency_key="client:message:1",
             today=date(2026, 8, 17),
             supplies_collection_id="supplies:abc",
         )
@@ -95,7 +95,7 @@ class BrainGuardTests(unittest.TestCase):
         self.assertEqual(result.kind, BrainGuardResultKind.GOVERNOR_PROPOSAL)
         self.assertTrue(result.confirmation_required)
         self.assertEqual(result.actor_id, 123)
-        self.assertEqual(result.idempotency_key, "discord:message:1")
+        self.assertEqual(result.idempotency_key, "client:message:1")
         self.assertIsInstance(result.request, TaskCreateRequest)
         request = result.request
         assert isinstance(request, TaskCreateRequest)

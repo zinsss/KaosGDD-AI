@@ -1050,8 +1050,7 @@ def _render_system_status(payload: dict[str, Any]) -> str:
     lines = ["## System status"]
     version = str(status.get("version") or "").strip()
     if version:
-        lines.append(f"- KaosDiscoord: {version}")
-    lines.append(f"- Discord: {_ready_text(status.get('discordReady'))}")
+        lines.append(f"- KaosGovernor: {version}")
     lines.append(f"- Startup: {_ready_text(status.get('startupComplete'))}")
     brain_tools = status.get("brainTools")
     if isinstance(brain_tools, dict):

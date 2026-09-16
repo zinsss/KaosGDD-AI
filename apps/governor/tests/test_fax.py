@@ -51,6 +51,9 @@ class FaxTests(unittest.TestCase):
         self.assertEqual(config.owner, "worker")
         with self.assertRaisesRegex(FaxError, "FAX_LIFECYCLE_OWNER"):
             FaxConfig.from_env({"FAX_LIFECYCLE_OWNER": "both"})
+        with self.assertRaisesRegex(FaxError, "FAX_LIFECYCLE_OWNER"):
+            FaxConfig.from_env({"FAX_LIFECYCLE_OWNER": "discord"})
+        self.assertEqual(FaxConfig.from_env({}).owner, "worker")
 
     def test_runtime_status_is_visible_to_a_separate_reader(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -62,7 +65,7 @@ class FaxTests(unittest.TestCase):
 
         self.assertTrue(status["lastScanAt"])
         self.assertEqual(status["lastError"], "")
-        self.assertEqual(status["owner"], "discord")
+        self.assertEqual(status["owner"], "worker")
 
     def test_normalizes_domestic_and_country_code_numbers(self) -> None:
         self.assertEqual(normalize_destination("02-284-8302"), "022848302")
@@ -167,15 +170,16 @@ class FaxTests(unittest.TestCase):
 
         self.assertTrue(created)
         self.assertEqual(job["status"], "queued")
+        self.assertEqual(job["source"], "governor")
         self.assertEqual(connector.submitted[0][0], job["jobId"])
         self.assertEqual(
             [action.kind for action in actions],
-            ["notification", "notification", "notification", "cleanup"],
+            ["notification", "notification", "notification"],
         )
         self.assertEqual(actions[2].content, "Fax successfully sent.")
-        self.assertEqual(actions[-1].message_ids, (20, 21))
+        self.assertNotIn("cleanup", [action.kind for action in actions])
 
-    def test_worker_owner_separates_discord_source_cleanup(self) -> None:
+    def test_worker_owner_does_not_create_discord_source_cleanup(self) -> None:
         class Connector:
             def submit(self, job_id, request, source_metadata):
                 return {"status": "queued"}
@@ -212,8 +216,7 @@ class FaxTests(unittest.TestCase):
             cleanup_actions = service.cleanup_actions()
 
         self.assertNotIn("cleanup", [action.kind for action in worker_actions])
-        self.assertEqual([action.kind for action in cleanup_actions], ["cleanup"])
-        self.assertEqual(cleanup_actions[0].message_ids, (20, 21))
+        self.assertEqual(cleanup_actions, [])
 
     def test_recent_items_returns_outgoing_jobs_without_pdf_content(self) -> None:
         class Connector:
@@ -349,10 +352,10 @@ class FaxTests(unittest.TestCase):
             }
             actions = service.scan_actions()
 
-        self.assertEqual([action.kind for action in actions], ["notification", "notification", "cleanup"])
+        self.assertEqual([action.kind for action in actions], ["notification", "notification"])
         self.assertEqual(actions[0].content, "Sending fax.")
         self.assertEqual(actions[1].content, "Fax successfully sent.")
-        self.assertEqual(actions[-1].message_ids, (20, 21))
+        self.assertNotIn("cleanup", [action.kind for action in actions])
 
     def test_connector_transport_delivers_incoming_pdf_events(self) -> None:
         class Connector:
@@ -490,7 +493,7 @@ class FaxTests(unittest.TestCase):
         self.assertEqual(config.transport, "connector")
         self.assertEqual(config.connector_token, "secret-token")
 
-    def test_bridge_and_doneq_generate_lifecycle_archive_and_cleanup(self) -> None:
+    def test_bridge_and_doneq_generate_lifecycle_archive_without_retired_cleanup(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             service = FaxService(self.config(root))
@@ -510,10 +513,10 @@ class FaxTests(unittest.TestCase):
 
         self.assertEqual(
             [action.kind for action in actions],
-            ["notification", "notification", "notification", "archive", "cleanup"],
+            ["notification", "notification", "notification", "archive"],
         )
         self.assertEqual(actions[2].content, "Fax successfully sent.")
-        self.assertEqual(actions[-1].message_ids, (20, 21))
+        self.assertNotIn("cleanup", [action.kind for action in actions])
 
     def test_first_run_baselines_incoming_and_legacy_sent_jobs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -570,7 +573,7 @@ class FaxTests(unittest.TestCase):
         self.assertEqual([action.kind for action in actions], ["archive"])
         self.assertEqual(actions[0].filename, "2026-08-12-13:55_FROM_0547337787.pdf")
         self.assertIn("Fax received.", actions[0].content)
-        self.assertIn("Open #brain", actions[0].content)
+        self.assertIn("Open KaosGDD", actions[0].content)
         self.assertEqual(recent[0]["direction"], "incoming")
         self.assertEqual(recent[0]["remote"], "0547337787")
         self.assertEqual(recent[0]["pages"], "1")

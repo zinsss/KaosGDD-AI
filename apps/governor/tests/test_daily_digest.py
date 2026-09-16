@@ -48,7 +48,7 @@ class Adapter:
 
 
 class DailyDigestTests(unittest.TestCase):
-    def config(self, root: Path, *, owner: str = "discord") -> DailyDigestConfig:
+    def config(self, root: Path, *, owner: str = "worker") -> DailyDigestConfig:
         return DailyDigestConfig(
             enabled=True,
             owner=owner,  # type: ignore[arg-type]
@@ -79,8 +79,10 @@ class DailyDigestTests(unittest.TestCase):
             DailyDigestConfig.from_env({"DAILY_DIGEST_TIME": "7am"})
         with self.assertRaisesRegex(DailyDigestError, "main or family"):
             DailyDigestConfig.from_env({"DAILY_DIGEST_PROFILE": "admin"})
-        with self.assertRaisesRegex(DailyDigestError, "discord or worker"):
+        with self.assertRaisesRegex(DailyDigestError, "must be worker"):
             DailyDigestConfig.from_env({"DAILY_DIGEST_OWNER": "both"})
+        with self.assertRaisesRegex(DailyDigestError, "must be worker"):
+            DailyDigestConfig.from_env({"DAILY_DIGEST_OWNER": "discord"})
         with self.assertRaisesRegex(DailyDigestError, "WEATHER_CITY"):
             DailyDigestConfig.from_env({"DAILY_DIGEST_WEATHER_CITY": "../../etc"})
         with self.assertRaisesRegex(DailyDigestError, "HTTPS URL"):
@@ -204,6 +206,25 @@ class DailyDigestTests(unittest.TestCase):
         self.assertEqual(final["lastMessageId"], "701")
         self.assertEqual(final["pendingPublicationCount"], 0)
         self.assertTrue(lock_exists)
+
+    def test_discord_era_pending_publications_are_archived_without_deletion(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            config = self.config(Path(temporary))
+            service = DailyDigestService(config, Adapter())  # type: ignore[arg-type]
+            day = date(2026, 8, 29)
+            content = service.build(day)
+            service.record_scheduled(day, content)
+
+            retired = service.retire_pending_publications()
+            state = service._load()
+            no_pending = service.pending_publication() is None
+
+        self.assertEqual(retired, 1)
+        self.assertTrue(no_pending)
+        publication = state["publications"][day.isoformat()]
+        self.assertEqual(publication["status"], "retired")
+        self.assertEqual(publication["content"], content)
+        self.assertEqual(publication["retirementReason"], "discord-transport-retired")
 
     def test_bible_and_quote_cycle_through_available_content(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

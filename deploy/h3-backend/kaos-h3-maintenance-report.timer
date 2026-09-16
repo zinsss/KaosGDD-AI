@@ -1,0 +1,13 @@
+[Unit]
+Description=Refresh Kaos host maintenance status every day and after boot
+
+[Timer]
+OnBootSec=2min
+OnCalendar=*-*-* 05:00:00 Asia/Seoul
+Persistent=true
+RandomizedDelaySec=10min
+AccuracySec=1min
+Unit=kaos-h3-maintenance-report.service
+
+[Install]
+WantedBy=timers.target

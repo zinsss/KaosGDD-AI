@@ -4,25 +4,24 @@ The detailed host, service-placement, interaction, security, backup, and
 migration decisions are maintained in the
 [H4 Ultra + H3+ production plan](h4-h3-production-plan.md).
 
-Implementation phases and current progress are tracked in the
+Historical implementation phases are recorded in the
 [Brain / Governor / Discoord / iOS migration plan](../migration/brain-governor-discoord-ios-plan.md).
+Both Discord transports were retired on 2026-09-17.
 
 ## Overview
 
 ```text
-Discord #brain fallback     Shortcuts / optional Scriptable
-   |                          |                  |
-   v                          |                  |
-KaosDiscoord                  |       Personal + Family KaosGDD PWAs
-   |                          |       including Kaos Feed command cards
-   +------ deterministic calls ------------------+
-   |                          |                  |
-   +-> KaosBrain on H4/Mac <--+ when interpretation is needed
-          |                    |                  |
-          +--------------------+------------------+
-                               |
-                               v
-                      KaosGovernor on H3+ backend
+ iOS Shortcuts / native apps        Personal + Family KaosGDD PWAs
+                |                         |
+                +---- deterministic calls-+
+                |                         |
+                +-> KaosBrain on H4 <-----+ when interpretation is needed
+                         |                |
+                         +----------------+
+                                  |
+                                  v
+                         KaosGovernor on H3+
+                    worker / tools / API runtimes
                     |
         +-----------+------------+
         |           |            |
@@ -34,10 +33,10 @@ iOS Calendar and Reminders
 (personal, family, supplies)
 ```
 
-KaosBrain communicates with backends only through KaosGovernor. KaosDiscoord
-is retained only for fallback private Discord `#brain` conversation during
-migration. The personal and family PWAs, Shortcuts, and an optional focused
-Scriptable client may call Governor directly for deterministic operations. The
+KaosBrain is a headless internal HTTP service and communicates with backends
+only through KaosGovernor. The personal and family PWAs and Shortcuts may call
+Governor directly for deterministic operations. Web Push provides generic
+alerts without becoming a source of truth. The
 personal PWA should evolve toward the
 [Kaos Feed Command Interface](kaos-feed-command-interface.md): a timeline of
 openable command cards, buttons, forms, receipts, and optional Ask Kaos input.
@@ -61,8 +60,8 @@ purpose-built file transfer service where needed.
 
 KaosGDD is the umbrella project. Under it, KaosBrain is the top AI
 manager/orchestrator for language interpretation, provider routing, and guarded
-structured action proposals; KaosGovernor owns deterministic orchestration; and
-KaosDiscoord is the replaceable Discord transport. KaosBrain-OpenAI is the
+structured action proposals, while KaosGovernor owns deterministic
+orchestration. KaosBrain-OpenAI is the
 optional OpenClaw/ChatGPT Pro provider implementation formerly called KaosAI.
 Prompt-driven Brain workflows exposed in the PWA are called **AI Tasks**; they
 are archived as receipts/work history, not treated as authoritative domain
@@ -173,13 +172,13 @@ AI may summarize collected mail but does not own polling or mailbox state.
 - number and attachment validation
 - confirmations
 - status transitions and retries
-- transport-neutral result presentation, including requested `#brain` output
+- transport-neutral result presentation in the PWA and scoped clients
 
 Physical modem access remains in a narrow office Fax Connector beside HylaFAX.
 
 ### KaosInbox
 
-- iOS Share Sheet and family file intake; requested `#brain` files only
+- iOS Share Sheet, PWA, and family file intake
 - temporary upload lifecycle
 - MIME, size, and duplicate validation
 - Paperless import and metadata application
@@ -191,7 +190,7 @@ Mail attachments and faxes may create Inbox references without transferring owne
 ### KaosNotifications
 
 - Pushover delivery for immediate personal text alerts
-- requested `#brain` detail/receipts
+- PWA detail/receipts
 - Family PWA chat delivery and Web Push
 - quiet hours and category preferences
 - retry/outbox handling

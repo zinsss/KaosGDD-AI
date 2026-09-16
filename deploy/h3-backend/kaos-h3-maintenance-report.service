@@ -1,0 +1,15 @@
+[Unit]
+Description=Collect read-only Kaos host maintenance status
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=__KAOS_DEPLOY_USER__
+Environment=HOME=__KAOS_DEPLOY_HOME__
+WorkingDirectory=/srv/projects/KaosGDD-AI
+ExecStart=/srv/projects/KaosGDD-AI/deploy/h3-backend/kaos-h3 maintenance-report
+UMask=0007
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full

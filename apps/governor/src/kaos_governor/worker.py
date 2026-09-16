@@ -22,6 +22,7 @@ from .import_workers import (
     NaverMailLifecycleWorker,
 )
 from .mail import NaverMailConfig, NaverMailPoller
+from .maintenance import MaintenanceReminderConfig, MaintenanceReminderService
 from .notifications import (
     NotificationInbox,
     NotificationInboxConfig,
@@ -133,6 +134,7 @@ class GovernorWorker:
         recurring_tasks: RecurringTaskService | None = None,
         recurring_task_config: RecurringTaskSyncConfig | None = None,
         web_push: WebPushService | None = None,
+        maintenance_reminders: MaintenanceReminderService | None = None,
     ) -> None:
         self.config = config
         self.notifications = notifications
@@ -142,6 +144,7 @@ class GovernorWorker:
         self.recurring_tasks = recurring_tasks
         self.recurring_task_config = recurring_task_config or RecurringTaskSyncConfig(enabled=False)
         self.web_push = web_push
+        self.maintenance_reminders = maintenance_reminders
         self._next_digest_check_at: datetime | None = None
         self._next_content_refresh_at: datetime | None = None
         self._next_mail_check_at: datetime | None = None
@@ -196,7 +199,7 @@ class GovernorWorker:
                     for notification in notifications
                     if self.notifications.enqueue(notification)
                 )
-                service.record_scheduled(current.date(), content)
+                service.record_sent(current.date())
         # Refresh after scheduling so a slow or unavailable web source can never
         # delay the time-sensitive morning alert; cached/local content is enough.
         if self._next_content_refresh_at is None or current >= self._next_content_refresh_at:
@@ -258,6 +261,7 @@ class GovernorWorker:
     def run_once(self, now: datetime | None = None) -> int:
         delivered = 0
         scheduled = 0
+        maintenance_scheduled = 0
         recurring_task_result = 0
         mail_result = ImportCycleResult()
         fax_result = ImportCycleResult()
@@ -277,6 +281,12 @@ class GovernorWorker:
             errors.append(f"{type(exc).__name__}: {exc}")
             if self.daily_digest is not None:
                 self.daily_digest.record_error(exc)
+        if self.maintenance_reminders is not None:
+            try:
+                maintenance_scheduled = self.maintenance_reminders.run_due(now)
+                scheduled += maintenance_scheduled
+            except Exception as exc:
+                errors.append(f"{type(exc).__name__}: {exc}")
         try:
             recurring_task_result = self._sync_recurring_tasks(now)
         except Exception as exc:
@@ -305,6 +315,7 @@ class GovernorWorker:
             status="degraded" if errors else "ready",
             delivered=delivered,
             scheduled=scheduled,
+            maintenance_scheduled=maintenance_scheduled,
             recurring_task_result=recurring_task_result,
             mail_result=mail_result,
             fax_result=fax_result,
@@ -321,6 +332,7 @@ class GovernorWorker:
         status: str,
         delivered: int,
         scheduled: int,
+        maintenance_scheduled: int,
         recurring_task_result: int,
         mail_result: ImportCycleResult,
         fax_result: ImportCycleResult,
@@ -335,6 +347,7 @@ class GovernorWorker:
                 "lastCycleAt": _timestamp(now),
                 "lastDeliveredCount": delivered,
                 "lastScheduledNotificationCount": scheduled,
+                "lastMaintenanceScheduledCount": maintenance_scheduled,
                 "lastRecurringTaskSyncDate": self._last_recurring_task_sync_date.isoformat()
                 if self._last_recurring_task_sync_date
                 else "",
@@ -354,6 +367,11 @@ class GovernorWorker:
                 "pushover": self.notifications.status(),
                 "webPush": self.web_push.status() if self.web_push is not None else {"enabled": False},
                 "dailyDigest": self.daily_digest.status() if self.daily_digest is not None else {"enabled": False},
+                "maintenance": (
+                    self.maintenance_reminders.status()
+                    if self.maintenance_reminders is not None
+                    else {"enabled": False}
+                ),
                 "naverMail": (
                     self.mail_lifecycle.poller.status()
                     if self.mail_lifecycle is not None
@@ -438,21 +456,30 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
     digest_config = DailyDigestConfig.from_env()
-    daily_digest = None
-    if digest_config.enabled and digest_config.owner == "worker":
-        calendar_url = os.environ.get(
-            "CALENDAR_ADAPTER_INTERNAL_URL",
-            "http://calendar-adapter:8091",
-        ).strip()
-        daily_digest = DailyDigestService(
-            digest_config,
-            CalendarAdapterClient(CalendarAdapterConfig(calendar_url)),
+    calendar_url = os.environ.get(
+        "CALENDAR_ADAPTER_INTERNAL_URL",
+        "http://calendar-adapter:8091",
+    ).strip()
+    digest_state = DailyDigestService(
+        digest_config,
+        CalendarAdapterClient(CalendarAdapterConfig(calendar_url)),
+    )
+    retired_publications = digest_state.retire_pending_publications()
+    if retired_publications:
+        LOGGER.info(
+            "Archived %d pending Discord-era daily digest publications",
+            retired_publications,
         )
+    daily_digest = digest_state if digest_config.enabled else None
     web_push = WebPushService(WebPushConfig.from_env())
     notifications = TextNotificationService(
         pushover,
         inbox=NotificationInbox(NotificationInboxConfig.from_env()),
         mirrors=(web_push,),
+    )
+    maintenance_reminders = MaintenanceReminderService(
+        MaintenanceReminderConfig.from_env(),
+        notifications,
     )
     mail_config = NaverMailConfig.from_env()
     mail_lifecycle = None
@@ -491,6 +518,7 @@ def main() -> None:
                 recurring_tasks,
                 recurring_task_config,
                 web_push,
+                maintenance_reminders,
             )
         )
     )

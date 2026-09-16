@@ -163,7 +163,7 @@ services:
   governor-api:
     build:
       context: ../..
-      dockerfile: integrations/discoord/Dockerfile
+      dockerfile: apps/governor/Dockerfile
       target: runtime
     image: kaosgdd-ai-governor-api:0.1.0
     pull_policy: never
@@ -204,9 +204,6 @@ services:
       WEB_PUSH_TIMEOUT_SECONDS: "${WEB_PUSH_TIMEOUT_SECONDS:-10}"
       AI_TASK_TEXTBOOK_SEARCH_ENABLED: "${AI_TASK_TEXTBOOK_SEARCH_ENABLED:-true}"
       AI_TASK_TEXTBOOK_INDEX_PATH: "${AI_TASK_TEXTBOOK_INDEX_PATH:-/data/textbooks/harrison/index/harrison22.index.sqlite}"
-      FAX_DISCORD_ENABLED: "false"
-      FAX_DISCORD_MESSAGE_INTAKE: "false"
-      FAX_DISCORD_STATE_PATH: "/data/fax/state.json"
       DOCUMENT_INTAKE_STATE_PATH: "/data/documents/intake.json"
       SCRIBBLE_STATE_PATH: "/data/scribble/index.json"
       MAIL_NAVER_ENABLED: "${MAIL_NAVER_ENABLED:-false}"
@@ -221,9 +218,6 @@ services:
       GOVERNOR_API_TOKEN_FILE: "/run/secrets/governor_api_token"
       SYSTEM_STATUS_TOOLS_BASE_URL: "${SYSTEM_STATUS_TOOLS_BASE_URL:-http://governor-tools:8098}"
       SYSTEM_STATUS_TIMEOUT_SECONDS: "${SYSTEM_STATUS_TIMEOUT_SECONDS:-5}"
-      DISCORD_GUILD_ID: "${DISCORD_GUILD_ID:-}"
-      DISCORD_BRAIN_CHANNEL_ID: "${DISCORD_BRAIN_CHANNEL_ID:-}"
-      DISCORD_BRAIN_CHANNEL_URL: "${DISCORD_BRAIN_CHANNEL_URL:-}"
     secrets:
       - paperless_api_token
       - naver_mail_password

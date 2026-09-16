@@ -26,10 +26,6 @@ if AIOHTTP_AVAILABLE:
 
 
 BASE_ENV = {
-    "DISCORD_BOT_TOKEN": "not-a-real-token",
-    "DISCORD_GUILD_ID": "100",
-    "DISCORD_ALLOWED_USER_IDS": "200",
-    "DISCORD_BRAIN_CHANNEL_ID": "300",
     "KAOSBRAIN_AI_TASK_API_TOKEN": "ai-task-token",
     "KAOSBRAIN_OPENAI_API_KEY": "test-key",
 }

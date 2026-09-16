@@ -1,4 +1,4 @@
-# KaosBrain, KaosBrain-OpenAI, KaosGovernor, and KaosDiscoord
+# KaosBrain, KaosBrain-OpenAI, and KaosGovernor
 
 KaosGDD separates language intelligence, deterministic authority, domain
 execution, and transport concerns.
@@ -10,8 +10,9 @@ as Radicale, Memos, and Vaultwarden keep their own service names. Current
 OpenClaw/OpenAI host paths may still use the legacy `kaosai` name until a
 separate host-path migration is performed.
 
-The canonical phase and progress tracker is the
+The historical phase tracker is the
 [Brain / Governor / Discoord / iOS migration plan](../migration/brain-governor-discoord-ios-plan.md).
+Its Discord transport was fully retired on 2026-09-17.
 
 ## Roles
 
@@ -26,9 +27,6 @@ KaosBrain-OpenAI
 KaosGovernor
   validates actions and owns confirmations, audit, operation state, and execution routing
 
-KaosDiscoord
-  owns Discord connection, IDs, attachments, controls, and response formatting
-
 KaosGDD domain services
   execute operations and preserve each service's source of truth
 ```
@@ -37,33 +35,27 @@ KaosBrain-OpenAI is the optional OpenAI-backed model/planner implementation
 used by KaosBrain. It is not a source of truth. Brain may read context and
 propose actions, but it
 does not directly mutate Radicale, Memos, Paperless, HylaFAX, or Governor data.
-Governor is the deterministic authority and does not depend on Brain or
-Discord.
-
-The current H4 package still contains Discord views around the Brain logic, and
-the current H3 Discord package still hosts compatibility tool routes. Those
-transport pieces will be isolated incrementally; they are not the target
-ownership model.
+Governor is the deterministic authority and does not depend on Brain. H4
+KaosBrain is a headless internal HTTP service; H3 exposes separate Governor
+worker, tools, and API runtimes. No current runtime connects to Discord.
 
 ## Request Flow
 
 ```text
-Discord user message
-  -> KaosDiscoord receives actor/channel/context
-  -> KaosBrain interprets the request and returns a strict action
+PWA / scoped client request
+  -> KaosBrain interprets language when needed and returns a strict action
   -> KaosGovernor creates a proposal or serves a read-only tool result
   -> user confirms risky writes
   -> KaosGovernor routes the validated operation to a domain service and audits
-  -> KaosDiscoord formats the result for Discord
+  -> the requesting client renders the result
 ```
 
 Deterministic commands do not invoke Brain:
 
 ```text
-Discord / task done
-  -> KaosDiscoord parses the command
+PWA / Shortcut structured request
   -> KaosGovernor validates and executes the structured operation
-  -> KaosDiscoord formats the result
+  -> the requesting client renders the result
 ```
 
 ## Plan Contract
@@ -163,9 +155,7 @@ Brain may interpret, answer, and propose. It must not directly write a source
 of truth.
 
 Governor accepts structured requests from Brain and deterministic callers. It
-must remain callable when Brain and Discord are unavailable.
-
-KaosDiscoord owns no domain rules. Shortcuts and Scriptable likewise remain
+must remain callable when Brain is unavailable. PWAs and Shortcuts remain
 clients and keep no authoritative state.
 
 Governor validates before routing writes. Radicale, Memos, Paperless, HylaFAX,

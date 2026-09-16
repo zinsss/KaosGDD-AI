@@ -10,6 +10,7 @@ RUN pip install --no-cache-dir /tmp/brain
 
 FROM base AS test
 COPY apps/brain/tests /tmp/brain/tests
+COPY deploy/kaosbrain/kaosbrain /tmp/brain/deploy/kaosbrain
 CMD ["python", "-m", "unittest", "discover", "-s", "/tmp/brain/tests"]
 
 FROM base AS runtime

@@ -5,9 +5,9 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "kaos-brain"
 version = "0.1.0"
-description = "Lightweight KaosBrain Discord and Ollama service"
+description = "Headless KaosBrain HTTP and AI orchestration service"
 requires-python = ">=3.12"
-dependencies = ["aiohttp>=3.10,<4", "discord.py==2.7.1"]
+dependencies = ["aiohttp>=3.10,<4"]
 
 [project.scripts]
 kaos-brain = "kaos_brain.main:main"

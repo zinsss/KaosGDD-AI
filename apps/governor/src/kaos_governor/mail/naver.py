@@ -40,7 +40,7 @@ class NaverMailConfig:
     max_attachment_bytes: int
     preview_characters: int
     mark_existing_on_first_run: bool
-    owner: str = "discord"
+    owner: str = "worker"
     notification_folder_roots: tuple[str, ...] = ("세무사", "영덕군보건소")
 
     @property
@@ -50,9 +50,9 @@ class NaverMailConfig:
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "NaverMailConfig":
         source = os.environ if env is None else env
-        owner = source.get("MAIL_NAVER_OWNER", "discord").strip().lower() or "discord"
-        if owner not in {"discord", "worker"}:
-            raise ValueError("MAIL_NAVER_OWNER must be discord or worker")
+        owner = source.get("MAIL_NAVER_OWNER", "worker").strip().lower() or "worker"
+        if owner != "worker":
+            raise ValueError("MAIL_NAVER_OWNER must be worker")
         roots = tuple(
             value.strip()
             for value in source.get("MAIL_NAVER_FOLDERS", "INBOX,세무사,영덕군보건소").split(",")

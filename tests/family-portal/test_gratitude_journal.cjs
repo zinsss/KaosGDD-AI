@@ -17,7 +17,7 @@ function loadModule(fetchImpl = async () => ({ ok: true, json: async () => ({ ok
 }
 
 test("gratitude journal module loads before the portal app", () => {
-  assert.ok(indexSource.indexOf('src="/gratitude-journal.js?v=3"') < indexSource.indexOf('src="/app.js?v=346"'));
+  assert.ok(indexSource.indexOf('src="/gratitude-journal.js?v=3"') < indexSource.indexOf('src="/app.js?v=347"'));
   assert.match(appSource, /gratitude: window\.KAOS_GRATITUDE_JOURNAL\.initialState\(\)/);
   assert.match(appSource, /calendarGratitude: window\.KAOS_GRATITUDE_JOURNAL\.initialState\(\)/);
   assert.match(appSource, /renderGratitudeJournal\(today\)/);

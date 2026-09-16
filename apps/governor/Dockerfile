@@ -18,3 +18,10 @@ USER 10001:10001
 EXPOSE 8098
 HEALTHCHECK --interval=10s --timeout=5s --start-period=10s --retries=3 CMD ["kaos-governor-worker", "--check"]
 ENTRYPOINT ["kaos-governor-worker"]
+
+FROM build AS test
+ENV PYTHONPATH=/install/lib/python3.12/site-packages
+COPY apps/governor/tests /tests/governor
+COPY apps/governor/migrations /tests/governor/migrations
+COPY apps/calendar-adapter /tests/calendar-adapter
+CMD ["python", "-m", "unittest", "discover", "-s", "/tests/governor", "-v"]

@@ -214,17 +214,6 @@ def secret_value(name: str, *, default_file: str = "") -> str:
         return ""
 
 
-def discord_brain_channel_url() -> str:
-    configured = os.environ.get("DISCORD_BRAIN_CHANNEL_URL", "").strip()
-    if configured.startswith(("https://discord.com/channels/", "discord://")):
-        return configured
-    guild_id = os.environ.get("DISCORD_GUILD_ID", "").strip()
-    channel_id = os.environ.get("DISCORD_BRAIN_CHANNEL_ID", "").strip()
-    if guild_id.isdigit() and channel_id.isdigit():
-        return f"https://discord.com/channels/{guild_id}/{channel_id}"
-    return ""
-
-
 def system_status_payload(profile: str, urlopen=urllib.request.urlopen) -> dict[str, object]:
     if profile != "main":
         raise SystemStatusError("main_profile_required", 404)
@@ -264,7 +253,6 @@ def system_status_payload(profile: str, urlopen=urllib.request.urlopen) -> dict[
         "source": str(payload.get("source") or "governor-runtime-health"),
         "date": str(payload.get("date") or ""),
         "status": dict(payload["status"]),
-        "brainChannelUrl": discord_brain_channel_url(),
         "readOnly": True,
     }
 

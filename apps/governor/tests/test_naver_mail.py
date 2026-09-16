@@ -82,9 +82,12 @@ class NaverMailConfigTests(unittest.TestCase):
         self.assertEqual(config.owner, "worker")
         with self.assertRaisesRegex(ValueError, "MAIL_NAVER_OWNER"):
             NaverMailConfig.from_env({"MAIL_NAVER_OWNER": "both"})
+        with self.assertRaisesRegex(ValueError, "MAIL_NAVER_OWNER"):
+            NaverMailConfig.from_env({"MAIL_NAVER_OWNER": "discord"})
 
     def test_default_lifecycle_roots_include_inbox(self) -> None:
         config = NaverMailConfig.from_env({})
+        self.assertEqual(config.owner, "worker")
         self.assertEqual(config.folder_roots, ("INBOX", "세무사", "영덕군보건소"))
         self.assertEqual(config.notification_folder_roots, ("세무사", "영덕군보건소"))
 
@@ -212,7 +215,7 @@ class NaverMailTests(unittest.TestCase):
         self.assertTrue(status["started"])
         self.assertTrue(status["lastScanAt"])
         self.assertEqual(status["mailboxCount"], 3)
-        self.assertEqual(status["owner"], "discord")
+        self.assertEqual(status["owner"], "worker")
         self.assertEqual(status["pendingCount"], 0)
 
     def test_pending_count_can_be_scoped_to_target_folder_names(self) -> None:

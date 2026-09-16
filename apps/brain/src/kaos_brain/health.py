@@ -27,7 +27,8 @@ LOGGER = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class BrainHealthSnapshot:
     status: str
-    discord_ready: bool
+    runtime: str
+    http_ready: bool
     chat_model: str
     deep_model: str
     imaging_provider: str
@@ -38,7 +39,9 @@ class BrainHealthSnapshot:
     def payload(self) -> dict[str, Any]:
         return {
             "status": self.status,
-            "discordReady": self.discord_ready,
+            "service": "kaos-brain",
+            "runtime": self.runtime,
+            "httpReady": self.http_ready,
             "chatModel": self.chat_model,
             "deepModel": self.deep_model,
             "imagingProvider": self.imaging_provider,
@@ -53,12 +56,10 @@ class BrainHealthServer:
     def __init__(
         self,
         settings: Settings,
-        bot: Any,
         *,
         reauth_client: OpenClawReauthClient | None = None,
     ) -> None:
         self.settings = settings
-        self.bot = bot
         self.reauth = reauth_client or (
             OpenClawReauthClient(
                 ReauthConfig(
@@ -103,7 +104,7 @@ class BrainHealthServer:
         self._site = None
 
     async def handle_health(self, request: web.Request) -> web.Response:
-        return web.json_response(snapshot(self.settings, self.bot).payload())
+        return web.json_response(snapshot(self.settings).payload())
 
     def _reauth_authorized(self, request: web.Request) -> bool:
         token = self.settings.ai_task_api_token
@@ -147,11 +148,11 @@ class BrainHealthServer:
         return await self._reauth_payload(request, start=False)
 
 
-def snapshot(settings: Settings, bot: Any) -> BrainHealthSnapshot:
-    discord_ready = bool(bot.is_ready()) if hasattr(bot, "is_ready") else False
+def snapshot(settings: Settings) -> BrainHealthSnapshot:
     return BrainHealthSnapshot(
         status="ok",
-        discord_ready=discord_ready,
+        runtime="headless",
+        http_ready=True,
         chat_model=settings.chat_model,
         deep_model=settings.deep_model,
         imaging_provider=settings.imaging_provider,
@@ -164,8 +165,4 @@ def snapshot(settings: Settings, bot: Any) -> BrainHealthSnapshot:
 def _kaosai_mode(settings: Settings) -> str:
     if not settings.kaosai_enabled:
         return "disabled"
-    if settings.kaosai_dry_run_enabled:
-        return "dry-run"
-    if settings.kaosai_chat_enabled:
-        return "chat"
-    return "diagnostic"
+    return "enabled"

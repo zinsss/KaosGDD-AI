@@ -86,7 +86,7 @@ class TaskUpdateIntentTests(unittest.TestCase):
         self.assertEqual(request.due_date, "")
         self.assertEqual(request.due_time, "")
 
-    def test_explicit_task_make_from_reported_discord_phrase(self) -> None:
+    def test_explicit_task_make_from_reported_phrase(self) -> None:
         request = parse_task_create("전염병신고 할일 만들어줘", today=date(2026, 8, 30))
         assert request is not None
         self.assertEqual(request.title, "전염병신고")

@@ -6,6 +6,7 @@ REPO_ROOT=$(cd -- "${DEPLOY_DIR}/../.." && pwd)
 ENV_FILE="${DEPLOY_DIR}/.env"
 SECRETS_DIR="${DEPLOY_DIR}/secrets"
 COMPOSE=(docker compose --project-directory "${DEPLOY_DIR}" --env-file "${ENV_FILE}" -f "${DEPLOY_DIR}/compose.yaml")
+RUNTIME_COMPOSE=(env COMPOSE_IGNORE_ORPHANS=true "${COMPOSE[@]}")
 BACKENDS_COMPOSE=("${COMPOSE[@]}" -f "${DEPLOY_DIR}/compose.backends.yaml")
 SERVICES_COMPOSE=("${COMPOSE[@]}" -f "${DEPLOY_DIR}/compose.services.yaml")
 EDGE_COMPOSE=("${COMPOSE[@]}" -f "${DEPLOY_DIR}/compose.edge.yaml")
@@ -24,12 +25,17 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || die "$1 is required"
 }
 
-load_env() {
+source_env() {
   [[ -f "${ENV_FILE}" ]] || die "run: ${0} setup"
   set -a
   # shellcheck disable=SC1090
   source "${ENV_FILE}"
   set +a
+}
+
+load_env() {
+  source_env
+  write_runtime_env
 }
 
 secret_path() {
@@ -96,11 +102,6 @@ install_state_directories() {
   local paths=(
     "${root}/mail"
     "${root}/fax"
-    "${root}/discord-calendar"
-    "${root}/discord-tasks"
-    "${root}/discord-supplies"
-    "${root}/discord-inbox"
-    "${root}/discord-system"
     "${root}/ai-tasks"
     "${root}/documents"
     "${root}/notifications"
@@ -124,6 +125,33 @@ governor_state_root() {
   printf '%s/data/kaosgdd-ai/governor' "${KAOS_ROOT:-/srv/kaos}"
 }
 
+write_runtime_env() {
+  local destination temporary fax_enabled fax_message_intake fax_state_path
+  local fax_poll_seconds fax_delete_source
+  destination="${SECRETS_DIR}/governor-runtime.env"
+  temporary=$(mktemp "${SECRETS_DIR}/.governor-runtime.XXXXXX")
+  fax_enabled=${FAX_ENABLED:-${FAX_DISCORD_ENABLED:-false}}
+  fax_message_intake=${FAX_MESSAGE_INTAKE_ENABLED:-${FAX_DISCORD_MESSAGE_INTAKE:-false}}
+  fax_state_path=${FAX_STATE_PATH:-${FAX_DISCORD_STATE_PATH:-/data/fax/state.json}}
+  fax_poll_seconds=${FAX_POLL_SECONDS:-${FAX_DISCORD_POLL_SECONDS:-20}}
+  fax_delete_source=${FAX_DELETE_SOURCE_ON_SUCCESS:-${FAX_DELETE_DISCORD_SOURCE_ON_SUCCESS:-true}}
+  awk '
+    /^[[:space:]]*(DISCORD_|HEALTH_(HOST|PORT)=|GOVERNOR_BIND_ADDRESS=|SERVICE_STATUS_)/ { next }
+    /^[[:space:]]*(MAIL_[A-Z0-9_]*DISCORD|MAIL_ORGANIZER_|FAX_[A-Z0-9_]*DISCORD)/ { next }
+    /^[[:space:]]*FAX_(ENABLED|MESSAGE_INTAKE_ENABLED|STATE_PATH|POLL_SECONDS|DELETE_SOURCE_ON_SUCCESS)=/ { next }
+    { print }
+  ' "${ENV_FILE}" > "${temporary}"
+  printf '%s\n' \
+    "FAX_ENABLED=${fax_enabled}" \
+    "FAX_MESSAGE_INTAKE_ENABLED=${fax_message_intake}" \
+    "FAX_STATE_PATH=${fax_state_path}" \
+    "FAX_POLL_SECONDS=${fax_poll_seconds}" \
+    "FAX_DELETE_SOURCE_ON_SUCCESS=${fax_delete_source}" \
+    >> "${temporary}"
+  chmod 0600 "${temporary}"
+  mv -- "${temporary}" "${destination}"
+}
+
 setup() {
   require_command docker
   docker compose version >/dev/null 2>&1 || die "Docker Compose v2 is required"
@@ -137,7 +165,6 @@ setup() {
   load_env
   install_state_directories "$(governor_state_root)"
   for secret in \
-    discord_bot_token \
     memos_access_token \
     naver_mail_password \
     paperless_api_token \
@@ -164,8 +191,7 @@ setup() {
   if [[ ! -s "$(secret_path web_push_vapid_private_key)" ]]; then
     openssl ecparam -name prime256v1 -genkey -noout > "$(secret_path web_push_vapid_private_key)"
   fi
-  chmod 0640 "${SECRETS_DIR}"/discord_bot_token \
-    "${SECRETS_DIR}"/governor_api_token \
+  chmod 0640 "${SECRETS_DIR}"/governor_api_token \
     "${SECRETS_DIR}"/ios_shortcuts_token \
     "${SECRETS_DIR}"/ios_fax_shortcut_token \
     "${SECRETS_DIR}"/ios_scribble_shortcut_token \
@@ -177,17 +203,18 @@ setup() {
     "${SECRETS_DIR}"/pushover_app_token \
     "${SECRETS_DIR}"/pushover_user_key \
     "${SECRETS_DIR}"/web_push_vapid_private_key
-  info "Setup complete. Fill ${ENV_FILE} and ${SECRETS_DIR}/discord_bot_token, then run:"
+  info "Setup complete. Fill ${ENV_FILE}, then run:"
   info "  ${0} test"
   info "  ${0} up"
 }
 
 preflight() {
+  local fax_enabled
   require_command docker
   require_command curl
   docker compose version >/dev/null 2>&1 || die "Docker Compose v2 is required"
   load_env
-  require_secret discord_bot_token
+  fax_enabled=${FAX_ENABLED:-${FAX_DISCORD_ENABLED:-false}}
   require_secret governor_api_token
   if [[ "${GOVERNOR_OPERATION_STORE:-postgres}" == "postgres" ]]; then
     require_nonempty_file "${KAOS_ROOT:-/srv/kaos}/secrets/governor-postgres.env"
@@ -196,42 +223,16 @@ preflight() {
   require_secret ios_fax_shortcut_token
   require_secret ios_scribble_shortcut_token
   require_secret ios_paperless_shortcut_token
-  [[ "${DISCORD_GUILD_ID:-}" != "123456789012345678" ]] || die "replace the example Discord guild ID"
-  [[ "${DISCORD_ALLOWED_USER_IDS:-}" != *"123456789012345678"* ]] || die "replace the example Discord user ID"
-  [[ "${DISCORD_ALLOWED_CHANNEL_IDS:-}" != *"123456789012345678"* ]] || die "replace the example Discord channel IDs"
   if [[ "${MEMOS_SEARCH_ENABLED:-false}" == "true" ]]; then
     require_secret memos_access_token
     [[ -n "${MEMOS_BASE_URL:-}" ]] || die "MEMOS_BASE_URL is required"
     [[ "${MEMOS_CREATOR:-}" == users/* ]] || die "MEMOS_CREATOR must use users/<username>"
   fi
-  if [[ "${MAIL_NAVER_ENABLED:-false}" == "true" || "${MAIL_ORGANIZER_ENABLED:-false}" == "true" ]]; then
+  if [[ "${MAIL_NAVER_ENABLED:-false}" == "true" ]]; then
     require_secret naver_mail_password
     [[ -n "${MAIL_NAVER_USERNAME:-}" ]] || die "MAIL_NAVER_USERNAME is required"
-    if [[ "${MAIL_NAVER_OWNER:-discord}" == "discord" || "${MAIL_ORGANIZER_ENABLED:-false}" == "true" ]]; then
-      [[ -n "${MAIL_ARCHIVE_DISCORD_CHANNEL_ID:-}" ]] || die "MAIL_ARCHIVE_DISCORD_CHANNEL_ID is required"
-    fi
   fi
-  if [[ "${MAIL_ORGANIZER_ENABLED:-false}" == "true" ]]; then
-    [[ -n "${MAIL_ORGANIZER_DISCORD_CHANNEL_ID:-}" ]] || die "MAIL_ORGANIZER_DISCORD_CHANNEL_ID is required"
-  fi
-  if [[ "${DISCORD_CALENDAR_ENABLED:-false}" == "true" ]]; then
-    [[ -n "${DISCORD_CALENDAR_CHANNEL_ID:-}" ]] || die "DISCORD_CALENDAR_CHANNEL_ID is required"
-    [[ -n "${CALENDAR_ADAPTER_INTERNAL_URL:-}" ]] || die "CALENDAR_ADAPTER_INTERNAL_URL is required"
-  fi
-  if [[ "${DISCORD_TASKS_ENABLED:-false}" == "true" ]]; then
-    [[ -n "${DISCORD_TASKS_CHANNEL_ID:-}" ]] || die "DISCORD_TASKS_CHANNEL_ID is required"
-    [[ -n "${CALENDAR_ADAPTER_INTERNAL_URL:-}" ]] || die "CALENDAR_ADAPTER_INTERNAL_URL is required"
-  fi
-  if [[ "${DISCORD_SUPPLIES_ENABLED:-false}" == "true" ]]; then
-    [[ -n "${DISCORD_SUPPLIES_CHANNEL_ID:-}" ]] || die "DISCORD_SUPPLIES_CHANNEL_ID is required"
-    [[ -n "${CALENDAR_ADAPTER_INTERNAL_URL:-}" ]] || die "CALENDAR_ADAPTER_INTERNAL_URL is required"
-  fi
-  if [[ "${DISCORD_INBOX_ENABLED:-false}" == "true" ]]; then
-    [[ -n "${DISCORD_INBOX_CHANNEL_ID:-}" ]] || die "DISCORD_INBOX_CHANNEL_ID is required"
-    [[ -n "${PAPERLESS_BASE_URL:-${PAPERLESS_INTERNAL_URL:-}}" ]] || die "PAPERLESS_BASE_URL is required"
-    require_secret paperless_api_token
-  fi
-  if [[ "${FAX_DISCORD_ENABLED:-false}" == "true" ]]; then
+  if [[ "${fax_enabled}" == "true" ]]; then
     [[ "${FAX_TRANSPORT:-connector}" == "connector" ]] \
       || die "H3 fax must use FAX_TRANSPORT=connector; HylaFAX stays on Office Kaos"
     [[ -n "${FAX_CONNECTOR_BASE_URL:-}" ]] || die "FAX_CONNECTOR_BASE_URL is required when fax is enabled"
@@ -248,43 +249,79 @@ preflight() {
       *) die "WEB_PUSH_VAPID_SUBJECT must start with mailto: or https://" ;;
     esac
   fi
-  case "${PUSHOVER_DELIVERY_MODE:-worker}" in
-    inline|worker) ;;
-    *) die "PUSHOVER_DELIVERY_MODE must be inline or worker" ;;
-  esac
-  case "${MAIL_NAVER_OWNER:-discord}" in
-    discord|worker) ;;
-    *) die "MAIL_NAVER_OWNER must be discord or worker" ;;
-  esac
-  case "${FAX_LIFECYCLE_OWNER:-discord}" in
-    discord|worker) ;;
-    *) die "FAX_LIFECYCLE_OWNER must be discord or worker" ;;
-  esac
-  case "${DAILY_DIGEST_OWNER:-discord}" in
-    discord|worker) ;;
-    *) die "DAILY_DIGEST_OWNER must be discord or worker" ;;
-  esac
-  if [[ "${MAIL_NAVER_OWNER:-discord}" == "worker" || "${FAX_LIFECYCLE_OWNER:-discord}" == "worker" ]]; then
-    [[ "${PUSHOVER_DELIVERY_MODE:-worker}" == "worker" ]] \
-      || die "PUSHOVER_DELIVERY_MODE must be worker for worker-owned mail or fax polling"
-  fi
+  [[ "${PUSHOVER_DELIVERY_MODE:-worker}" == "worker" ]] \
+    || die "PUSHOVER_DELIVERY_MODE must be worker"
+  [[ "${MAIL_NAVER_OWNER:-worker}" == "worker" ]] \
+    || die "MAIL_NAVER_OWNER must be worker"
+  [[ "${FAX_LIFECYCLE_OWNER:-worker}" == "worker" ]] \
+    || die "FAX_LIFECYCLE_OWNER must be worker"
+  [[ "${DAILY_DIGEST_OWNER:-worker}" == "worker" ]] \
+    || die "DAILY_DIGEST_OWNER must be worker"
   if [[ "${DAILY_DIGEST_ENABLED:-false}" == "true" ]]; then
-    [[ -n "${DISCORD_SYSTEM_CHANNEL_ID:-}" ]] \
-      || die "DISCORD_SYSTEM_CHANNEL_ID is required when the daily digest is enabled"
     [[ -n "${CALENDAR_ADAPTER_INTERNAL_URL:-}" ]] \
       || die "CALENDAR_ADAPTER_INTERNAL_URL is required when the daily digest is enabled"
   fi
-  "${COMPOSE[@]}" config --quiet
+  "${RUNTIME_COMPOSE[@]}" config --quiet
   info "Preflight passed."
 }
 
 test_image() {
   require_command docker
   docker build --target test \
-    --tag kaosgdd-ai-governor-discord:test \
-    --file "${REPO_ROOT}/integrations/discoord/Dockerfile" \
+    --tag kaosgdd-ai-governor:test \
+    --file "${REPO_ROOT}/apps/governor/Dockerfile" \
     "${REPO_ROOT}"
-  docker run --rm kaosgdd-ai-governor-discord:test
+  docker run --rm kaosgdd-ai-governor:test
+}
+
+retire_discord_runtime() {
+  require_command docker
+  if ! docker inspect kaos-governor-discord >/dev/null 2>&1; then
+    return
+  fi
+  docker update --restart=no kaos-governor-discord >/dev/null
+  if [[ "$(docker inspect --format '{{.State.Running}}' kaos-governor-discord)" == "true" ]]; then
+    docker stop --time 30 kaos-governor-discord >/dev/null
+    info "Stopped retired kaos-governor-discord container; persistent state was preserved."
+  fi
+}
+
+quarantine_discord_token() {
+  local source retired_dir target uid gid
+  source=$(secret_path discord_bot_token)
+  retired_dir="${KAOS_ROOT:-/srv/kaos}/retired-secrets/h3-governor-discord"
+  target="${retired_dir}/discord_bot_token"
+  if [[ ! -e "${source}" && ! -L "${source}" && ! -e "${target}" && ! -L "${target}" ]]; then
+    return
+  fi
+  uid=$(id -u)
+  gid=$(id -g)
+  if [[ -e "${retired_dir}" || -L "${retired_dir}" ]]; then
+    [[ -d "${retired_dir}" && ! -L "${retired_dir}" ]] \
+      || die "retired Discord credential directory is not a real directory"
+  elif ! install -d -m 0700 "${retired_dir}" 2>/dev/null; then
+    require_command sudo
+    sudo install -d -m 0700 -o "${uid}" -g "${gid}" "${retired_dir}"
+  fi
+  chmod 0700 "${retired_dir}" 2>/dev/null || {
+    require_command sudo
+    sudo chmod 0700 "${retired_dir}"
+  }
+  if [[ -e "${target}" || -L "${target}" ]]; then
+    [[ ! -e "${source}" && ! -L "${source}" ]] \
+      || die "retired Discord token collision; refusing to overwrite either credential file"
+    [[ -f "${target}" && ! -L "${target}" ]] \
+      || die "retired Discord token target is not a regular file"
+    return
+  fi
+  [[ -e "${source}" || -L "${source}" ]] || return
+  [[ -f "${source}" && ! -L "${source}" ]] \
+    || die "Discord token source is not a regular file"
+  if ! mv -- "${source}" "${target}" 2>/dev/null; then
+    require_command sudo
+    sudo mv -- "${source}" "${target}"
+  fi
+  info "Quarantined the retired H3 Discord credential without reading it."
 }
 
 wait_worker_healthy() {
@@ -294,7 +331,7 @@ wait_worker_healthy() {
     [[ "${worker_status}" == "healthy" ]] && return
     sleep 1
   done
-  "${COMPOSE[@]}" logs --tail=80 governor-worker >&2 || true
+  "${RUNTIME_COMPOSE[@]}" logs --tail=80 governor-worker >&2 || true
   die "Governor worker did not become healthy"
 }
 
@@ -305,131 +342,113 @@ wait_tools_healthy() {
     [[ "${tools_status}" == "healthy" ]] && return
     sleep 1
   done
-  "${COMPOSE[@]}" logs --tail=80 governor-tools >&2 || true
+  "${RUNTIME_COMPOSE[@]}" logs --tail=80 governor-tools >&2 || true
   die "Governor tools did not become healthy"
 }
 
 smoke() {
   load_env
-  local address=${GOVERNOR_BIND_ADDRESS:-127.0.0.1}
-  [[ "${address}" != "0.0.0.0" ]] || address=127.0.0.1
-  local health_url="http://${address}:${HEALTH_PORT:-8097}/health"
-  local ready_url="http://${address}:${HEALTH_PORT:-8097}/ready"
   local tools_address=${GOVERNOR_BRAIN_TOOLS_BIND_ADDRESS:-127.0.0.1}
   [[ "${tools_address}" != "0.0.0.0" ]] || tools_address=127.0.0.1
   local tools_url="http://${tools_address}:${GOVERNOR_BRAIN_TOOLS_PORT:-8098}/health"
   local attempt
-  for attempt in $(seq 1 30); do
-    if curl --fail --silent --show-error "${health_url}" >/dev/null 2>&1; then
-      break
-    fi
-    sleep 1
-  done
-  if ! curl --fail --silent --show-error "${health_url}" >/dev/null 2>&1; then
-    "${COMPOSE[@]}" logs --tail=80 governor-discord >&2 || true
-    die "Governor health endpoint did not become available: ${health_url}"
+  if [[ "$(docker inspect --format '{{.State.Running}}' kaos-governor-discord 2>/dev/null || true)" == "true" ]]; then
+    die "retired kaos-governor-discord container is unexpectedly running"
   fi
-  for attempt in $(seq 1 60); do
-    if curl --fail --silent --show-error "${ready_url}" >/dev/null 2>&1; then
-      curl --fail --silent --show-error "${ready_url}"
+  wait_worker_healthy
+  for attempt in $(seq 1 30); do
+    if curl --fail --silent --show-error "${tools_url}" >/dev/null 2>&1; then
+      curl --fail --silent --show-error "${tools_url}"
       printf '\n'
-      if [[ "${PUSHOVER_DELIVERY_MODE:-worker}" == "worker" ]]; then
-        wait_worker_healthy
-      fi
-      curl --fail --silent --show-error "${tools_url}" >/dev/null
       return
     fi
     sleep 1
   done
-  "${COMPOSE[@]}" logs --tail=80 governor-discord >&2 || true
-  die "Governor ready endpoint did not become ready: ${ready_url}"
+  "${RUNTIME_COMPOSE[@]}" logs --tail=80 governor-tools >&2 || true
+  die "Governor tools health endpoint did not become available: ${tools_url}"
+}
+
+migrate_maintenance_report() {
+  local root legacy_report report legacy_reminders reminders uid gid
+  root=$(governor_state_root)
+  legacy_report="${root}/discord-system/maintenance.json"
+  report="${root}/notifications/maintenance-report.json"
+  legacy_reminders="${root}/discord-system/maintenance-reminders.json"
+  reminders="${root}/notifications/maintenance-reminders.json"
+  uid=$(id -u)
+  gid=$(id -g)
+  if [[ ! -e "${report}" ]] && [[ -s "${legacy_report}" ]]; then
+    if ! install -m 0660 "${legacy_report}" "${report}" 2>/dev/null; then
+      require_command sudo
+      sudo install -m 0660 -o "${uid}" -g "${gid}" "${legacy_report}" "${report}"
+    fi
+    info "Copied the legacy maintenance report to neutral Governor state."
+  fi
+  if [[ ! -e "${reminders}" ]] && [[ -s "${legacy_reminders}" ]]; then
+    if ! install -m 0660 "${legacy_reminders}" "${reminders}" 2>/dev/null; then
+      require_command sudo
+      sudo install -m 0660 -o "${uid}" -g "${gid}" "${legacy_reminders}" "${reminders}"
+    fi
+    info "Copied legacy maintenance reminder deduplication keys."
+  fi
+}
+
+install_maintenance_timer() {
+  local deploy_user deploy_home
+  require_command cut
+  require_command getent
+  require_command install
+  require_command sed
+  require_command systemctl
+  require_command sudo
+  deploy_user=$(id -un)
+  deploy_home=$(getent passwd "${deploy_user}" | cut -d: -f6)
+  [[ "${deploy_user}" =~ ^[a-z_][a-z0-9_-]*$ ]] \
+    || die "deploy username cannot be rendered safely in systemd"
+  [[ "${deploy_home}" =~ ^/[A-Za-z0-9._/-]+$ ]] \
+    || die "deploy home cannot be rendered safely in systemd"
+  sed \
+    -e "s|__KAOS_DEPLOY_USER__|${deploy_user}|g" \
+    -e "s|__KAOS_DEPLOY_HOME__|${deploy_home}|g" \
+    "${DEPLOY_DIR}/kaos-h3-maintenance-report.service" \
+    | sudo install -m 0644 /dev/stdin /etc/systemd/system/kaos-h3-maintenance-report.service
+  sudo install -m 0644 \
+    "${DEPLOY_DIR}/kaos-h3-maintenance-report.timer" \
+    /etc/systemd/system/kaos-h3-maintenance-report.timer
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now kaos-h3-maintenance-report.timer >/dev/null
+  sudo systemctl start kaos-h3-maintenance-report.service
 }
 
 up_runtime() {
   local recreate=$1
   local recreate_options=()
   install_state_directories "$(governor_state_root)"
+  migrate_maintenance_report
   if [[ "${recreate}" == "true" ]]; then
     recreate_options+=(--force-recreate)
   fi
-  "${COMPOSE[@]}" build governor-discord governor-worker governor-tools
-  "${COMPOSE[@]}" stop governor-discord >/dev/null 2>&1 || true
-  if [[ "${PUSHOVER_DELIVERY_MODE:-worker}" == "worker" ]]; then
-    "${COMPOSE[@]}" up --detach "${recreate_options[@]}" governor-worker
-    wait_worker_healthy
-  else
-    "${COMPOSE[@]}" stop governor-worker >/dev/null 2>&1 || true
-  fi
-  "${COMPOSE[@]}" up --detach "${recreate_options[@]}" governor-tools
+  "${RUNTIME_COMPOSE[@]}" build governor-worker governor-tools
+  install_maintenance_timer
+  retire_discord_runtime
+  quarantine_discord_token
+  "${RUNTIME_COMPOSE[@]}" up --detach "${recreate_options[@]}" governor-worker
+  wait_worker_healthy
+  "${RUNTIME_COMPOSE[@]}" up --detach "${recreate_options[@]}" governor-tools
   wait_tools_healthy
-  "${COMPOSE[@]}" up --detach "${recreate_options[@]}" governor-discord
 }
 
 maintenance_report() {
-  load_env
+  source_env
   require_command python3
   local root report_path targets timeout
   root=$(governor_state_root)
   install_state_directories "${root}"
-  report_path="${root}/discord-system/maintenance.json"
+  report_path="${root}/notifications/maintenance-report.json"
   targets="${SYSTEM_MAINTENANCE_TARGETS:-kaosgdd=local:/srv/projects/KaosGDD-AI,kaosbrain=ssh:zin@kaosbrain:/srv/projects/KaosGDD-AI,kaosclinic=ssh:zin@kaosclinic:}"
   timeout="${SYSTEM_MAINTENANCE_TIMEOUT_SECONDS:-12}"
-  PYTHONPATH="${REPO_ROOT}/integrations/discoord/src${PYTHONPATH:+:${PYTHONPATH}}" \
-    python3 - "${report_path}" "${targets}" "${timeout}" <<'PY'
-import json
-import os
-import sys
-import tempfile
-from datetime import datetime, timezone
-
-from kaosdiscoord.maintenance import (
-    collect_maintenance_report,
-    default_runner,
-    maintenance_targets,
-    maintenance_timeout_seconds,
-)
-
-
-report_path, raw_targets, raw_timeout = sys.argv[1:4]
-environment = {
-    "SYSTEM_MAINTENANCE_TARGETS": raw_targets,
-    "SYSTEM_MAINTENANCE_TIMEOUT_SECONDS": raw_timeout,
-}
-timeout = maintenance_timeout_seconds(environment)
-reports = [
-    collect_maintenance_report(target, timeout, default_runner)
-    for target in maintenance_targets(environment)
-]
-
-
-def report_payload(report):
-    return {
-        "target": {
-            "name": report.target.name,
-            "mode": report.target.mode,
-            "address": report.target.address,
-            "repoPath": report.target.repo_path,
-        },
-        "ok": report.ok,
-        "facts": dict(report.facts),
-        "error": report.error,
-        "collectedAt": report.collected_at,
-    }
-
-
-payload = {
-    "collectedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-    "reports": [report_payload(report) for report in reports],
-}
-os.makedirs(os.path.dirname(report_path), exist_ok=True)
-fd, tmp_path = tempfile.mkstemp(prefix=".maintenance.", dir=os.path.dirname(report_path), text=True)
-with os.fdopen(fd, "w", encoding="utf-8") as handle:
-    json.dump(payload, handle, ensure_ascii=False, indent=2, sort_keys=True)
-    handle.write("\n")
-os.chmod(tmp_path, 0o660)
-os.replace(tmp_path, report_path)
-print(report_path)
-PY
+  python3 "${REPO_ROOT}/apps/governor/src/kaos_governor/maintenance_collector.py" \
+    "${report_path}" "${targets}" "${timeout}"
   info "Maintenance report written: ${report_path}"
 }
 
@@ -787,15 +806,17 @@ Usage: deploy/h3-backend/kaos-h3 COMMAND
 Commands:
   setup              Create local env, secrets, and Governor state directories
   preflight          Validate configuration without starting containers
-  test               Build and run the complete container test suite
-  build              Build the production Governor, worker, and tools images
-  up                 Validate, build, start Governor/worker/tools, and check health
-  down               Stop Governor without deleting persistent data
-  restart            Recreate Governor from current configuration
+  test               Build and run the Governor container test suite
+  build              Build the production Governor worker and tools images
+  up                 Retire Discord, start worker/tools, and check health
+  down               Stop Governor and retired Discord without deleting data
+  restart            Recreate Governor worker/tools from current configuration
   status             Show Compose and health status
-  logs               Follow Governor, worker, and tools logs
-  smoke              Check local/Tailscale health and Discord readiness
-  maintenance-report Write a read-only host maintenance JSON report for Discord
+  logs               Follow Governor worker and tools logs
+  smoke              Check worker/tools health and confirm Discord stays stopped
+  maintenance-report Write a read-only host maintenance JSON report
+  maintenance-schedule
+                      Install/start the daily system maintenance timer
   config             Render the effective Compose configuration
   backends-preflight Validate staged Memos and Radicale data for cutover
   backends-up         Start migrated Memos and Radicale after guarded preflight
@@ -827,15 +848,16 @@ case "${command}" in
   setup) setup ;;
   preflight) preflight ;;
   test) test_image ;;
-  build) load_env; "${COMPOSE[@]}" build governor-discord governor-worker governor-tools ;;
+  build) load_env; "${RUNTIME_COMPOSE[@]}" build governor-worker governor-tools ;;
   up) preflight; up_runtime false; smoke ;;
-  down) load_env; "${COMPOSE[@]}" down ;;
+  down) load_env; retire_discord_runtime; quarantine_discord_token; "${RUNTIME_COMPOSE[@]}" down ;;
   restart) preflight; up_runtime true; smoke ;;
-  status) load_env; "${COMPOSE[@]}" ps; smoke ;;
-  logs) load_env; "${COMPOSE[@]}" logs --follow --tail=100 governor-discord governor-worker governor-tools ;;
+  status) load_env; "${RUNTIME_COMPOSE[@]}" ps; smoke ;;
+  logs) load_env; "${RUNTIME_COMPOSE[@]}" logs --follow --tail=100 governor-worker governor-tools ;;
   smoke) smoke ;;
   maintenance-report) maintenance_report ;;
-  config) load_env; "${COMPOSE[@]}" config | redact_config ;;
+  maintenance-schedule) source_env; install_state_directories "$(governor_state_root)"; migrate_maintenance_report; install_maintenance_timer ;;
+  config) load_env; "${RUNTIME_COMPOSE[@]}" config | redact_config ;;
   backends-preflight) backends_preflight ;;
   backends-up) backends_preflight; "${BACKENDS_COMPOSE[@]}" up --detach memos radicale ;;
   backends-down) load_env; "${BACKENDS_COMPOSE[@]}" stop memos radicale ;;
