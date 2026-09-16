@@ -536,8 +536,8 @@ openclaw_reauth() {
   export_openclaw_env
   [[ -f "${OPENCLAW_CONFIG_PATH}" ]] || die "missing OpenClaw config: ${OPENCLAW_CONFIG_PATH}"
   info "Starting OpenClaw OpenAI reauth for ${OPENCLAW_CONFIG_PATH}"
-  info "Open the OAuth URL, sign in, then paste the callback URL or authorization code."
-  openclaw models auth login --provider openai --force
+  info "Open the device-pairing URL and enter the displayed one-time code."
+  openclaw models auth login --provider openai --method device-code --force
   if systemctl --user list-unit-files "${OPENCLAW_GATEWAY_SERVICE}" >/dev/null 2>&1; then
     systemctl --user restart "${OPENCLAW_GATEWAY_SERVICE}"
     info "Restarted ${OPENCLAW_GATEWAY_SERVICE}"

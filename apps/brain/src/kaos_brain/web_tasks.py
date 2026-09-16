@@ -10,7 +10,12 @@ if TYPE_CHECKING:
     from aiohttp import web
 
 from .config import Settings
-from .kaos_ai import KaosAIConfig, KaosAIError, OpenClawKaosAIPlanner
+from .kaos_ai import (
+    KaosAIConfig,
+    KaosAIError,
+    OpenClawAuthRequired,
+    OpenClawKaosAIPlanner,
+)
 
 
 MAX_WEB_TASK_PROMPT_CHARS = 1600
@@ -86,6 +91,11 @@ class BrainWebTaskServer:
                     "prompt": str(body.get("prompt") or ""),
                     "checkedAt": datetime.now(UTC).date().isoformat(),
                 }
+            )
+        except OpenClawAuthRequired:
+            return web.json_response(
+                {"ok": False, "error": "kaosbrain_openai_auth_required"},
+                status=502,
             )
         except KaosAIError as exc:
             return web.json_response({"ok": False, "error": "kaosbrain_web_search_unavailable", "detail": str(exc)}, status=502)
@@ -261,6 +271,11 @@ class BrainOfficialWebTaskServer:
             return web.json_response({"ok": False, "error": error}, status=400)
         try:
             plan = await self.kaosai.plan_official_web_task(body)
+        except OpenClawAuthRequired:
+            return web.json_response(
+                {"ok": False, "error": "kaosbrain_openai_auth_required"},
+                status=502,
+            )
         except KaosAIError as exc:
             return web.json_response({"ok": False, "error": "kaosbrain_official_web_plan_unavailable", "detail": str(exc)}, status=502)
         return web.json_response({"ok": True, "source": "kaosbrain-openai", "plan": plan})
@@ -292,6 +307,11 @@ class BrainOfficialWebTaskServer:
             return web.json_response({"ok": False, "error": "official_web_sources_required"}, status=400)
         try:
             result = await self.kaosai.summarize_official_web_task(body)
+        except OpenClawAuthRequired:
+            return web.json_response(
+                {"ok": False, "error": "kaosbrain_openai_auth_required"},
+                status=502,
+            )
         except KaosAIError as exc:
             return web.json_response({"ok": False, "error": "kaosbrain_official_web_summary_unavailable", "detail": str(exc)}, status=502)
         return web.json_response({"ok": True, "source": "kaosbrain-openai", "result": result})

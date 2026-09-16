@@ -129,13 +129,18 @@ class FailingGovernorTools(FakeGovernorTools):
 
 
 class FakeReauth:
-    def __init__(self) -> None:
+    def __init__(self, start_payload=None) -> None:
         self.start_calls = 0
         self.callback_calls = []
+        self.start_payload = start_payload or {
+            "status": "waiting_for_device",
+            "verificationUrl": "https://auth.openai.com/codex/device",
+            "userCode": "ABCD-EFGH",
+        }
 
     async def start(self):
         self.start_calls += 1
-        return {"status": "waiting_for_callback", "oauthUrl": "https://auth.openai.com/oauth/authorize?state=test"}
+        return self.start_payload
 
     async def submit_callback(self, callback):
         self.callback_calls.append(callback)
@@ -220,7 +225,23 @@ class BrainBotKaosAITests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(brain.reauth.start_calls, 1)
         reply = message.reply.await_args.args[0]
         self.assertIn("## KaosBrain-OpenAI login renewal", reply)
-        self.assertIn("https://auth.openai.com/oauth/authorize", reply)
+        self.assertIn("https://auth.openai.com/codex/device", reply)
+        self.assertIn("`ABCD-EFGH`", reply)
+        self.assertIn("Authorization completes automatically", reply)
+        self.assertNotIn("then paste", reply)
+
+    async def test_kaosai_reauth_waiting_message_does_not_request_callback(self) -> None:
+        brain = self.brain(None)
+        brain.reauth = FakeReauth({"status": "starting", "verificationUrl": "", "userCode": ""})
+        message = fake_discord_message("chatgpt login")
+
+        await BrainBot.on_message(brain, message)  # type: ignore[arg-type]
+
+        reply = message.reply.await_args.args[0]
+        self.assertIn("device-pairing URL and code are not available yet", reply)
+        self.assertIn("Status: `starting`", reply)
+        self.assertIn("Try again shortly", reply)
+        self.assertNotIn("paste", reply.lower())
 
     async def test_rrr_command_reposts_active_control_message(self) -> None:
         brain = self.brain(None)

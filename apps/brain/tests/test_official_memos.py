@@ -4,7 +4,7 @@ import unittest
 from importlib.util import find_spec
 
 from kaos_brain.config import Settings
-from kaos_brain.kaos_ai import parse_official_memo_response
+from kaos_brain.kaos_ai import OpenClawAuthRequired, parse_official_memo_response
 
 AIOHTTP_AVAILABLE = find_spec("aiohttp") is not None
 
@@ -48,6 +48,11 @@ class FakeKaosAI:
             "sourceUrl": "https://example.go.kr/flu",
             "checkedAt": "2026-09-03",
         }
+
+
+class AuthRequiredKaosAI:
+    async def preview_official_memo(self, _request):
+        raise OpenClawAuthRequired()
 
 
 @unittest.skipUnless(AIOHTTP_AVAILABLE, "aiohttp is required for BrainOfficialMemoServer tests")
@@ -98,6 +103,21 @@ class BrainOfficialMemoTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["source"], "ai")
         self.assertEqual(payload["memo"]["title"], "인플루엔자 접종 계획")
         self.assertEqual(self.kaosai.requests[0]["prompt"], "국가 인플루엔자 접종 계획 요약")
+
+    async def test_preview_preserves_openclaw_auth_required_error(self) -> None:
+        self.server.kaosai = AuthRequiredKaosAI()  # type: ignore[assignment]
+
+        response = await self.client.post(
+            "/internal/ai-tasks/official-doc-memo/preview",
+            headers={"Authorization": "Bearer ai-task-token"},
+            json=preview_payload(),
+        )
+
+        self.assertEqual(response.status, 502)
+        self.assertEqual(
+            await response.json(),
+            {"ok": False, "error": "kaosbrain_openai_auth_required"},
+        )
 
 
 @unittest.skipUnless(AIOHTTP_AVAILABLE, "aiohttp is required for official memo validation tests")

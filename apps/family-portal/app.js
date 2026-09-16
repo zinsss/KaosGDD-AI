@@ -92,6 +92,8 @@ let suppressRounyGridClick = false;
 let topAddLongPressTimer = null;
 let suppressTopAddClick = false;
 let aiTaskPollTimer = null;
+let openclawAuthPollTimer = null;
+let openclawAuthFlowGeneration = 0;
 let rounyRemoteLoadPromise = null;
 let rounyRemoteSavePromise = null;
 let rounyRemoteSavePending = false;
@@ -232,6 +234,13 @@ const state = {
     sourceUrl: "",
     sourceText: "",
     korean: portalProfile() === "family",
+    openclawAuth: {
+      status: "idle",
+      loading: false,
+      error: "",
+      verificationUrl: "",
+      userCode: "",
+    },
     preview: null,
     items: [],
   },
@@ -2239,6 +2248,222 @@ function aiTasksHaveRunningItems(items = state.aiTasks.items) {
   return Array.isArray(items) && items.some((item) => String(item.status || "") === "running");
 }
 
+const OPENCLAW_AUTH_PENDING_STATUSES = new Set([
+  "starting",
+  "waiting_for_device",
+  "waiting_for_callback",
+  "submitting",
+]);
+
+function emptyOpenClawAuthState() {
+  return {
+    status: "idle",
+    loading: false,
+    error: "",
+    verificationUrl: "",
+    userCode: "",
+  };
+}
+
+function clearOpenClawAuthPoll() {
+  if (!openclawAuthPollTimer) return;
+  window.clearTimeout(openclawAuthPollTimer);
+  openclawAuthPollTimer = null;
+}
+
+function cancelOpenClawAuthFlow({ clearState = false } = {}) {
+  clearOpenClawAuthPoll();
+  openclawAuthFlowGeneration += 1;
+  if (clearState) {
+    state.aiTasks = { ...state.aiTasks, openclawAuth: emptyOpenClawAuthState() };
+  }
+}
+
+function openclawAuthFlowIsCurrent(generation) {
+  return (
+    generation === openclawAuthFlowGeneration &&
+    getRoute() === "ai-tasks" &&
+    aiTaskNeedsOpenClawAuth()
+  );
+}
+
+function normalizeOpenClawAuthPayload(payload) {
+  const source = payload && typeof payload === "object" ? payload : {};
+  const allowedStatuses = new Set([
+    "idle",
+    "starting",
+    "waiting_for_device",
+    "waiting_for_callback",
+    "submitting",
+    "succeeded",
+    "failed",
+  ]);
+  const status = String(source.status || "").trim().toLowerCase();
+  if (!allowedStatuses.has(status)) throw new Error("ai_task_openclaw_auth_invalid_response");
+  let verificationUrl = "";
+  try {
+    const candidate = new URL(String(source.verificationUrl || source.oauthUrl || ""));
+    if (
+      candidate.protocol === "https:" &&
+      candidate.hostname === "auth.openai.com" &&
+      !candidate.username &&
+      !candidate.password &&
+      (!candidate.port || candidate.port === "443") &&
+      !candidate.hash &&
+      ["/codex/device", "/oauth/authorize"].includes(candidate.pathname)
+    ) {
+      verificationUrl = candidate.toString();
+    }
+  } catch (_error) {
+    verificationUrl = "";
+  }
+  const rawCode = String(source.userCode || "").trim().toUpperCase();
+  const userCode = OPENCLAW_AUTH_PENDING_STATUSES.has(status) && /^[A-Z0-9][A-Z0-9-]{1,62}[A-Z0-9]$/.test(rawCode)
+    ? rawCode
+    : "";
+  if (status === "waiting_for_device" && (!verificationUrl || !userCode)) {
+    throw new Error("ai_task_openclaw_auth_invalid_response");
+  }
+  return {
+    status,
+    loading: false,
+    error: status === "failed" ? "OpenAI sign-in did not complete. Start it again." : "",
+    verificationUrl: OPENCLAW_AUTH_PENDING_STATUSES.has(status) ? verificationUrl : "",
+    userCode,
+  };
+}
+
+function aiTaskNeedsOpenClawAuth(preview = state.aiTasks.preview) {
+  return portalProfile() === "main" && String(preview?.error || "") === "kaosbrain_openai_auth_required";
+}
+
+function scheduleOpenClawAuthPoll(delay = 2500) {
+  clearOpenClawAuthPoll();
+  if (
+    getRoute() !== "ai-tasks" ||
+    !aiTaskNeedsOpenClawAuth() ||
+    !OPENCLAW_AUTH_PENDING_STATUSES.has(state.aiTasks.openclawAuth.status)
+  ) return;
+  openclawAuthPollTimer = window.setTimeout(async () => {
+    openclawAuthPollTimer = null;
+    await loadOpenClawAuthStatus();
+  }, delay);
+}
+
+async function requestOpenClawAuth(action) {
+  const response = await fetch(`/api/ai-tasks/openclaw-auth/${action}`, {
+    method: action === "start" ? "POST" : "GET",
+    headers: { Accept: "application/json" },
+    credentials: "same-origin",
+    cache: "no-store",
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+  return normalizeOpenClawAuthPayload(payload);
+}
+
+async function startOpenClawAuth() {
+  if (!aiTaskNeedsOpenClawAuth() || state.aiTasks.openclawAuth.loading) return;
+  cancelOpenClawAuthFlow();
+  const generation = openclawAuthFlowGeneration;
+  state.aiTasks = {
+    ...state.aiTasks,
+    openclawAuth: { ...emptyOpenClawAuthState(), status: "starting", loading: true },
+  };
+  render();
+  try {
+    const auth = await requestOpenClawAuth("start");
+    if (!openclawAuthFlowIsCurrent(generation)) return;
+    state.aiTasks = { ...state.aiTasks, openclawAuth: auth };
+    scheduleOpenClawAuthPoll();
+  } catch (error) {
+    if (!openclawAuthFlowIsCurrent(generation)) return;
+    state.aiTasks = {
+      ...state.aiTasks,
+      openclawAuth: {
+        ...emptyOpenClawAuthState(),
+        status: "failed",
+        error: aiTaskErrorMessage(aiTaskErrorCode(error, "ai_task_openclaw_auth_unavailable")),
+      },
+    };
+  }
+  if (getRoute() === "ai-tasks") render();
+}
+
+async function loadOpenClawAuthStatus() {
+  if (getRoute() !== "ai-tasks" || !aiTaskNeedsOpenClawAuth()) {
+    cancelOpenClawAuthFlow({ clearState: true });
+    return;
+  }
+  const generation = openclawAuthFlowGeneration;
+  try {
+    const auth = await requestOpenClawAuth("status");
+    if (!openclawAuthFlowIsCurrent(generation)) return;
+    state.aiTasks = { ...state.aiTasks, openclawAuth: auth };
+    scheduleOpenClawAuthPoll();
+  } catch (error) {
+    if (!openclawAuthFlowIsCurrent(generation)) return;
+    state.aiTasks = {
+      ...state.aiTasks,
+      openclawAuth: {
+        ...emptyOpenClawAuthState(),
+        status: "failed",
+        error: aiTaskErrorMessage(aiTaskErrorCode(error, "ai_task_openclaw_auth_unavailable")),
+      },
+    };
+  }
+  if (getRoute() === "ai-tasks") render();
+}
+
+async function retryAiTaskAfterOpenClawAuth() {
+  const preview = state.aiTasks.preview;
+  if (!aiTaskNeedsOpenClawAuth(preview) || state.aiTasks.openclawAuth.status !== "succeeded") return;
+  const kind = String(preview?.kind || "");
+  if (!new Set(["web", "general_web"]).has(kind)) return;
+  const prompt = String(preview?.prompt || "").trim();
+  if (!prompt) return;
+  cancelOpenClawAuthFlow();
+  const retryGeneralWeb = kind === "general_web";
+  state.aiTasks = {
+    ...state.aiTasks,
+    prompt,
+    previewing: true,
+    polling: false,
+    error: "",
+    openclawAuth: emptyOpenClawAuthState(),
+  };
+  render();
+  try {
+    const response = await fetch(retryGeneralWeb ? "/api/ai-tasks/general-web/preview" : "/api/ai-tasks/run", {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ prompt, outputLanguage: state.aiTasks.korean ? "ko" : "" }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    const task = normalizeAiTask(payload.task || {});
+    state.aiTasks = {
+      ...state.aiTasks,
+      previewing: false,
+      polling: task.status === "running",
+      selectedId: task.id,
+      preview: aiTaskPreviewFromRecord(task),
+      checked: false,
+      error: "",
+    };
+    await loadAiTasks({ force: true });
+    if (task.status === "running") scheduleAiTasksPoll(1200);
+  } catch (error) {
+    state.aiTasks = {
+      ...state.aiTasks,
+      previewing: false,
+      error: aiTaskErrorMessage(aiTaskErrorCode(error, "ai_task_start_failed")),
+    };
+    render();
+  }
+}
+
 function scheduleAiTasksPoll(delay = 3500) {
   if (!aiTasksEnabledForProfile()) return;
   if (aiTaskPollTimer) window.clearTimeout(aiTaskPollTimer);
@@ -2314,6 +2539,7 @@ async function loadAiTasks(options = {}) {
 
 async function startUnifiedAiTask(form) {
   if (state.aiTasks.previewing) return;
+  cancelOpenClawAuthFlow();
   const formData = new FormData(form);
   const prompt = String(formData.get("prompt") || "").trim();
   const sourceUrl = String(formData.get("sourceUrl") || "").trim();
@@ -2333,6 +2559,7 @@ async function startUnifiedAiTask(form) {
     previewing: true,
     polling: false,
     error: "",
+    openclawAuth: emptyOpenClawAuthState(),
     preview: null,
   };
   render();
@@ -2660,6 +2887,10 @@ function aiTaskErrorMessage(code) {
     ai_task_network_failed: "Network request did not reach Governor. Refresh or re-open Cloudflare Access, then retry.",
     ai_task_start_failed: "Could not start the AI Task.",
     ai_task_background_failed: "AI Task stopped before finishing.",
+    ai_task_openclaw_auth_not_configured: "OpenAI sign-in recovery is not configured.",
+    ai_task_openclaw_auth_unavailable: "Could not reach OpenAI sign-in recovery.",
+    ai_task_openclaw_auth_invalid_response: "OpenAI sign-in recovery returned an invalid response.",
+    kaosbrain_openai_auth_required: "KaosBrain needs a fresh OpenAI sign-in.",
     kaosbrain_openai_disabled: "KaosBrain-OpenAI is disabled.",
     kaosbrain_official_memo_unavailable: "KaosBrain could not draft this memo.",
     kaosbrain_official_web_plan_unavailable: "KaosBrain could not make an official-source search plan.",
@@ -2835,10 +3066,12 @@ function openAiTaskArchive(id) {
   const taskId = String(id || "").trim();
   if (!taskId) return;
   const selected = state.aiTasks.items.find((item) => item.id === taskId) || null;
+  cancelOpenClawAuthFlow();
   state.aiTasks = {
     ...state.aiTasks,
     selectedId: taskId,
     preview: aiTaskPreviewFromRecord(selected),
+    openclawAuth: emptyOpenClawAuthState(),
     error: selected ? "" : "AI Task archive item is unavailable",
   };
   render();
@@ -2847,10 +3080,12 @@ function openAiTaskArchive(id) {
 
 function closeAiTaskArchive() {
   const taskId = state.aiTasks.selectedId;
+  cancelOpenClawAuthFlow();
   state.aiTasks = {
     ...state.aiTasks,
     selectedId: "",
     preview: null,
+    openclawAuth: emptyOpenClawAuthState(),
     error: "",
   };
   render();
@@ -2865,6 +3100,7 @@ async function deleteAiTaskArchive() {
     ? "이 AI 기록을 삭제할까요? 삭제 후에는 복구할 수 없어요."
     : "Delete this AI Task archive record? This cannot be undone.";
   if (!window.confirm(question)) return;
+  cancelOpenClawAuthFlow();
   state.aiTasks = { ...state.aiTasks, deleting: true, error: "" };
   render();
   try {
@@ -2882,6 +3118,7 @@ async function deleteAiTaskArchive() {
       checked: false,
       selectedId: "",
       preview: null,
+      openclawAuth: emptyOpenClawAuthState(),
       error: "",
       items: state.aiTasks.items.filter((item) => item.id !== taskId),
     };
@@ -11284,6 +11521,18 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (event.target.closest("[data-openclaw-auth-start]")) {
+    event.preventDefault();
+    await startOpenClawAuth();
+    return;
+  }
+
+  if (event.target.closest("[data-openclaw-auth-retry]")) {
+    event.preventDefault();
+    await retryAiTaskAfterOpenClawAuth();
+    return;
+  }
+
   const aiTaskOpenButton = event.target.closest("[data-ai-task-open]");
   if (aiTaskOpenButton) {
     event.preventDefault();
@@ -11305,6 +11554,7 @@ document.addEventListener("click", async (event) => {
 
   if (event.target.closest("[data-ai-task-clear]")) {
     event.preventDefault();
+    cancelOpenClawAuthFlow();
     state.aiTasks = {
       ...state.aiTasks,
       selectedId: "",
@@ -11312,6 +11562,7 @@ document.addEventListener("click", async (event) => {
       sourceUrl: "",
       sourceText: "",
       preview: null,
+      openclawAuth: emptyOpenClawAuthState(),
       error: "",
     };
     render();
@@ -12103,6 +12354,7 @@ window.setInterval(() => {
 }, 60_000);
 
 window.addEventListener("hashchange", () => {
+  if (getRoute() !== "ai-tasks") cancelOpenClawAuthFlow({ clearState: true });
   const view = document.getElementById("view");
   if (view) view.scrollTop = 0;
   render();

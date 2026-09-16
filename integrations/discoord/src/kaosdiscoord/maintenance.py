@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
+import inspect
 import json
 import os
 from pathlib import Path
@@ -10,7 +11,18 @@ import shlex
 import subprocess
 from typing import Callable, Mapping
 
-from .markdown import escape_text
+
+
+def escape_text(value: object) -> str:
+    """Load Discord-specific escaping only when rendering a Discord message.
+
+    The host-side maintenance collector imports this module without installing
+    the Discord runtime; collection itself uses only the standard library.
+    """
+
+    from .markdown import escape_text as markdown_escape_text
+
+    return markdown_escape_text(value)
 
 
 DEFAULT_MAINTENANCE_TIMEOUT_SECONDS = 12.0
@@ -41,9 +53,11 @@ class OpenClawRenewalReminder:
     key: str
     target: str
     model: str
-    last_touched_at: str
+    auth_status: str
+    expires_at: str
     reminder_on: date
-    expires_on: date
+    expires_on: date | None
+    estimated: bool = False
 
 
 Runner = Callable[[MaintenanceTarget, str, float], subprocess.CompletedProcess[str]]
@@ -157,17 +171,17 @@ def default_runner(target: MaintenanceTarget, script: str, timeout_seconds: floa
 
 def maintenance_probe_script(repo_path: str) -> str:
     quoted_repo = shlex.quote(repo_path)
-    return f"""set +e
-kv() {{ printf '%s=%s\\n' "$1" "$2"; }}
+    script = """set +e
+kv() { printf '%s=%s\\n' "$1" "$2"; }
 kv hostname "$(hostname 2>/dev/null)"
 kv checked_at "$(date +%Y-%m-%dT%H:%M:%S%z 2>/dev/null)"
 kv uptime "$(uptime -p 2>/dev/null)"
 kv reboot_required "$([ -f /var/run/reboot-required ] && echo yes || echo no)"
-kv disk_root "$(df -h / 2>/dev/null | awk 'NR==2{{print $5 " used, " $4 " free"}}')"
-kv memory "$(free -m 2>/dev/null | awk '/^Mem:/{{print $3 "MiB/" $2 "MiB"}}')"
+kv disk_root "$(df -h / 2>/dev/null | awk 'NR==2{print $5 " used, " $4 " free"}')"
+kv memory "$(free -m 2>/dev/null | awk '/^Mem:/{print $3 "MiB/" $2 "MiB"}')"
 if command -v apt >/dev/null 2>&1; then
-  kv os_updates "$(apt list --upgradable 2>/dev/null | awk 'NR>1{{c++}} END{{print c+0}}')"
-  kv docker_package_updates "$(apt list --upgradable 2>/dev/null | awk -F/ '/^(docker|docker-ce|docker.io|containerd|containerd.io|docker-compose-plugin)\\//{{c++}} END{{print c+0}}')"
+  kv os_updates "$(apt list --upgradable 2>/dev/null | awk 'NR>1{c++} END{print c+0}')"
+  kv docker_package_updates "$(apt list --upgradable 2>/dev/null | awk -F/ '/^(docker|docker-ce|docker.io|containerd|containerd.io|docker-compose-plugin)\\//{c++} END{print c+0}')"
 else
   kv os_updates unknown
   kv docker_package_updates unknown
@@ -185,7 +199,7 @@ else
   kv docker_unhealthy unknown
   kv docker_exited unknown
 fi
-repo={quoted_repo}
+repo=__KAOS_REPO_PATH__
 if [ -n "$repo" ] && [ -d "$repo/.git" ]; then
   kv repo "$(git -C "$repo" status -sb 2>/dev/null | head -n 1)"
   kv repo_dirty "$(git -C "$repo" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
@@ -205,11 +219,47 @@ if [ -f "$openclaw_config" ]; then
     kv openclaw_primary_model unknown
     kv openclaw_last_touched unknown
   fi
+  export OPENCLAW_STATE_DIR="$(dirname "$openclaw_config")"
+  export OPENCLAW_CONFIG_PATH="$openclaw_config"
+  if [ -s "$HOME/.nvm/nvm.sh" ]; then
+    # OpenClaw is installed under the H4 Node 24 runtime. Suppress nvm output so
+    # the maintenance report remains a strict key/value stream.
+    . "$HOME/.nvm/nvm.sh" >/dev/null 2>&1
+    nvm use 24 >/dev/null 2>&1 || true
+  fi
+  if command -v openclaw >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
+    old_umask="$(umask)"
+    umask 077
+    openclaw_status_file="$(mktemp 2>/dev/null)"
+    umask "$old_umask"
+    cleanup_openclaw_status() { [ -z "$openclaw_status_file" ] || rm -f -- "$openclaw_status_file"; }
+    trap cleanup_openclaw_status EXIT HUP INT TERM
+    if [ -n "$openclaw_status_file" ] && openclaw models status --json >"$openclaw_status_file" 2>/dev/null; then
+      python3 - "$openclaw_status_file" <<'PY'
+__OPENCLAW_STATUS_PARSER__
+PY
+    else
+      kv openclaw_auth_probe error
+      kv openclaw_auth_status unknown
+      kv openclaw_auth_expires_at unknown
+    fi
+    cleanup_openclaw_status
+    openclaw_status_file=""
+    trap - EXIT HUP INT TERM
+  else
+    kv openclaw_auth_probe unavailable
+    kv openclaw_auth_status unknown
+    kv openclaw_auth_expires_at unknown
+  fi
 else
   kv openclaw_configured no
 fi
 kv docker_image_updates "not checked; requires explicit pull"
 """
+    return script.replace("__KAOS_REPO_PATH__", quoted_repo).replace(
+        "__OPENCLAW_STATUS_PARSER__",
+        _openclaw_status_parser_program(),
+    )
 
 
 def parse_probe_output(output: str) -> dict[str, str]:
@@ -219,6 +269,180 @@ def parse_probe_output(output: str) -> dict[str, str]:
         if separator and key:
             facts[key] = value.strip()
     return facts
+
+
+OPENCLAW_AUTH_STATUSES = frozenset(("ok", "expiring", "expired", "missing", "static"))
+
+
+def parse_openclaw_models_status(payload: object) -> dict[str, str]:
+    """Return only the non-secret OpenAI auth status and expiry from CLI JSON."""
+
+    providers_of_interest = ("openai", "openai-codex")
+    statuses = frozenset(("ok", "expiring", "expired", "missing", "static"))
+    priority = {"expired": 5, "missing": 4, "expiring": 3, "ok": 2, "static": 1, "unknown": 0}
+
+    def mappings(value: object) -> list[dict[str, object]]:
+        if not isinstance(value, list):
+            return []
+        return [item for item in value if isinstance(item, dict)]
+
+    def provider_id(value: object) -> str:
+        return str(value or "").strip().lower()
+
+    def status(value: object) -> str:
+        normalized = str(value or "").strip().lower()
+        return normalized if normalized in statuses else "unknown"
+
+    def most_actionable(values: object) -> str:
+        return max(
+            (status(value) for value in values),
+            key=lambda item: priority[item],
+            default="unknown",
+        )
+
+    def expiry_iso(value: object) -> str:
+        try:
+            if isinstance(value, str) and not value.strip():
+                return ""
+            if isinstance(value, str) and not value.strip().replace(".", "", 1).isdigit():
+                text = value.strip()
+                if text.endswith("Z"):
+                    text = text[:-1] + "+00:00"
+                parsed = datetime.fromisoformat(text)
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+                return parsed.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+            numeric = float(value)
+            if numeric <= 0:
+                return ""
+            if numeric < 100_000_000_000:
+                numeric *= 1000
+            return datetime.fromtimestamp(numeric / 1000, timezone.utc).isoformat(timespec="seconds").replace(
+                "+00:00", "Z"
+            )
+        except (OverflowError, OSError, TypeError, ValueError):
+            return ""
+
+    def first_entries(entries: list[dict[str, object]], preferred: list[str]) -> list[dict[str, object]]:
+        for candidate in preferred:
+            selected = [item for item in entries if provider_id(item.get("provider")) == candidate]
+            if selected:
+                return selected
+        return []
+
+    def earliest_expiry(entries: list[dict[str, object]]) -> str:
+        values = [expiry_iso(item.get("expiresAt")) for item in entries]
+        return min((value for value in values if value), default="")
+
+    if not isinstance(payload, dict):
+        return {"status": "unknown", "expires_at": ""}
+    auth = payload.get("auth")
+    auth = auth if isinstance(auth, dict) else {}
+    oauth = auth.get("oauth")
+    oauth = oauth if isinstance(oauth, dict) else {}
+    routes = [
+        item
+        for item in mappings(auth.get("runtimeAuthRoutes"))
+        if provider_id(item.get("provider")) in providers_of_interest
+        or provider_id(item.get("authProvider")) in providers_of_interest
+    ]
+    providers = mappings(oauth.get("providers"))
+    profiles = [
+        item
+        for item in mappings(oauth.get("profiles"))
+        if str(item.get("type") or "").strip().lower() in {"oauth", "token"}
+    ]
+
+    selected_status = "unknown"
+    preferred: list[str] = []
+    if routes:
+        selected_status = most_actionable(item.get("status") for item in routes)
+        preferred.extend(provider_id(item.get("authProvider")) for item in routes)
+        preferred.extend(provider_id(item.get("provider")) for item in routes)
+    preferred.extend(providers_of_interest)
+    preferred = list(dict.fromkeys(item for item in preferred if item in providers_of_interest))
+
+    selected_entries = first_entries(providers, preferred)
+    if selected_status == "unknown" and selected_entries:
+        selected_status = most_actionable(item.get("status") for item in selected_entries)
+    profile_entries = first_entries(profiles, preferred)
+    if selected_status == "unknown" and profile_entries:
+        selected_status = most_actionable(item.get("status") for item in profile_entries)
+
+    missing = {
+        provider_id(item)
+        for item in auth.get("missingProvidersInUse", [])
+        if isinstance(item, str)
+    }
+    if selected_status == "unknown" and missing.intersection(providers_of_interest):
+        selected_status = "missing"
+
+    expires_at = earliest_expiry(selected_entries) or earliest_expiry(profile_entries)
+    return {"status": selected_status, "expires_at": expires_at}
+
+
+def _openclaw_status_parser_program() -> str:
+    parser = inspect.getsource(parse_openclaw_models_status)
+    return "\n".join(
+        (
+            "import json",
+            "import sys",
+            "from datetime import datetime, timezone",
+            "",
+            parser,
+            "try:",
+            '    payload = json.load(open(sys.argv[1], encoding="utf-8"))',
+            "except (OSError, ValueError):",
+            '    print("openclaw_auth_probe=invalid")',
+            '    print("openclaw_auth_status=unknown")',
+            '    print("openclaw_auth_expires_at=unknown")',
+            "    raise SystemExit(0)",
+            "facts = parse_openclaw_models_status(payload)",
+            'print("openclaw_auth_probe=ok")',
+            'print(f"openclaw_auth_status={facts[\'status\']}")',
+            'print(f"openclaw_auth_expires_at={facts[\'expires_at\'] or \'unknown\'}")',
+        )
+    )
+
+
+def _openclaw_auth_status(value: object) -> str:
+    normalized = str(value or "").strip().lower()
+    return normalized if normalized in OPENCLAW_AUTH_STATUSES else "unknown"
+
+
+def parse_openclaw_expiry(value: object) -> datetime | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        numeric = float(value)
+        if numeric <= 0:
+            return None
+        if numeric < 100_000_000_000:
+            numeric *= 1000
+        try:
+            return datetime.fromtimestamp(numeric / 1000, timezone.utc)
+        except (OverflowError, OSError, ValueError):
+            return None
+    text = str(value).strip()
+    if not text or text.lower() == "unknown":
+        return None
+    try:
+        return parse_openclaw_expiry(float(text))
+    except ValueError:
+        pass
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _format_openclaw_expiry(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def maintenance_targets(env: Mapping[str, str]) -> tuple[MaintenanceTarget, ...]:
@@ -293,14 +517,19 @@ def render_maintenance_report(report: MaintenanceReport) -> str:
     ]
     if facts.get("openclaw_configured") == "yes":
         renewal = openclaw_renewal_from_report(report)
-        expires = renewal.expires_on.isoformat() if renewal else "unknown"
+        auth_status = renewal.auth_status if renewal else str(facts.get("openclaw_auth_status") or "unknown")
+        expires = renewal.expires_at if renewal and renewal.expires_at else str(
+            facts.get("openclaw_auth_expires_at") or "unknown"
+        )
         remind = renewal.reminder_on.isoformat() if renewal else "unknown"
+        basis = " (estimated from config update)" if renewal and renewal.estimated else ""
         lines.append(
             "- OpenClaw: "
             f"model {escape_text(facts.get('openclaw_primary_model', 'unknown'))}, "
             f"gateway {escape_text(facts.get('openclaw_gateway', 'unknown'))}, "
             f"reauth {escape_text(facts.get('openclaw_reauth_agent', 'unknown'))}, "
-            f"ChatGPT expires {escape_text(expires)}, remind {escape_text(remind)}"
+            f"ChatGPT auth {escape_text(auth_status)}, expires {escape_text(expires)}, "
+            f"remind {escape_text(remind)}{basis}"
         )
         lines.append(f"- OpenClaw config updated: {escape_text(facts.get('openclaw_last_touched', 'unknown'))}")
     return "\n".join(lines)
@@ -382,22 +611,58 @@ def openclaw_renewal_from_report(report: MaintenanceReport) -> OpenClawRenewalRe
     facts = report.facts
     if not report.ok or facts.get("openclaw_configured") != "yes":
         return None
+    model = str(facts.get("openclaw_primary_model") or "unknown")
+    if "openclaw_auth_status" in facts:
+        auth_status = _openclaw_auth_status(facts.get("openclaw_auth_status"))
+        expires_at = parse_openclaw_expiry(facts.get("openclaw_auth_expires_at"))
+        if auth_status in {"unknown", "static"}:
+            return None
+        if auth_status == "ok" and expires_at is None:
+            return None
+        observed_on = _openclaw_report_date(report)
+        expires_on = expires_at.astimezone(timezone(timedelta(hours=9), "KST")).date() if expires_at else None
+        if auth_status in {"missing", "expired"}:
+            reminder_on = observed_on
+        else:
+            reminder_on = expires_on - timedelta(days=1) if expires_on else observed_on
+        expires_text = _format_openclaw_expiry(expires_at) if expires_at else ""
+        key_suffix = expires_text or f"{auth_status}:{observed_on.isoformat()}"
+        return OpenClawRenewalReminder(
+            key=f"openclaw-chatgpt:{report.target.name}:{key_suffix}",
+            target=report.target.name,
+            model=model,
+            auth_status=auth_status,
+            expires_at=expires_text,
+            reminder_on=reminder_on,
+            expires_on=expires_on,
+        )
+
+    # Compatibility for already-stored reports created before the CLI auth
+    # probe existed. New reports always use OpenClaw's actual expiresAt value.
     last_touched = str(facts.get("openclaw_last_touched") or "").strip()
     last_touched_date = parse_openclaw_timestamp_date(last_touched)
     if last_touched_date is None:
         return None
     expires_on = last_touched_date + timedelta(days=10)
     reminder_on = last_touched_date + timedelta(days=9)
-    model = str(facts.get("openclaw_primary_model") or "unknown")
     key = f"openclaw-chatgpt:{report.target.name}:{last_touched_date.isoformat()}:{reminder_on.isoformat()}"
     return OpenClawRenewalReminder(
         key=key,
         target=report.target.name,
         model=model,
-        last_touched_at=last_touched,
+        auth_status="estimated",
+        expires_at=expires_on.isoformat(),
         reminder_on=reminder_on,
         expires_on=expires_on,
+        estimated=True,
     )
+
+
+def _openclaw_report_date(report: MaintenanceReport) -> date:
+    checked_at = _maintenance_report_time(report)
+    if checked_at is None:
+        return datetime.now(timezone(timedelta(hours=9), "KST")).date()
+    return checked_at.astimezone(timezone(timedelta(hours=9), "KST")).date()
 
 
 def parse_openclaw_timestamp_date(value: str) -> date | None:
@@ -416,14 +681,22 @@ def parse_openclaw_timestamp_date(value: str) -> date | None:
 
 
 def render_openclaw_renewal_reminder(reminder: OpenClawRenewalReminder) -> str:
+    expiry_line = (
+        f"- expires at: `{reminder.expires_at}`"
+        if reminder.expires_at
+        else "- expires at: unavailable (authentication is missing or unusable)"
+    )
+    estimate_line = ["-# Expiry is estimated from a legacy report; regenerate the maintenance report."] if reminder.estimated else []
     return "\n".join(
         [
             "## KaosBrain-OpenAI ChatGPT renewal",
             f"- target: {escape_text(reminder.target)}",
             f"- model: {escape_text(reminder.model)}",
+            f"- auth status: {escape_text(reminder.auth_status)}",
             f"- renew on: `{reminder.reminder_on.isoformat()}`",
-            f"- expires on: `{reminder.expires_on.isoformat()}`",
-            "- Renew ChatGPT login, then run the maintenance report again.",
+            expiry_line,
+            *estimate_line,
+            "- Run `./deploy/kaosbrain/kaosbrain openclaw-reauth` on H4, then regenerate the maintenance report.",
         ]
     )
 

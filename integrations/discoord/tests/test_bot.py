@@ -223,8 +223,11 @@ class GovernorBotTests(unittest.IsolatedAsyncioTestCase):
                     {
                         "openclaw_configured": "yes",
                         "openclaw_primary_model": "openai/gpt-5.6-sol",
-                        "openclaw_last_touched": "2026-08-10T09:00:00+09:00",
+                        "openclaw_auth_probe": "ok",
+                        "openclaw_auth_status": "expired",
+                        "openclaw_auth_expires_at": "2026-08-20T00:00:00Z",
                     },
+                    collected_at="2026-08-21T00:00:00Z",
                 )
             ]
 

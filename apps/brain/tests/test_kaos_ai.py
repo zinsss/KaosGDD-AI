@@ -9,6 +9,7 @@ from kaos_brain.kaos_ai import (
     KAOSAI_PLAN_SYSTEM_PROMPT,
     KaosAIConfig,
     KaosAIError,
+    OpenClawAuthRequired,
     OpenClawKaosAIPlanner,
     document_tag_rule_suggestions,
     merge_document_tag_suggestions,
@@ -17,6 +18,7 @@ from kaos_brain.kaos_ai import (
     parse_document_tag_response,
     parse_kaosai_plan_response,
     parse_second_look_response,
+    _openclaw_provider_auth_required,
 )
 
 AIOHTTP_AVAILABLE = find_spec("aiohttp") is not None
@@ -481,6 +483,189 @@ class KaosAITests(unittest.IsolatedAsyncioTestCase):
             )
             with self.assertRaisesRegex(KaosAIError, "invalid_kaosai_json"):
                 await planner.plan("hello", context={})
+        finally:
+            await runner.cleanup()
+
+    @unittest.skipUnless(AIOHTTP_AVAILABLE, "aiohttp is required for OpenClawKaosAIPlanner tests")
+    async def test_openclaw_classifies_only_openai_agent_oauth_failures(self) -> None:
+        async def agent_auth_failure(request):
+            websocket = web.WebSocketResponse()
+            await websocket.prepare(request)
+            await websocket.send_json({"type": "event", "event": "connect.challenge", "payload": {}})
+            async for message in websocket:
+                frame = message.json()
+                if frame["method"] == "connect":
+                    await websocket.send_json(
+                        {"type": "res", "id": frame["id"], "ok": True, "payload": {}}
+                    )
+                else:
+                    await websocket.send_json(
+                        {
+                            "type": "res",
+                            "id": frame["id"],
+                            "ok": False,
+                            "error": {
+                                "code": "TOKEN_EXPIRED",
+                                "message": "OpenAI OAuth token_expired",
+                            },
+                        }
+                    )
+            return websocket
+
+        runner, base_url = await self._start_server(agent_auth_failure)
+        try:
+            planner = OpenClawKaosAIPlanner(
+                KaosAIConfig(
+                    enabled=True,
+                    provider="openclaw",
+                    base_url=base_url,
+                    model="openai/gpt-5",
+                    api_token="gateway-token",
+                    timeout_seconds=1,
+                )
+            )
+            with self.assertRaises(OpenClawAuthRequired) as context:
+                await planner.plan("hello", context={})
+            self.assertEqual(str(context.exception), "kaosbrain_openai_auth_required")
+        finally:
+            await runner.cleanup()
+
+        runner, base_url = await self._start_server(agent_auth_failure)
+        try:
+            planner = OpenClawKaosAIPlanner(
+                KaosAIConfig(
+                    enabled=True,
+                    provider="openclaw",
+                    base_url=base_url,
+                    model="ollama/gemma4",
+                    api_token="gateway-token",
+                    timeout_seconds=1,
+                )
+            )
+            with self.assertRaises(KaosAIError) as context:
+                await planner.plan("hello", context={})
+            self.assertNotIsInstance(context.exception, OpenClawAuthRequired)
+            self.assertIn("kaosai_gateway_agent_failed", str(context.exception))
+        finally:
+            await runner.cleanup()
+
+    def test_openclaw_classifies_installed_runtime_missing_auth_forms(self) -> None:
+        for error in (
+            {
+                "code": "missing-api-key",
+                "provider": "openai",
+                "message": 'No API key resolved for provider "openai".',
+            },
+            {
+                "code": "agent_failed",
+                "message": 'No API key found for provider "openai".',
+            },
+            {
+                "code": "agent_failed",
+                "message": "Auth profile credentials are missing or expired for provider openai.",
+            },
+            {
+                "code": "agent_failed",
+                "message": "OpenAI OAuth token refresh failed.",
+            },
+        ):
+            with self.subTest(error=error):
+                self.assertTrue(_openclaw_provider_auth_required(error, provider=""))
+
+    def test_openclaw_missing_auth_classifier_stays_provider_scoped(self) -> None:
+        self.assertFalse(
+            _openclaw_provider_auth_required(
+                {
+                    "code": "missing-api-key",
+                    "provider": "ollama",
+                    "message": 'No API key resolved for provider "ollama".',
+                },
+                provider="",
+            )
+        )
+        self.assertFalse(
+            _openclaw_provider_auth_required(
+                {"code": "UNAUTHORIZED", "message": "RPC request unauthorized"},
+                provider="openai",
+            )
+        )
+
+    @unittest.skipUnless(AIOHTTP_AVAILABLE, "aiohttp is required for OpenClawKaosAIPlanner tests")
+    async def test_gateway_bearer_rejection_is_not_provider_reauth(self) -> None:
+        async def gateway_auth_failure(request):
+            websocket = web.WebSocketResponse()
+            await websocket.prepare(request)
+            await websocket.send_json({"type": "event", "event": "connect.challenge", "payload": {}})
+            async for message in websocket:
+                frame = message.json()
+                await websocket.send_json(
+                    {
+                        "type": "res",
+                        "id": frame["id"],
+                        "ok": False,
+                        "error": {"code": "UNAUTHORIZED", "message": "gateway bearer rejected"},
+                    }
+                )
+            return websocket
+
+        runner, base_url = await self._start_server(gateway_auth_failure)
+        try:
+            planner = OpenClawKaosAIPlanner(
+                KaosAIConfig(
+                    enabled=True,
+                    provider="openclaw",
+                    base_url=base_url,
+                    model="openai/gpt-5",
+                    api_token="wrong-gateway-token",
+                    timeout_seconds=1,
+                )
+            )
+            with self.assertRaises(KaosAIError) as context:
+                await planner.plan("hello", context={})
+            self.assertNotIsInstance(context.exception, OpenClawAuthRequired)
+            self.assertIn("kaosai_gateway_connect_failed", str(context.exception))
+        finally:
+            await runner.cleanup()
+
+    @unittest.skipUnless(AIOHTTP_AVAILABLE, "aiohttp is required for OpenClawKaosAIPlanner tests")
+    async def test_agent_rpc_unauthorized_is_not_provider_reauth(self) -> None:
+        async def agent_rpc_auth_failure(request):
+            websocket = web.WebSocketResponse()
+            await websocket.prepare(request)
+            await websocket.send_json({"type": "event", "event": "connect.challenge", "payload": {}})
+            async for message in websocket:
+                frame = message.json()
+                if frame.get("method") == "connect":
+                    await websocket.send_json(
+                        {"type": "res", "id": frame["id"], "ok": True, "payload": {"status": "connected"}}
+                    )
+                else:
+                    await websocket.send_json(
+                        {
+                            "type": "res",
+                            "id": frame["id"],
+                            "ok": False,
+                            "error": {"code": "UNAUTHORIZED", "message": "RPC request unauthorized"},
+                        }
+                    )
+            return websocket
+
+        runner, base_url = await self._start_server(agent_rpc_auth_failure)
+        try:
+            planner = OpenClawKaosAIPlanner(
+                KaosAIConfig(
+                    enabled=True,
+                    provider="openclaw",
+                    base_url=base_url,
+                    model="openai/gpt-5",
+                    api_token="gateway-token",
+                    timeout_seconds=1,
+                )
+            )
+            with self.assertRaises(KaosAIError) as context:
+                await planner.plan("hello", context={})
+            self.assertNotIsInstance(context.exception, OpenClawAuthRequired)
+            self.assertIn("kaosai_gateway_agent_failed", str(context.exception))
         finally:
             await runner.cleanup()
 

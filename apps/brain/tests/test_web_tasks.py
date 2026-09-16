@@ -7,6 +7,7 @@ from importlib.util import find_spec
 from kaos_brain.kaos_ai import (
     KAOSAI_OFFICIAL_WEB_PLAN_SYSTEM_PROMPT,
     KAOSAI_OFFICIAL_WEB_SUMMARY_SYSTEM_PROMPT,
+    OpenClawAuthRequired,
     _render_general_web_task_request,
     _render_official_web_plan_request,
     _render_official_web_summary_request,
@@ -21,7 +22,7 @@ AIOHTTP_AVAILABLE = find_spec("aiohttp") is not None
 if AIOHTTP_AVAILABLE:
     from aiohttp.test_utils import TestClient, TestServer
     from kaos_brain.config import Settings
-    from kaos_brain.web_tasks import BrainWebTaskServer
+    from kaos_brain.web_tasks import BrainOfficialWebTaskServer, BrainWebTaskServer
 
 
 BASE_ENV = {
@@ -47,6 +48,17 @@ class FakeKaosAI:
             "checkedAt": request["checkedAt"],
             "model": "openai/gpt-5.6-sol",
         }
+
+
+class AuthRequiredKaosAI:
+    async def preview_web_task(self, _request):
+        raise OpenClawAuthRequired()
+
+    async def plan_official_web_task(self, _request):
+        raise OpenClawAuthRequired()
+
+    async def summarize_official_web_task(self, _request):
+        raise OpenClawAuthRequired()
 
 
 @unittest.skipUnless(AIOHTTP_AVAILABLE, "aiohttp is required for BrainWebTaskServer tests")
@@ -108,6 +120,73 @@ class BrainWebTaskTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["source"], "openclaw-web-search")
         self.assertEqual(payload["result"]["sources"][0]["url"], "https://example.com/source")
         self.assertEqual(self.kaosai.requests[0]["prompt"], "공식 결과 바탕으로 일반 웹도 확인")
+
+    async def test_preview_preserves_openclaw_auth_required_error(self) -> None:
+        self.server.settings = Settings.from_env(
+            {
+                **{key: value for key, value in BASE_ENV.items() if key != "KAOSBRAIN_OPENAI_API_KEY"},
+                "KAOSAI_ENABLED": "true",
+                "KAOSAI_PROVIDER": "openclaw",
+                "KAOSAI_BASE_URL": "http://127.0.0.1:18789",
+                "KAOSAI_API_TOKEN": "gateway-token",
+            }
+        )
+        self.server.kaosai = AuthRequiredKaosAI()  # type: ignore[assignment]
+
+        response = await self.client.post(
+            "/internal/ai-tasks/web/preview",
+            headers={"Authorization": "Bearer ai-task-token"},
+            json={"prompt": "search"},
+        )
+
+        self.assertEqual(response.status, 502)
+        self.assertEqual(
+            await response.json(),
+            {"ok": False, "error": "kaosbrain_openai_auth_required"},
+        )
+
+    async def test_official_web_endpoints_preserve_openclaw_auth_required_error(self) -> None:
+        settings = Settings.from_env(
+            {
+                **{key: value for key, value in BASE_ENV.items() if key != "KAOSBRAIN_OPENAI_API_KEY"},
+                "KAOSAI_ENABLED": "true",
+                "KAOSAI_PROVIDER": "openclaw",
+                "KAOSAI_BASE_URL": "http://127.0.0.1:18789",
+                "KAOSAI_API_TOKEN": "gateway-token",
+            }
+        )
+        server = BrainOfficialWebTaskServer(settings)
+        server.kaosai = AuthRequiredKaosAI()  # type: ignore[assignment]
+        from aiohttp import web
+
+        app = web.Application()
+        app.router.add_post("/plan", server.plan)
+        app.router.add_post("/summarize", server.summarize)
+        client = TestClient(TestServer(app))
+        await client.start_server()
+        try:
+            plan = await client.post(
+                "/plan",
+                headers={"Authorization": "Bearer ai-task-token"},
+                json={"prompt": "search"},
+            )
+            summary = await client.post(
+                "/summarize",
+                headers={"Authorization": "Bearer ai-task-token"},
+                json={"prompt": "search", "sources": [{"url": "https://example.com"}]},
+            )
+            self.assertEqual(plan.status, 502)
+            self.assertEqual(summary.status, 502)
+            self.assertEqual(
+                await plan.json(),
+                {"ok": False, "error": "kaosbrain_openai_auth_required"},
+            )
+            self.assertEqual(
+                await summary.json(),
+                {"ok": False, "error": "kaosbrain_openai_auth_required"},
+            )
+        finally:
+            await client.close()
 
 
 class WebTaskValidationTests(unittest.TestCase):

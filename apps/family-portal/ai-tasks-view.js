@@ -235,6 +235,53 @@ window.KAOS_AI_TASKS_VIEW = (() => {
     `;
   }
 
+  function renderOpenClawAuthCard(deps, preview) {
+    const auth = deps.state.aiTasks.openclawAuth || {};
+    const status = String(auth.status || "idle");
+    const pending = ["starting", "waiting_for_device", "waiting_for_callback", "submitting"].includes(status);
+    const verificationUrl = String(auth.verificationUrl || "");
+    const userCode = String(auth.userCode || "");
+    const succeeded = status === "succeeded";
+    const failed = status === "failed";
+    const retryable = ["web", "general_web"].includes(String(preview?.kind || ""));
+    return `
+      <aside class="openclawAuthCard" data-ai-task-detail tabindex="0" aria-labelledby="openclawAuthTitle" aria-live="polite">
+        <div class="openclawAuthCardHeader">
+          <div>
+            <p>OPENAI SIGN-IN</p>
+            <h4 id="openclawAuthTitle">KaosBrain needs authorization</h4>
+          </div>
+          <span class="openclawAuthStatus is-${deps.escapeHtml(status)}">${deps.escapeHtml(status.replaceAll("_", " "))}</span>
+        </div>
+        ${
+          succeeded
+            ? `<p class="openclawAuthMessage">${retryable ? "Sign-in restored. Retry the failed task." : "Sign-in restored. Start this task again and attach or paste its source."}</p>`
+            : pending
+              ? `<p class="openclawAuthMessage">Open the device page, enter the one-time code, then return here. Status updates automatically.</p>`
+              : `<p class="openclawAuthMessage">Reconnect OpenAI on H4 without leaving this AI Task.</p>`
+        }
+        ${
+          pending && (verificationUrl || userCode)
+            ? `<div class="openclawAuthPairing">
+                ${verificationUrl ? `<a class="archiveAction isActive" href="${deps.escapeHtml(verificationUrl)}" target="_blank" rel="noopener noreferrer">OPEN DEVICE PAGE</a>` : ""}
+                ${userCode ? `<code class="openclawAuthCode" aria-label="OpenAI one-time code">${deps.escapeHtml(userCode)}</code>` : ""}
+              </div>`
+            : ""
+        }
+        ${auth.error ? `<p class="openclawAuthError">${deps.escapeHtml(auth.error)}</p>` : ""}
+        <div class="archiveActions openclawAuthActions">
+          ${
+            succeeded && retryable
+              ? `<button class="archiveAction isActive" type="button" data-openclaw-auth-retry>RETRY TASK</button>`
+              : succeeded
+                ? ""
+                : `<button class="archiveAction${failed ? " isActive" : ""}" type="button" data-openclaw-auth-start ${auth.loading ? "disabled" : ""}>${deps.escapeHtml(auth.loading ? "STARTING" : failed ? "START AGAIN" : "START SIGN-IN")}</button>`
+          }
+        </div>
+      </aside>
+    `;
+  }
+
   function renderAiTaskStatePanel(deps, preview, labels = null) {
     const status = String(preview?.status || "");
     if (status !== "running" && status !== "failed") return "";
@@ -264,6 +311,7 @@ window.KAOS_AI_TASKS_VIEW = (() => {
     const resultContent = String(result.content || "").trim();
     const canCopy = Boolean(resultContent);
     const canSearchGeneralWeb = !isRunning && deps.aiTaskIsOfficialWebPreview(preview) && resultSources.length > 0;
+    const needsOpenClawAuth = !isRunning && deps.portalProfile() === "main" && String(preview?.error || "") === "kaosbrain_openai_auth_required";
     return `
       <section class="archiveDetail aiTaskPreview aiTaskStatePanel" aria-label="AI task ${deps.escapeHtml(status)}">
         <header class="archiveDetailHeader">
@@ -285,9 +333,13 @@ window.KAOS_AI_TASKS_VIEW = (() => {
           ${deps.archiveMeta("Updated", preview?.updatedAt || "")}
           ${deps.archiveMeta("Source", sourceInfo.type || "")}
         </dl>
-        <div class="${isRunning ? "archiveNotice" : "archiveError"}" data-ai-task-detail role="status" tabindex="0">
-          <p>${isRunning ? deps.escapeHtml(text.runningMessage) : deps.escapeHtml(deps.aiTaskErrorMessage(preview?.error || "ai_task_background_failed"))}</p>
-        </div>
+        ${
+          needsOpenClawAuth
+            ? renderOpenClawAuthCard(deps, preview)
+            : `<div class="${isRunning ? "archiveNotice" : "archiveError"}" data-ai-task-detail role="status" tabindex="0">
+                <p>${isRunning ? deps.escapeHtml(text.runningMessage) : deps.escapeHtml(deps.aiTaskErrorMessage(preview?.error || "ai_task_background_failed"))}</p>
+              </div>`
+        }
         ${renderAiTaskPlan(deps, sourceInfo.plan)}
         ${renderAiTaskSourceQuality(deps, resultSources, textbookSources, {
           title: text.sourceQuality,
@@ -523,6 +575,7 @@ window.KAOS_AI_TASKS_VIEW = (() => {
     renderAiTaskPlan,
     renderAiTaskSources,
     renderAiTaskTextbookSources,
+    renderOpenClawAuthCard,
     renderAiTaskStatePanel,
     renderAiTasks,
   };

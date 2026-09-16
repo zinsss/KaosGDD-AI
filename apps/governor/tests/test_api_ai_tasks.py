@@ -189,6 +189,146 @@ class GovernorAITaskTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "ai_task_profile_required"):
                 api.require_ai_task_access({})
 
+    def test_openclaw_auth_proxy_reuses_brain_token_and_allowlists_response(self) -> None:
+        captured_requests = []
+
+        def fake_auth_urlopen(request, timeout=0):  # type: ignore[no-untyped-def]
+            captured_requests.append(request)
+            self.assertEqual(timeout, api.AI_TASKS_BRAIN_TIMEOUT_SECONDS)
+            self.assertEqual(request.headers["Authorization"], "Bearer secret")
+            return FakeHTTPResponse(
+                {
+                    "ok": True,
+                    "status": "waiting_for_device",
+                    "verificationUrl": "https://auth.openai.com/codex/device?flow=codex",
+                    "oauthUrl": "https://malicious.example/steal",
+                    "userCode": "ABCD-EFGH",
+                    "startedAt": 123.5,
+                    "completedAt": 0,
+                    "message": "terminal output that must not leave H4",
+                    "access_token": "secret-token",
+                }
+            )
+
+        with (
+            patch.object(api, "AI_TASKS_BRAIN_URL", "http://brain.internal:8099/internal/ai-tasks/official-doc-memo/preview"),
+            patch.object(api, "AI_TASKS_WEB_BRAIN_URL", ""),
+            patch.object(api, "AI_TASKS_BRAIN_TOKEN", "secret"),
+        ):
+            payload = api.openclaw_auth_payload("start", urlopen=fake_auth_urlopen)
+
+        self.assertEqual(captured_requests[0].full_url, "http://brain.internal:8099/internal/openclaw-auth/start")
+        self.assertEqual(captured_requests[0].method, "POST")
+        self.assertEqual(
+            payload,
+            {
+                "ok": True,
+                "status": "waiting_for_device",
+                "verificationUrl": "https://auth.openai.com/codex/device?flow=codex",
+                "oauthUrl": "https://auth.openai.com/codex/device?flow=codex",
+                "startedAt": 123.5,
+                "completedAt": 0.0,
+                "userCode": "ABCD-EFGH",
+            },
+        )
+        self.assertNotIn("message", payload)
+        self.assertNotIn("access_token", payload)
+
+    def test_openclaw_auth_proxy_strips_unapproved_urls_and_expired_codes(self) -> None:
+        with (
+            patch.object(api, "AI_TASKS_BRAIN_URL", "http://brain.internal:8099/internal/ai-tasks/official-doc-memo/preview"),
+            patch.object(api, "AI_TASKS_WEB_BRAIN_URL", ""),
+            patch.object(api, "AI_TASKS_BRAIN_TOKEN", "secret"),
+        ):
+            payload = api.openclaw_auth_payload(
+                "status",
+                urlopen=lambda request, timeout=0: FakeHTTPResponse(
+                    {
+                        "ok": True,
+                        "status": "succeeded",
+                        "verificationUrl": "https://example.com/codex/device",
+                        "userCode": "SHOULD-NOT-SURVIVE",
+                    }
+                ),
+            )
+
+        self.assertEqual(payload["verificationUrl"], "")
+        self.assertNotIn("userCode", payload)
+
+    def test_openclaw_auth_proxy_rejects_incomplete_device_pairing_and_nonfinite_time(self) -> None:
+        with self.assertRaisesRegex(AITaskError, "ai_task_openclaw_auth_invalid_response"):
+            api._clean_openclaw_auth_payload(
+                {
+                    "ok": True,
+                    "status": "waiting_for_device",
+                    "verificationUrl": "https://auth.openai.com/codex/device",
+                    "userCode": "",
+                }
+            )
+
+        with self.assertRaisesRegex(AITaskError, "ai_task_openclaw_auth_invalid_response"):
+            api._clean_openclaw_auth_payload(
+                {
+                    "ok": True,
+                    "status": "starting",
+                    "startedAt": float("nan"),
+                    "completedAt": float("inf"),
+                }
+            )
+
+    def test_openclaw_auth_proxy_rejects_nonstandard_port_and_fragment(self) -> None:
+        self.assertEqual(api._safe_openclaw_auth_url("https://auth.openai.com:444/codex/device"), "")
+        self.assertEqual(api._safe_openclaw_auth_url("https://auth.openai.com/codex/device#secret"), "")
+
+    def test_openclaw_auth_proxy_rejects_malformed_device_code(self) -> None:
+        with self.assertRaisesRegex(AITaskError, "ai_task_openclaw_auth_invalid_response"):
+            api._clean_openclaw_auth_payload(
+                {
+                    "ok": True,
+                    "status": "waiting_for_device",
+                    "verificationUrl": "https://auth.openai.com/codex/device",
+                    "userCode": "ABCD-",
+                }
+            )
+
+    def test_openclaw_auth_routes_are_personal_only(self) -> None:
+        personal = CaptureHandler("/api/ai-tasks/openclaw-auth/status")
+        with (
+            patch.object(api.memos_relay, "verify_cloudflare_access", return_value=("personal", "zin@example.com")),
+            patch.object(api, "openclaw_auth_payload", return_value={"ok": True, "status": "idle"}) as proxy,
+        ):
+            personal.do_GET()
+        self.assertEqual(personal.status, 200)
+        proxy.assert_called_once_with("status")
+
+        family = CaptureHandler("/api/ai-tasks/openclaw-auth/start")
+        with (
+            patch.object(api.memos_relay, "verify_cloudflare_access", return_value=("family", "wife@example.com")),
+            patch.object(api, "openclaw_auth_payload") as blocked_proxy,
+        ):
+            family.do_POST()
+        self.assertEqual(family.status, 404)
+        self.assertEqual(json.loads(family.wfile.getvalue())["error"], "main_profile_required")
+        blocked_proxy.assert_not_called()
+
+    def test_openclaw_auth_proxy_maps_only_known_upstream_errors(self) -> None:
+        def http_error(code: str):
+            def raise_error(request, timeout=0):  # type: ignore[no-untyped-def]
+                body = json.dumps({"ok": False, "error": code, "detail": "do not expose"}).encode("utf-8")
+                raise urllib.error.HTTPError(request.full_url, 502, "Bad Gateway", {}, BytesIO(body))
+
+            return raise_error
+
+        with (
+            patch.object(api, "AI_TASKS_BRAIN_URL", "http://brain.internal:8099/internal/ai-tasks/official-doc-memo/preview"),
+            patch.object(api, "AI_TASKS_WEB_BRAIN_URL", ""),
+            patch.object(api, "AI_TASKS_BRAIN_TOKEN", "secret"),
+        ):
+            with self.assertRaisesRegex(AITaskError, "ai_task_openclaw_auth_not_configured"):
+                api.openclaw_auth_payload("status", urlopen=http_error("openclaw_reauth_not_configured"))
+            with self.assertRaisesRegex(AITaskError, "ai_task_openclaw_auth_unavailable"):
+                api.openclaw_auth_payload("status", urlopen=http_error("secret_upstream_detail"))
+
     def test_ai_task_archive_uses_separate_family_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             personal_path = Path(temporary_directory) / "archive.json"
@@ -720,6 +860,19 @@ class GovernorAITaskTests(unittest.TestCase):
         self.assertFalse(created)
         service.enqueue.assert_not_called()
 
+    def test_failed_ai_task_web_push_stays_generic_and_never_carries_auth_code(self) -> None:
+        service = Mock()
+        service.enqueue.return_value = True
+
+        created = api.enqueue_ai_task_web_push("ait-auth-required", "failed", "personal", service=service)
+
+        self.assertTrue(created)
+        notification = service.enqueue.call_args.args[0]
+        self.assertEqual(notification.category, "ai_task_failed")
+        self.assertEqual(notification.message, "AI Task status changed.")
+        self.assertNotIn("code", notification.message.lower())
+        self.assertNotIn("auth", notification.message.lower())
+
     def test_ai_task_worker_archives_failure_status(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             archive = AITaskArchive(Path(temporary_directory) / "ai-tasks.json")
@@ -736,6 +889,40 @@ class GovernorAITaskTests(unittest.TestCase):
             failed = archive.list_records()[0]
             self.assertEqual(failed.status, "failed")
             self.assertEqual(failed.error, "ai_task_brain_not_configured")
+
+    def test_ai_task_worker_preserves_openclaw_auth_required_error_and_uses_failed_push(self) -> None:
+        attempts = 0
+
+        def fake_auth_required(request, timeout=0):  # type: ignore[no-untyped-def]
+            nonlocal attempts
+            attempts += 1
+            payload = json.dumps({"ok": False, "error": "kaosbrain_openai_auth_required"}).encode("utf-8")
+            raise urllib.error.HTTPError(request.full_url, 502, "Bad Gateway", {}, BytesIO(payload))
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            archive = AITaskArchive(Path(temporary_directory) / "ai-tasks.json")
+            record = archive.add_running(kind="web", prompt="search", source={"type": "official_web_search"})
+            notifier = Mock()
+            with (
+                patch.object(api, "AI_TASKS_BRAIN_URL", "http://brain.internal:8099/internal/ai-tasks/official-doc-memo/preview"),
+                patch.object(api, "AI_TASKS_WEB_BRAIN_URL", ""),
+                patch.object(api, "AI_TASKS_BRAIN_TOKEN", "secret"),
+            ):
+                api.run_ai_task_worker(
+                    record.task_id,
+                    {"prompt": "search"},
+                    source_task=False,
+                    archive=archive,
+                    profile="personal",
+                    notifier=notifier,
+                    urlopen=fake_auth_required,
+                )
+
+            failed = archive.list_records()[0]
+            self.assertEqual(failed.status, "failed")
+            self.assertEqual(failed.error, "kaosbrain_openai_auth_required")
+            self.assertEqual(attempts, 1)
+            notifier.assert_called_once_with(record.task_id, "failed", "personal")
 
     def test_official_web_brain_call_retries_transient_http_errors(self) -> None:
         attempts = 0

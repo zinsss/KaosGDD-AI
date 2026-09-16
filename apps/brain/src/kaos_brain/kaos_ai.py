@@ -15,6 +15,13 @@ class KaosAIError(RuntimeError):
     """Raised when the legacy KaosAI/KaosBrain-OpenAI provider cannot return a usable plan."""
 
 
+class OpenClawAuthRequired(KaosAIError):
+    """Raised only when an OpenAI model request needs provider OAuth renewal."""
+
+    def __init__(self) -> None:
+        super().__init__("kaosbrain_openai_auth_required")
+
+
 class KaosAIPlanner(Protocol):
     async def plan(self, user_text: str, *, context: Mapping[str, Any]) -> dict[str, Any] | None:
         """Return a KaosBrain-OpenAI plan or None when planning is unavailable."""
@@ -1079,6 +1086,11 @@ async def _openclaw_agent_request(
     await websocket.send_json({"type": "req", "id": request_id, "method": "agent", "params": params})
     frame = await _receive_openclaw_response(websocket, request_id, expect_final=True)
     if not frame.get("ok"):
+        if _openclaw_provider_auth_required(
+            frame.get("error"),
+            provider=str(params.get("provider") or ""),
+        ):
+            raise OpenClawAuthRequired()
         raise KaosAIError(_openclaw_error_code(frame, "kaosai_gateway_agent_failed"))
     payload = frame.get("payload")
     if not isinstance(payload, Mapping):
@@ -1151,3 +1163,57 @@ def _openclaw_error_code(frame: Mapping[str, Any], fallback: str) -> str:
     if message:
         return f"{fallback}:{message[:80]}"
     return fallback
+
+
+def _openclaw_provider_auth_required(error: object, *, provider: str) -> bool:
+    """Classify model-provider auth errors after gateway authentication succeeded."""
+
+    normalized_provider = provider.strip().lower()
+    if normalized_provider not in {"", "openai"} or not isinstance(error, Mapping):
+        return False
+    code = re.sub(r"[^a-z0-9]+", "_", str(error.get("code") or "").strip().lower()).strip("_")
+    message = " ".join(str(error.get("message") or "").lower().split())
+    error_provider = str(error.get("provider") or "").strip().lower()
+    if error_provider and error_provider != "openai":
+        return False
+    provider_evidence = normalized_provider == "openai" or error_provider == "openai" or any(
+        marker in message for marker in ("openai", "oauth", "provider", "model")
+    )
+    if code in {
+        "authentication_error",
+        "authentication_failed",
+        "auth_profile_expired",
+        "auth_profile_missing",
+        "invalid_grant",
+        "missing_api_key",
+        "missing_provider_auth",
+        "oauth_token_refresh_failed",
+        "oauth_token_expired",
+        "token_expired",
+    } and provider_evidence:
+        return True
+    if any(
+        marker in message
+        for marker in (
+            "token_expired",
+            "authentication failed",
+            "auth profile credentials are missing or expired",
+            "invalid_grant",
+            "missing credential",
+            "missing credentials",
+            "no api key found",
+            "no api key resolved",
+            "oauth token refresh failed",
+            "oauth token expired",
+            "refresh token has expired",
+            "refresh token expired",
+            "refresh token is invalid",
+        )
+    ) and provider_evidence:
+        return True
+    # `unauthorized` is also used by the gateway/RPC authentication boundary.
+    # Only elevate it when the error itself identifies provider credentials.
+    return code == "unauthorized" and provider_evidence and any(
+        marker in message
+        for marker in ("api key", "credential", "oauth", "refresh token", "access token", "token expired")
+    )

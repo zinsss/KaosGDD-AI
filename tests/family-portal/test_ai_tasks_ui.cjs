@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
+const vm = require("node:vm");
 
 const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
 const aiTasksViewSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/ai-tasks-view.js"), "utf8");
@@ -77,8 +78,8 @@ test("AI Tasks official document memo flow previews before saving to Memos", () 
   assert.match(appSource, /method: "DELETE"/);
   assert.match(appSource, /\/api\/ai-tasks\/\$\{encodeURIComponent\(taskId\)\}/);
   assert.match(appSource, /이 AI 기록을 삭제할까요\?/);
-  assert.match(indexSource, /src="\/ai-tasks-view\.js\?v=2"/);
-  assert.ok(indexSource.indexOf('src="/ai-tasks-view.js?v=2"') < indexSource.indexOf('src="/app.js?v=345"'));
+  assert.match(indexSource, /src="\/ai-tasks-view\.js\?v=3"/);
+  assert.ok(indexSource.indexOf('src="/ai-tasks-view.js?v=3"') < indexSource.indexOf('src="/app.js?v=346"'));
 });
 
 test("Family AI Tasks keeps its own light theme surface", () => {
@@ -104,6 +105,84 @@ test("AI Tasks preview errors use actionable messages", () => {
   assert.match(appSource, /ai_task_source_not_found: "The source page says it does not exist\. Try a specific article page or paste the text\."/);
   assert.match(appSource, /ai_task_pdf_text_empty: "Could not read text from that PDF\. If it is scanned, use Paperless OCR first or paste the text\."/);
   assert.match(appSource, /error: aiTaskErrorMessage\(aiTaskErrorCode\(error, "ai_task_preview_failed"\)\)/);
+});
+
+test("personal AI Tasks offers in-memory OpenClaw device authorization recovery", () => {
+  assert.match(appSource, /String\(preview\?\.error \|\| ""\) === "kaosbrain_openai_auth_required"/);
+  assert.match(aiTasksViewSource, /deps\.portalProfile\(\) === "main"/);
+  assert.match(aiTasksViewSource, /data-openclaw-auth-start/);
+  assert.match(aiTasksViewSource, /data-openclaw-auth-retry/);
+  assert.match(aiTasksViewSource, /OPEN DEVICE PAGE/);
+  assert.match(appSource, /\/api\/ai-tasks\/openclaw-auth\/\$\{action\}/);
+  assert.match(appSource, /scheduleOpenClawAuthPoll/);
+  assert.match(appSource, /if \(getRoute\(\) !== "ai-tasks"\) cancelOpenClawAuthFlow\(\{ clearState: true \}\)/);
+  assert.match(appSource, /openclawAuthFlowGeneration/);
+  assert.equal(
+    (appSource.match(/const auth = await requestOpenClawAuth\("(?:start|status)"\);\s*if \(!openclawAuthFlowIsCurrent\(generation\)\) return;/g) || []).length,
+    2,
+  );
+  assert.match(appSource, /new Set\(\["web", "general_web"\]\)\.has\(kind\)/);
+  assert.match(appSource, /OPENCLAW_AUTH_PENDING_STATUSES/);
+  assert.match(appSource, /candidate\.hostname === "auth\.openai\.com"/);
+  assert.match(appSource, /!candidate\.username/);
+  assert.match(appSource, /!candidate\.password/);
+  assert.match(appSource, /candidate\.port === "443"/);
+  assert.match(appSource, /!candidate\.hash/);
+  assert.match(appSource, /\["\/codex\/device", "\/oauth\/authorize"\]/);
+  assert.doesNotMatch(appSource, /localStorage[^\n]*openclaw/i);
+  assert.doesNotMatch(appSource, /console\.[a-z]+\([^\n]*userCode/i);
+  assert.match(stylesSource, /\.app\[data-profile="main"\]\[data-route="ai-tasks"\] \.openclawAuthCard/);
+});
+
+test("OpenClaw recovery card renders only for the exact personal auth-required error", () => {
+  const context = { window: {}, URL };
+  vm.runInNewContext(aiTasksViewSource, context);
+  const view = context.window.KAOS_AI_TASKS_VIEW;
+  const deps = {
+    state: { aiTasks: { deleting: false, openclawAuth: { status: "idle" } } },
+    portalProfile: () => "main",
+    escapeHtml: (value) => String(value ?? ""),
+    archiveMeta: () => "",
+    aiTaskIsOfficialWebPreview: () => false,
+    aiTaskErrorMessage: (value) => String(value || ""),
+  };
+  const exact = view.renderAiTaskStatePanel(deps, {
+    kind: "web",
+    status: "failed",
+    error: "kaosbrain_openai_auth_required",
+    source: {},
+    result: {},
+  });
+  assert.match(exact, /class="openclawAuthCard"/);
+
+  const other = view.renderAiTaskStatePanel(deps, {
+    kind: "web",
+    status: "failed",
+    error: "kaosbrain_ai_task_unauthorized",
+    source: {},
+    result: {},
+  });
+  assert.doesNotMatch(other, /class="openclawAuthCard"/);
+
+  const family = view.renderAiTaskStatePanel({ ...deps, portalProfile: () => "family" }, {
+    kind: "web",
+    status: "failed",
+    error: "kaosbrain_openai_auth_required",
+    source: {},
+    result: {},
+  });
+  assert.doesNotMatch(family, /class="openclawAuthCard"/);
+
+  deps.state.aiTasks.openclawAuth = { status: "succeeded" };
+  const sourceTask = view.renderAiTaskStatePanel(deps, {
+    kind: "official_doc_memo",
+    status: "failed",
+    error: "kaosbrain_openai_auth_required",
+    source: { type: "pdf", filename: "source.pdf" },
+    result: {},
+  });
+  assert.match(sourceTask, /attach or paste its source/);
+  assert.doesNotMatch(sourceTask, /data-openclaw-auth-retry/);
 });
 
 test("AI Tasks API proxy allows long-running official-source searches", () => {

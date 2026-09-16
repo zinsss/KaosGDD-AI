@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import html
 import json
+import math
 import os
 import re
 import socket
@@ -1094,6 +1095,135 @@ def ai_task_brain_token() -> str:
     return secret_value("AI_TASKS_BRAIN_TOKEN")
 
 
+def ai_tasks_openclaw_auth_url(action: str) -> str:
+    if action not in {"start", "status"}:
+        raise AITaskError("ai_task_openclaw_auth_action_invalid")
+    configured_url = AI_TASKS_WEB_BRAIN_URL or AI_TASKS_BRAIN_URL
+    if not configured_url:
+        raise AITaskError("ai_task_openclaw_auth_not_configured")
+    parsed = urllib.parse.urlsplit(configured_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise AITaskError("ai_task_openclaw_auth_not_configured")
+    base_url = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
+    return f"{base_url}/internal/openclaw-auth/{action}"
+
+
+def _safe_openclaw_auth_url(value: object) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    try:
+        parsed = urllib.parse.urlsplit(raw)
+        port = parsed.port
+    except ValueError:
+        return ""
+    if (
+        parsed.scheme != "https"
+        or (parsed.hostname or "").lower() != "auth.openai.com"
+        or parsed.username is not None
+        or parsed.password is not None
+        or port not in {None, 443}
+        or parsed.path not in {"/codex/device", "/oauth/authorize"}
+        or parsed.fragment
+    ):
+        return ""
+    return urllib.parse.urlunsplit(("https", "auth.openai.com", parsed.path, parsed.query, ""))
+
+
+def _clean_openclaw_auth_payload(payload: object) -> dict[str, object]:
+    if not isinstance(payload, dict) or payload.get("ok") is not True:
+        raise AITaskError("ai_task_openclaw_auth_invalid_response")
+    status = str(payload.get("status") or "").strip().lower()
+    allowed_statuses = {
+        "idle",
+        "starting",
+        "waiting_for_device",
+        "waiting_for_callback",
+        "submitting",
+        "succeeded",
+        "failed",
+    }
+    if status not in allowed_statuses:
+        raise AITaskError("ai_task_openclaw_auth_invalid_response")
+    verification_url = _safe_openclaw_auth_url(payload.get("verificationUrl") or payload.get("oauthUrl"))
+    user_code = str(payload.get("userCode") or "").strip().upper()
+    if not re.fullmatch(r"[A-Z0-9][A-Z0-9-]{1,62}[A-Z0-9]", user_code):
+        user_code = ""
+    if status == "waiting_for_device" and (not verification_url or not user_code):
+        raise AITaskError("ai_task_openclaw_auth_invalid_response")
+
+    def safe_timestamp(name: str) -> float:
+        value = payload.get(name)
+        if value is None or value == "":
+            return 0.0
+        if (
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and math.isfinite(value)
+            and value >= 0
+        ):
+            return float(value)
+        raise AITaskError("ai_task_openclaw_auth_invalid_response")
+
+    result: dict[str, object] = {
+        "ok": True,
+        "status": status,
+        "verificationUrl": verification_url,
+        "oauthUrl": verification_url,
+        "startedAt": safe_timestamp("startedAt"),
+        "completedAt": safe_timestamp("completedAt"),
+    }
+    if user_code and status in {"starting", "waiting_for_device", "waiting_for_callback", "submitting"}:
+        result["userCode"] = user_code
+    return result
+
+
+def openclaw_auth_payload(
+    action: str,
+    *,
+    urlopen=urllib.request.urlopen,
+) -> dict[str, object]:
+    token = ai_task_brain_token()
+    if not token:
+        raise AITaskError("ai_task_brain_token_missing")
+    method = "POST" if action == "start" else "GET"
+    request = urllib.request.Request(
+        ai_tasks_openclaw_auth_url(action),
+        data=b"{}" if method == "POST" else None,
+        method=method,
+        headers={
+            "Accept": "application/json",
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "User-Agent": "KaosGovernor/ai-tasks",
+        },
+    )
+    try:
+        with urlopen(request, timeout=AI_TASKS_BRAIN_TIMEOUT_SECONDS) as response:
+            raw = response.read()
+    except urllib.error.HTTPError as exc:
+        upstream_error = ""
+        try:
+            upstream_payload = json.loads(exc.read().decode("utf-8"))
+            if isinstance(upstream_payload, dict):
+                upstream_error = str(upstream_payload.get("error") or "")
+        except Exception:
+            upstream_error = ""
+        safe_errors = {
+            "kaosbrain_ai_task_unauthorized": "kaosbrain_ai_task_unauthorized",
+            "openclaw_reauth_not_configured": "ai_task_openclaw_auth_not_configured",
+            "openclaw_reauth_unavailable": "ai_task_openclaw_auth_unavailable",
+        }
+        raise AITaskError(safe_errors.get(upstream_error, "ai_task_openclaw_auth_unavailable")) from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise AITaskError("ai_task_openclaw_auth_unavailable") from exc
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise AITaskError("ai_task_openclaw_auth_invalid_response") from exc
+    return _clean_openclaw_auth_payload(payload)
+
+
 def list_ai_tasks_payload(
     query_string: str = "",
     archive: AITaskArchive | None = None,
@@ -2111,7 +2241,11 @@ def call_ai_task_official_web_brain(
                 code = str(body.get("error") or f"ai_task_official_web_brain_http_{exc.code}")
             except Exception:
                 code = f"ai_task_official_web_brain_http_{exc.code}"
-            if attempt == 0 and (code in retryable_errors or exc.code in {502, 503, 504}):
+            if (
+                attempt == 0
+                and code != "kaosbrain_openai_auth_required"
+                and (code in retryable_errors or exc.code in {502, 503, 504})
+            ):
                 continue
             raise AITaskError(code) from exc
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
@@ -3679,6 +3813,17 @@ class Handler(BaseHTTPRequestHandler):
                 print(f"Supplies presets failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "supplies_unavailable"})
             return
+        if parsed.path == "/api/ai-tasks/openclaw-auth/status":
+            try:
+                require_main_access(self.headers)
+                json_response(self, 200, openclaw_auth_payload("status"))
+            except (ValueError, AITaskError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, (AITaskError, memos_relay.MemosRelayError)) else str(exc)
+                json_response(self, ai_task_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"OpenClaw auth status failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "ai_task_openclaw_auth_unavailable"})
+            return
         if parsed.path == "/api/ai-tasks":
             try:
                 profile = require_ai_task_access(self.headers)
@@ -4098,6 +4243,17 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 print(f"AI task start failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "ai_task_start_failed"})
+            return
+        if parsed.path == "/api/ai-tasks/openclaw-auth/start":
+            try:
+                require_main_access(self.headers)
+                json_response(self, 200, openclaw_auth_payload("start"))
+            except (ValueError, AITaskError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, (AITaskError, memos_relay.MemosRelayError)) else str(exc)
+                json_response(self, ai_task_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"OpenClaw auth start failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "ai_task_openclaw_auth_unavailable"})
             return
         if parsed.path == "/api/ai-tasks/official-doc-memo/preview":
             try:

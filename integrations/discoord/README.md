@@ -24,6 +24,18 @@ Every interaction must match configured server, channel, and user
 allowlists. It requests Message Content intent only when the optional
 Discord fax upload/reply flow is enabled. It has no public HTTP route.
 
+The read-only H4 maintenance probe loads the configured OpenClaw state and
+config paths, selects Node 24 through `nvm` when available, and runs
+`openclaw models status --json`. The raw response is kept in a mode-0600
+temporary file and removed after an on-host parser emits only the normalized
+OpenAI auth status and expiry timestamp. Profile IDs, labels, paths, and
+credentials never enter the maintenance report. Renewal is scheduled for the
+KST calendar day before the reported `expiresAt`; explicit `missing`,
+`expired`, or expiry-less `expiring` states are actionable immediately. Reports
+created before this probe retain the old config-timestamp estimate only as a
+labelled compatibility fallback. Regenerate the maintenance report after each
+reauthentication so future reminders use the new credential expiry.
+
 Version `0.6.0` also exposes the first narrow Governor tool API on the same
 loopback-bound listener:
 

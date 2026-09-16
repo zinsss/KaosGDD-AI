@@ -214,9 +214,11 @@ host checkout with one command:
 ```
 
 The helper loads the KaosGDD OpenClaw state path, switches to the required Node
-runtime through `nvm` when needed, starts the OpenAI OAuth flow, accepts the
-callback URL or authorization code, restarts `openclaw-gateway.service`, and
-prints the non-secret auth profile status.
+runtime through `nvm` when needed, and starts OpenAI's device-pairing flow. Open
+the displayed URL on any device and enter the displayed one-time code; no
+localhost callback needs to be copied back to H4. After authorization, the
+helper restarts `openclaw-gateway.service` and prints the non-secret auth
+profile status.
 
 For Discord-driven renewal, install the H4-local reauth agent. It is a separate
 loopback-only service with a bearer token, so the Brain container does not get
@@ -231,9 +233,15 @@ The agent exposes only:
 
 ```text
 POST /reauth/openai/start
-POST /reauth/openai/callback
+POST /reauth/openai/callback  # legacy compatibility; rejected during device pairing
 GET  /reauth/openai/status
 ```
+
+Authenticated `start` and `status` responses return `verificationUrl` and the
+short-lived `userCode` while pairing is pending. The unauthenticated health
+response contains only service health, and command output is redacted before it
+is returned. Device pairing completes asynchronously, so clients should poll
+`status` until it reports `succeeded` or `failed`.
 
 The setup command creates:
 
@@ -243,11 +251,19 @@ The setup command creates:
 ~/.config/systemd/user/kaosai-openclaw-reauth-agent.service
 ```
 
-After the first install, update from the host checkout with:
+After the first install, update Brain from the host checkout with:
 
 ```bash
 cd /srv/projects/KaosGDD-AI
 ./deploy/kaosbrain/kaosbrain deploy
+```
+
+When the reauth agent package or unit changes, reinstall and restart that
+separate user service explicitly:
+
+```bash
+./deploy/kaosbrain/kaosbrain openclaw-reauth-agent-setup
+./deploy/kaosbrain/kaosbrain openclaw-reauth-agent-up
 ```
 
 ## Verify

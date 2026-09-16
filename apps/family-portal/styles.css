@@ -7856,6 +7856,103 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   border-color: rgba(235, 203, 139, 0.62);
 }
 
+.app[data-profile="main"][data-route="ai-tasks"] .openclawAuthCard {
+  display: grid;
+  gap: 10px;
+  width: min(100%, 640px);
+  border: 1px solid rgba(235, 203, 139, 0.58);
+  background: rgba(46, 52, 64, 0.72);
+  padding: 12px;
+  color: var(--archive-text);
+  outline: none;
+}
+
+.app[data-profile="main"][data-route="ai-tasks"] .openclawAuthCard:focus-visible {
+  border-color: var(--archive-cyan);
+}
+
+.app[data-profile="main"][data-route="ai-tasks"] .openclawAuthCardHeader {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.app[data-profile="main"][data-route="ai-tasks"] .openclawAuthCardHeader > div {
+  min-width: 0;
+}
+
+.app[data-profile="main"][data-route="ai-tasks"] .openclawAuthCardHeader p,
+.app[data-profile="main"][data-route="ai-tasks"] .openclawAuthCardHeader h4,
+.app[data-profile="main"][data-route="ai-tasks"] .openclawAuthMessage,
+.app[data-profile="main"][data-route="ai-tasks"] .openclawAuthError {
+  margin: 0;
+}
+
+.app[data-profile="main"][data-route="ai-tasks"] .openclawAuthCardHeader p {
+  color: var(--archive-cyan);
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.05em;
+}
+
+.app[data-profile="main"][data-route="ai-tasks"] .openclawAuthCardHeader h4 {
+  margin-top: 3px;
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+.app[data-profile="main"][data-route="ai-tasks"] .openclawAuthStatus {
+  flex: 0 0 auto;
+  color: var(--archive-muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.app[data-profile="main"][data-route="ai-tasks"] .openclawAuthStatus.is-succeeded {
+  color: var(--nord14);
+}
+
+.app[data-profile="main"][data-route="ai-tasks"] .openclawAuthStatus.is-failed,
+.app[data-profile="main"][data-route="ai-tasks"] .openclawAuthError {
+  color: var(--archive-error);
+}
+
+.app[data-profile="main"][data-route="ai-tasks"] .openclawAuthMessage,
+.app[data-profile="main"][data-route="ai-tasks"] .openclawAuthError {
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.app[data-profile="main"][data-route="ai-tasks"] .openclawAuthMessage {
+  color: var(--archive-muted);
+}
+
+.app[data-profile="main"][data-route="ai-tasks"] .openclawAuthPairing {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.app[data-profile="main"][data-route="ai-tasks"] .openclawAuthCode {
+  min-width: 9ch;
+  border: 1px solid var(--archive-line);
+  background: var(--archive-bg);
+  padding: 0.65rem 0.8rem;
+  color: var(--archive-amber);
+  font: 850 1rem/1 "Sarasa Gothic Mono", ui-monospace, monospace;
+  letter-spacing: 0.09em;
+  text-align: center;
+  user-select: all;
+}
+
+.app[data-profile="main"][data-route="ai-tasks"] .openclawAuthActions {
+  justify-content: flex-start;
+}
+
 .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"], [data-profile="family"][data-route="memos"]) .archiveNotice {
   border: 1px solid rgba(235, 203, 139, 0.58);
   padding: 12px;

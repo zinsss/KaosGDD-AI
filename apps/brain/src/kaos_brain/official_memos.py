@@ -6,7 +6,12 @@ from typing import Any, Mapping
 from aiohttp import web
 
 from .config import Settings
-from .kaos_ai import KaosAIConfig, KaosAIError, OpenClawKaosAIPlanner
+from .kaos_ai import (
+    KaosAIConfig,
+    KaosAIError,
+    OpenClawAuthRequired,
+    OpenClawKaosAIPlanner,
+)
 
 
 MAX_OFFICIAL_MEMO_PROMPT_CHARS = 1200
@@ -65,6 +70,11 @@ class BrainOfficialMemoServer:
             return web.json_response({"ok": False, "error": error}, status=400)
         try:
             memo = await self.kaosai.preview_official_memo(body)
+        except OpenClawAuthRequired:
+            return web.json_response(
+                {"ok": False, "error": "kaosbrain_openai_auth_required"},
+                status=502,
+            )
         except KaosAIError as exc:
             return web.json_response(
                 {

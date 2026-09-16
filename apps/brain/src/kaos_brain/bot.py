@@ -229,15 +229,21 @@ async def _start_reauth_message(reauth: OpenClawReauthClient) -> str:
         payload = await reauth.start()
     except ReauthError as exc:
         return f"KaosBrain-OpenAI login renewal failed to start: `{exc}`"
-    oauth_url = str(payload.get("oauthUrl") or "").strip()
+    verification_url = str(payload.get("verificationUrl") or payload.get("oauthUrl") or "").strip()
+    user_code = str(payload.get("userCode") or "").strip()
     status = str(payload.get("status") or "").strip() or "unknown"
-    if not oauth_url:
-        return f"KaosBrain-OpenAI login renewal started, but no login URL is available yet. Status: `{status}`"
+    if not verification_url or not user_code:
+        return (
+            "KaosBrain-OpenAI login renewal started, but the device-pairing URL and code "
+            f"are not available yet. Status: `{status}`. Try again shortly."
+        )
     return "\n".join(
         [
             "## KaosBrain-OpenAI login renewal",
-            "Open this URL, sign in, then paste the callback URL here.",
-            oauth_url,
+            "Open this URL and enter the one-time code:",
+            verification_url,
+            f"`{user_code}`",
+            "Authorization completes automatically. Do not paste a callback URL here.",
         ]
     )
 
