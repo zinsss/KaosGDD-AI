@@ -713,7 +713,7 @@ html.isAgendaSuppliesEmbed body {
   }
 }
 
-@media (max-width: 1179px) and (hover: hover) and (pointer: fine) {
+@media (max-width: 1179px) and (display-mode: browser) {
   .app[data-profile="main"] .appTop {
     gap: 7px;
   }

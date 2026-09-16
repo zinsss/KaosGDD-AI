@@ -54,7 +54,7 @@ test("notifications stays routable without adding another main menu item", () =>
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=353"');
+  const styleIndex = index.indexOf('href="/styles.css?v=354"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=8"');
   const calendarViewIndex = index.indexOf('src="/calendar-view.js?v=2"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
@@ -208,11 +208,11 @@ test("main desktop navigation renders an open list while preserving the mobile p
   assert.match(styles, /\.app\[data-profile="main"\] \.topHeaderActions \{\n    position: absolute;\n    top: 16px;\n    right: 16px;/);
 });
 
-test("fine-pointer mobile layout uses the themed compact menu", () => {
+test("narrow browser layout uses the themed compact menu", () => {
   const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
   const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
 
-  assert.match(styles, /@media \(max-width: 1179px\) and \(hover: hover\) and \(pointer: fine\)/);
+  assert.match(styles, /@media \(max-width: 1179px\) and \(display-mode: browser\)/);
   assert.match(styles, /\.app\[data-profile="main"\] \.mainMenuPicker select \{\s*display: none;/);
   assert.match(styles, /\.compactMainMenuPopup \{[\s\S]*background: rgba\(37, 43, 54, 0\.98\);/);
   assert.match(styles, /\.compactMainMenuPopup a\.isActive \{[\s\S]*color: var\(--nord13\);/);
