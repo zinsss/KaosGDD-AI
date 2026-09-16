@@ -478,6 +478,10 @@ html.isAgendaSuppliesEmbed body {
   display: none;
 }
 
+.compactMainMenu {
+  display: none;
+}
+
 .topAddWrap {
   position: relative;
 }
@@ -706,6 +710,109 @@ html.isAgendaSuppliesEmbed body {
 
   .app[data-profile="main"] .mainMenuPicker select {
     text-align: right;
+  }
+}
+
+@media (max-width: 1179px) and (hover: hover) and (pointer: fine) {
+  .app[data-profile="main"] .appTop {
+    gap: 7px;
+  }
+
+  .app[data-profile="main"] .mainMenuPicker {
+    justify-self: start;
+  }
+
+  .app[data-profile="main"] .mainMenuPicker select {
+    display: none;
+  }
+
+  .app[data-profile="main"] .compactMainMenu {
+    position: relative;
+    display: block;
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: start;
+  }
+
+  .compactMainMenuButton {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 44px;
+    padding: 0 2px;
+    border: 0;
+    background: transparent;
+    color: var(--nord13);
+    font: 700 1.18rem/1 "Sarasa Gothic Mono", ui-monospace, monospace;
+  }
+
+  .compactMainMenuButton:hover,
+  .compactMainMenuButton:focus-visible,
+  .compactMainMenuButton[aria-expanded="true"] {
+    color: var(--nord13);
+    outline: 0;
+    background: rgba(235, 203, 139, 0.08);
+  }
+
+  .compactMainMenuChevron {
+    color: var(--nord8);
+    font-size: 0.78rem;
+    transition: transform 120ms ease;
+  }
+
+  .compactMainMenuButton[aria-expanded="true"] .compactMainMenuChevron {
+    transform: rotate(180deg);
+  }
+
+  .compactMainMenuPopup {
+    position: absolute;
+    top: calc(100% + 2px);
+    left: 0;
+    z-index: 70;
+    display: grid;
+    width: max-content;
+    min-width: 176px;
+    max-height: min(70vh, 520px);
+    padding: 4px;
+    overflow-y: auto;
+    border: 1px solid rgba(136, 192, 208, 0.38);
+    background: rgba(37, 43, 54, 0.98);
+    box-shadow: 0 16px 32px rgba(9, 12, 18, 0.52);
+    scrollbar-width: none;
+  }
+
+  .compactMainMenuPopup[hidden] {
+    display: none;
+  }
+
+  .compactMainMenuPopup::-webkit-scrollbar {
+    display: none;
+  }
+
+  .compactMainMenuPopup a {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    min-height: 36px;
+    padding: 0 10px;
+    border-left: 2px solid transparent;
+    color: var(--nord4);
+    font: 600 0.88rem/1 "Sarasa Gothic Mono", ui-monospace, monospace;
+  }
+
+  .compactMainMenuPopup a:hover,
+  .compactMainMenuPopup a:focus-visible {
+    outline: 0;
+    border-left-color: var(--nord8);
+    background: rgba(136, 192, 208, 0.1);
+    color: var(--nord6);
+  }
+
+  .compactMainMenuPopup a.isActive {
+    border-left-color: var(--nord13);
+    background: rgba(235, 203, 139, 0.1);
+    color: var(--nord13);
   }
 }
 

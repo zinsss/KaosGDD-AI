@@ -5558,6 +5558,7 @@ function renderTopNav(route) {
   const activeRoute = activeNavRoute(route);
   if (portalProfile() === "main") {
     const selectedRoute = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(activeRoute) || "today";
+    const selectedItem = profileConfig().nav.find((item) => item.route === selectedRoute) || profileConfig().nav[0];
     const topAction = topAddActionForRoute(route);
     nav.innerHTML = `
       <div class="mainMenuPicker">
@@ -5567,6 +5568,21 @@ function renderTopNav(route) {
             <option value="${escapeHtml(item.route)}" ${item.route === selectedRoute ? "selected" : ""}>${escapeHtml(mainMenuLabelWithAttention(item))}</option>
           `).join("")}
         </select>
+        <div class="compactMainMenu" data-compact-main-menu>
+          <button class="compactMainMenuButton" type="button" data-compact-main-menu-toggle aria-haspopup="true" aria-expanded="false">
+            <span>${escapeHtml(selectedItem?.label || "Agenda")}</span>
+            ${renderMainMenuAttentionDot(selectedRoute)}
+            <span class="compactMainMenuChevron" aria-hidden="true">⌄</span>
+          </button>
+          <nav class="compactMainMenuPopup" data-compact-main-menu-popup aria-label="Main menu" hidden>
+            ${profileConfig().nav.map((item) => `
+              <a href="#/${item.route}" data-compact-main-menu-route="${escapeHtml(item.route)}" class="${item.route === selectedRoute ? "isActive" : ""}" ${item.route === selectedRoute ? 'aria-current="page"' : ""}>
+                <span>${escapeHtml(item.label)}</span>
+                ${renderMainMenuAttentionDot(item.route)}
+              </a>
+            `).join("")}
+          </nav>
+        </div>
         <nav class="desktopMainMenuList" aria-label="Desktop main menu">
           ${profileConfig().nav.map((item) => `
             <a href="#/${item.route}" data-desktop-main-menu="${escapeHtml(item.route)}" class="${item.route === selectedRoute ? "isActive" : ""}" ${item.route === selectedRoute ? 'aria-current="page"' : ""}>
@@ -5611,6 +5627,26 @@ function closeTopAddMenu() {
     menu.classList.remove("isOpen");
   }
   if (button) button.setAttribute("aria-expanded", "false");
+}
+
+function closeCompactMainMenu({ restoreFocus = false } = {}) {
+  const popup = document.querySelector("[data-compact-main-menu-popup]");
+  const button = document.querySelector("[data-compact-main-menu-toggle]");
+  if (popup) popup.hidden = true;
+  if (button) {
+    button.setAttribute("aria-expanded", "false");
+    if (restoreFocus) button.focus();
+  }
+}
+
+function toggleCompactMainMenu() {
+  const popup = document.querySelector("[data-compact-main-menu-popup]");
+  const button = document.querySelector("[data-compact-main-menu-toggle]");
+  if (!popup || !button) return;
+  const willOpen = popup.hidden;
+  closeTopAddMenu();
+  popup.hidden = !willOpen;
+  button.setAttribute("aria-expanded", String(willOpen));
 }
 
 function openTopAddMenu() {
@@ -9967,6 +10003,20 @@ function updateTopBarShadow() {
 }
 
 document.addEventListener("click", async (event) => {
+  const compactMainMenuToggle = event.target.closest("[data-compact-main-menu-toggle]");
+  if (compactMainMenuToggle) {
+    event.preventDefault();
+    toggleCompactMainMenu();
+    return;
+  }
+
+  if (event.target.closest("[data-compact-main-menu-route]")) {
+    closeCompactMainMenu();
+    return;
+  }
+
+  if (!event.target.closest("[data-compact-main-menu]")) closeCompactMainMenu();
+
   if (event.target.closest("[data-web-push-enable]")) {
     try {
       await window.KAOS_WEB_PUSH.enable();
@@ -11839,6 +11889,12 @@ document.addEventListener("keydown", (event) => {
   if (notificationsTrigger && (event.key === "Enter" || event.key === " ")) {
     event.preventDefault();
     notificationsTrigger.click();
+    return;
+  }
+
+  if (event.key === "Escape" && document.querySelector("[data-compact-main-menu-toggle][aria-expanded=\"true\"]")) {
+    event.preventDefault();
+    closeCompactMainMenu({ restoreFocus: true });
     return;
   }
 

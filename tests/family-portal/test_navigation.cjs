@@ -54,13 +54,13 @@ test("notifications stays routable without adding another main menu item", () =>
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=352"');
+  const styleIndex = index.indexOf('href="/styles.css?v=353"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=8"');
   const calendarViewIndex = index.indexOf('src="/calendar-view.js?v=2"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
   const faxIndex = index.indexOf('src="/fax.js?v=2"');
   const mailIndex = index.indexOf('src="/mail.js?v=7"');
-  const applicationIndex = index.indexOf('src="/app.js?v=344"');
+  const applicationIndex = index.indexOf('src="/app.js?v=345"');
   assert.ok(styleIndex >= 0);
   assert.ok(navigationIndex >= 0);
   assert.ok(calendarViewIndex > navigationIndex);
@@ -94,7 +94,7 @@ test("calendar month panel rendering is delegated to the view module", () => {
   assert.match(calendarViewSource, /data-date="\$\{cell\.value\}"/);
   assert.match(calendarViewSource, /data-calendar-add-event/);
   assert.match(index, /src="\/calendar-view\.js\?v=2"/);
-  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=344"'));
+  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=345"'));
   assert.match(calendarViewSource, /dayCaregiverMark" role="img"/);
   assert.match(calendarViewSource, /hasMarket \|\| eventCount \|\| taskCount/);
 });
@@ -190,6 +190,8 @@ test("main desktop navigation renders an open list while preserving the mobile p
   const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
 
   assert.match(appSource, /<select data-main-menu aria-label="Main menu">/);
+  assert.match(appSource, /data-compact-main-menu-toggle/);
+  assert.match(appSource, /data-compact-main-menu-popup/);
   assert.match(appSource, /class="desktopMainMenuList"/);
   assert.match(appSource, /data-desktop-main-menu/);
   assert.match(styles, /\.desktopMainMenuList \{\n  display: none;/);
@@ -204,6 +206,18 @@ test("main desktop navigation renders an open list while preserving the mobile p
   assert.match(styles, /@media \(min-width: 1180px\) \{[\s\S]*\.app\[data-profile="main"\] \.view \{[\s\S]*padding-top: 0;[\s\S]*padding-bottom: 40px;/);
   assert.match(styles, /@media \(min-width: 1180px\) \{[\s\S]*\.app\[data-profile="main"\]\[data-route="memos"\] \.view \{[\s\S]*padding-top: 0;[\s\S]*padding-bottom: 40px;/);
   assert.match(styles, /\.app\[data-profile="main"\] \.topHeaderActions \{\n    position: absolute;\n    top: 16px;\n    right: 16px;/);
+});
+
+test("fine-pointer mobile layout uses the themed compact menu", () => {
+  const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
+  const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
+
+  assert.match(styles, /@media \(max-width: 1179px\) and \(hover: hover\) and \(pointer: fine\)/);
+  assert.match(styles, /\.app\[data-profile="main"\] \.mainMenuPicker select \{\s*display: none;/);
+  assert.match(styles, /\.compactMainMenuPopup \{[\s\S]*background: rgba\(37, 43, 54, 0\.98\);/);
+  assert.match(styles, /\.compactMainMenuPopup a\.isActive \{[\s\S]*color: var\(--nord13\);/);
+  assert.match(appSource, /function toggleCompactMainMenu\(\)/);
+  assert.match(appSource, /closeCompactMainMenu\(\{ restoreFocus: true \}\)/);
 });
 
 test("main offers a global reload button while family reloads from its title", () => {
