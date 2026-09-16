@@ -97,6 +97,17 @@ set_env_value() {
   fi
 }
 
+ensure_upgrade_defaults() {
+  [[ -f "${ENV_FILE}" ]] || die "missing env file: ${ENV_FILE}; run ${0} setup"
+  load_env
+  if [[ "${KAOSAI_REAUTH_ENABLED:-false}" == "true" \
+    && -z "${KAOSBRAIN_AI_TASK_API_TOKEN:-}" \
+    && -z "${KAOSBRAIN_AI_TASK_API_TOKEN_FILE:-}" ]]; then
+    set_env_value KAOSBRAIN_AI_TASK_API_TOKEN_FILE /run/secrets/governor_api_token
+    info "Added KAOSBRAIN_AI_TASK_API_TOKEN_FILE for the OpenClaw reauth proxy."
+  fi
+}
+
 validate_internal_http_url() {
   local name=$1
   local url=$2
@@ -241,6 +252,9 @@ preflight() {
   if [[ "${KAOSAI_REAUTH_ENABLED:-false}" == "true" ]]; then
     [[ -n "${KAOSAI_REAUTH_BASE_URL:-}" ]] || die "KAOSAI_REAUTH_BASE_URL is required when KAOSAI_REAUTH_ENABLED=true"
     validate_internal_http_url "KAOSAI_REAUTH_BASE_URL" "${KAOSAI_REAUTH_BASE_URL}"
+    if [[ -z "${KAOSBRAIN_AI_TASK_API_TOKEN:-}" && -z "${KAOSBRAIN_AI_TASK_API_TOKEN_FILE:-}" ]]; then
+      die "KAOSBRAIN_AI_TASK_API_TOKEN or KAOSBRAIN_AI_TASK_API_TOKEN_FILE is required when KAOSAI_REAUTH_ENABLED=true"
+    fi
     if [[ -z "${KAOSAI_REAUTH_TOKEN:-}" ]]; then
       local reauth_token_path
       reauth_token_path=$(host_secret_path "${KAOSAI_REAUTH_TOKEN_FILE:-/run/secrets/kaosai_reauth_agent_token}")
@@ -455,6 +469,7 @@ PY
 }
 
 up() {
+  ensure_upgrade_defaults
   preflight
   ensure_runtime_dirs
   install_service_unit
