@@ -135,6 +135,22 @@
 }
 
 @font-face {
+  font-family: "SchoolSafetyKidariBalloon";
+  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/2511-1@1.0/HakgyoansimKidaripungseonL.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "SchoolSafetyHalfMoon";
+  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/2508-2@1.0/HakgyoansimBandalL.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
   font-family: "NixgonFont";
   src: url("./fonts/NIXGONL-Vb.woff?v=114") format("woff");
   font-weight: 300;
@@ -5522,6 +5538,18 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   font-family:
     "Watermelon", "NanumBarunPen", "Pretendard", ui-sans-serif, system-ui,
     -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.app[data-profile="family"][data-family-font="kidari-balloon"] {
+  font-family:
+    "SchoolSafetyKidariBalloon", "NanumBarunPen", "Pretendard", ui-sans-serif,
+    system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.app[data-profile="family"][data-family-font="halfmoon"] {
+  font-family:
+    "SchoolSafetyHalfMoon", "NanumBarunPen", "Pretendard", ui-sans-serif,
+    system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .app[data-profile="family"] .appTop {
