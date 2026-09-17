@@ -135,6 +135,22 @@
 }
 
 @font-face {
+  font-family: "SchoolSafeBoardMarker";
+  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/2511-1@1.0/HakgyoansimBoadmarkerR.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "SchoolSafetyMilkyWay";
+  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2402_keris@1.0/TTHakgyoansimEunhasuR.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
   font-family: "NixgonFont";
   src: url("./fonts/NIXGONL-Vb.woff?v=114") format("woff");
   font-weight: 300;
@@ -5522,6 +5538,18 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   font-family:
     "Watermelon", "NanumBarunPen", "Pretendard", ui-sans-serif, system-ui,
     -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.app[data-profile="family"][data-family-font="board-marker"] {
+  font-family:
+    "SchoolSafeBoardMarker", "NanumBarunPen", "Pretendard", ui-sans-serif,
+    system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.app[data-profile="family"][data-family-font="milky-way"] {
+  font-family:
+    "SchoolSafetyMilkyWay", "NanumBarunPen", "Pretendard", ui-sans-serif,
+    system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .app[data-profile="family"] .appTop {

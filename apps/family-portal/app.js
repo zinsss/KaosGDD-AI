@@ -76,6 +76,8 @@ const FAMILY_FONT_OPTIONS = new Set([
   "nixgon",
   "skybori",
   "watermelon",
+  "board-marker",
+  "milky-way",
 ]);
 const MAIN_FONT_STORAGE_KEY = "kaosgdd.v2.main.font.v1";
 const MAIN_FONT_OPTIONS = new Set(["pretendard", "orbit", "sarasa"]);
@@ -9893,6 +9895,8 @@ function renderFamilyFontSettingsRow() {
           <option value="nixgon" ${familyFontPreference() === "nixgon" ? "selected" : ""}>${uiText("settings.fontNixgon", "Nixgon")}</option>
           <option value="skybori" ${familyFontPreference() === "skybori" ? "selected" : ""}>${uiText("settings.fontSkybori", "SKYBORI")}</option>
           <option value="watermelon" ${familyFontPreference() === "watermelon" ? "selected" : ""}>${uiText("settings.fontWatermelon", "Watermelon")}</option>
+          <option value="board-marker" ${familyFontPreference() === "board-marker" ? "selected" : ""}>${uiText("settings.fontBoardMarker", "School Safe Board Marker")}</option>
+          <option value="milky-way" ${familyFontPreference() === "milky-way" ? "selected" : ""}>${uiText("settings.fontMilkyWay", "School Safety Milky Way")}</option>
         </select>
       </dd>
     </div>

@@ -62,13 +62,13 @@ test("notification categories point at the selector destination that can acknowl
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=358"');
+  const styleIndex = index.indexOf('href="/styles.css?v=359"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=9"');
   const calendarViewIndex = index.indexOf('src="/calendar-view.js?v=2"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
   const faxIndex = index.indexOf('src="/fax.js?v=2"');
   const mailIndex = index.indexOf('src="/mail.js?v=7"');
-  const applicationIndex = index.indexOf('src="/app.js?v=353"');
+  const applicationIndex = index.indexOf('src="/app.js?v=354"');
   assert.ok(styleIndex >= 0);
   assert.ok(navigationIndex >= 0);
   assert.ok(calendarViewIndex > navigationIndex);
@@ -90,18 +90,24 @@ test("mobile layout scrolls without a visible desktop scrollbar", () => {
   assert.match(styles, /\.view::\-webkit-scrollbar \{\s*display: none;\s*width: 0;\s*height: 0;/);
 });
 
-test("family font settings include the Watermelon web font", () => {
+test("family font settings include the custom web fonts", () => {
   const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
   const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
   const translations = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/translations.js"), "utf8");
 
-  assert.match(appSource, /FAMILY_FONT_OPTIONS = new Set\(\[[^\]]*"watermelon"/);
+  assert.match(appSource, /FAMILY_FONT_OPTIONS = new Set\(\[[^\]]*"watermelon"[^\]]*"board-marker"[^\]]*"milky-way"/);
   assert.match(appSource, /<option value="watermelon"/);
-  assert.doesNotMatch(appSource, /<option value="(?:kidari-balloon|halfmoon)"/);
+  assert.match(appSource, /<option value="board-marker"/);
+  assert.match(appSource, /<option value="milky-way"/);
   assert.match(styles, /font-family: "Watermelon";[\s\S]*EF_watermelonSalad\.woff2/);
+  assert.match(styles, /font-family: "SchoolSafeBoardMarker";[\s\S]*HakgyoansimBoadmarkerR\.woff2/);
+  assert.match(styles, /font-family: "SchoolSafetyMilkyWay";[\s\S]*TTHakgyoansimEunhasuR\.woff2/);
   assert.match(styles, /data-family-font="watermelon"[\s\S]*"Watermelon"/);
-  assert.doesNotMatch(styles, /SchoolSafety(?:KidariBalloon|HalfMoon)/);
+  assert.match(styles, /data-family-font="board-marker"[\s\S]*"SchoolSafeBoardMarker"/);
+  assert.match(styles, /data-family-font="milky-way"[\s\S]*"SchoolSafetyMilkyWay"/);
   assert.match(translations, /"settings\.fontWatermelon": "Watermelon"/);
+  assert.match(translations, /"settings\.fontBoardMarker": "학교안심 보드마커"/);
+  assert.match(translations, /"settings\.fontMilkyWay": "학교안심 은하수"/);
 });
 
 test("calendar month panel rendering is delegated to the view module", () => {
@@ -116,7 +122,7 @@ test("calendar month panel rendering is delegated to the view module", () => {
   assert.match(calendarViewSource, /data-date="\$\{cell\.value\}"/);
   assert.match(calendarViewSource, /data-calendar-add-event/);
   assert.match(index, /src="\/calendar-view\.js\?v=2"/);
-  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=353"'));
+  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=354"'));
   assert.match(calendarViewSource, /dayCaregiverMark" role="img"/);
   assert.match(calendarViewSource, /hasMarket \|\| eventCount \|\| taskCount/);
 });
