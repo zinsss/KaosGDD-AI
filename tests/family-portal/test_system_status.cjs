@@ -21,7 +21,7 @@ test("settings loads the read-only system status endpoint", () => {
   assert.match(systemStatusViewSource, /const worker = runtime\.worker \|\| \{\};/);
   assert.match(systemStatusViewSource, /Observation only\. No restart, deploy, reboot, shell, package-update, or system write controls are exposed in PWA\./);
   assert.match(indexSource, /src="\/system-status-view\.js\?v=2"/);
-  assert.ok(indexSource.indexOf('src="/system-status-view.js?v=2"') < indexSource.indexOf('src="/app.js?v=354"'));
+  assert.ok(indexSource.indexOf('src="/system-status-view.js?v=2"') < indexSource.indexOf('src="/app.js?v=355"'));
 });
 
 test("settings top add button is hidden because system writes are not exposed in PWA", () => {
@@ -54,6 +54,21 @@ test("main settings renders a compact KaosGDD settings terminal", () => {
   assert.match(styles, /\.app\[data-profile="main"\] \.settingsListCompact \{/);
 });
 
+test("main typography settings select Elice and step the saved font scale", () => {
+  assert.match(appSource, /MAIN_FONT_OPTIONS = new Set\(\[[^\]]*"elice"/);
+  assert.match(appSource, /MAIN_FONT_SCALE_OPTIONS = Object\.freeze\(\[90, 95, 100, 105, 110\]\)/);
+  assert.match(appSource, /<option value="elice"[^>]*>Elice Digital Baeum<\/option>/);
+  assert.match(appSource, /data-main-font-step="-1"/);
+  assert.match(appSource, /data-main-font-reset/);
+  assert.match(appSource, /data-main-font-step="1"/);
+  assert.match(appSource, /document\.documentElement\.style\.fontSize = `\$\{normalized\}%`/);
+  assert.match(appSource, /window\.localStorage\.setItem\(MAIN_FONT_SCALE_STORAGE_KEY, String\(normalized\)\)/);
+  assert.match(styles, /font-family: "EllisDigitalCoding";[\s\S]*EliceDigitalBaeum_Regular\.woff2/);
+  assert.match(styles, /font-family: "EllisDigitalCoding";[\s\S]*EliceDigitalBaeum_Bold\.woff2/);
+  assert.match(styles, /data-main-font="elice"[\s\S]*"EllisDigitalCoding"/);
+  assert.match(styles, /\.settingsTypographyControls \{/);
+});
+
 test("main settings avoids legacy editor stacks and keeps system writes out of PWA", () => {
   const mainSettingsStart = appSource.indexOf("function renderMainSettings()");
   const settingsStart = appSource.indexOf("function renderSettings()", mainSettingsStart);
@@ -75,7 +90,7 @@ test("custom event settings rendering is delegated to the settings view module",
   assert.match(settingsViewSource, /data-custom-events-sync/);
   assert.match(settingsViewSource, /Generated calendar events/);
   assert.match(indexSource, /src="\/settings-view\.js\?v=1"/);
-  assert.ok(indexSource.indexOf('src="/settings-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=354"'));
+  assert.ok(indexSource.indexOf('src="/settings-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=355"'));
 });
 
 test("holiday settings rendering is delegated to the settings view module", () => {

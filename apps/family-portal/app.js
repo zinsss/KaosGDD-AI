@@ -80,7 +80,9 @@ const FAMILY_FONT_OPTIONS = new Set([
   "milky-way",
 ]);
 const MAIN_FONT_STORAGE_KEY = "kaosgdd.v2.main.font.v1";
-const MAIN_FONT_OPTIONS = new Set(["pretendard", "orbit", "sarasa"]);
+const MAIN_FONT_OPTIONS = new Set(["pretendard", "orbit", "sarasa", "elice"]);
+const MAIN_FONT_SCALE_STORAGE_KEY = "kaosgdd.v2.main.fontScale.v1";
+const MAIN_FONT_SCALE_OPTIONS = Object.freeze([90, 95, 100, 105, 110]);
 const WEATHER_LOCATION_STORAGE_KEY = "kaosgdd.v2.weather.location.v1";
 const WEATHER_LOCATION_OPTIONS = [
   { id: "pohang", label: "Pohang", translationKey: "weather.locationPohang" },
@@ -5529,6 +5531,37 @@ function setMainFontPreference(value) {
   applyMainFontPreference(normalized);
 }
 
+function mainFontScalePreference() {
+  const stored = Number(window.localStorage.getItem(MAIN_FONT_SCALE_STORAGE_KEY));
+  return MAIN_FONT_SCALE_OPTIONS.includes(stored) ? stored : 100;
+}
+
+function applyMainFontScalePreference(value = mainFontScalePreference()) {
+  const app = document.querySelector(".app");
+  const normalized = MAIN_FONT_SCALE_OPTIONS.includes(Number(value)) ? Number(value) : 100;
+  if (!app || portalProfile() !== "main") {
+    document.documentElement.style.removeProperty("font-size");
+    if (app) delete app.dataset.mainFontScale;
+    return;
+  }
+  app.dataset.mainFontScale = String(normalized);
+  document.documentElement.style.fontSize = `${normalized}%`;
+}
+
+function setMainFontScalePreference(value) {
+  const requested = Number(value);
+  const normalized = MAIN_FONT_SCALE_OPTIONS.includes(requested) ? requested : 100;
+  window.localStorage.setItem(MAIN_FONT_SCALE_STORAGE_KEY, String(normalized));
+  applyMainFontScalePreference(normalized);
+}
+
+function stepMainFontScale(direction) {
+  const currentIndex = MAIN_FONT_SCALE_OPTIONS.indexOf(mainFontScalePreference());
+  const delta = Math.sign(Number(direction) || 0);
+  const nextIndex = Math.max(0, Math.min(MAIN_FONT_SCALE_OPTIONS.length - 1, currentIndex + delta));
+  setMainFontScalePreference(MAIN_FONT_SCALE_OPTIONS[nextIndex]);
+}
+
 function weatherLocationPreference() {
   const stored = window.localStorage.getItem(WEATHER_LOCATION_STORAGE_KEY) || "";
   return WEATHER_LOCATION_IDS.has(stored) ? stored : "pohang";
@@ -6211,6 +6244,7 @@ function routeTitle(route) {
   }
   applyFamilyFontPreference();
   applyMainFontPreference();
+  applyMainFontScalePreference();
   renderTopNav(route);
 }
 
@@ -9903,6 +9937,48 @@ function renderFamilyFontSettingsRow() {
   `;
 }
 
+function mainFontLabel(value = mainFontPreference()) {
+  const labels = {
+    sarasa: "Sarasa Gothic Mono",
+    elice: "Elice Digital Baeum",
+    pretendard: "Pretendard",
+    orbit: "Orbit",
+  };
+  return labels[value] || labels.sarasa;
+}
+
+function renderMainTypographySettings() {
+  const selectedFont = mainFontPreference();
+  const selectedScale = mainFontScalePreference();
+  return `
+    <section class="settingsStatusPanel settingsTypographyPanel">
+      <div class="settingsStatusHeader">
+        <strong>TYPOGRAPHY</strong>
+        <small>THIS DEVICE</small>
+      </div>
+      <div class="settingsTypographyControls">
+        <label>
+          <span>Font</span>
+          <select data-main-font-setting aria-label="Main font">
+            <option value="sarasa" ${selectedFont === "sarasa" ? "selected" : ""}>Sarasa Gothic Mono</option>
+            <option value="elice" ${selectedFont === "elice" ? "selected" : ""}>Elice Digital Baeum</option>
+            <option value="pretendard" ${selectedFont === "pretendard" ? "selected" : ""}>Pretendard</option>
+            <option value="orbit" ${selectedFont === "orbit" ? "selected" : ""}>Orbit</option>
+          </select>
+        </label>
+        <div class="settingsFontScaleControl">
+          <span>Font size</span>
+          <div class="settingsFontScaleActions">
+            <button class="archiveAction" type="button" data-main-font-step="-1" ${selectedScale <= MAIN_FONT_SCALE_OPTIONS[0] ? "disabled" : ""} aria-label="Decrease font size">A−</button>
+            <button class="archiveAction" type="button" data-main-font-reset aria-label="Reset font size">${selectedScale}%</button>
+            <button class="archiveAction" type="button" data-main-font-step="1" ${selectedScale >= MAIN_FONT_SCALE_OPTIONS.at(-1) ? "disabled" : ""} aria-label="Increase font size">A+</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
 function renderTextPresets() {
   return window.KAOS_TEXT_PRESETS.render(textPresetContext());
 }
@@ -10003,10 +10079,12 @@ function renderMainSettings() {
             ["Mobile", "PWA + iOS Shortcuts"],
             ["AI runtime", "Headless H4 + OpenClaw"],
             ["System writes", "KaosSystemOperator / Codex, not PWA"],
-            ["Font", "Sarasa Gothic Mono"],
+            ["Font", mainFontLabel()],
+            ["Font size", `${mainFontScalePreference()}%`],
           ])}
         </dl>
       </section>
+      ${renderMainTypographySettings()}
       ${renderSystemStatusPanel()}
       ${renderGovernorSettingsStatus({ showRecurringDetails: false })}
       ${renderWebPushSettings()}
@@ -10328,6 +10406,21 @@ document.addEventListener("click", async (event) => {
   }
 
   if (!event.target.closest("[data-compact-main-menu]")) closeCompactMainMenu();
+
+  const mainFontStep = event.target.closest("[data-main-font-step]");
+  if (mainFontStep) {
+    event.preventDefault();
+    stepMainFontScale(mainFontStep.dataset.mainFontStep);
+    render();
+    return;
+  }
+
+  if (event.target.closest("[data-main-font-reset]")) {
+    event.preventDefault();
+    setMainFontScalePreference(100);
+    render();
+    return;
+  }
 
   if (event.target.closest("[data-web-push-enable]")) {
     try {
@@ -12357,6 +12450,7 @@ document.addEventListener("change", async (event) => {
   const mainFont = event.target.closest("[data-main-font-setting]");
   if (mainFont) {
     setMainFontPreference(mainFont.value);
+    render();
     return;
   }
 

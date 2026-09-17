@@ -70,6 +70,22 @@
 }
 
 @font-face {
+  font-family: "EllisDigitalCoding";
+  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_220508@1.0/EliceDigitalBaeum_Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "EllisDigitalCoding";
+  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_220508@1.0/EliceDigitalBaeum_Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
   font-family: "Pretendard";
   src: url("./fonts/Pretendard-Regular.woff2?v=1") format("woff2");
   font-weight: 400;
@@ -4228,6 +4244,56 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   margin-top: 0;
 }
 
+.app[data-profile="main"] .settingsTypographyControls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.app[data-profile="main"] .settingsTypographyControls label,
+.app[data-profile="main"] .settingsFontScaleControl {
+  display: grid;
+  gap: 6px;
+}
+
+.app[data-profile="main"] .settingsTypographyControls label > span,
+.app[data-profile="main"] .settingsFontScaleControl > span {
+  color: var(--dim);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.app[data-profile="main"] .settingsTypographyControls select {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.app[data-profile="main"] .settingsFontScaleActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+}
+
+.app[data-profile="main"] .settingsFontScaleActions .archiveAction {
+  min-width: 3.5ch;
+  justify-content: center;
+}
+
+@media (max-width: 520px) {
+  .app[data-profile="main"] .settingsTypographyControls {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+}
+
 .app[data-profile="main"] .settingsLinkGrid {
   display: flex;
   flex-wrap: wrap;
@@ -5218,7 +5284,8 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 .app[data-profile="main"],
 .app[data-profile="main"][data-main-font="pretendard"],
 .app[data-profile="main"][data-main-font="orbit"],
-.app[data-profile="main"][data-main-font="sarasa"] {
+.app[data-profile="main"][data-main-font="sarasa"],
+.app[data-profile="main"][data-main-font="elice"] {
   --bg: #252b36;
   --panel: #2d3441;
   --surface: #28303c;
@@ -5226,9 +5293,36 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   --line: rgba(136, 192, 208, 0.24);
   --line-strong: rgba(216, 222, 233, 0.34);
   --shadow: rgba(9, 12, 18, 0.38);
+}
+
+.app[data-profile="main"],
+.app[data-profile="main"][data-main-font="sarasa"] {
   font-family:
     "Sarasa Gothic Mono", ui-monospace, "SFMono-Regular", Consolas,
     "Liberation Mono", monospace;
+}
+
+.app[data-profile="main"][data-main-font="pretendard"] {
+  font-family: "Pretendard", ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+.app[data-profile="main"][data-main-font="orbit"] {
+  font-family: "Orbit", "Pretendard", ui-sans-serif, system-ui, sans-serif;
+}
+
+.app[data-profile="main"][data-main-font="elice"] {
+  font-family: "EllisDigitalCoding", "Pretendard", ui-sans-serif, system-ui, sans-serif;
+}
+
+.app[data-profile="main"][data-main-font="elice"] :where(
+  .topReloadButton,
+  .topAddButton,
+  .compactMainMenuButton,
+  .compactMainMenuPopup,
+  .archiveTerminal,
+  .archiveTerminal *
+) {
+  font-family: "EllisDigitalCoding", "Pretendard", ui-sans-serif, system-ui, sans-serif !important;
 }
 
 .app[data-profile="main"] {
