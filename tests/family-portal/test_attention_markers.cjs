@@ -10,7 +10,8 @@ test("main shell derives quiet attention markers from existing read-only state",
   assert.match(appSource, /attention: \{\n    checked: false,\n    loading: false,/);
   assert.match(appSource, /function mainAttentionMarkers\(\) \{/);
   assert.match(appSource, /Number\(state\.notifications\.pendingCount \|\| 0\) > 0/);
-  assert.match(appSource, /String\(item\?\.category \|\| ""\)\.toLowerCase\(\) !== "daily"/);
+  assert.match(appSource, /String\(item\?\.category \|\| ""\)\.toLowerCase\(\) === "daily"/);
+  assert.match(appSource, /dateTimePartsInTimeZone\(createdAt\)\.date === attentionDate/);
   assert.match(appSource, /Number\(state\.mail\.attention\.pendingCount \|\| 0\) > 0/);
   assert.doesNotMatch(appSource, /mailApi\.filterItems\(state\.mail\.items, "yeongdeok"\)\.length \+ mailApi\.filterItems\(state\.mail\.items, "tax"\)\.length/);
   assert.doesNotMatch(appSource, /state\.mail\.unreadItems\.length > 0/);
@@ -34,6 +35,8 @@ test("main shell refreshes attention once from existing protected endpoints", ()
   assert.match(appSource, /loadFax\(\{ force \}\)/);
   assert.match(appSource, /loadSystemStatus\(\{ force \}\)/);
   assert.match(appSource, /if \(portalProfile\(\) === "main"\) void loadMainAttention\(\);/);
+  assert.match(appSource, /document\.addEventListener\("visibilitychange"/);
+  assert.match(appSource, /loadMainAttention\(\{ force: true \}\)/);
 });
 
 test("main logo and menu dots use amber attention and red critical colors", () => {

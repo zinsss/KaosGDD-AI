@@ -3401,9 +3401,13 @@ async function loadNotifications(options = {}) {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
     const notificationItems = Array.isArray(payload.items) ? payload.items : [];
-    const actionableItems = notificationItems.filter(
-      (item) => !item?.acknowledged && String(item?.category || "").toLowerCase() !== "daily",
-    );
+    const attentionDate = dateTimePartsInTimeZone(new Date()).date;
+    const actionableItems = notificationItems.filter((item) => {
+      if (item?.acknowledged || String(item?.category || "").toLowerCase() === "daily") return false;
+      const createdAt = new Date(String(item?.createdAt || ""));
+      if (Number.isNaN(createdAt.getTime())) return true;
+      return dateTimePartsInTimeZone(createdAt).date === attentionDate;
+    });
     state.notifications = {
       checked: true,
       loading: false,
@@ -12348,6 +12352,10 @@ document.addEventListener("change", async (event) => {
 document.getElementById("view")?.addEventListener("scroll", updateTopBarShadow, { passive: true });
 desktopMedia.addEventListener("change", render);
 window.addEventListener("resize", updateOverlayMetrics, { passive: true });
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible" || portalProfile() !== "main") return;
+  void loadMainAttention({ force: true });
+});
 
 window.setInterval(() => {
   if (portalProfile() === "family" && getRoute() === "today") render();
