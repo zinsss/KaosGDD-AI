@@ -127,6 +127,14 @@
 }
 
 @font-face {
+  font-family: "Watermelon";
+  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2210-EF@1.0/EF_watermelonSalad.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
   font-family: "NixgonFont";
   src: url("./fonts/NIXGONL-Vb.woff?v=114") format("woff");
   font-weight: 300;
@@ -5507,6 +5515,12 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 .app[data-profile="family"][data-family-font="skybori"] {
   font-family:
     "SKYBORI", "NanumBarunPen", "NixgonFont", ui-sans-serif, system-ui,
+    -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.app[data-profile="family"][data-family-font="watermelon"] {
+  font-family:
+    "Watermelon", "NanumBarunPen", "Pretendard", ui-sans-serif, system-ui,
     -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 

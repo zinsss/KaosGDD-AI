@@ -62,13 +62,13 @@ test("notification categories point at the selector destination that can acknowl
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=355"');
+  const styleIndex = index.indexOf('href="/styles.css?v=356"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=9"');
   const calendarViewIndex = index.indexOf('src="/calendar-view.js?v=2"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
   const faxIndex = index.indexOf('src="/fax.js?v=2"');
   const mailIndex = index.indexOf('src="/mail.js?v=7"');
-  const applicationIndex = index.indexOf('src="/app.js?v=350"');
+  const applicationIndex = index.indexOf('src="/app.js?v=351"');
   assert.ok(styleIndex >= 0);
   assert.ok(navigationIndex >= 0);
   assert.ok(calendarViewIndex > navigationIndex);
@@ -90,6 +90,18 @@ test("mobile layout scrolls without a visible desktop scrollbar", () => {
   assert.match(styles, /\.view::\-webkit-scrollbar \{\s*display: none;\s*width: 0;\s*height: 0;/);
 });
 
+test("family font settings include the Watermelon web font", () => {
+  const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
+  const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
+  const translations = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/translations.js"), "utf8");
+
+  assert.match(appSource, /FAMILY_FONT_OPTIONS = new Set\(\[[^\]]*"watermelon"/);
+  assert.match(appSource, /<option value="watermelon"/);
+  assert.match(styles, /font-family: "Watermelon";[\s\S]*EF_watermelonSalad\.woff2/);
+  assert.match(styles, /data-family-font="watermelon"[\s\S]*"Watermelon"/);
+  assert.match(translations, /"settings\.fontWatermelon": "Watermelon"/);
+});
+
 test("calendar month panel rendering is delegated to the view module", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
   const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
@@ -102,7 +114,7 @@ test("calendar month panel rendering is delegated to the view module", () => {
   assert.match(calendarViewSource, /data-date="\$\{cell\.value\}"/);
   assert.match(calendarViewSource, /data-calendar-add-event/);
   assert.match(index, /src="\/calendar-view\.js\?v=2"/);
-  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=350"'));
+  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=351"'));
   assert.match(calendarViewSource, /dayCaregiverMark" role="img"/);
   assert.match(calendarViewSource, /hasMarket \|\| eventCount \|\| taskCount/);
 });

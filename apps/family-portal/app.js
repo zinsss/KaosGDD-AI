@@ -70,7 +70,7 @@ const ROUNY_SYNC_DIRTY_KEY = "kaosgdd.v2.rouny.syncDirty.v1";
 const EVENT_PRESET_STORAGE_KEY = "kaosgdd.v2.eventPresets.v1";
 const COMPOSER_RECOVERY_STORAGE_KEY = "kaosgdd.v2.composerRecovery.v1";
 const FAMILY_FONT_STORAGE_KEY = "kaosgdd.v2.family.font.v1";
-const FAMILY_FONT_OPTIONS = new Set(["nanum", "pretendard", "nixgon", "skybori"]);
+const FAMILY_FONT_OPTIONS = new Set(["nanum", "pretendard", "nixgon", "skybori", "watermelon"]);
 const MAIN_FONT_STORAGE_KEY = "kaosgdd.v2.main.font.v1";
 const MAIN_FONT_OPTIONS = new Set(["pretendard", "orbit", "sarasa"]);
 const WEATHER_LOCATION_STORAGE_KEY = "kaosgdd.v2.weather.location.v1";
@@ -9886,6 +9886,7 @@ function renderFamilyFontSettingsRow() {
           <option value="pretendard" ${familyFontPreference() === "pretendard" ? "selected" : ""}>${uiText("settings.fontPretendard", "Pretendard")}</option>
           <option value="nixgon" ${familyFontPreference() === "nixgon" ? "selected" : ""}>${uiText("settings.fontNixgon", "Nixgon")}</option>
           <option value="skybori" ${familyFontPreference() === "skybori" ? "selected" : ""}>${uiText("settings.fontSkybori", "SKYBORI")}</option>
+          <option value="watermelon" ${familyFontPreference() === "watermelon" ? "selected" : ""}>${uiText("settings.fontWatermelon", "Watermelon")}</option>
         </select>
       </dd>
     </div>

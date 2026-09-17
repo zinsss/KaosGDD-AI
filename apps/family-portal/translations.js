@@ -374,6 +374,7 @@ window.KAOS_TRANSLATIONS = {
     "settings.fontPretendard": "프리텐다드",
     "settings.fontNixgon": "닉스곤",
     "settings.fontSkybori": "SKYBORI",
+    "settings.fontWatermelon": "Watermelon",
     "settings.textPresets": "차팅 프리셋",
     "settings.textPresetsCount": "{count}개 저장됨",
     "settings.textPresetsEmptySummary": "저장된 차팅 없음",
