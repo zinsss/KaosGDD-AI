@@ -37,5 +37,13 @@
     return personalRoutes.has(selected) ? selected : "today";
   }
 
-  return Object.freeze({ personalMenu, selectedPersonalRoute });
+  function notificationRoute(category) {
+    const normalized = String(category || "").trim().toLowerCase();
+    if (normalized === "mail") return "mail";
+    if (normalized === "fax") return "fax";
+    if (normalized === "maintenance" || normalized === "system") return "settings";
+    return "notifications";
+  }
+
+  return Object.freeze({ personalMenu, selectedPersonalRoute, notificationRoute });
 });

@@ -509,6 +509,7 @@ const state = {
 
 let remoteCalendarRequestId = 0;
 let renderedRoute = "";
+const acknowledgingNotificationRoutes = new Set();
 
 const mockCalendarData = {
   collections: [],
@@ -3401,13 +3402,9 @@ async function loadNotifications(options = {}) {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
     const notificationItems = Array.isArray(payload.items) ? payload.items : [];
-    const attentionDate = dateTimePartsInTimeZone(new Date()).date;
-    const actionableItems = notificationItems.filter((item) => {
-      if (item?.acknowledged || String(item?.category || "").toLowerCase() === "daily") return false;
-      const createdAt = new Date(String(item?.createdAt || ""));
-      if (Number.isNaN(createdAt.getTime())) return true;
-      return dateTimePartsInTimeZone(createdAt).date === attentionDate;
-    });
+    const actionableItems = notificationItems.filter(
+      (item) => !item?.acknowledged && String(item?.category || "").toLowerCase() !== "daily",
+    );
     state.notifications = {
       checked: true,
       loading: false,
@@ -3431,19 +3428,65 @@ async function loadNotifications(options = {}) {
   if (getRoute() === "notifications") render();
 }
 
+function notificationRoute(item) {
+  return window.KAOS_PORTAL_NAVIGATION?.notificationRoute(item?.category) || "notifications";
+}
+
+function pendingNotificationsForRoute(route) {
+  const selectedRoute = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(activeNavRoute(route)) || "today";
+  return state.notifications.items.filter((item) => (
+    !item?.acknowledged
+    && String(item?.category || "").toLowerCase() !== "daily"
+    && notificationRoute(item) === selectedRoute
+  ));
+}
+
+async function acknowledgeNotificationIds(ids) {
+  const uniqueIds = [...new Set((Array.isArray(ids) ? ids : []).filter(Boolean).map(String))];
+  if (!uniqueIds.length) return;
+  await Promise.allSettled(uniqueIds.map((id) => fetch(`/api/notifications/${encodeURIComponent(id)}/acknowledge`, {
+    method: "POST",
+    headers: { Accept: "application/json" },
+  })));
+  state.notifications.checked = false;
+  await loadNotifications({ force: true });
+}
+
+function notificationRouteIsViewed(route) {
+  const selectedRoute = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(activeNavRoute(route)) || "today";
+  const currentRoute = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(activeNavRoute(getRoute())) || "today";
+  if (selectedRoute !== currentRoute) return false;
+  if (selectedRoute === "mail") {
+    return state.mail.mode === "unread"
+      ? state.mail.unreadChecked && !state.mail.unreadError
+      : state.mail.checked && !state.mail.error;
+  }
+  if (selectedRoute === "fax") return state.fax.checked && !state.fax.error;
+  if (selectedRoute === "settings") return state.systemStatus.checked && !state.systemStatus.error;
+  return false;
+}
+
+async function acknowledgeViewedRouteNotifications(route) {
+  const selectedRoute = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(activeNavRoute(route)) || "today";
+  if (!["mail", "fax", "settings"].includes(selectedRoute) || acknowledgingNotificationRoutes.has(selectedRoute)) return;
+  if (!notificationRouteIsViewed(selectedRoute)) return;
+  const ids = pendingNotificationsForRoute(selectedRoute).map((item) => item.id);
+  if (!ids.length) return;
+  acknowledgingNotificationRoutes.add(selectedRoute);
+  try {
+    await acknowledgeNotificationIds(ids);
+  } finally {
+    acknowledgingNotificationRoutes.delete(selectedRoute);
+  }
+}
+
 async function acknowledgeBriefingNotifications(items) {
   const ids = [...new Set(
     (Array.isArray(items) ? items : [])
       .filter((item) => item?.source === "notification" && item.id && !item.acknowledged)
       .map((item) => String(item.id)),
   )];
-  if (!ids.length) return;
-  await Promise.allSettled(ids.map((id) => fetch(`/api/notifications/${encodeURIComponent(id)}/acknowledge`, {
-    method: "POST",
-    headers: { Accept: "application/json" },
-  })));
-  state.notifications.checked = false;
-  await loadNotifications({ force: true });
+  await acknowledgeNotificationIds(ids);
 }
 
 async function loadTodayBriefing({ force = false } = {}) {
@@ -3655,6 +3698,9 @@ async function loadFax(options = {}) {
   }
   refreshMainAttentionShell();
   if (getRoute() === "fax") render();
+  if (getRoute() === "fax" && state.fax.checked && !state.fax.error) {
+    void acknowledgeViewedRouteNotifications("fax");
+  }
 }
 
 function refreshFax() {
@@ -3745,6 +3791,9 @@ async function loadMail(options = {}) {
   }
   refreshMainAttentionShell();
   if (getRoute() === "mail") render();
+  if (getRoute() === "mail" && state.mail.checked && !state.mail.error) {
+    void acknowledgeViewedRouteNotifications("mail");
+  }
 }
 
 async function loadMailAttention(options = {}) {
@@ -3834,6 +3883,9 @@ async function loadUnreadMail(options = {}) {
   }
   refreshMainAttentionShell();
   if (getRoute() === "mail") render();
+  if (getRoute() === "mail" && state.mail.unreadChecked && !state.mail.unreadError) {
+    void acknowledgeViewedRouteNotifications("mail");
+  }
 }
 
 function unreadMailAction(item) {
@@ -5605,6 +5657,9 @@ async function loadSystemStatus({ force = false } = {}) {
   }
   refreshMainAttentionShell();
   if (getRoute() === "settings") render();
+  if (getRoute() === "settings" && state.systemStatus.checked && !state.systemStatus.error) {
+    void acknowledgeViewedRouteNotifications("settings");
+  }
 }
 
 function interpolateText(template, params = {}) {
@@ -5674,8 +5729,9 @@ function mainAttentionMarkers() {
   };
 
   if (state.notifications.error) add("notifications", "critical");
-  else if (Number(state.notifications.criticalCount || 0) > 0) add("notifications", "critical");
-  else if (Number(state.notifications.pendingCount || 0) > 0) add("notifications", "attention");
+  state.notifications.items
+    .filter((item) => !item?.acknowledged && String(item?.category || "").toLowerCase() !== "daily")
+    .forEach((item) => add(notificationRoute(item), Number(item?.priority || 0) > 0 ? "critical" : "attention"));
 
   if (state.mail.error || state.mail.attention.error) add("mail", "critical");
   else if (Number(state.mail.attention.pendingCount || 0) > 0) add("mail", "attention");
@@ -5726,7 +5782,10 @@ function refreshMainAttentionShell() {
 async function loadMainAttention({ force = false } = {}) {
   if (portalProfile() !== "main" || isAgendaSuppliesEmbed()) return;
   if (state.attention.loading) return;
-  if (state.attention.checked && !force) return;
+  if (state.attention.checked && !force) {
+    await acknowledgeViewedRouteNotifications(getRoute());
+    return;
+  }
   state.attention.loading = true;
   refreshMainAttentionShell();
   await Promise.allSettled([
@@ -5743,6 +5802,7 @@ async function loadMainAttention({ force = false } = {}) {
     refreshedAt: new Date().toISOString(),
   };
   refreshMainAttentionShell();
+  await acknowledgeViewedRouteNotifications(getRoute());
 }
 
 function topAddActionForRoute(route) {

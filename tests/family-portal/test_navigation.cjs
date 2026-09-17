@@ -3,7 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
-const { personalMenu, selectedPersonalRoute } = require("../../apps/family-portal/navigation.js");
+const { personalMenu, selectedPersonalRoute, notificationRoute } = require("../../apps/family-portal/navigation.js");
 
 test("personal menu has the accepted labels and order", () => {
   assert.deepEqual(
@@ -52,15 +52,23 @@ test("notifications stays routable without adding another main menu item", () =>
   assert.equal(selectedPersonalRoute("notifications"), "notifications");
 });
 
+test("notification categories point at the selector destination that can acknowledge them", () => {
+  assert.equal(notificationRoute("mail"), "mail");
+  assert.equal(notificationRoute("fax"), "fax");
+  assert.equal(notificationRoute("maintenance"), "settings");
+  assert.equal(notificationRoute("system"), "settings");
+  assert.equal(notificationRoute("daily"), "notifications");
+});
+
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
   const styleIndex = index.indexOf('href="/styles.css?v=355"');
-  const navigationIndex = index.indexOf('src="/navigation.js?v=8"');
+  const navigationIndex = index.indexOf('src="/navigation.js?v=9"');
   const calendarViewIndex = index.indexOf('src="/calendar-view.js?v=2"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
   const faxIndex = index.indexOf('src="/fax.js?v=2"');
   const mailIndex = index.indexOf('src="/mail.js?v=7"');
-  const applicationIndex = index.indexOf('src="/app.js?v=348"');
+  const applicationIndex = index.indexOf('src="/app.js?v=349"');
   assert.ok(styleIndex >= 0);
   assert.ok(navigationIndex >= 0);
   assert.ok(calendarViewIndex > navigationIndex);
@@ -94,7 +102,7 @@ test("calendar month panel rendering is delegated to the view module", () => {
   assert.match(calendarViewSource, /data-date="\$\{cell\.value\}"/);
   assert.match(calendarViewSource, /data-calendar-add-event/);
   assert.match(index, /src="\/calendar-view\.js\?v=2"/);
-  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=348"'));
+  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=349"'));
   assert.match(calendarViewSource, /dayCaregiverMark" role="img"/);
   assert.match(calendarViewSource, /hasMarket \|\| eventCount \|\| taskCount/);
 });

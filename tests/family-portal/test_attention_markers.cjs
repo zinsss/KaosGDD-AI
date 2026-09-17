@@ -9,9 +9,9 @@ const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/st
 test("main shell derives quiet attention markers from existing read-only state", () => {
   assert.match(appSource, /attention: \{\n    checked: false,\n    loading: false,/);
   assert.match(appSource, /function mainAttentionMarkers\(\) \{/);
-  assert.match(appSource, /Number\(state\.notifications\.pendingCount \|\| 0\) > 0/);
-  assert.match(appSource, /String\(item\?\.category \|\| ""\)\.toLowerCase\(\) === "daily"/);
-  assert.match(appSource, /dateTimePartsInTimeZone\(createdAt\)\.date === attentionDate/);
+  assert.match(appSource, /String\(item\?\.category \|\| ""\)\.toLowerCase\(\) !== "daily"/);
+  assert.match(appSource, /add\(notificationRoute\(item\), Number\(item\?\.priority \|\| 0\) > 0 \? "critical" : "attention"\)/);
+  assert.doesNotMatch(appSource, /dateTimePartsInTimeZone\(createdAt\)\.date === attentionDate/);
   assert.match(appSource, /Number\(state\.mail\.attention\.pendingCount \|\| 0\) > 0/);
   assert.doesNotMatch(appSource, /mailApi\.filterItems\(state\.mail\.items, "yeongdeok"\)\.length \+ mailApi\.filterItems\(state\.mail\.items, "tax"\)\.length/);
   assert.doesNotMatch(appSource, /state\.mail\.unreadItems\.length > 0/);
@@ -24,6 +24,23 @@ test("main shell shows markers in mobile dropdown and desktop open list", () => 
   assert.match(appSource, /function mainMenuLabelWithAttention\(item\) \{/);
   assert.match(appSource, /return `\$\{item\.label\}\$\{marker \? " •" : ""\}`;/);
   assert.match(appSource, /<span>\$\{escapeHtml\(item\.label\)\}<\/span>\n              \$\{renderMainMenuAttentionDot\(item\.route\)\}/);
+});
+
+test("viewing a loaded dotted notification destination acknowledges only that route", () => {
+  assert.match(appSource, /function pendingNotificationsForRoute\(route\) \{/);
+  assert.match(appSource, /notificationRoute\(item\) === selectedRoute/);
+  assert.match(appSource, /function notificationRouteIsViewed\(route\) \{/);
+  assert.match(appSource, /state\.mail\.unreadChecked && !state\.mail\.unreadError/);
+  assert.match(appSource, /state\.fax\.checked && !state\.fax\.error/);
+  assert.match(appSource, /state\.systemStatus\.checked && !state\.systemStatus\.error/);
+  assert.match(appSource, /async function acknowledgeViewedRouteNotifications\(route\) \{/);
+  assert.match(appSource, /\["mail", "fax", "settings"\]\.includes\(selectedRoute\)/);
+  assert.match(appSource, /if \(!notificationRouteIsViewed\(selectedRoute\)\) return;/);
+  assert.match(appSource, /await acknowledgeNotificationIds\(ids\)/);
+  assert.match(appSource, /await acknowledgeViewedRouteNotifications\(getRoute\(\)\)/);
+  assert.match(appSource, /state\.mail\.unreadChecked && !state\.mail\.unreadError[\s\S]*acknowledgeViewedRouteNotifications\("mail"\)/);
+  assert.match(appSource, /state\.fax\.checked && !state\.fax\.error[\s\S]*acknowledgeViewedRouteNotifications\("fax"\)/);
+  assert.match(appSource, /state\.systemStatus\.checked && !state\.systemStatus\.error[\s\S]*acknowledgeViewedRouteNotifications\("settings"\)/);
 });
 
 test("main shell refreshes attention once from existing protected endpoints", () => {
