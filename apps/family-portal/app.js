@@ -4902,7 +4902,7 @@ function caregiverMinutesTime(value) {
 
 function caregiverTimeOptions(selectedValue) {
   const selected = caregiverTimeMinutes(selectedValue) === null ? "" : String(selectedValue);
-  const values = Array.from({ length: 48 }, (_, index) => caregiverMinutesTime(index * 30));
+  const values = Array.from({ length: 144 }, (_, index) => caregiverMinutesTime(index * 10));
   if (selected && !values.includes(selected)) values.push(selected);
   return values
     .sort((left, right) => caregiverTimeMinutes(left) - caregiverTimeMinutes(right))

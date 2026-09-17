@@ -141,6 +141,6 @@ test("family smart event assets include styling, translations, and cache busters
   assert.match(indexSource, /href="\/styles\.css\?v=355"/);
   assert.match(indexSource, /src="\/translations\.js\?v=186"/);
   assert.match(indexSource, /src="\/smart-events\.js\?v=1"/);
-  assert.ok(indexSource.indexOf('src="/smart-events.js?v=1"') < indexSource.indexOf('src="/app.js?v=349"'));
-  assert.match(indexSource, /src="\/app\.js\?v=349"/);
+  assert.ok(indexSource.indexOf('src="/smart-events.js?v=1"') < indexSource.indexOf('src="/app.js?v=350"'));
+  assert.match(indexSource, /src="\/app\.js\?v=350"/);
 });

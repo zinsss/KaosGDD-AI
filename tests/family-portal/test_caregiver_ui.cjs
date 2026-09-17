@@ -15,10 +15,10 @@ test("caregiver page rendering is delegated to the view module", () => {
   assert.match(caregiverViewSource, /data-caregiver-copy-month/);
   assert.match(caregiverViewSource, /class="caregiverMonthGrid"/);
   assert.match(appSource, /function caregiverTimeOptions\(selectedValue\)/);
-  assert.match(appSource, /Array\.from\(\{ length: 48 \}/);
+  assert.match(appSource, /Array\.from\(\{ length: 144 \}, \(_, index\) => caregiverMinutesTime\(index \* 10\)\)/);
   assert.match(appSource, /<select name="sessionStart"/);
   assert.match(appSource, /<select name="sessionEnd"/);
   assert.doesNotMatch(appSource, /name="session(?:Start|End)" type="time"/);
   assert.match(indexSource, /src="\/caregiver-view\.js\?v=1"/);
-  assert.ok(indexSource.indexOf('src="/caregiver-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=349"'));
+  assert.ok(indexSource.indexOf('src="/caregiver-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=350"'));
 });
