@@ -62,7 +62,7 @@ test("notification categories point at the selector destination that can acknowl
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=363"');
+  const styleIndex = index.indexOf('href="/styles.css?v=364"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=9"');
   const calendarViewIndex = index.indexOf('src="/calendar-view.js?v=2"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
@@ -124,6 +124,14 @@ test("main and family settings share the complete font list", () => {
   assert.match(appSource, /window\.localStorage\.setItem\(FAMILY_FONT_SCALE_STORAGE_KEY, String\(normalized\)\)/);
   assert.match(styles, /\.familyFontScaleActions button \{/);
   assert.match(translations, /"settings\.fontSize": "글자 크기"/);
+});
+
+test("main typography avoids heavy synthesized bold while keeping light hierarchy", () => {
+  const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
+
+  assert.match(styles, /\.app\[data-profile="main"\],\s*\.app\[data-profile="main"\] \* \{\s*font-synthesis-weight: none;/);
+  assert.match(styles, /\.app\[data-profile="main"\] \* \{\s*font-weight: 400 !important;/);
+  assert.match(styles, /\.app\[data-profile="main"\] :where\([\s\S]*strong,[\s\S]*button,[\s\S]*summary,[\s\S]*\) \{\s*font-weight: 500 !important;/);
 });
 
 test("calendar month panel rendering is delegated to the view module", () => {

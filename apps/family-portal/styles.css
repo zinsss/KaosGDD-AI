@@ -9310,3 +9310,30 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
     padding: 10px;
   }
 }
+
+/* Main keeps hierarchy through size and color instead of heavy terminal bolds. */
+.app[data-profile="main"],
+.app[data-profile="main"] * {
+  font-synthesis-weight: none;
+}
+
+.app[data-profile="main"] * {
+  font-weight: 400 !important;
+}
+
+.app[data-profile="main"] :where(
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  strong,
+  b,
+  button,
+  label,
+  summary,
+  th
+) {
+  font-weight: 500 !important;
+}
