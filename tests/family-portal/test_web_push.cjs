@@ -12,7 +12,7 @@ const nginx = fs.readFileSync(path.join(root, "deploy/h3-backend/family-portal/n
 
 test("personal PWA registers Web Push without adding a navigation item", () => {
   assert.match(index, /src="\/web-push\.js\?v=1"/);
-  assert.ok(index.indexOf('src="/web-push.js?v=1"') < index.indexOf('src="/app.js?v=357"'));
+  assert.ok(index.indexOf('src="/web-push.js?v=1"') < index.indexOf('src="/app.js?v=358"'));
   assert.match(client, /family\.kaosgdd\.net/);
   assert.match(client, /navigator\.serviceWorker\.register\("\/sw\.js"/);
   assert.doesNotMatch(app.slice(0, app.indexOf("const familyRoutes")), /web-push/);
@@ -26,10 +26,10 @@ test("settings exposes enable, disable, and test controls", () => {
   assert.match(app, /Sensitive notification text stays inside KaosGDD/);
 });
 
-test("service worker displays generic payload and opens the existing notifications route", () => {
+test("service worker displays generic payload and opens the hidden Today route", () => {
   assert.match(worker, /addEventListener\("push"/);
   assert.match(worker, /showNotification/);
-  assert.match(worker, /\/#\/notifications/);
+  assert.match(worker, /\/#\/today/);
   assert.match(worker, /clients\.matchAll/);
   assert.doesNotMatch(worker, /cache\.add|caches\.open/);
 });

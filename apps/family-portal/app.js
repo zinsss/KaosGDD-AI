@@ -1,7 +1,8 @@
 const routes = {
-  today: "Agenda",
+  today: "Today",
+  agenda: "Agenda",
   scribble: "Scribble",
-  notifications: "Notifications",
+  notifications: "Today",
   calendar: "Calendar",
   caregiver: "Caregiver",
   tasks: "Tasks",
@@ -147,7 +148,7 @@ const DEFAULT_ROUNY_ICON = "⭐";
 const profileConfigs = {
   main: {
     label: "KaosGDD",
-    defaultRoute: "today",
+    defaultRoute: "agenda",
     nav: window.KAOS_PORTAL_NAVIGATION?.personalMenu || [],
   },
   family: {
@@ -1779,7 +1780,7 @@ async function loadRemoteWeatherForSelectedMonth({ force = false } = {}) {
       error: error.message || uiText("weather.unavailable", "날씨 정보 없음"),
     };
   }
-  if (getRoute() === "calendar" || getRoute() === "today" || (getRoute() === "add-event" && isDesktopLayout())) render();
+  if (getRoute() === "calendar" || isAgendaRoute() || (getRoute() === "add-event" && isDesktopLayout())) render();
 }
 
 async function openWeatherLocationPopup(dateValue) {
@@ -3410,7 +3411,7 @@ async function loadNotifications(options = {}) {
   if (state.notifications.loading) return;
   if (state.notifications.checked && !options.force) return;
   state.notifications.loading = true;
-  if (getRoute() === "notifications") render();
+  if (isMainTodayRoute()) render();
   try {
     const response = await fetch("/api/notifications?limit=100", {
       headers: { Accept: "application/json" },
@@ -3442,15 +3443,15 @@ async function loadNotifications(options = {}) {
     };
   }
   refreshMainAttentionShell();
-  if (getRoute() === "notifications") render();
+  if (isMainTodayRoute()) render();
 }
 
 function notificationRoute(item) {
-  return window.KAOS_PORTAL_NAVIGATION?.notificationRoute(item?.category) || "notifications";
+  return window.KAOS_PORTAL_NAVIGATION?.notificationRoute(item?.category) || "today";
 }
 
 function pendingNotificationsForRoute(route) {
-  const selectedRoute = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(activeNavRoute(route)) || "today";
+  const selectedRoute = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(activeNavRoute(route)) || "agenda";
   return state.notifications.items.filter((item) => (
     !item?.acknowledged
     && String(item?.category || "").toLowerCase() !== "daily"
@@ -3470,8 +3471,8 @@ async function acknowledgeNotificationIds(ids) {
 }
 
 function notificationRouteIsViewed(route) {
-  const selectedRoute = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(activeNavRoute(route)) || "today";
-  const currentRoute = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(activeNavRoute(getRoute())) || "today";
+  const selectedRoute = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(activeNavRoute(route)) || "agenda";
+  const currentRoute = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(activeNavRoute(getRoute())) || "agenda";
   if (selectedRoute !== currentRoute) return false;
   if (selectedRoute === "mail") {
     return state.mail.mode === "unread"
@@ -3484,7 +3485,7 @@ function notificationRouteIsViewed(route) {
 }
 
 async function acknowledgeViewedRouteNotifications(route) {
-  const selectedRoute = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(activeNavRoute(route)) || "today";
+  const selectedRoute = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(activeNavRoute(route)) || "agenda";
   if (!["mail", "fax", "settings"].includes(selectedRoute) || acknowledgingNotificationRoutes.has(selectedRoute)) return;
   if (!notificationRouteIsViewed(selectedRoute)) return;
   const ids = pendingNotificationsForRoute(selectedRoute).map((item) => item.id);
@@ -3511,7 +3512,7 @@ async function loadTodayBriefing({ force = false } = {}) {
   if (state.todayBriefing.checked && !force) return;
   state.todayBriefing.loading = true;
   state.todayBriefing.error = "";
-  if (getRoute() === "notifications") render();
+  if (isMainTodayRoute()) render();
   try {
     const response = await fetch("/api/today", {
       headers: { Accept: "application/json" },
@@ -3525,7 +3526,7 @@ async function loadTodayBriefing({ force = false } = {}) {
       error: "",
       data: payload,
     };
-    if (getRoute() === "notifications") render();
+    if (isMainTodayRoute()) render();
     await acknowledgeBriefingNotifications(payload.items);
   } catch (error) {
     state.todayBriefing = {
@@ -3534,7 +3535,7 @@ async function loadTodayBriefing({ force = false } = {}) {
       error: error.message || "KaosToday is unavailable",
       data: null,
     };
-    if (getRoute() === "notifications") render();
+    if (isMainTodayRoute()) render();
   }
 }
 
@@ -5454,10 +5455,19 @@ function getRoute() {
   const raw = window.location.hash.replace(/^#\/?/, "");
   const route = raw.split("?", 1)[0];
   if (!routes[route]) return profileConfig().defaultRoute;
+  if (portalProfile() === "main" && route === "notifications") return "today";
   if (portalProfile() === "family" && route === "services") return profileConfig().defaultRoute;
   if (portalProfile() === "family" && ["notifications", "scribble", "supplies", "documents", "add-document", "fax", "mail", "add-ai-task"].includes(route)) return profileConfig().defaultRoute;
   if (portalProfile() === "main" && (route === "rouny" || route === "caregiver" || route === "text-presets" || route === "ledger")) return profileConfig().defaultRoute;
   return route;
+}
+
+function isMainTodayRoute(route = getRoute()) {
+  return portalProfile() === "main" && route === "today";
+}
+
+function isAgendaRoute(route = getRoute()) {
+  return portalProfile() === "family" ? route === "today" : route === "agenda";
 }
 
 function isAgendaSuppliesEmbed() {
@@ -5889,10 +5899,10 @@ async function loadMainAttention({ force = false } = {}) {
 }
 
 function topAddActionForRoute(route) {
-  const selectedRoute = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(activeNavRoute(route)) || "today";
+  const selectedRoute = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(activeNavRoute(route)) || "agenda";
   if (selectedRoute === "settings") return "";
   if (selectedRoute === "scribble") return "scribble";
-  if (selectedRoute === "today" || selectedRoute === "calendar") return "event";
+  if (selectedRoute === "agenda" || selectedRoute === "calendar") return "event";
   if (selectedRoute === "tasks") return "task";
   if (selectedRoute === "supplies") return "supply";
   if (selectedRoute === "memos") return "memo";
@@ -5941,20 +5951,22 @@ function renderTopNav(route) {
   if (!nav) return;
   const activeRoute = activeNavRoute(route);
   if (portalProfile() === "main") {
-    const selectedRoute = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(activeRoute) || "today";
-    const selectedItem = profileConfig().nav.find((item) => item.route === selectedRoute) || profileConfig().nav[0];
+    const selectedRoute = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(activeRoute) || "agenda";
+    const selectedItem = profileConfig().nav.find((item) => item.route === selectedRoute);
+    const selectedLabel = selectedItem?.label || routes[selectedRoute] || "Agenda";
     const topAction = topAddActionForRoute(route);
     nav.innerHTML = `
       <div class="mainMenuPicker">
         <span>Main menu</span>
         <select data-main-menu aria-label="Main menu">
+          ${selectedItem ? "" : `<option value="${escapeHtml(selectedRoute)}" selected hidden>${escapeHtml(selectedLabel)}</option>`}
           ${profileConfig().nav.map((item) => `
             <option value="${escapeHtml(item.route)}" ${item.route === selectedRoute ? "selected" : ""}>${escapeHtml(mainMenuLabelWithAttention(item))}</option>
           `).join("")}
         </select>
         <div class="compactMainMenu" data-compact-main-menu>
           <button class="compactMainMenuButton" type="button" data-compact-main-menu-toggle aria-haspopup="true" aria-expanded="false">
-            <span>${escapeHtml(selectedItem?.label || "Agenda")}</span>
+            <span>${escapeHtml(selectedLabel)}</span>
             ${renderMainMenuAttentionDot(selectedRoute)}
             <span class="compactMainMenuChevron" aria-hidden="true">⌄</span>
           </button>
@@ -6274,8 +6286,8 @@ function routeTitle(route) {
     identity.dataset.notificationsOpen = "";
     identity.setAttribute("role", "button");
     identity.setAttribute("tabindex", "0");
-    identity.setAttribute("aria-label", "Open notifications");
-    identity.setAttribute("title", "Notifications");
+    identity.setAttribute("aria-label", "Open Today");
+    identity.setAttribute("title", "Today");
   }
   if (portalProfile() === "main") {
     const severity = mainAttentionSeverity();
@@ -7165,8 +7177,7 @@ function renderFamilyAgenda() {
   `;
 }
 
-function renderToday() {
-  if (portalProfile() === "family") return renderFamilyAgenda();
+function renderMainAgenda() {
   const today = ymd(new Date());
   state.selectedDate = today;
   const endDate = addDaysToDateValue(today, 6);
@@ -10319,6 +10330,8 @@ function render() {
   routeTitle(route);
   if (route === "calendar") view.innerHTML = renderCalendar();
   else if (route === "scribble") view.innerHTML = renderScribble();
+  else if (route === "today") view.innerHTML = portalProfile() === "main" ? renderNotifications() : renderFamilyAgenda();
+  else if (route === "agenda") view.innerHTML = renderMainAgenda();
   else if (route === "notifications") view.innerHTML = renderNotifications();
   else if (route === "caregiver") view.innerHTML = renderCaregiver();
   else if (route === "tasks") view.innerHTML = renderTasks();
@@ -10348,14 +10361,14 @@ function render() {
   else if (route === "text-presets") view.innerHTML = renderTextPresets();
   else if (route === "ledger") view.innerHTML = renderLedger();
   else if (route === "settings") view.innerHTML = renderSettings();
-  else view.innerHTML = renderToday();
+  else view.innerHTML = portalProfile() === "family" ? renderFamilyAgenda() : renderMainAgenda();
   window.KAOS_MARKDOWN_EDITOR?.enhanceAll(view);
   if (overlayRoot) overlayRoot.innerHTML = route === "rouny" ? renderRounyOverlay() : "";
   updateOverlayMetrics();
-  if (route === "calendar" || route === "today" || ((route === "add-event" || route === "edit-event") && isDesktopLayout())) {
+  if (route === "calendar" || isAgendaRoute(route) || ((route === "add-event" || route === "edit-event") && isDesktopLayout())) {
     loadRemoteWeatherForSelectedMonth();
   }
-  if (route === "today") window.KAOS_GRATITUDE_JOURNAL.load(gratitudeJournalContext());
+  if (isAgendaRoute(route)) window.KAOS_GRATITUDE_JOURNAL.load(gratitudeJournalContext());
   if (route === "calendar") window.KAOS_GRATITUDE_JOURNAL.load(calendarGratitudeContext());
   if (route === "caregiver" || (route === "calendar" && portalProfile() === "family")) loadCaregiverMonth();
   if (route === "supplies") {
@@ -10371,7 +10384,7 @@ function render() {
   }
   if (route === "memos") loadMemos();
   if (route === "scribble") loadScribbles();
-  if (route === "notifications") {
+  if (isMainTodayRoute(route)) {
     loadTodayBriefing();
   }
   if (route === "documents" && portalProfile() === "main") {
@@ -10513,7 +10526,7 @@ document.addEventListener("click", async (event) => {
 
   if (event.target.closest("[data-notifications-open]")) {
     event.preventDefault();
-    window.location.hash = "#/notifications";
+    window.location.hash = "#/today";
     return;
   }
 
@@ -12393,7 +12406,7 @@ document.addEventListener("keydown", (event) => {
 document.addEventListener("change", async (event) => {
   const mainMenu = event.target.closest("[data-main-menu]");
   if (mainMenu) {
-    const route = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(mainMenu.value) || "today";
+    const route = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(mainMenu.value) || "agenda";
     window.location.hash = `#/${route}`;
     return;
   }

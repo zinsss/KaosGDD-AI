@@ -17,7 +17,16 @@ test("personal PWA renders the shared KaosToday briefing instead of an ACK list"
   assert.match(viewSource, /class="kaosTodayText"/);
   assert.doesNotMatch(viewSource, /data-notification-ack=/);
   assert.match(indexSource, /src="\/notifications-view\.js\?v=5"/);
-  assert.ok(indexSource.indexOf('src="/notifications-view.js?v=5"') < indexSource.indexOf('src="/app.js?v=357"'));
+  assert.ok(indexSource.indexOf('src="/notifications-view.js?v=5"') < indexSource.indexOf('src="/app.js?v=358"'));
+});
+
+test("main Today is a hidden briefing route while Agenda remains the default menu page", () => {
+  assert.match(appSource, /today: "Today",\s*agenda: "Agenda"/);
+  assert.match(appSource, /label: "KaosGDD",\s*defaultRoute: "agenda"/);
+  assert.match(appSource, /route === "notifications"\) return "today"/);
+  assert.match(appSource, /route === "today"\) view\.innerHTML = portalProfile\(\) === "main" \? renderNotifications\(\) : renderFamilyAgenda\(\)/);
+  assert.match(appSource, /route === "agenda"\) view\.innerHTML = renderMainAgenda\(\)/);
+  assert.match(appSource, /window\.location\.hash = "#\/today"/);
 });
 
 test("viewing KaosToday acknowledges only notification rows included in its briefing", () => {

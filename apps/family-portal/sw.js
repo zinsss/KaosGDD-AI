@@ -11,7 +11,7 @@ self.addEventListener("push", (event) => {
   }
   const title = String(payload.title || "KaosGDD");
   const body = String(payload.body || "Something needs attention.");
-  const url = String(payload.url || "/#/notifications");
+  const url = String(payload.url || "/#/today");
   event.waitUntil(
     self.registration.showNotification(title, {
       body,
@@ -25,7 +25,7 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const target = new URL(String(event.notification.data?.url || "/#/notifications"), self.location.origin).href;
+  const target = new URL(String(event.notification.data?.url || "/#/today"), self.location.origin).href;
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
       const existing = windows.find((client) => new URL(client.url).origin === self.location.origin);

@@ -9,7 +9,7 @@ test("personal menu has the accepted labels and order", () => {
   assert.deepEqual(
     personalMenu.map((item) => [item.route, item.label]),
     [
-      ["today", "Agenda"],
+      ["agenda", "Agenda"],
       ["scribble", "Scribble"],
       ["calendar", "Calendar"],
       ["tasks", "Tasks"],
@@ -35,7 +35,9 @@ test("personal subroutes select their owning main menu", () => {
   assert.equal(selectedPersonalRoute("service"), "services");
   assert.equal(selectedPersonalRoute("supplies"), "supplies");
   assert.equal(selectedPersonalRoute("scribble"), "scribble");
-  assert.equal(selectedPersonalRoute("notifications"), "notifications");
+  assert.equal(selectedPersonalRoute("agenda"), "agenda");
+  assert.equal(selectedPersonalRoute("today"), "today");
+  assert.equal(selectedPersonalRoute("notifications"), "today");
   assert.equal(selectedPersonalRoute("documents"), "documents");
   assert.equal(selectedPersonalRoute("fax"), "fax");
   assert.equal(selectedPersonalRoute("ai-tasks"), "ai-tasks");
@@ -43,13 +45,15 @@ test("personal subroutes select their owning main menu", () => {
 });
 
 test("unknown personal routes safely select Agenda", () => {
-  assert.equal(selectedPersonalRoute(""), "today");
-  assert.equal(selectedPersonalRoute("not-a-route"), "today");
+  assert.equal(selectedPersonalRoute(""), "agenda");
+  assert.equal(selectedPersonalRoute("not-a-route"), "agenda");
 });
 
-test("notifications stays routable without adding another main menu item", () => {
+test("Today stays routable without adding another main menu item", () => {
+  assert.equal(personalMenu.some((item) => item.route === "today"), false);
   assert.equal(personalMenu.some((item) => item.route === "notifications"), false);
-  assert.equal(selectedPersonalRoute("notifications"), "notifications");
+  assert.equal(selectedPersonalRoute("today"), "today");
+  assert.equal(selectedPersonalRoute("notifications"), "today");
 });
 
 test("notification categories point at the selector destination that can acknowledge them", () => {
@@ -57,18 +61,18 @@ test("notification categories point at the selector destination that can acknowl
   assert.equal(notificationRoute("fax"), "fax");
   assert.equal(notificationRoute("maintenance"), "settings");
   assert.equal(notificationRoute("system"), "settings");
-  assert.equal(notificationRoute("daily"), "notifications");
+  assert.equal(notificationRoute("daily"), "today");
 });
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
   const styleIndex = index.indexOf('href="/styles.css?v=365"');
-  const navigationIndex = index.indexOf('src="/navigation.js?v=9"');
+  const navigationIndex = index.indexOf('src="/navigation.js?v=10"');
   const calendarViewIndex = index.indexOf('src="/calendar-view.js?v=2"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
   const faxIndex = index.indexOf('src="/fax.js?v=2"');
   const mailIndex = index.indexOf('src="/mail.js?v=7"');
-  const applicationIndex = index.indexOf('src="/app.js?v=357"');
+  const applicationIndex = index.indexOf('src="/app.js?v=358"');
   assert.ok(styleIndex >= 0);
   assert.ok(navigationIndex >= 0);
   assert.ok(calendarViewIndex > navigationIndex);
@@ -147,7 +151,7 @@ test("calendar month panel rendering is delegated to the view module", () => {
   assert.match(calendarViewSource, /data-date="\$\{cell\.value\}"/);
   assert.match(calendarViewSource, /data-calendar-add-event/);
   assert.match(index, /src="\/calendar-view\.js\?v=2"/);
-  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=357"'));
+  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=358"'));
   assert.match(calendarViewSource, /dayCaregiverMark" role="img"/);
   assert.match(calendarViewSource, /hasMarket \|\| eventCount \|\| taskCount/);
 });
