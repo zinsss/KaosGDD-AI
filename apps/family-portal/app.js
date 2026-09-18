@@ -69,20 +69,25 @@ const ROUNY_SYNC_REVISION_KEY = "kaosgdd.v2.rouny.syncRevision.v1";
 const ROUNY_SYNC_DIRTY_KEY = "kaosgdd.v2.rouny.syncDirty.v1";
 const EVENT_PRESET_STORAGE_KEY = "kaosgdd.v2.eventPresets.v1";
 const COMPOSER_RECOVERY_STORAGE_KEY = "kaosgdd.v2.composerRecovery.v1";
-const FAMILY_FONT_STORAGE_KEY = "kaosgdd.v2.family.font.v1";
-const FAMILY_FONT_OPTIONS = new Set([
-  "nanum",
-  "pretendard",
-  "nixgon",
-  "skybori",
-  "watermelon",
-  "board-marker",
-  "milky-way",
+const SHARED_FONT_OPTIONS = Object.freeze([
+  { id: "sarasa", label: "Sarasa Gothic Mono", translationKey: "settings.fontSarasa" },
+  { id: "elice", label: "Elice Digital Baeum", translationKey: "settings.fontElice" },
+  { id: "pretendard", label: "Pretendard", translationKey: "settings.fontPretendard" },
+  { id: "orbit", label: "Orbit", translationKey: "settings.fontOrbit" },
+  { id: "nanum", label: "NanumBarunPen", translationKey: "settings.fontNanum" },
+  { id: "nixgon", label: "Nixgon", translationKey: "settings.fontNixgon" },
+  { id: "skybori", label: "SKYBORI", translationKey: "settings.fontSkybori" },
+  { id: "watermelon", label: "Watermelon", translationKey: "settings.fontWatermelon" },
+  { id: "board-marker", label: "School Safe Board Marker", translationKey: "settings.fontBoardMarker" },
+  { id: "milky-way", label: "School Safety Milky Way", translationKey: "settings.fontMilkyWay" },
 ]);
+const PORTAL_FONT_IDS = SHARED_FONT_OPTIONS.map((option) => option.id);
+const FAMILY_FONT_STORAGE_KEY = "kaosgdd.v2.family.font.v1";
+const FAMILY_FONT_OPTIONS = new Set(PORTAL_FONT_IDS);
 const FAMILY_FONT_SCALE_STORAGE_KEY = "kaosgdd.v2.family.fontScale.v1";
 const FAMILY_FONT_SCALE_OPTIONS = Object.freeze([90, 95, 100, 105, 110]);
 const MAIN_FONT_STORAGE_KEY = "kaosgdd.v2.main.font.v1";
-const MAIN_FONT_OPTIONS = new Set(["pretendard", "orbit", "sarasa", "elice"]);
+const MAIN_FONT_OPTIONS = new Set(PORTAL_FONT_IDS);
 const MAIN_FONT_SCALE_STORAGE_KEY = "kaosgdd.v2.main.fontScale.v1";
 const MAIN_FONT_SCALE_OPTIONS = Object.freeze([90, 95, 100, 105, 110]);
 const WEATHER_LOCATION_STORAGE_KEY = "kaosgdd.v2.weather.location.v1";
@@ -9956,19 +9961,14 @@ function renderWeatherSettingsRow() {
 }
 
 function renderFamilyFontSettingsRow() {
+  const selectedFont = familyFontPreference();
   const selectedScale = familyFontScalePreference();
   return `
     <div>
       <dt>${uiText("settings.font", "Font")}</dt>
       <dd>
         <select data-family-font-setting aria-label="${uiText("settings.font", "Font")}">
-          <option value="nanum" ${familyFontPreference() === "nanum" ? "selected" : ""}>${uiText("settings.fontNanum", "NanumBarunPen")}</option>
-          <option value="pretendard" ${familyFontPreference() === "pretendard" ? "selected" : ""}>${uiText("settings.fontPretendard", "Pretendard")}</option>
-          <option value="nixgon" ${familyFontPreference() === "nixgon" ? "selected" : ""}>${uiText("settings.fontNixgon", "Nixgon")}</option>
-          <option value="skybori" ${familyFontPreference() === "skybori" ? "selected" : ""}>${uiText("settings.fontSkybori", "SKYBORI")}</option>
-          <option value="watermelon" ${familyFontPreference() === "watermelon" ? "selected" : ""}>${uiText("settings.fontWatermelon", "Watermelon")}</option>
-          <option value="board-marker" ${familyFontPreference() === "board-marker" ? "selected" : ""}>${uiText("settings.fontBoardMarker", "School Safe Board Marker")}</option>
-          <option value="milky-way" ${familyFontPreference() === "milky-way" ? "selected" : ""}>${uiText("settings.fontMilkyWay", "School Safety Milky Way")}</option>
+          ${renderSharedFontOptions(selectedFont, { translate: true })}
         </select>
       </dd>
     </div>
@@ -9983,14 +9983,15 @@ function renderFamilyFontSettingsRow() {
   `;
 }
 
+function renderSharedFontOptions(selectedFont, { translate = false } = {}) {
+  return SHARED_FONT_OPTIONS.map((option) => {
+    const label = translate ? uiText(option.translationKey, option.label) : option.label;
+    return `<option value="${option.id}" ${selectedFont === option.id ? "selected" : ""}>${escapeHtml(label)}</option>`;
+  }).join("");
+}
+
 function mainFontLabel(value = mainFontPreference()) {
-  const labels = {
-    sarasa: "Sarasa Gothic Mono",
-    elice: "Elice Digital Baeum",
-    pretendard: "Pretendard",
-    orbit: "Orbit",
-  };
-  return labels[value] || labels.sarasa;
+  return SHARED_FONT_OPTIONS.find((option) => option.id === value)?.label || "Sarasa Gothic Mono";
 }
 
 function renderMainTypographySettings() {
@@ -10006,10 +10007,7 @@ function renderMainTypographySettings() {
         <label>
           <span>Font</span>
           <select data-main-font-setting aria-label="Main font">
-            <option value="sarasa" ${selectedFont === "sarasa" ? "selected" : ""}>Sarasa Gothic Mono</option>
-            <option value="elice" ${selectedFont === "elice" ? "selected" : ""}>Elice Digital Baeum</option>
-            <option value="pretendard" ${selectedFont === "pretendard" ? "selected" : ""}>Pretendard</option>
-            <option value="orbit" ${selectedFont === "orbit" ? "selected" : ""}>Orbit</option>
+            ${renderSharedFontOptions(selectedFont)}
           </select>
         </label>
         <div class="settingsFontScaleControl">

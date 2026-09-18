@@ -5309,11 +5309,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   font-weight: 900;
 }
 
-.app[data-profile="main"],
-.app[data-profile="main"][data-main-font="pretendard"],
-.app[data-profile="main"][data-main-font="orbit"],
-.app[data-profile="main"][data-main-font="sarasa"],
-.app[data-profile="main"][data-main-font="elice"] {
+.app[data-profile="main"] {
   --bg: #252b36;
   --panel: #2d3441;
   --surface: #28303c;
@@ -5321,28 +5317,52 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   --line: rgba(136, 192, 208, 0.24);
   --line-strong: rgba(216, 222, 233, 0.34);
   --shadow: rgba(9, 12, 18, 0.38);
+  --main-selected-font: "Sarasa Gothic Mono", ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-family:
+    var(--main-selected-font);
 }
 
-.app[data-profile="main"],
 .app[data-profile="main"][data-main-font="sarasa"] {
-  font-family:
-    "Sarasa Gothic Mono", ui-monospace, "SFMono-Regular", Consolas,
-    "Liberation Mono", monospace;
+  --main-selected-font: "Sarasa Gothic Mono", ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
 .app[data-profile="main"][data-main-font="pretendard"] {
-  font-family: "Pretendard", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --main-selected-font: "Pretendard", ui-sans-serif, system-ui, -apple-system, sans-serif;
 }
 
 .app[data-profile="main"][data-main-font="orbit"] {
-  font-family: "Orbit", "Pretendard", ui-sans-serif, system-ui, sans-serif;
+  --main-selected-font: "Orbit", "Pretendard", ui-sans-serif, system-ui, sans-serif;
 }
 
 .app[data-profile="main"][data-main-font="elice"] {
-  font-family: "EllisDigitalCoding", "Pretendard", ui-sans-serif, system-ui, sans-serif;
+  --main-selected-font: "EllisDigitalCoding", "Pretendard", ui-sans-serif, system-ui, sans-serif;
 }
 
-.app[data-profile="main"][data-main-font="elice"] :where(
+.app[data-profile="main"][data-main-font="nanum"] {
+  --main-selected-font: "NanumBarunPen", "Pretendard", ui-sans-serif, system-ui, sans-serif;
+}
+
+.app[data-profile="main"][data-main-font="nixgon"] {
+  --main-selected-font: "NixgonFont", "Pretendard", ui-sans-serif, system-ui, sans-serif;
+}
+
+.app[data-profile="main"][data-main-font="skybori"] {
+  --main-selected-font: "SKYBORI", "Pretendard", ui-sans-serif, system-ui, sans-serif;
+}
+
+.app[data-profile="main"][data-main-font="watermelon"] {
+  --main-selected-font: "Watermelon", "Pretendard", ui-sans-serif, system-ui, sans-serif;
+}
+
+.app[data-profile="main"][data-main-font="board-marker"] {
+  --main-selected-font: "SchoolSafeBoardMarker", "Pretendard", ui-sans-serif, system-ui, sans-serif;
+}
+
+.app[data-profile="main"][data-main-font="milky-way"] {
+  --main-selected-font: "SchoolSafetyMilkyWay", "Pretendard", ui-sans-serif, system-ui, sans-serif;
+}
+
+.app[data-profile="main"][data-main-font] :where(
   .topReloadButton,
   .topAddButton,
   .compactMainMenuButton,
@@ -5350,7 +5370,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   .archiveTerminal,
   .archiveTerminal *
 ) {
-  font-family: "EllisDigitalCoding", "Pretendard", ui-sans-serif, system-ui, sans-serif !important;
+  font-family: var(--main-selected-font) !important;
 }
 
 .app[data-profile="main"] {
@@ -5636,6 +5656,24 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   --muted: #594964;
   --dim: #826f8a;
   --shadow: rgba(96, 75, 107, 0.14);
+}
+
+.app[data-profile="family"][data-family-font="sarasa"] {
+  font-family:
+    "Sarasa Gothic Mono", ui-monospace, "SFMono-Regular", Consolas,
+    "Liberation Mono", monospace;
+}
+
+.app[data-profile="family"][data-family-font="elice"] {
+  font-family:
+    "EllisDigitalCoding", "Pretendard", ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.app[data-profile="family"][data-family-font="orbit"] {
+  font-family:
+    "Orbit", "Pretendard", ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .app[data-profile="family"][data-family-font="nixgon"] {
