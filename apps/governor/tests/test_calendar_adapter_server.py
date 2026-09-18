@@ -44,6 +44,29 @@ class CalendarAdapterServerTests(unittest.TestCase):
         }
         return source, target, existing
 
+    @staticmethod
+    def task_move_fixture():
+        source = {
+            "id": "family:tasks",
+            "owner": "family",
+            "href": "http://radicale/family/tasks/",
+            "components": ["VTODO"],
+        }
+        target = {
+            "id": "zin:tasks",
+            "owner": "zin",
+            "href": "http://radicale/zin/tasks/",
+            "components": ["VTODO"],
+        }
+        existing = {
+            "UID": "TASK-1",
+            "href": "http://radicale/family/tasks/TASK-1.ics",
+            "etag": '"source-v1"',
+            "_raw_properties": ["UID:TASK-1"],
+            "_subcomponents": [],
+        }
+        return source, target, existing
+
     def test_update_event_moves_to_selected_calendar_after_target_write(self) -> None:
         server = load_server_module()
         source, target, existing = self.event_move_fixture()
@@ -134,6 +157,92 @@ class CalendarAdapterServerTests(unittest.TestCase):
             ("PUT", "http://radicale/family/calendar/EVENT-1.ics"),
             ("DELETE", existing["href"]),
             ("DELETE", "http://radicale/family/calendar/EVENT-1.ics"),
+        ])
+
+    def test_update_task_moves_to_selected_list_after_target_write(self) -> None:
+        server = load_server_module()
+        source, target, existing = self.task_move_fixture()
+        calls = []
+        original_configured = server.configured
+        original_collections = server.collections_for_profile
+        original_find = server.find_task
+        original_account = server.account_for_collection
+        original_radicale = server.radicale_request
+        try:
+            server.configured = lambda _profile: True
+            server.collections_for_profile = lambda _profile: [source, target]
+            server.find_task = lambda *_args: (source, existing)
+            server.account_for_collection = lambda collection: {"key": collection["owner"]}
+            server.radicale_request = lambda *args, **_kwargs: calls.append(args) or (200, "")
+
+            result = server.update_task(
+                {
+                    "uid": "TASK-1",
+                    "collectionId": source["id"],
+                    "targetCollectionId": target["id"],
+                    "title": "개인 할 일",
+                },
+                "main",
+            )
+        finally:
+            server.configured = original_configured
+            server.collections_for_profile = original_collections
+            server.find_task = original_find
+            server.account_for_collection = original_account
+            server.radicale_request = original_radicale
+
+        self.assertTrue(result["moved"])
+        self.assertEqual(result["collection"], target["id"])
+        self.assertEqual([call[1] for call in calls], ["PUT", "DELETE"])
+        self.assertEqual(calls[0][2], "http://radicale/zin/tasks/TASK-1.ics")
+        self.assertEqual(calls[0][4]["If-None-Match"], "*")
+        self.assertEqual(calls[1][2], existing["href"])
+        self.assertEqual(calls[1][4]["If-Match"], existing["etag"])
+
+    def test_update_task_rolls_back_target_copy_when_source_delete_fails(self) -> None:
+        server = load_server_module()
+        source, target, existing = self.task_move_fixture()
+        calls = []
+        original_configured = server.configured
+        original_collections = server.collections_for_profile
+        original_find = server.find_task
+        original_account = server.account_for_collection
+        original_radicale = server.radicale_request
+
+        def radicale_request(_account, method, path, body="", headers=None):
+            calls.append((method, path, body, headers))
+            if method == "DELETE" and path == existing["href"]:
+                raise RuntimeError("source delete failed")
+            return 200, ""
+
+        try:
+            server.configured = lambda _profile: True
+            server.collections_for_profile = lambda _profile: [source, target]
+            server.find_task = lambda *_args: (source, existing)
+            server.account_for_collection = lambda collection: {"key": collection["owner"]}
+            server.radicale_request = radicale_request
+
+            with self.assertRaisesRegex(RuntimeError, "source delete failed"):
+                server.update_task(
+                    {
+                        "uid": "TASK-1",
+                        "collectionId": source["id"],
+                        "targetCollectionId": target["id"],
+                        "title": "개인 할 일",
+                    },
+                    "main",
+                )
+        finally:
+            server.configured = original_configured
+            server.collections_for_profile = original_collections
+            server.find_task = original_find
+            server.account_for_collection = original_account
+            server.radicale_request = original_radicale
+
+        self.assertEqual([call[:2] for call in calls], [
+            ("PUT", "http://radicale/zin/tasks/TASK-1.ics"),
+            ("DELETE", existing["href"]),
+            ("DELETE", "http://radicale/zin/tasks/TASK-1.ics"),
         ])
 
     def test_completed_vtodo_sets_ios_visible_completion_fields_and_preserves_unknown_properties(self) -> None:

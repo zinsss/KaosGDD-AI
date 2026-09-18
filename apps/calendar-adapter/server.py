@@ -2474,8 +2474,30 @@ def update_task(payload, profile="main"):
     uid = str(payload.get("uid") or "").strip()
     collections = collections_for_profile(profile)
     collection, existing = find_task(collections, uid, str(payload.get("collectionId") or "").strip())
+    target_collection_id = str(payload.get("targetCollectionId") or collection["id"]).strip()
+    target_collection = select_collection(collections, target_collection_id, "VTODO")
     item_account = account_for_collection(collection)
-    _, body = build_vtodo(payload, existing)
+    built_uid, body = build_vtodo(payload, existing)
+    if target_collection["id"] != collection["id"]:
+        target_account = account_for_collection(target_collection)
+        target_href = urllib.parse.urljoin(target_collection["href"], f"{built_uid}.ics")
+        radicale_request(
+            target_account,
+            "PUT",
+            target_href,
+            body,
+            {"Content-Type": "text/calendar; charset=utf-8", "If-None-Match": "*"},
+        )
+        source_headers = {"If-Match": existing["etag"]} if existing.get("etag") else {}
+        try:
+            radicale_request(item_account, "DELETE", existing["href"], "", source_headers)
+        except Exception:
+            try:
+                radicale_request(target_account, "DELETE", target_href, "", {})
+            except Exception:
+                pass
+            raise
+        return {"ok": True, "uid": uid, "collection": target_collection["id"], "moved": True}
     headers = {"Content-Type": "text/calendar; charset=utf-8"}
     if existing.get("etag"):
         headers["If-Match"] = existing["etag"]
@@ -2486,7 +2508,7 @@ def update_task(payload, profile="main"):
         body,
         headers,
     )
-    return {"ok": True, "uid": uid, "collection": collection["id"]}
+    return {"ok": True, "uid": uid, "collection": collection["id"], "moved": False}
 
 
 def update_event(payload, profile="main"):

@@ -18,7 +18,7 @@ test("event add and edit forms expose an owner-backed calendar selector", () => 
 });
 
 test("event writes resolve the selected owner and edits request a safe move", () => {
-  assert.match(appSource, /formData\.get\("eventOwner"\)/);
+  assert.match(appSource, /component === "VEVENT" \? "eventOwner"/);
   assert.match(appSource, /targetCollectionId: writableCollectionIdFromForm\(formData, "VEVENT"\)/);
   assert.match(adapterSource, /target_collection_id = str\(payload\.get\("targetCollectionId"\)/);
   assert.match(adapterSource, /"If-None-Match": "\*"/);

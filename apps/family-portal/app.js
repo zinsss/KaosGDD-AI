@@ -654,6 +654,7 @@ const mockAdapter = {
     rawTask.due = due.date;
     rawTask.dueTime = due.time;
     rawTask.priority = taskPriorityFromForm(formData);
+    rawTask.collection = writableCollectionIdFromForm(formData, "VTODO");
     rawTask.lastModified = localDateTimeStamp();
     state.taskMode = rawTask.status === "COMPLETED" ? "done" : "active";
   },
@@ -831,7 +832,8 @@ function writableCollectionIdForOwner(owner, component) {
 }
 
 function writableCollectionIdFromForm(formData, component) {
-  const requestedOwner = component === "VEVENT" ? String(formData.get("eventOwner") || "").trim() : "";
+  const ownerField = component === "VEVENT" ? "eventOwner" : component === "VTODO" ? "taskOwner" : "";
+  const requestedOwner = ownerField ? String(formData.get(ownerField) || "").trim() : "";
   const owner = requestedOwner || (formData.get("shareFamily") === "on" ? "family" : defaultPersonalOwner());
   return writableCollectionIdForOwner(owner, component);
 }
@@ -855,6 +857,31 @@ function renderEventOwnerSelect(selectedOwner) {
     <label>
       <span>${uiText("event.calendar", "Calendar")}</span>
       <select name="eventOwner" data-event-owner aria-label="${uiText("event.calendarSelectorAria", "Event calendar")}">
+        ${owners.map((owner) => `<option value="${escapeHtml(owner)}" ${owner === selected ? "selected" : ""}>${escapeHtml(calendarOwnerLabel(owner))}</option>`).join("")}
+      </select>
+    </label>
+  `;
+}
+
+function taskOwnerChoices() {
+  const owners = activeCalendarData().collections
+    .filter((collection) => !collection.components?.length || collection.components.includes("VTODO"))
+    .map((collection) => collection.owner)
+    .filter(Boolean);
+  const available = [...new Set(owners)];
+  if (portalProfile() === "family") return available.includes("family") ? ["family"] : available.slice(0, 1);
+  const preferred = ["zin", "family"];
+  return [...preferred.filter((owner) => available.includes(owner)), ...available.filter((owner) => !preferred.includes(owner))];
+}
+
+function renderTaskOwnerSelect(selectedOwner) {
+  const owners = taskOwnerChoices();
+  const fallbackOwner = portalProfile() === "family" ? "family" : defaultPersonalOwner();
+  const selected = owners.includes(selectedOwner) ? selectedOwner : owners.includes(fallbackOwner) ? fallbackOwner : owners[0] || fallbackOwner;
+  return `
+    <label>
+      <span>${uiText("task.list", "Task list")}</span>
+      <select name="taskOwner" data-task-owner aria-label="${uiText("task.listSelectorAria", "Task list")}">
         ${owners.map((owner) => `<option value="${escapeHtml(owner)}" ${owner === selected ? "selected" : ""}>${escapeHtml(calendarOwnerLabel(owner))}</option>`).join("")}
       </select>
     </label>
@@ -1168,6 +1195,7 @@ async function requestFamilySmartEventAiPreview() {
 function addTaskDraftFromForm(form) {
   const previous = state.addTaskDraft || {};
   if (!form) return previous;
+  const owner = form.querySelector('[name="taskOwner"]')?.value || previous.owner || defaultPersonalOwner();
   return {
     ...previous,
     title: form.querySelector('[name="title"]')?.value || "",
@@ -1175,7 +1203,8 @@ function addTaskDraftFromForm(form) {
     due: form.querySelector('[name="due"]')?.value || "",
     dueTime: form.querySelector('[name="dueTime"]')?.value || "",
     priority: form.querySelector('[name="priority"]')?.value || "",
-    shareFamily: form.querySelector('[name="shareFamily"]')?.checked || false,
+    owner,
+    shareFamily: owner === "family",
     selectedDate: state.selectedDate,
     dueEnabled: state.taskDueEnabled,
   };
@@ -1185,6 +1214,7 @@ function collectAddTaskDraft() {
   const form = document.querySelector("[data-create-task]");
   if (!form) return state.addTaskDraft;
   const previous = state.addTaskDraft || {};
+  const owner = form.querySelector('[name="taskOwner"]')?.value || previous.owner || defaultPersonalOwner();
   state.addTaskDraft = {
     ...previous,
     title: form.querySelector('[name="title"]')?.value || "",
@@ -1192,7 +1222,8 @@ function collectAddTaskDraft() {
     due: form.querySelector('[name="due"]')?.value || "",
     dueTime: form.querySelector('[name="dueTime"]')?.value || "",
     priority: form.querySelector('[name="priority"]')?.value || "",
-    shareFamily: form.querySelector('[name="shareFamily"]')?.checked || false,
+    owner,
+    shareFamily: owner === "family",
     selectedDate: state.selectedDate,
     dueEnabled: state.taskDueEnabled,
   };
@@ -5098,6 +5129,7 @@ async function updateRemoteTask(formData, options = {}) {
     body: JSON.stringify({
       uid: String(formData.get("uid") || ""),
       collectionId: String(formData.get("collectionId") || ""),
+      targetCollectionId: writableCollectionIdFromForm(formData, "VTODO"),
       title: String(formData.get("title") || "").trim(),
       memo: String(formData.get("memo") || "").trim(),
       dueDate: due.date,
@@ -7644,22 +7676,6 @@ function renderAddTask() {
   return `${renderCollectionRail()}${form}`;
 }
 
-function renderFamilyShareToggle(checked = state.currentCollection === "owner:family", kind = "task") {
-  if (portalProfile() === "family") {
-    return '<input name="shareFamily" type="hidden" value="on" />';
-  }
-  const label =
-    kind === "event"
-      ? uiText("event.shareFamily", "Share to Family")
-      : uiText("task.shareFamily", "Family shared");
-  return `
-    <label class="toggleLine shareLine">
-      <span>${label}</span>
-      <input name="shareFamily" type="checkbox" data-share-family ${checked ? "checked" : ""} />
-    </label>
-  `;
-}
-
 function renderEditTask() {
   const taskId = hashParam("uid");
   const task = findTaskById(taskId);
@@ -7699,7 +7715,9 @@ function renderTaskEditorForm(task = null, draft = {}) {
   const memo = editing ? task.description : draft.memo || "";
   const dueTime = editing ? task.dueTime : draft.dueTime || "";
   const priority = editing ? task.priority : draft.priority || "";
-  const shareFamily = editing ? false : Boolean(draft.shareFamily || state.currentCollection === "owner:family");
+  const owner = editing
+    ? collectionOwnerForItem(task)
+    : draft.owner || (draft.shareFamily || state.currentCollection === "owner:family" ? "family" : defaultPersonalOwner());
   return `
     <form class="taskComposer taskContextComposer" ${editing ? "data-edit-task" : "data-create-task"}>
       ${editing ? `<input name="uid" type="hidden" value="${escapeHtml(task.id)}" />` : ""}
@@ -7707,7 +7725,7 @@ function renderTaskEditorForm(task = null, draft = {}) {
       <input name="due" type="hidden" value="${dueEnabled ? escapeHtml(state.selectedDate) : ""}" />
       <section class="panel">
         <div class="composer">
-          ${editing ? "" : renderFamilyShareToggle(shareFamily)}
+          ${renderTaskOwnerSelect(owner)}
           <label>
             <span>${uiText("task.label", "Task")}</span>
             <input name="title" type="text" autocomplete="off" value="${escapeHtml(title)}" placeholder="${uiText("task.new", "New task")}" required />

@@ -4,6 +4,8 @@ const path = require("node:path");
 const test = require("node:test");
 
 const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
+const translations = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/translations.js"), "utf8");
+const adapterSource = fs.readFileSync(path.join(__dirname, "../../apps/calendar-adapter/server.py"), "utf8");
 
 test("task due-today label compares against real today, not selected date", () => {
   assert.match(appSource, /const dueDate = task\.due === ymd\(new Date\(\)\)/);
@@ -38,4 +40,15 @@ test("task creation is server-backed and never presented as local", () => {
   assert.doesNotMatch(appSource, /Create local task/);
   assert.doesNotMatch(appSource, /mockAdapter\.createTask\(formData\)/);
   assert.match(appSource, /uiText\("task\.serverRequired", "Task server unavailable\. Reconnect and try again\."\)/);
+});
+
+test("task add and edit forms can select and safely move between Family and GDDZiN", () => {
+  assert.match(appSource, /function renderTaskOwnerSelect\(selectedOwner\)/);
+  assert.match(appSource, /<select name="taskOwner" data-task-owner/);
+  assert.match(appSource, /editing\s*\? collectionOwnerForItem\(task\)/);
+  assert.match(appSource, /targetCollectionId: writableCollectionIdFromForm\(formData, "VTODO"\)/);
+  assert.match(translations, /"task\.list": "할 일 목록"/);
+  assert.match(adapterSource, /target_collection_id = str\(payload\.get\("targetCollectionId"\)/);
+  assert.match(adapterSource, /select_collection\(collections, target_collection_id, "VTODO"\)/);
+  assert.match(adapterSource, /return \{"ok": True, "uid": uid, "collection": target_collection\["id"\], "moved": True\}/);
 });

@@ -25,8 +25,8 @@ test("Rouny detail offers Make default and identifies the current default", () =
   assert.match(appSource, /rounySetDefault\.dataset\.rounySetDefault/);
   assert.match(translations, /"rouny\.makeDefault": "기본으로 만들기"/);
   assert.match(translations, /"rouny\.defaultTemplate": "기본 시간표"/);
-  assert.match(indexSource, /src="\/translations\.js\?v=193"/);
-  assert.match(indexSource, /src="\/app\.js\?v=360"/);
+  assert.match(indexSource, /src="\/translations\.js\?v=194"/);
+  assert.match(indexSource, /src="\/app\.js\?v=361"/);
 });
 
 test("Rouny timeline uses slightly taller hourly cells", () => {

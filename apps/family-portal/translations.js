@@ -236,6 +236,8 @@ window.KAOS_TRANSLATIONS = {
     "task.due": "마감일",
     "task.creation": "생성일",
     "task.new": "새 할 일",
+    "task.list": "할 일 목록",
+    "task.listSelectorAria": "할 일 목록",
     "task.time": "시간",
     "task.memoPlaceholder": "일반 메모 또는;\n-- 진행 중인 하위 할 일\n-x 완료한 하위 할 일",
     "task.defaultTime": "기본 시간 오전 10:00",
