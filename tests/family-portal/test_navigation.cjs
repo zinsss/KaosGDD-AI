@@ -62,13 +62,13 @@ test("notification categories point at the selector destination that can acknowl
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=360"');
+  const styleIndex = index.indexOf('href="/styles.css?v=361"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=9"');
   const calendarViewIndex = index.indexOf('src="/calendar-view.js?v=2"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
   const faxIndex = index.indexOf('src="/fax.js?v=2"');
   const mailIndex = index.indexOf('src="/mail.js?v=7"');
-  const applicationIndex = index.indexOf('src="/app.js?v=355"');
+  const applicationIndex = index.indexOf('src="/app.js?v=356"');
   assert.ok(styleIndex >= 0);
   assert.ok(navigationIndex >= 0);
   assert.ok(calendarViewIndex > navigationIndex);
@@ -108,6 +108,13 @@ test("family font settings include the custom web fonts", () => {
   assert.match(translations, /"settings\.fontWatermelon": "Watermelon"/);
   assert.match(translations, /"settings\.fontBoardMarker": "학교안심 보드마커"/);
   assert.match(translations, /"settings\.fontMilkyWay": "학교안심 은하수"/);
+  assert.match(appSource, /FAMILY_FONT_SCALE_OPTIONS = Object\.freeze\(\[90, 95, 100, 105, 110\]\)/);
+  assert.match(appSource, /data-family-font-step="-1"/);
+  assert.match(appSource, /data-family-font-reset/);
+  assert.match(appSource, /data-family-font-step="1"/);
+  assert.match(appSource, /window\.localStorage\.setItem\(FAMILY_FONT_SCALE_STORAGE_KEY, String\(normalized\)\)/);
+  assert.match(styles, /\.familyFontScaleActions button \{/);
+  assert.match(translations, /"settings\.fontSize": "글자 크기"/);
 });
 
 test("calendar month panel rendering is delegated to the view module", () => {
@@ -122,7 +129,7 @@ test("calendar month panel rendering is delegated to the view module", () => {
   assert.match(calendarViewSource, /data-date="\$\{cell\.value\}"/);
   assert.match(calendarViewSource, /data-calendar-add-event/);
   assert.match(index, /src="\/calendar-view\.js\?v=2"/);
-  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=355"'));
+  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=356"'));
   assert.match(calendarViewSource, /dayCaregiverMark" role="img"/);
   assert.match(calendarViewSource, /hasMarket \|\| eventCount \|\| taskCount/);
 });

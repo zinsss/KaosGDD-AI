@@ -3845,6 +3845,29 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   font: inherit;
 }
 
+.app[data-profile="family"] .settingsList dd.familyFontScaleActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.app[data-profile="family"] .familyFontScaleActions button {
+  min-width: 48px;
+  min-height: 38px;
+  padding: 6px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-weight: 800;
+}
+
+.app[data-profile="family"] .familyFontScaleActions button:disabled {
+  opacity: 0.38;
+}
+
 .settingsDisclosure {
   margin-top: 10px;
   border-top: 1px solid var(--line);

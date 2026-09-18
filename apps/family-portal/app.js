@@ -79,6 +79,8 @@ const FAMILY_FONT_OPTIONS = new Set([
   "board-marker",
   "milky-way",
 ]);
+const FAMILY_FONT_SCALE_STORAGE_KEY = "kaosgdd.v2.family.fontScale.v1";
+const FAMILY_FONT_SCALE_OPTIONS = Object.freeze([90, 95, 100, 105, 110]);
 const MAIN_FONT_STORAGE_KEY = "kaosgdd.v2.main.font.v1";
 const MAIN_FONT_OPTIONS = new Set(["pretendard", "orbit", "sarasa", "elice"]);
 const MAIN_FONT_SCALE_STORAGE_KEY = "kaosgdd.v2.main.fontScale.v1";
@@ -5482,6 +5484,36 @@ function setFamilyFontPreference(value) {
   applyFamilyFontPreference(normalized);
 }
 
+function familyFontScalePreference() {
+  const stored = Number(window.localStorage.getItem(FAMILY_FONT_SCALE_STORAGE_KEY));
+  return FAMILY_FONT_SCALE_OPTIONS.includes(stored) ? stored : 100;
+}
+
+function applyFamilyFontScalePreference(value = familyFontScalePreference()) {
+  const app = document.querySelector(".app");
+  const normalized = FAMILY_FONT_SCALE_OPTIONS.includes(Number(value)) ? Number(value) : 100;
+  if (!app || portalProfile() !== "family") {
+    if (app) delete app.dataset.familyFontScale;
+    return;
+  }
+  app.dataset.familyFontScale = String(normalized);
+  document.documentElement.style.fontSize = `${normalized}%`;
+}
+
+function setFamilyFontScalePreference(value) {
+  const requested = Number(value);
+  const normalized = FAMILY_FONT_SCALE_OPTIONS.includes(requested) ? requested : 100;
+  window.localStorage.setItem(FAMILY_FONT_SCALE_STORAGE_KEY, String(normalized));
+  applyFamilyFontScalePreference(normalized);
+}
+
+function stepFamilyFontScale(direction) {
+  const currentIndex = FAMILY_FONT_SCALE_OPTIONS.indexOf(familyFontScalePreference());
+  const delta = Math.sign(Number(direction) || 0);
+  const nextIndex = Math.max(0, Math.min(FAMILY_FONT_SCALE_OPTIONS.length - 1, currentIndex + delta));
+  setFamilyFontScalePreference(FAMILY_FONT_SCALE_OPTIONS[nextIndex]);
+}
+
 function normalizeFamilyTextPresets(value) {
   const source = Array.isArray(value)
     ? value
@@ -5540,7 +5572,6 @@ function applyMainFontScalePreference(value = mainFontScalePreference()) {
   const app = document.querySelector(".app");
   const normalized = MAIN_FONT_SCALE_OPTIONS.includes(Number(value)) ? Number(value) : 100;
   if (!app || portalProfile() !== "main") {
-    document.documentElement.style.removeProperty("font-size");
     if (app) delete app.dataset.mainFontScale;
     return;
   }
@@ -5560,6 +5591,12 @@ function stepMainFontScale(direction) {
   const delta = Math.sign(Number(direction) || 0);
   const nextIndex = Math.max(0, Math.min(MAIN_FONT_SCALE_OPTIONS.length - 1, currentIndex + delta));
   setMainFontScalePreference(MAIN_FONT_SCALE_OPTIONS[nextIndex]);
+}
+
+function applyPortalFontScalePreference() {
+  document.documentElement.style.removeProperty("font-size");
+  applyFamilyFontScalePreference();
+  applyMainFontScalePreference();
 }
 
 function weatherLocationPreference() {
@@ -6244,7 +6281,7 @@ function routeTitle(route) {
   }
   applyFamilyFontPreference();
   applyMainFontPreference();
-  applyMainFontScalePreference();
+  applyPortalFontScalePreference();
   renderTopNav(route);
 }
 
@@ -9919,6 +9956,7 @@ function renderWeatherSettingsRow() {
 }
 
 function renderFamilyFontSettingsRow() {
+  const selectedScale = familyFontScalePreference();
   return `
     <div>
       <dt>${uiText("settings.font", "Font")}</dt>
@@ -9932,6 +9970,14 @@ function renderFamilyFontSettingsRow() {
           <option value="board-marker" ${familyFontPreference() === "board-marker" ? "selected" : ""}>${uiText("settings.fontBoardMarker", "School Safe Board Marker")}</option>
           <option value="milky-way" ${familyFontPreference() === "milky-way" ? "selected" : ""}>${uiText("settings.fontMilkyWay", "School Safety Milky Way")}</option>
         </select>
+      </dd>
+    </div>
+    <div>
+      <dt>${uiText("settings.fontSize", "Font size")}</dt>
+      <dd class="familyFontScaleActions">
+        <button type="button" data-family-font-step="-1" ${selectedScale <= FAMILY_FONT_SCALE_OPTIONS[0] ? "disabled" : ""} aria-label="${uiText("settings.fontSmaller", "Decrease font size")}">A−</button>
+        <button type="button" data-family-font-reset aria-label="${uiText("settings.fontReset", "Reset font size")}">${selectedScale}%</button>
+        <button type="button" data-family-font-step="1" ${selectedScale >= FAMILY_FONT_SCALE_OPTIONS.at(-1) ? "disabled" : ""} aria-label="${uiText("settings.fontLarger", "Increase font size")}">A+</button>
       </dd>
     </div>
   `;
@@ -10406,6 +10452,21 @@ document.addEventListener("click", async (event) => {
   }
 
   if (!event.target.closest("[data-compact-main-menu]")) closeCompactMainMenu();
+
+  const familyFontStep = event.target.closest("[data-family-font-step]");
+  if (familyFontStep) {
+    event.preventDefault();
+    stepFamilyFontScale(familyFontStep.dataset.familyFontStep);
+    render();
+    return;
+  }
+
+  if (event.target.closest("[data-family-font-reset]")) {
+    event.preventDefault();
+    setFamilyFontScalePreference(100);
+    render();
+    return;
+  }
 
   const mainFontStep = event.target.closest("[data-main-font-step]");
   if (mainFontStep) {

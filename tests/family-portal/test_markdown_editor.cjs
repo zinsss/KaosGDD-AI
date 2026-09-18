@@ -44,7 +44,7 @@ test("Markdown editing moves the current line without changing its selection", (
 
 test("Memos and Scribble share the lightweight editor", () => {
   assert.match(index, /src="\/markdown-editor\.js\?v=1"/);
-  assert.ok(index.indexOf('src="/markdown-editor.js?v=1"') < index.indexOf('src="/app.js?v=355"'));
+  assert.ok(index.indexOf('src="/markdown-editor.js?v=1"') < index.indexOf('src="/app.js?v=356"'));
   assert.match(app, /KAOS_MARKDOWN_EDITOR\?\.enhanceAll\(view\)/);
   assert.match(app, /data-memo-content[\s\S]*data-markdown-editor/);
   assert.match(memosView, /data-memo-edit-start/);
