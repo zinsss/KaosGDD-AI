@@ -9312,6 +9312,11 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 }
 
 /* Main keeps hierarchy through size and color instead of heavy terminal bolds. */
+.app[data-profile="main"] {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 .app[data-profile="main"],
 .app[data-profile="main"] * {
   font-synthesis-weight: none;
