@@ -543,46 +543,48 @@ html.isAgendaSuppliesEmbed body {
 }
 
 .topReloadButton {
-  display: grid;
-  place-items: center;
-  width: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
   height: 36px;
   min-height: 36px;
-  border: 1px solid rgba(136, 192, 208, 0.5);
-  border-radius: 999px;
-  background: rgba(67, 76, 94, 0.28);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--nord8);
-  padding: 0;
-  font: 700 1.2rem/1 "Sarasa Gothic Mono", ui-monospace, monospace;
+  padding: 0 2px;
+  font: 650 0.78rem/1 "Sarasa Gothic Mono", ui-monospace, monospace;
+  white-space: nowrap;
 }
 
 .topReloadButton:hover,
 .topReloadButton:focus-visible,
 .topReloadButton:active {
-  border-color: rgba(235, 203, 139, 0.72);
   color: var(--nord13);
-  background: rgba(235, 203, 139, 0.13);
+  background: transparent;
 }
 
 .topAddButton {
-  display: grid;
-  place-items: center;
-  width: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
   height: 36px;
   min-height: 36px;
-  border: 1px solid rgba(136, 192, 208, 0.72);
-  border-radius: 999px;
-  background: rgba(136, 192, 208, 0.22);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--nord8);
-  padding: 0;
-  font: 700 1.5rem/1 "Sarasa Gothic Mono", ui-monospace, monospace;
+  padding: 0 2px;
+  font: 650 0.78rem/1 "Sarasa Gothic Mono", ui-monospace, monospace;
+  white-space: nowrap;
 }
 
 .topAddButton:active,
 .topAddButton[aria-expanded="true"] {
-  border-color: rgba(235, 203, 139, 0.72);
   color: var(--nord13);
-  background: rgba(235, 203, 139, 0.13);
+  background: transparent;
 }
 
 .topAddMenu {
@@ -5387,8 +5389,6 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 }
 
 .app[data-profile="main"][data-main-font] :where(
-  .topReloadButton,
-  .topAddButton,
   .compactMainMenuButton,
   .compactMainMenuPopup,
   .archiveTerminal,
@@ -6686,7 +6686,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   }
 
   .app[data-profile="main"] .appIdentity {
-    padding-right: 94px;
+    padding-right: 140px;
   }
 
   .app[data-profile="main"] .topNav {
