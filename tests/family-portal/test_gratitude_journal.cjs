@@ -27,6 +27,7 @@ test("gratitude journal module loads before the portal app", () => {
   assert.match(styleSource, /\.gratitudeField input::placeholder\s*\{[^}]*rgba\(216, 222, 233, 0\.26\)[^}]*opacity: 1;/s);
   assert.match(styleSource, /\.app\[data-profile="main"\] \.gratitudeField input\s*\{[^}]*border-radius: 0;/s);
   assert.match(styleSource, /\.gratitudeField input:focus\s*\{[^}]*outline: none;[^}]*inset 2px 0 0/s);
+  assert.match(styleSource, /\.app\[data-profile="family"\] \.gratitudeField input,[\s\S]*\.calendarGratitudeList\s*\{[^}]*color: #594964;/s);
 });
 
 test("renders a selected day's gratitude as a read-only list", () => {

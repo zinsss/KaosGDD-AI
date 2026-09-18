@@ -1577,6 +1577,11 @@ h3 {
   box-shadow: inset 2px 0 0 rgba(155, 95, 143, 0.46);
 }
 
+.app[data-profile="family"] .gratitudeField input,
+.app[data-profile="family"] .calendarGratitudeList {
+  color: #594964;
+}
+
 .app[data-profile="family"] .gratitudeField input::placeholder {
   color: rgba(89, 73, 100, 0.34);
 }
