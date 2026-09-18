@@ -81,16 +81,18 @@ const SHARED_FONT_OPTIONS = Object.freeze([
   { id: "watermelon", label: "Watermelon", translationKey: "settings.fontWatermelon" },
   { id: "board-marker", label: "School Safe Board Marker", translationKey: "settings.fontBoardMarker" },
   { id: "milky-way", label: "School Safety Milky Way", translationKey: "settings.fontMilkyWay" },
+  { id: "kita", label: "KITA", translationKey: "settings.fontKita" },
+  { id: "free-time", label: "School Safety Free Time", translationKey: "settings.fontFreeTime" },
 ]);
 const PORTAL_FONT_IDS = SHARED_FONT_OPTIONS.map((option) => option.id);
 const FAMILY_FONT_STORAGE_KEY = "kaosgdd.v2.family.font.v1";
 const FAMILY_FONT_OPTIONS = new Set(PORTAL_FONT_IDS);
 const FAMILY_FONT_SCALE_STORAGE_KEY = "kaosgdd.v2.family.fontScale.v1";
-const FAMILY_FONT_SCALE_OPTIONS = Object.freeze([90, 95, 100, 105, 110]);
+const FAMILY_FONT_SCALE_OPTIONS = Object.freeze([80, 85, 90, 95, 100, 105, 110, 115, 120]);
 const MAIN_FONT_STORAGE_KEY = "kaosgdd.v2.main.font.v1";
 const MAIN_FONT_OPTIONS = new Set(PORTAL_FONT_IDS);
 const MAIN_FONT_SCALE_STORAGE_KEY = "kaosgdd.v2.main.fontScale.v1";
-const MAIN_FONT_SCALE_OPTIONS = Object.freeze([90, 95, 100, 105, 110]);
+const MAIN_FONT_SCALE_OPTIONS = Object.freeze([80, 85, 90, 95, 100, 105, 110, 115, 120]);
 const WEATHER_LOCATION_STORAGE_KEY = "kaosgdd.v2.weather.location.v1";
 const WEATHER_LOCATION_OPTIONS = [
   { id: "pohang", label: "Pohang", translationKey: "weather.locationPohang" },

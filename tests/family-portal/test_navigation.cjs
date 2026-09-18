@@ -66,13 +66,13 @@ test("notification categories point at the selector destination that can acknowl
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=365"');
+  const styleIndex = index.indexOf('href="/styles.css?v=366"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=10"');
   const calendarViewIndex = index.indexOf('src="/calendar-view.js?v=2"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
   const faxIndex = index.indexOf('src="/fax.js?v=2"');
   const mailIndex = index.indexOf('src="/mail.js?v=7"');
-  const applicationIndex = index.indexOf('src="/app.js?v=358"');
+  const applicationIndex = index.indexOf('src="/app.js?v=359"');
   assert.ok(styleIndex >= 0);
   assert.ok(navigationIndex >= 0);
   assert.ok(calendarViewIndex > navigationIndex);
@@ -99,7 +99,7 @@ test("main and family settings share the complete font list", () => {
   const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
   const translations = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/translations.js"), "utf8");
 
-  assert.match(appSource, /SHARED_FONT_OPTIONS = Object\.freeze\(\[[\s\S]*id: "sarasa"[\s\S]*id: "elice"[\s\S]*id: "nanum"[\s\S]*id: "watermelon"[\s\S]*id: "milky-way"/);
+  assert.match(appSource, /SHARED_FONT_OPTIONS = Object\.freeze\(\[[\s\S]*id: "sarasa"[\s\S]*id: "elice"[\s\S]*id: "nanum"[\s\S]*id: "watermelon"[\s\S]*id: "milky-way"[\s\S]*id: "kita"[\s\S]*id: "free-time"/);
   assert.match(appSource, /FAMILY_FONT_OPTIONS = new Set\(PORTAL_FONT_IDS\)/);
   assert.match(appSource, /MAIN_FONT_OPTIONS = new Set\(PORTAL_FONT_IDS\)/);
   assert.match(appSource, /renderSharedFontOptions\(selectedFont, \{ translate: true \}\)/);
@@ -107,21 +107,29 @@ test("main and family settings share the complete font list", () => {
   assert.match(styles, /font-family: "Watermelon";[\s\S]*EF_watermelonSalad\.woff2/);
   assert.match(styles, /font-family: "SchoolSafeBoardMarker";[\s\S]*HakgyoansimBoadmarkerR\.woff2/);
   assert.match(styles, /font-family: "SchoolSafetyMilkyWay";[\s\S]*TTHakgyoansimEunhasuR\.woff2/);
+  assert.match(styles, /font-family: "Kita";[\s\S]*-KITA-Regular\.woff/);
+  assert.match(styles, /font-family: "SchoolSafetyFreeTime";[\s\S]*HakgyoansimJayusiganR\.woff2/);
   assert.match(styles, /data-family-font="watermelon"[\s\S]*"Watermelon"/);
   assert.match(styles, /data-family-font="board-marker"[\s\S]*"SchoolSafeBoardMarker"/);
   assert.match(styles, /data-family-font="milky-way"[\s\S]*"SchoolSafetyMilkyWay"/);
+  assert.match(styles, /data-family-font="kita"[\s\S]*"Kita"/);
+  assert.match(styles, /data-family-font="free-time"[\s\S]*"SchoolSafetyFreeTime"/);
   assert.match(styles, /data-family-font="sarasa"[\s\S]*"Sarasa Gothic Mono"/);
   assert.match(styles, /data-family-font="elice"[\s\S]*"EllisDigitalCoding"/);
   assert.match(styles, /data-family-font="orbit"[\s\S]*"Orbit"/);
   assert.match(styles, /data-main-font="watermelon"[\s\S]*"Watermelon"/);
   assert.match(styles, /data-main-font="milky-way"[\s\S]*"SchoolSafetyMilkyWay"/);
+  assert.match(styles, /data-main-font="kita"[\s\S]*"Kita"/);
+  assert.match(styles, /data-main-font="free-time"[\s\S]*"SchoolSafetyFreeTime"/);
   assert.match(translations, /"settings\.fontSarasa": "Sarasa Gothic Mono"/);
   assert.match(translations, /"settings\.fontElice": "Elice Digital Baeum"/);
   assert.match(translations, /"settings\.fontOrbit": "Orbit"/);
   assert.match(translations, /"settings\.fontWatermelon": "Watermelon"/);
   assert.match(translations, /"settings\.fontBoardMarker": "학교안심 보드마커"/);
   assert.match(translations, /"settings\.fontMilkyWay": "학교안심 은하수"/);
-  assert.match(appSource, /FAMILY_FONT_SCALE_OPTIONS = Object\.freeze\(\[90, 95, 100, 105, 110\]\)/);
+  assert.match(translations, /"settings\.fontKita": "KITA"/);
+  assert.match(translations, /"settings\.fontFreeTime": "학교안심 자유시간"/);
+  assert.match(appSource, /FAMILY_FONT_SCALE_OPTIONS = Object\.freeze\(\[80, 85, 90, 95, 100, 105, 110, 115, 120\]\)/);
   assert.match(appSource, /data-family-font-step="-1"/);
   assert.match(appSource, /data-family-font-reset/);
   assert.match(appSource, /data-family-font-step="1"/);
@@ -151,7 +159,7 @@ test("calendar month panel rendering is delegated to the view module", () => {
   assert.match(calendarViewSource, /data-date="\$\{cell\.value\}"/);
   assert.match(calendarViewSource, /data-calendar-add-event/);
   assert.match(index, /src="\/calendar-view\.js\?v=2"/);
-  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=358"'));
+  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=359"'));
   assert.match(calendarViewSource, /dayCaregiverMark" role="img"/);
   assert.match(calendarViewSource, /hasMarket \|\| eventCount \|\| taskCount/);
 });

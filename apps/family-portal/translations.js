@@ -380,6 +380,8 @@ window.KAOS_TRANSLATIONS = {
     "settings.fontWatermelon": "Watermelon",
     "settings.fontBoardMarker": "학교안심 보드마커",
     "settings.fontMilkyWay": "학교안심 은하수",
+    "settings.fontKita": "KITA",
+    "settings.fontFreeTime": "학교안심 자유시간",
     "settings.fontSize": "글자 크기",
     "settings.fontSmaller": "글자 작게",
     "settings.fontReset": "글자 크기 초기화",

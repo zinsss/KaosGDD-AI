@@ -167,6 +167,22 @@
 }
 
 @font-face {
+  font-family: "Kita";
+  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2201-2@1.0/-KITA-Regular.woff") format("woff");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "SchoolSafetyFreeTime";
+  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/2508-2@1.0/HakgyoansimJayusiganR.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
   font-family: "NixgonFont";
   src: url("./fonts/NIXGONL-Vb.woff?v=114") format("woff");
   font-weight: 300;
@@ -5362,6 +5378,14 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   --main-selected-font: "SchoolSafetyMilkyWay", "Pretendard", ui-sans-serif, system-ui, sans-serif;
 }
 
+.app[data-profile="main"][data-main-font="kita"] {
+  --main-selected-font: "Kita", "Pretendard", ui-sans-serif, system-ui, sans-serif;
+}
+
+.app[data-profile="main"][data-main-font="free-time"] {
+  --main-selected-font: "SchoolSafetyFreeTime", "Pretendard", ui-sans-serif, system-ui, sans-serif;
+}
+
 .app[data-profile="main"][data-main-font] :where(
   .topReloadButton,
   .topAddButton,
@@ -5709,6 +5733,18 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 .app[data-profile="family"][data-family-font="milky-way"] {
   font-family:
     "SchoolSafetyMilkyWay", "NanumBarunPen", "Pretendard", ui-sans-serif,
+    system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.app[data-profile="family"][data-family-font="kita"] {
+  font-family:
+    "Kita", "NanumBarunPen", "Pretendard", ui-sans-serif, system-ui,
+    -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.app[data-profile="family"][data-family-font="free-time"] {
+  font-family:
+    "SchoolSafetyFreeTime", "NanumBarunPen", "Pretendard", ui-sans-serif,
     system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
