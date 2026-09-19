@@ -37,8 +37,12 @@ test("main and family memos routes render native archive board controls", () => 
   assert.match(memosViewSource, /data-archive-kind="memos"/);
   assert.match(memosViewSource, /data-memo-search/);
   assert.match(memosViewSource, /data-memos-refresh/);
-  assert.match(memosViewSource, /href="#\/add-memo">NEW<\/a>/);
-  assert.ok(memosViewSource.indexOf('href="#/add-memo">NEW</a>') < memosViewSource.indexOf('class="archiveSearchBox"'));
+  assert.match(memosViewSource, /href="#\/add-memo">New<\/a>/);
+  assert.ok(memosViewSource.indexOf('href="#/add-memo">New</a>') < memosViewSource.indexOf('class="archiveSearchBox"'));
+  assert.match(appSource, /class="openButton memoHeaderCancel" href="#\/memos">Cancel<\/a>/);
+  assert.match(stylesSource, /\.memoHeaderCancel \{[\s\S]*font: 500 0\.78rem\/1 "Sarasa Gothic Mono"/);
+  assert.match(stylesSource, /\.memoHeaderCancel::before \{\s*content: "\[";/);
+  assert.match(stylesSource, /\.memoHeaderCancel::after \{\s*content: "\]";/);
   assert.ok(memosViewSource.indexOf('class="archiveSearchBox"') < memosViewSource.indexOf('data-memos-refresh'));
   assert.match(stylesSource, /\[data-archive-kind="memos"\] \.archiveSearchBar \{\n  grid-template-columns: auto minmax\(0, 1fr\) 44px;/);
   assert.match(memosViewSource, /data-memo-open/);

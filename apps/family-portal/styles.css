@@ -7561,7 +7561,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.28em;
+  gap: 0;
   min-height: 32px;
   border: 0;
   border-radius: 0;
@@ -7666,6 +7666,32 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   min-height: 32px;
   padding: 0;
   font-size: 1.05rem;
+  text-transform: none;
+}
+
+.app[data-profile="main"] .memoHeaderCancel {
+  min-width: 0;
+  min-height: 32px;
+  border: 0;
+  background: transparent;
+  padding: 0 3px;
+  color: var(--nord8);
+  font: 500 0.78rem/1 "Sarasa Gothic Mono", ui-monospace, monospace;
+  text-transform: none;
+}
+
+.app[data-profile="main"] .memoHeaderCancel::before {
+  content: "[";
+}
+
+.app[data-profile="main"] .memoHeaderCancel::after {
+  content: "]";
+}
+
+.app[data-profile="main"] .memoHeaderCancel:hover,
+.app[data-profile="main"] .memoHeaderCancel:focus-visible {
+  color: var(--nord13);
+  background: transparent;
 }
 
 .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"], [data-profile="family"][data-route="memos"]) .archiveAction:hover,

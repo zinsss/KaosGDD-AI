@@ -127,7 +127,7 @@ window.KAOS_MEMOS_VIEW = (() => {
     return `
       <section class="archiveTerminal" data-archive-kind="memos" aria-label="Memo archive">
         <form class="archiveCommand archiveSearchBar" data-memo-search role="search">
-          <a class="archiveAction archiveTopAction" href="#/add-memo">NEW</a>
+          <a class="archiveAction archiveTopAction" href="#/add-memo">New</a>
           <label class="archiveSearchBox" for="memoQuery">
             <span class="archiveSearchIcon" aria-hidden="true">⌕</span>
             <input id="memoQuery" name="query" type="search" value="${deps.escapeHtml(memos.query)}" placeholder="Search memos" autocomplete="off" />

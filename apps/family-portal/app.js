@@ -9621,7 +9621,7 @@ function renderAddMemo() {
           <p class="label">Memos</p>
           <h2>Add memo</h2>
         </div>
-        <a class="openButton" href="#/memos">Cancel</a>
+        <a class="openButton memoHeaderCancel" href="#/memos">Cancel</a>
       </div>
       <div class="composer memoComposer">
         <label>
