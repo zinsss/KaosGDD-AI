@@ -7411,6 +7411,29 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   grid-template-columns: auto minmax(0, 1fr) 44px;
 }
 
+.app:is([data-profile="main"], [data-profile="family"][data-route="memos"]) [data-archive-kind="memos"] .memoArchiveToolbar {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+}
+
+.memoArchiveCommands {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0;
+}
+
+.memoArchiveCommands .archiveTopAction {
+  min-width: 0;
+  padding: 0 2px;
+}
+
+.memoToolbarPanel {
+  width: 100%;
+  margin: 0;
+}
+
 .app[data-profile="main"] [data-archive-kind="fax"] .archiveCommand,
 .app[data-profile="main"] [data-archive-kind="mail"] .archiveCommand {
   display: flex;

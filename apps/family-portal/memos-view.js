@@ -50,6 +50,9 @@ window.KAOS_MEMOS_VIEW = (() => {
     const summary = memos.appliedQuery
       ? `${memos.resultCount} MATCHES // MEMOS`
       : `${memos.totalCount} MEMOS`;
+    const tagButtons = (Array.isArray(memos.tagOptions) ? memos.tagOptions : [])
+      .map((tag) => `<button class="archiveTagChip ${memos.appliedQuery === `#${tag}` ? "isActive" : ""}" type="button" data-memo-tag="${deps.escapeHtml(tag)}">#${deps.escapeHtml(tag)}</button>`)
+      .join("");
     const detail = memos.detailLoading
       ? `
         <section class="archiveDetail" data-memo-detail tabindex="-1" aria-busy="true">
@@ -126,14 +129,25 @@ window.KAOS_MEMOS_VIEW = (() => {
           : "";
     return `
       <section class="archiveTerminal" data-archive-kind="memos" aria-label="Memo archive">
-        <form class="archiveCommand archiveSearchBar" data-memo-search role="search">
-          <a class="archiveAction archiveTopAction" href="#/add-memo">New</a>
-          <label class="archiveSearchBox" for="memoQuery">
-            <span class="archiveSearchIcon" aria-hidden="true">⌕</span>
-            <input id="memoQuery" name="query" type="search" value="${deps.escapeHtml(memos.query)}" placeholder="Search memos" autocomplete="off" />
-            ${memos.appliedQuery ? `<button class="archiveSearchClear" type="button" data-memos-clear aria-label="Clear memo search">×</button>` : ""}
-          </label>
-          <button class="archiveAction archiveTopAction" type="button" data-memos-refresh aria-label="Reload memos" title="Reload memos" ${memos.loading ? "disabled" : ""}>Reload</button>
+        <form class="archiveCommand memoArchiveToolbar" data-memo-search role="search">
+          <div class="memoArchiveCommands">
+            <a class="archiveAction archiveTopAction" href="#/add-memo">New</a>
+            <button class="archiveAction archiveTopAction ${memos.toolbarPanel === "search" ? "isActive" : ""}" type="button" data-memos-toolbar="search" aria-expanded="${memos.toolbarPanel === "search"}">Search</button>
+            <button class="archiveAction archiveTopAction ${memos.toolbarPanel === "tags" ? "isActive" : ""}" type="button" data-memos-toolbar="tags" aria-expanded="${memos.toolbarPanel === "tags"}">Tags</button>
+            <button class="archiveAction archiveTopAction" type="button" data-memos-refresh aria-label="Reload memos" title="Reload memos" ${memos.loading ? "disabled" : ""}>Reload</button>
+          </div>
+          ${memos.toolbarPanel === "search" ? `
+            <label class="archiveSearchBox memoToolbarPanel" for="memoQuery">
+              <span class="archiveSearchIcon" aria-hidden="true">⌕</span>
+              <input id="memoQuery" name="query" type="search" value="${deps.escapeHtml(memos.query)}" placeholder="Search memos" autocomplete="off" />
+              ${memos.appliedQuery ? `<button class="archiveSearchClear" type="button" data-memos-clear aria-label="Clear memo search">×</button>` : ""}
+            </label>
+          ` : `<input type="hidden" name="query" value="${deps.escapeHtml(memos.query)}" />`}
+          ${memos.toolbarPanel === "tags" ? `
+            <div class="archiveTagFilters memoToolbarPanel" aria-label="Memo tags">
+              ${tagButtons || `<p class="archiveTagStatus">No tags found.</p>`}
+            </div>
+          ` : ""}
           <button class="srOnly" type="submit">Search</button>
         </form>
         <div class="archiveWorkspace ${hasDetail ? "hasDetail" : ""}">

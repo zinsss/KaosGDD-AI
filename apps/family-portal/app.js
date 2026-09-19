@@ -218,6 +218,8 @@ const state = {
     error: "",
     query: "",
     appliedQuery: "",
+    toolbarPanel: "",
+    tagOptions: [],
     pageSize: 50,
     resultCount: 0,
     totalCount: 0,
@@ -3387,6 +3389,16 @@ function memoSearchFilter(query) {
   return terms.map((term) => `content.contains(${JSON.stringify(term)})`).join(" && ");
 }
 
+function memoTagOptions(items) {
+  const tags = [];
+  for (const memo of Array.isArray(items) ? items : []) {
+    for (const tag of Array.isArray(memo.tags) ? memo.tags : []) tags.push(tag.replace(/^#/, ""));
+    for (const match of String(memo.content || "").matchAll(/(?:^|\s)#([^\s#]+)/gu)) tags.push(match[1]);
+  }
+  return [...new Set(tags.map((tag) => String(tag || "").trim()).filter(Boolean))]
+    .sort((left, right) => left.localeCompare(right));
+}
+
 async function loadMemos(options = {}) {
   if (state.memos.loading) return;
   if (state.memos.checked && !options.force) return;
@@ -3406,6 +3418,7 @@ async function loadMemos(options = {}) {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || payload.message || `HTTP ${response.status}`);
     const page = normalizeMemosPage(payload);
+    const tagOptions = state.memos.appliedQuery ? state.memos.tagOptions : memoTagOptions(page.items);
     state.memos = {
       ...state.memos,
       checked: true,
@@ -3414,6 +3427,7 @@ async function loadMemos(options = {}) {
       items: page.items,
       resultCount: page.totalCount,
       totalCount: page.totalCount,
+      tagOptions,
     };
   } catch (error) {
     state.memos = {
@@ -10857,6 +10871,25 @@ document.addEventListener("click", async (event) => {
 
   if (event.target.closest("[data-memos-refresh]")) {
     await refreshMemos();
+    return;
+  }
+
+  const memoToolbarToggle = event.target.closest("[data-memos-toolbar]");
+  if (memoToolbarToggle) {
+    const panel = memoToolbarToggle.dataset.memosToolbar || "";
+    state.memos.toolbarPanel = state.memos.toolbarPanel === panel ? "" : panel;
+    render();
+    if (state.memos.toolbarPanel === "search") {
+      window.setTimeout(() => document.getElementById("memoQuery")?.focus(), 0);
+    }
+    return;
+  }
+
+  const memoTag = event.target.closest("[data-memo-tag]");
+  if (memoTag) {
+    state.memos.toolbarPanel = "tags";
+    const tagQuery = `#${memoTag.dataset.memoTag || ""}`;
+    await searchMemos(state.memos.appliedQuery === tagQuery ? "" : tagQuery);
     return;
   }
 
