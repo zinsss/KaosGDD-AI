@@ -15,6 +15,7 @@ test("personal PWA renders the shared KaosToday briefing instead of an ACK list"
   assert.match(viewSource, /aria-label="KaosGDD Today"/);
   assert.match(viewSource, /class="archiveCommand kaosTodayToolbar"/);
   assert.match(viewSource, /data-notifications-refresh[^>]*>Reload<\/button>/);
+  assert.match(indexSource, /href="\/styles\.css\?v=386"/);
   assert.match(viewSource, /payload\.plainText/);
   assert.match(viewSource, /class="kaosTodayText"/);
   assert.doesNotMatch(viewSource, /data-notification-ack=/);
