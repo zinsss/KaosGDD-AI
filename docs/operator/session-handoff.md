@@ -2,6 +2,12 @@
 
 Last updated: 2026-09-07
 
+> Historical handoff snapshot. It records the system-operator state as of the
+> date above and is not the current production baseline. Both Discord
+> transports were retired on 2026-09-17. See
+> [Production Recovery](../operations/production-recovery.md) and the
+> repository root README for current runtime status.
+
 ## Current State
 
 - KaosGDD-AI main branch is the durable shared context for KaosBrain,
@@ -86,6 +92,6 @@ Last updated: 2026-09-07
 - Do not execute generated scripts on production without a separate approved
   runbook operation.
 - Do not perform PACS/database/OS maintenance through ordinary chat approval.
-- Preserve PWA as daily UI and read-only system status. Treat Discord `#brain`
-  as transitional/fallback conversation only; do not build new privileged
-  system operations in Discord.
+- Preserve the PWA as the daily UI and read-only system-status surface. Both
+  Discord transports are retired; do not restore them or build privileged
+  system operations through a chat transport.

@@ -1,5 +1,13 @@
 # H4 Ultra + H3+ Production Plan
 
+> Historical architecture and migration record. The placement, authority,
+> recovery, and failure-isolation decisions remain relevant, but the Discord
+> transition steps in this document were completed and superseded on
+> 2026-09-17. Both Discord transports are retired. Current runtime truth is in
+> [Target Architecture](target-architecture.md),
+> [Runtime Layout](runtime-layout.md), and
+> [Production Recovery](../operations/production-recovery.md).
+>
 > Implementation status (2026-08-28): the H3 application plane, H4 KaosBrain,
 > guarded KaosBrain-OpenAI chat, and the office Fax Connector/Bridge are active. This
 > document remains the architecture and rollback contract; phase instructions
@@ -521,7 +529,7 @@ version, and expiry. A conversational `yes` alone is insufficient.
 
 - Join Office Kaos, H3+, and H4 to Tailscale.
 - Bind Governor only to loopback initially, then the H3+ Tailscale address.
-- Permit Governor TCP 8097 only from H4 and approved H3-local services.
+- Permit Governor TCP 8098 only from H4 and approved H3-local services.
 - Permit office connector APIs only from H3+.
 - Never expose Governor, model APIs, PostgreSQL, Docker, PACS, or HylaFAX
   directly through Cloudflare.

@@ -9,7 +9,7 @@ namespace.
 ```text
 /srv/kaosgdd/
   kaosbrain/
-    KaosBrain AI orchestrator, Discord-facing runtime, guard, and local worker env
+    KaosBrain headless AI orchestrator, guard, and local worker environment
   kaosgovernor/
     KaosGovernor API, workers, scheduler, durable operation state
   secrets/
@@ -60,7 +60,7 @@ or KaosGovernor internals.
 The H3 backend deploy therefore uses two roots:
 
 - `GOVERNOR_STATE_ROOT=/srv/kaosgdd/kaosgovernor` for Governor-owned mail,
-  fax, Discord channel, scheduler, audit, and durable operation state.
+  fax, notification, scheduler, audit, and durable operation state.
 - `KAOS_ROOT=/srv/kaos` for ready-made backend service data and config such as
   Radicale, Memos, Vaultwarden, SFTPGo, Caddy, and cloudflared.
 

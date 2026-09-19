@@ -18,7 +18,7 @@ The model may propose an operation. It may not authorize itself or bypass Govern
 Allowed:
 
 - local model inference
-- Discord channel handling through the KaosBrain adapter
+- token-protected internal HTTP preview and reasoning routes
 - approved narrow KaosGovernor tool APIs
 - short-lived conversational context
 
@@ -31,7 +31,8 @@ Denied:
 - direct Radicale, Memos, Paperless, or HylaFAX credentials
 - production filesystem mounts
 
-Discord guild, channel, and user access must be allowlisted. If
+KaosBrain has no active chat transport. Callers must use its private,
+token-protected HTTP surface over loopback or Tailscale. If
 KaosBrain-OpenAI/OpenClaw is enabled, it remains behind KaosBrain Guard and
 must not receive Governor credentials or direct backend credentials.
 
