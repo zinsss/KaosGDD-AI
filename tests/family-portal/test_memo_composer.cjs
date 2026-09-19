@@ -19,6 +19,11 @@ test("memo composer uploads arbitrary files and links them to a private memo", (
   assert.match(appSource, /fetch\("\/api\/memos\/attachments\/upload"/);
   assert.match(appSource, /JSON\.stringify\(\{ content: normalized, visibility: "PRIVATE", attachments: attachmentReferences \}\)/);
   assert.match(appSource, /name="files" type="file" multiple data-memo-files/);
+  assert.match(appSource, /class="memoFileChoose">파일 선택<\/span>/);
+  assert.match(appSource, /data-memo-file-selection>선택한 파일 없음<\/span>/);
+  assert.match(appSource, /files\.length === 1[\s\S]*files\[0\]\.name[\s\S]*개 파일 선택됨/);
+  assert.match(stylesSource, /\.memoFileControl \{[\s\S]*font-family: "Sarasa Gothic Mono"[\s\S]*!important;/);
+  assert.match(stylesSource, /\.memoFilePicker input\[type="file"\] \{[\s\S]*opacity: 0;/);
   assert.match(appSource, /memo_content_or_attachment_required/);
   assert.match(appSource, /cleanupMemoAttachments/);
 });

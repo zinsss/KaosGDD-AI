@@ -9650,10 +9650,14 @@ function renderAddMemo() {
             data-markdown-editor
           >${escapeHtml(composer.content)}</textarea>
         </label>
-        <label class="memoFilePicker">
+        <div class="memoFilePicker">
           <span>Files</span>
-          <input name="files" type="file" multiple data-memo-files />
-        </label>
+          <label class="memoFileControl">
+            <input name="files" type="file" multiple data-memo-files />
+            <span class="memoFileChoose">파일 선택</span>
+            <span class="memoFileSelection" data-memo-file-selection>선택한 파일 없음</span>
+          </label>
+        </div>
         ${
           composer.error
             ? `<p class="formNote isError" role="alert">${escapeHtml(composer.error)}</p>`
@@ -12471,6 +12475,20 @@ document.addEventListener("keydown", (event) => {
 });
 
 document.addEventListener("change", async (event) => {
+  const memoFiles = event.target.closest("[data-memo-files]");
+  if (memoFiles) {
+    const files = Array.from(memoFiles.files || []);
+    const status = memoFiles.closest(".memoFileControl")?.querySelector("[data-memo-file-selection]");
+    if (status) {
+      status.textContent = files.length === 0
+        ? "선택한 파일 없음"
+        : files.length === 1
+          ? files[0].name
+          : `${files.length}개 파일 선택됨`;
+    }
+    return;
+  }
+
   const mainMenu = event.target.closest("[data-main-menu]");
   if (mainMenu) {
     const route = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(mainMenu.value) || "agenda";

@@ -101,10 +101,14 @@ window.KAOS_MEMOS_VIEW = (() => {
                         <textarea name="content" rows="16" data-memo-edit-content data-markdown-editor>${deps.escapeHtml(memos.editDraft)}</textarea>
                       </label>
                       ${renderAttachmentList(deps, memos.editAttachments, { editing: true })}
-                      <label class="memoFilePicker">
+                      <div class="memoFilePicker">
                         <span>ADD FILES</span>
-                        <input name="files" type="file" multiple data-memo-files />
-                      </label>
+                        <label class="memoFileControl">
+                          <input name="files" type="file" multiple data-memo-files />
+                          <span class="memoFileChoose">파일 선택</span>
+                          <span class="memoFileSelection" data-memo-file-selection>선택한 파일 없음</span>
+                        </label>
+                      </div>
                       ${memos.editError ? `<p class="formNote isError" role="alert">${deps.escapeHtml(memos.editError)}</p>` : ""}
                       <div class="archiveActions memoEditFormActions">
                         <button class="archiveAction" type="button" data-memo-edit-cancel ${memos.editSaving ? "disabled" : ""}>CANCEL</button>

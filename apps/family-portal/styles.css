@@ -2057,15 +2057,12 @@ h3 {
 }
 
 .memoFilePicker input[type="file"] {
-  display: block;
+  position: absolute;
+  inset: 0;
   width: 100%;
-  min-height: 46px;
-  box-sizing: border-box;
-  padding: 5px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
 }
 
 .memoFilePicker input[type="file"]::file-selector-button,
@@ -2078,6 +2075,42 @@ h3 {
   color: var(--text);
   font: inherit;
   cursor: pointer;
+}
+
+.memoFileControl {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  min-height: 46px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-family: "Sarasa Gothic Mono", ui-monospace, monospace !important;
+  cursor: pointer;
+}
+
+.memoFileChoose {
+  display: inline-flex;
+  align-items: center;
+  align-self: stretch;
+  padding: 0 12px;
+  border-right: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 86%, var(--text));
+  white-space: nowrap;
+}
+
+.memoFileSelection {
+  min-width: 0;
+  padding: 0 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memoFileControl:focus-within {
+  outline: 2px solid var(--nord13);
+  outline-offset: 2px;
 }
 
 .familySmartEventPanel .panelBody {
