@@ -60,9 +60,9 @@ test("Memos and Scribble share the lightweight editor", () => {
 
 test("Memo edits use the scoped Memos PATCH endpoint", () => {
   assert.match(app, /async function updateMemoContent/);
-  assert.match(app, /`\$\{detailUrl\}\?updateMask=content`/);
+  assert.match(app, /`\$\{detailUrl\}\?updateMask=content,attachments`/);
   assert.match(app, /method: "PATCH"/);
-  assert.match(app, /JSON\.stringify\(\{ content: normalized \}\)/);
+  assert.match(app, /JSON\.stringify\(\{ content: normalized, attachments: attachmentReferences \}\)/);
 });
 
 test("family portal deployment requires the shared editor asset", () => {

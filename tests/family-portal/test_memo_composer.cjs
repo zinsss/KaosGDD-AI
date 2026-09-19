@@ -14,9 +14,23 @@ test("top add opens the native one-box memo composer", () => {
   assert.doesNotMatch(appSource, /action: "memo", label: "Memo", note: "Later"/);
 });
 
-test("memo composer posts one private content payload through the Governor relay", () => {
+test("memo composer uploads arbitrary files and links them to a private memo", () => {
   assert.match(appSource, /fetch\("\/api\/memos\/api\/v1\/memos"/);
-  assert.match(appSource, /JSON\.stringify\(\{ content: normalized, visibility: "PRIVATE" \}\)/);
+  assert.match(appSource, /fetch\("\/api\/memos\/attachments\/upload"/);
+  assert.match(appSource, /JSON\.stringify\(\{ content: normalized, visibility: "PRIVATE", attachments: attachmentReferences \}\)/);
+  assert.match(appSource, /name="files" type="file" multiple data-memo-files/);
+  assert.match(appSource, /memo_content_or_attachment_required/);
+  assert.match(appSource, /cleanupMemoAttachments/);
+});
+
+test("memo details preview, download, add, and remove attachments", () => {
+  assert.match(appSource, /function normalizeMemoAttachment/);
+  assert.match(appSource, /function memoAttachmentUrl/);
+  assert.match(appSource, /updateMask=content,attachments/);
+  assert.match(memosViewSource, /class="memoAttachments"/);
+  assert.match(memosViewSource, /data-memo-edit-attachment-remove/);
+  assert.match(memosViewSource, /download="\$\{deps\.escapeHtml\(filename\)\}"/);
+  assert.match(stylesSource, /\.memoAttachmentList \{/);
 });
 
 test("main and family memos routes render native archive board controls", () => {
@@ -52,6 +66,7 @@ test("family portal proxies native memos api to governor", () => {
   const nginxSource = fs.readFileSync(path.join(__dirname, "../../deploy/h3-backend/family-portal/nginx.conf"), "utf8");
 
   assert.match(nginxSource, /location \^~ \/api\/memos\/ \{/);
+  assert.match(nginxSource, /location \^~ \/api\/memos\/ \{[\s\S]*client_max_body_size 21m;/);
   assert.match(nginxSource, /set \$governor_api http:\/\/governor-api:8096;/);
   assert.match(nginxSource, /location \^~ \/api\/memos\/ \{[\s\S]*proxy_pass \$governor_api;/);
 });

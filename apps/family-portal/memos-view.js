@@ -1,4 +1,34 @@
 window.KAOS_MEMOS_VIEW = (() => {
+  function renderAttachmentList(deps, attachments, options = {}) {
+    const items = (Array.isArray(attachments) ? attachments : []).map((attachment) => {
+      const url = deps.memoAttachmentUrl(attachment);
+      if (!url) return "";
+      const filename = attachment.filename || "attachment";
+      const preview = deps.isMemoImageAttachment(attachment)
+        ? `<img src="${deps.escapeHtml(deps.memoAttachmentUrl(attachment, { thumbnail: true }))}" alt="" loading="lazy" />`
+        : `<span class="memoAttachmentIcon" aria-hidden="true">FILE</span>`;
+      return `
+        <li class="memoAttachmentItem">
+          <a class="memoAttachmentLink" href="${deps.escapeHtml(url)}" target="_blank" rel="noopener" download="${deps.escapeHtml(filename)}">
+            ${preview}
+            <span class="memoAttachmentText">
+              <strong>${deps.escapeHtml(filename)}</strong>
+              <small>${deps.escapeHtml(attachment.type || "file")} · ${deps.escapeHtml(deps.formatBytes(attachment.size || 0))}</small>
+            </span>
+          </a>
+          ${options.editing ? `<button class="archiveAction memoAttachmentRemove" type="button" data-memo-edit-attachment-remove="${deps.escapeHtml(attachment.name)}">REMOVE</button>` : ""}
+        </li>
+      `;
+    }).join("");
+    if (!items && !options.editing) return "";
+    return `
+      <section class="memoAttachments" aria-label="Attachments">
+        <p>FILES${items ? ` · ${(attachments || []).length}` : ""}</p>
+        ${items ? `<ul class="memoAttachmentList">${items}</ul>` : `<p class="archiveStatusMessage">No files attached.</p>`}
+      </section>
+    `;
+  }
+
   function renderMemos(deps) {
     const memos = deps.state.memos;
     const rows = memos.items
@@ -65,7 +95,12 @@ window.KAOS_MEMOS_VIEW = (() => {
                     <form class="memoEditForm" data-memo-edit="${deps.escapeHtml(selected.name)}">
                       <label>
                         <span>MARKDOWN</span>
-                        <textarea name="content" rows="16" required data-memo-edit-content data-markdown-editor>${deps.escapeHtml(memos.editDraft)}</textarea>
+                        <textarea name="content" rows="16" data-memo-edit-content data-markdown-editor>${deps.escapeHtml(memos.editDraft)}</textarea>
+                      </label>
+                      ${renderAttachmentList(deps, memos.editAttachments, { editing: true })}
+                      <label class="memoFilePicker">
+                        <span>ADD FILES</span>
+                        <input name="files" type="file" multiple data-memo-files />
                       </label>
                       ${memos.editError ? `<p class="formNote isError" role="alert">${deps.escapeHtml(memos.editError)}</p>` : ""}
                       <div class="archiveActions memoEditFormActions">
@@ -79,6 +114,7 @@ window.KAOS_MEMOS_VIEW = (() => {
                       ${deps.archiveMeta("Updated", selected.updated ? deps.formatDocumentDate(selected.updated) : "")}
                       ${deps.archiveMeta("Created", selected.created ? deps.formatDocumentDate(selected.created) : "")}
                     </dl>
+                    ${renderAttachmentList(deps, selected.attachments)}
                     <div class="archiveOcrRegion" role="region" aria-label="Memo content" tabindex="0">
                       <p>MEMO TEXT</p>
                       <pre>${deps.escapeHtml(selected.content || "No memo content.")}</pre>

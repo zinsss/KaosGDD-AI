@@ -2051,6 +2051,34 @@ h3 {
   color: var(--nord11);
 }
 
+.memoFilePicker {
+  display: grid;
+  gap: 8px;
+}
+
+.memoFilePicker input[type="file"] {
+  display: block;
+  width: 100%;
+  min-height: 46px;
+  box-sizing: border-box;
+  padding: 5px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.memoFilePicker input[type="file"]::file-selector-button {
+  min-height: 34px;
+  margin-right: 10px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 86%, var(--text));
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
 .familySmartEventPanel .panelBody {
   display: grid;
   gap: 12px;
@@ -9335,6 +9363,89 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   color: var(--archive-error);
 }
 
+.memoAttachments {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--archive-line);
+  background: color-mix(in srgb, var(--archive-surface) 88%, transparent);
+}
+
+.memoAttachments > p {
+  margin: 0;
+  color: var(--archive-amber);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.memoAttachmentList {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.memoAttachmentItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.memoAttachmentLink {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid var(--archive-line);
+  color: var(--archive-text);
+  text-decoration: none;
+}
+
+.memoAttachmentLink:hover,
+.memoAttachmentLink:focus-visible {
+  border-color: var(--archive-cyan);
+  outline: none;
+}
+
+.memoAttachmentLink img,
+.memoAttachmentIcon {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  box-sizing: border-box;
+  place-items: center;
+  border: 1px solid var(--archive-line);
+  object-fit: cover;
+  color: var(--archive-cyan);
+  font-size: 0.64rem;
+}
+
+.memoAttachmentText {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.memoAttachmentText strong,
+.memoAttachmentText small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memoAttachmentText small {
+  color: var(--archive-muted);
+  font-size: 0.7rem;
+}
+
+.memoAttachmentRemove {
+  align-self: stretch;
+}
+
 @media (max-width: 640px) {
   .markdownEditorToolbar button {
     width: 42px;
@@ -9344,6 +9455,14 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 
   .memoEditForm {
     padding: 10px;
+  }
+
+  .memoAttachmentItem {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .memoAttachmentRemove {
+    justify-self: end;
   }
 }
 

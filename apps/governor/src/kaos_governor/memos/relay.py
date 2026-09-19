@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -27,10 +28,15 @@ ALLOWED_RELAY_ROUTES = {
     "GET": (
         re.compile(r"/api/v1/auth/me"),
         re.compile(r"/api/v1/memos"),
+        re.compile(r"/api/v1/memos/[^/]+"),
+        re.compile(r"/file/attachments/[^/]+/[^/]+"),
     ),
     "POST": (re.compile(r"/api/v1/memos"),),
     "PATCH": (re.compile(r"/api/v1/memos/[^/]+"),),
-    "DELETE": (re.compile(r"/api/v1/memos/[^/]+"),),
+    "DELETE": (
+        re.compile(r"/api/v1/memos/[^/]+"),
+        re.compile(r"/api/v1/attachments/[^/]+"),
+    ),
 }
 
 
@@ -359,3 +365,51 @@ def relay(
         raise MemosRelayError(404, "memos_relay_route_not_found")
     token = load_token(profile)
     return upstream_request(method, relay_path(path_and_query), body=body, access_token=token)
+
+
+def upload_attachment(
+    headers: Mapping[str, str],
+    *,
+    filename: str,
+    content_type: str,
+    content: bytes,
+) -> dict[str, object]:
+    """Upload one PWA file through the profile-scoped Memos credential."""
+    profile, _ = verify_cloudflare_access(headers)
+    cleaned_filename = str(filename or "").strip()
+    if (
+        not cleaned_filename
+        or "/" in cleaned_filename
+        or "\\" in cleaned_filename
+        or any(ord(character) < 32 for character in cleaned_filename)
+    ):
+        raise MemosRelayError(400, "memos_attachment_filename_invalid")
+    if not content:
+        raise MemosRelayError(400, "memos_attachment_empty")
+
+    normalized_type = str(content_type or "").strip().lower() or "application/octet-stream"
+    if not re.fullmatch(r"[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+", normalized_type):
+        normalized_type = "application/octet-stream"
+    body = json.dumps(
+        {
+            "filename": cleaned_filename,
+            "type": normalized_type,
+            "content": base64.b64encode(content).decode("ascii"),
+        },
+        separators=(",", ":"),
+    ).encode("utf-8")
+    token = load_token(profile)
+    status_code, _, response_body = upstream_request(
+        "POST",
+        "/api/v1/attachments",
+        body=body,
+        access_token=token,
+    )
+    if status_code < 200 or status_code >= 300:
+        message = ""
+        try:
+            message = str(json_body(response_body, "memos_attachment_upload_failed").get("message") or "")
+        except MemosRelayError:
+            pass
+        raise MemosRelayError(status_code, "memos_attachment_upload_failed", message)
+    return json_body(response_body, "memos_attachment_response_invalid")

@@ -228,6 +228,7 @@ const state = {
     detailError: "",
     editing: false,
     editDraft: "",
+    editAttachments: [],
     editBaseUpdated: "",
     editSaving: false,
     editError: "",
@@ -2112,26 +2113,111 @@ async function createSupply(title) {
   await loadSupplies({ force: true });
 }
 
-async function createMemo(content) {
+function memoAttachmentId(name) {
+  const raw = String(name || "").trim();
+  return raw.startsWith("attachments/") ? raw.slice("attachments/".length) : raw;
+}
+
+function normalizeMemoAttachment(item) {
+  const source = item && typeof item === "object" ? item : {};
+  const name = String(source.name || "").trim();
+  return {
+    name,
+    id: memoAttachmentId(name),
+    filename: String(source.filename || "attachment"),
+    type: String(source.type || "application/octet-stream"),
+    size: Math.max(0, Number(source.size || 0)),
+    externalLink: String(source.externalLink || source.external_link || ""),
+  };
+}
+
+function memoAttachmentUrl(attachment, options = {}) {
+  const externalLink = String(attachment?.externalLink || "").trim();
+  if (/^https?:\/\//i.test(externalLink)) return externalLink;
+  const id = memoAttachmentId(attachment?.name);
+  if (!id) return "";
+  const filename = String(attachment?.filename || "attachment");
+  const base = `/api/memos/file/attachments/${encodeURIComponent(id)}/${encodeURIComponent(filename)}`;
+  return options.thumbnail ? `${base}?thumbnail=true` : base;
+}
+
+function isMemoImageAttachment(attachment) {
+  return String(attachment?.type || "").toLowerCase().startsWith("image/");
+}
+
+function memoAttachmentReferences(attachments) {
+  return (Array.isArray(attachments) ? attachments : [])
+    .map((attachment) => ({ name: String(attachment?.name || "").trim() }))
+    .filter((attachment) => attachment.name);
+}
+
+async function uploadMemoAttachment(file) {
+  if (!(file instanceof File) || !file.name || file.size <= 0) throw new Error("memo_attachment_required");
+  if (file.size > 20 * 1024 * 1024) throw new Error(`${file.name}: file exceeds 20 MB`);
+  const body = new FormData();
+  body.append("file", file, file.name);
+  body.append("contentType", file.type || "application/octet-stream");
+  const response = await fetch("/api/memos/attachments/upload", {
+    method: "POST",
+    headers: { Accept: "application/json" },
+    body,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.message || payload.error || `HTTP ${response.status}`);
+  return normalizeMemoAttachment(payload);
+}
+
+async function uploadMemoFiles(files) {
+  const uploaded = [];
+  try {
+    for (const file of files) uploaded.push(await uploadMemoAttachment(file));
+    return uploaded;
+  } catch (error) {
+    await cleanupMemoAttachments(uploaded);
+    throw error;
+  }
+}
+
+async function deleteMemoAttachment(name) {
+  const id = memoAttachmentId(name);
+  if (!id) return;
+  const response = await fetch(`/api/memos/api/v1/attachments/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok && response.status !== 404) throw new Error(`HTTP ${response.status}`);
+}
+
+async function cleanupMemoAttachments(attachments) {
+  await Promise.allSettled((attachments || []).map((attachment) => deleteMemoAttachment(attachment.name)));
+}
+
+function memoFilesFromFormData(formData) {
+  return formData.getAll("files").filter((item) => item instanceof File && item.name && item.size > 0);
+}
+
+async function createMemo(content, attachments = []) {
   const normalized = String(content || "").trim();
-  if (!normalized) throw new Error("memo_content_required");
+  const attachmentReferences = memoAttachmentReferences(attachments);
+  if (!normalized && !attachmentReferences.length) throw new Error("memo_content_or_attachment_required");
   const response = await fetch("/api/memos/api/v1/memos", {
     method: "POST",
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ content: normalized, visibility: "PRIVATE" }),
+    body: JSON.stringify({ content: normalized, visibility: "PRIVATE", attachments: attachmentReferences }),
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.error || payload.message || `HTTP ${response.status}`);
   return payload;
 }
 
-async function updateMemoContent(name, content, expectedUpdated = "") {
+async function updateMemoContent(name, content, expectedUpdated = "", attachments = []) {
   const id = memoNameId(name);
   const normalized = String(content || "").trim();
-  if (!id || !normalized) throw new Error("memo_content_required");
+  const attachmentReferences = memoAttachmentReferences(attachments);
+  if (!id || (!normalized && !attachmentReferences.length)) throw new Error("memo_content_or_attachment_required");
   const detailUrl = `/api/memos/api/v1/memos/${encodeURIComponent(id)}`;
   if (expectedUpdated) {
     const currentResponse = await fetch(detailUrl, {
@@ -2145,13 +2231,13 @@ async function updateMemoContent(name, content, expectedUpdated = "") {
     const current = normalizeMemo(currentPayload);
     if (current.updated && current.updated !== expectedUpdated) throw new Error("memo_changed_elsewhere");
   }
-  const response = await fetch(`${detailUrl}?updateMask=content`, {
+  const response = await fetch(`${detailUrl}?updateMask=content,attachments`, {
     method: "PATCH",
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ content: normalized }),
+    body: JSON.stringify({ content: normalized, attachments: attachmentReferences }),
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.error || payload.message || `HTTP ${response.status}`);
@@ -3260,16 +3346,20 @@ function normalizeMemo(item) {
   const content = String(source.content || "");
   const id = memoNameId(name);
   const rawTags = Array.isArray(source.tags) ? source.tags : [];
+  const attachments = (Array.isArray(source.attachments) ? source.attachments : [])
+    .map(normalizeMemoAttachment)
+    .filter((attachment) => attachment.name);
   return {
     name,
     id,
-    title: memoTitleFromContent(content, id ? `Memo ${id}` : "Untitled memo"),
+    title: memoTitleFromContent(content, attachments[0]?.filename || (id ? `Memo ${id}` : "Untitled memo")),
     content,
     created: String(source.createTime || source.createdTs || source.createdAt || ""),
     updated: String(source.updateTime || source.updatedTs || source.updatedAt || ""),
     visibility: String(source.visibility || ""),
     pinned: Boolean(source.pinned),
     tags: rawTags.map((tag) => String(tag || "").trim()).filter(Boolean),
+    attachments,
   };
 }
 
@@ -3348,6 +3438,7 @@ async function refreshMemos() {
   state.memos.detailError = "";
   state.memos.editing = false;
   state.memos.editDraft = "";
+  state.memos.editAttachments = [];
   state.memos.editBaseUpdated = "";
   state.memos.editSaving = false;
   state.memos.editError = "";
@@ -3363,6 +3454,7 @@ async function searchMemos(query) {
   state.memos.detailError = "";
   state.memos.editing = false;
   state.memos.editDraft = "";
+  state.memos.editAttachments = [];
   state.memos.editBaseUpdated = "";
   state.memos.editSaving = false;
   state.memos.editError = "";
@@ -3380,6 +3472,7 @@ async function loadMemoDetail(name) {
   state.memos.selected = selected;
   state.memos.editing = false;
   state.memos.editDraft = "";
+  state.memos.editAttachments = [];
   state.memos.editBaseUpdated = "";
   state.memos.editSaving = false;
   state.memos.editError = "";
@@ -3394,6 +3487,7 @@ function closeMemoDetail() {
   state.memos.detailError = "";
   state.memos.editing = false;
   state.memos.editDraft = "";
+  state.memos.editAttachments = [];
   state.memos.editBaseUpdated = "";
   state.memos.editSaving = false;
   state.memos.editError = "";
@@ -9598,6 +9692,9 @@ function memosViewContext() {
     memoDisplayNumber,
     archiveMeta,
     formatDocumentDate,
+    memoAttachmentUrl,
+    isMemoImageAttachment,
+    formatBytes,
   };
 }
 
@@ -9605,6 +9702,7 @@ function startMemoEdit() {
   if (!state.memos.selected) return;
   state.memos.editing = true;
   state.memos.editDraft = state.memos.selected.content || "";
+  state.memos.editAttachments = [...(state.memos.selected.attachments || [])];
   state.memos.editBaseUpdated = state.memos.selected.updated || "";
   state.memos.editSaving = false;
   state.memos.editError = "";
@@ -9615,6 +9713,7 @@ function startMemoEdit() {
 function cancelMemoEdit() {
   state.memos.editing = false;
   state.memos.editDraft = "";
+  state.memos.editAttachments = [];
   state.memos.editBaseUpdated = "";
   state.memos.editSaving = false;
   state.memos.editError = "";
@@ -9640,15 +9739,18 @@ function renderAddMemo() {
             rows="12"
             autocomplete="off"
             placeholder="# Title&#10;memo body&#10;#tag"
-            required
             data-memo-content
             data-markdown-editor
           >${escapeHtml(composer.content)}</textarea>
         </label>
+        <label class="memoFilePicker">
+          <span>Files</span>
+          <input name="files" type="file" multiple data-memo-files />
+        </label>
         ${
           composer.error
             ? `<p class="formNote isError" role="alert">${escapeHtml(composer.error)}</p>`
-            : `<p class="formNote">One plain Memos content box. Title and tags are parsed from the text.</p>`
+            : `<p class="formNote">Text, files, or both. Up to 20 MB per file.</p>`
         }
         <div class="formActions">
           <a class="dangerButton" href="#/memos">Cancel</a>
@@ -10889,6 +10991,15 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const removeMemoAttachment = event.target.closest("[data-memo-edit-attachment-remove]");
+  if (removeMemoAttachment) {
+    event.preventDefault();
+    const name = removeMemoAttachment.dataset.memoEditAttachmentRemove || "";
+    state.memos.editAttachments = state.memos.editAttachments.filter((attachment) => attachment.name !== name);
+    render();
+    return;
+  }
+
   if (event.target.closest("[data-memos-clear]")) {
     await searchMemos("");
     return;
@@ -11961,21 +12072,27 @@ document.addEventListener("submit", async (event) => {
     event.preventDefault();
     const formData = new FormData(memoEditForm);
     const content = String(formData.get("content") || "");
+    const files = memoFilesFromFormData(formData);
     const selected = state.memos.selected;
     if (!selected || state.memos.editSaving) return;
     state.memos.editDraft = content;
     state.memos.editSaving = true;
     state.memos.editError = "";
     render();
+    let uploaded = [];
     try {
-      const updated = await updateMemoContent(selected.name, content, state.memos.editBaseUpdated);
+      uploaded = await uploadMemoFiles(files);
+      const attachments = [...state.memos.editAttachments, ...uploaded];
+      const updated = await updateMemoContent(selected.name, content, state.memos.editBaseUpdated, attachments);
       state.memos.items = state.memos.items.map((item) => item.name === updated.name ? updated : item);
       state.memos.selected = updated;
       state.memos.editing = false;
       state.memos.editDraft = "";
+      state.memos.editAttachments = [];
       state.memos.editBaseUpdated = "";
       state.memos.editError = "";
     } catch (error) {
+      await cleanupMemoAttachments(uploaded);
       state.memos.editError = error.message === "memo_changed_elsewhere"
         ? "This memo changed elsewhere. Your draft was kept; close and reopen the memo before saving again."
         : error.message || "Could not update memo";
@@ -11991,14 +12108,18 @@ document.addEventListener("submit", async (event) => {
     event.preventDefault();
     const formData = new FormData(memoForm);
     const content = String(formData.get("content") || "");
+    const files = memoFilesFromFormData(formData);
     state.memoComposer = { content, saving: true, error: "" };
     render();
+    let uploaded = [];
     try {
-      await createMemo(content);
+      uploaded = await uploadMemoFiles(files);
+      await createMemo(content, uploaded);
       state.memoComposer = { content: "", saving: false, error: "" };
       state.memos.checked = false;
       window.location.hash = "#/memos";
     } catch (error) {
+      await cleanupMemoAttachments(uploaded);
       state.memoComposer = {
         content,
         saving: false,

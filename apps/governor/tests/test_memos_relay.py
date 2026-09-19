@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import importlib
 import importlib.util
 import os
@@ -60,10 +61,13 @@ class MemosRelayTests(unittest.TestCase):
 
     def test_route_allow_list_blocks_non_memos_api_paths(self) -> None:
         self.assertTrue(self.relay.route_allowed("GET", "/api/memos/api/v1/auth/me"))
+        self.assertTrue(self.relay.route_allowed("GET", "/api/memos/api/v1/memos/abc_123"))
         self.assertTrue(self.relay.route_allowed("PATCH", "/api/memos/api/v1/memos/abc_123?updateMask=content"))
         self.assertFalse(self.relay.route_allowed("GET", "/api/memos/api/v1/users"))
         self.assertFalse(self.relay.route_allowed("POST", "/api/memos/api/v1/auth/signin"))
         self.assertFalse(self.relay.route_allowed("DELETE", "/api/memos/api/v1/memos/abc/attachments/1"))
+        self.assertTrue(self.relay.route_allowed("GET", "/api/memos/file/attachments/file_1/scan.pdf"))
+        self.assertTrue(self.relay.route_allowed("DELETE", "/api/memos/api/v1/attachments/file_1"))
 
     def test_upstream_url_uses_internal_memos_origin(self) -> None:
         with patch.dict(os.environ, {"MEMOS_INTERNAL_URL": "http://memos:5230/"}, clear=False):
@@ -78,6 +82,41 @@ class MemosRelayTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.status, 401)
         self.assertEqual(raised.exception.code, "cloudflare_access_required")
+
+    def test_attachment_upload_encodes_binary_for_memos_api(self) -> None:
+        response = b'{"name":"attachments/file_1","filename":"scan.pdf","type":"application/pdf","size":"8"}'
+        with (
+            patch.object(self.relay, "verify_cloudflare_access", return_value=("personal", "me@example.com")),
+            patch.object(self.relay, "load_token", return_value="secret-token"),
+            patch.object(self.relay, "upstream_request", return_value=(200, "application/json", response)) as upstream,
+        ):
+            payload = self.relay.upload_attachment(
+                {"Host": "kaosgdd.net"},
+                filename="scan.pdf",
+                content_type="application/pdf",
+                content=b"%PDF-1.4",
+            )
+
+        self.assertEqual(payload["name"], "attachments/file_1")
+        method, path = upstream.call_args.args[:2]
+        self.assertEqual((method, path), ("POST", "/api/v1/attachments"))
+        sent = __import__("json").loads(upstream.call_args.kwargs["body"])
+        self.assertEqual(base64.b64decode(sent["content"]), b"%PDF-1.4")
+        self.assertEqual(sent["filename"], "scan.pdf")
+        self.assertNotIn("secret-token", upstream.call_args.kwargs["body"].decode("utf-8"))
+
+    def test_attachment_upload_rejects_path_like_filename(self) -> None:
+        with patch.object(self.relay, "verify_cloudflare_access", return_value=("personal", "me@example.com")):
+            with self.assertRaises(self.relay.MemosRelayError) as raised:
+                self.relay.upload_attachment(
+                    {"Host": "kaosgdd.net"},
+                    filename="../scan.pdf",
+                    content_type="application/pdf",
+                    content=b"%PDF",
+                )
+
+        self.assertEqual(raised.exception.status, 400)
+        self.assertEqual(raised.exception.code, "memos_attachment_filename_invalid")
 
 
 if __name__ == "__main__":

@@ -64,6 +64,7 @@ PORT = int(os.environ.get("GOVERNOR_API_PORT", "8096"))
 MIGRATIONS = Path(os.environ.get("GOVERNOR_MIGRATIONS_DIR", "/usr/local/share/kaos-governor/migrations"))
 MAX_REQUEST_BYTES = 500_000
 MAX_MULTIPART_OVERHEAD_BYTES = 256_000
+MEMOS_ATTACHMENT_MAX_BYTES = int(os.environ.get("MEMOS_ATTACHMENT_MAX_MB", "20") or "20") * 1024 * 1024
 CALENDAR_ADAPTER_INTERNAL_URL = os.environ.get("CALENDAR_ADAPTER_INTERNAL_URL", "http://calendar-adapter:8091").rstrip("/")
 CALENDAR_ADAPTER_TIMEOUT_SECONDS = float(os.environ.get("CALENDAR_ADAPTER_TIMEOUT_SECONDS", "20"))
 SYSTEM_STATUS_TOOLS_BASE_URL = os.environ.get("SYSTEM_STATUS_TOOLS_BASE_URL", "http://governor-tools:8098").rstrip("/")
@@ -619,6 +620,24 @@ def proxy_memos(handler: BaseHTTPRequestHandler, method: str) -> None:
         body=body,
     )
     bytes_response(handler, status, content_type, response_body, private=True)
+
+
+def upload_memos_attachment(handler: BaseHTTPRequestHandler) -> dict[str, object]:
+    fields, files = multipart_form_request(
+        handler,
+        max_bytes=MEMOS_ATTACHMENT_MAX_BYTES + MAX_MULTIPART_OVERHEAD_BYTES,
+    )
+    filename, content = files.get("file", ("", b""))
+    if not filename:
+        raise memos_relay.MemosRelayError(400, "memos_attachment_required")
+    if not content or len(content) > MEMOS_ATTACHMENT_MAX_BYTES:
+        raise memos_relay.MemosRelayError(400, "memos_attachment_size_invalid")
+    return memos_relay.upload_attachment(
+        handler.headers,
+        filename=filename,
+        content_type=fields.get("contentType", ""),
+        content=content,
+    )
 
 
 @lru_cache(maxsize=1)
@@ -4331,6 +4350,16 @@ class Handler(BaseHTTPRequestHandler):
                 memos_relay_error(self, exc)
             except ValueError as exc:
                 json_response(self, 400, {"ok": False, "error": str(exc)})
+            return
+        if parsed.path == "/api/memos/attachments/upload":
+            try:
+                json_response(self, 201, upload_memos_attachment(self))
+            except ValueError as exc:
+                json_response(self, 400, {"ok": False, "error": str(exc)})
+            except DocumentIntakeError as exc:
+                json_response(self, 400, {"ok": False, "error": exc.code})
+            except memos_relay.MemosRelayError as exc:
+                memos_relay_error(self, exc)
             return
         if parsed.path.startswith("/api/memos/"):
             try:
