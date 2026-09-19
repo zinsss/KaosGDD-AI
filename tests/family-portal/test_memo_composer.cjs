@@ -37,6 +37,8 @@ test("main and family memos routes render native archive board controls", () => 
   assert.match(memosViewSource, /data-archive-kind="memos"/);
   assert.match(memosViewSource, /data-memo-search/);
   assert.match(memosViewSource, /data-memos-refresh/);
+  assert.match(memosViewSource, /data-memos-refresh[^>]*>Reload<\/button>/);
+  assert.doesNotMatch(memosViewSource, /data-memos-refresh[^>]*>↻<\/button>/);
   assert.match(memosViewSource, /href="#\/add-memo">New<\/a>/);
   assert.ok(memosViewSource.indexOf('href="#/add-memo">New</a>') < memosViewSource.indexOf('class="archiveSearchBox"'));
   assert.match(appSource, /class="openButton memoHeaderCancel" href="#\/memos">Cancel<\/a>/);

@@ -133,7 +133,7 @@ window.KAOS_MEMOS_VIEW = (() => {
             <input id="memoQuery" name="query" type="search" value="${deps.escapeHtml(memos.query)}" placeholder="Search memos" autocomplete="off" />
             ${memos.appliedQuery ? `<button class="archiveSearchClear" type="button" data-memos-clear aria-label="Clear memo search">×</button>` : ""}
           </label>
-          <button class="archiveAction archiveTopAction" type="button" data-memos-refresh aria-label="Refresh memos" title="Refresh memos" ${memos.loading ? "disabled" : ""}>↻</button>
+          <button class="archiveAction archiveTopAction" type="button" data-memos-refresh aria-label="Reload memos" title="Reload memos" ${memos.loading ? "disabled" : ""}>Reload</button>
           <button class="srOnly" type="submit">Search</button>
         </form>
         <div class="archiveWorkspace ${hasDetail ? "hasDetail" : ""}">
