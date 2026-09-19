@@ -53,7 +53,7 @@ test("memo Markdown renders semantic HTML without allowing raw HTML or unsafe li
 
 test("Memos and Scribble share the lightweight editor", () => {
   assert.match(index, /src="\/markdown-editor\.js\?v=2"/);
-  assert.ok(index.indexOf('src="/markdown-editor.js?v=2"') < index.indexOf('src="/app.js?v=368"'));
+  assert.ok(index.indexOf('src="/markdown-editor.js?v=2"') < index.indexOf('src="/app.js?v=369"'));
   assert.match(app, /KAOS_MARKDOWN_EDITOR\?\.enhanceAll\(view\)/);
   assert.match(app, /data-memo-content[\s\S]*data-markdown-editor/);
   assert.match(memosView, /data-memo-edit-start/);

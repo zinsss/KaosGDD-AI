@@ -391,6 +391,7 @@ const state = {
       error: "",
     },
     mode: "archive",
+    toolbarPanel: "",
     error: "",
     query: "",
     appliedQuery: "",
@@ -10725,9 +10726,23 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const documentsToolbarToggle = event.target.closest("[data-documents-toolbar]");
+  if (documentsToolbarToggle) {
+    const panel = documentsToolbarToggle.dataset.documentsToolbar || "";
+    const nextPanel = state.documents.toolbarPanel === panel && state.documents.mode === "archive" ? "" : panel;
+    state.documents.toolbarPanel = nextPanel;
+    if (state.documents.mode !== "archive") await setDocumentMode("archive");
+    else render();
+    if (nextPanel === "search") window.setTimeout(() => document.getElementById("paperlessQuery")?.focus(), 0);
+    return;
+  }
+
   const documentMode = event.target.closest("[data-document-mode]");
   if (documentMode) {
-    await setDocumentMode(documentMode.dataset.documentMode || "archive");
+    const mode = documentMode.dataset.documentMode || "archive";
+    state.documents.toolbarPanel = "";
+    if (state.documents.mode === mode) render();
+    else await setDocumentMode(mode);
     return;
   }
 

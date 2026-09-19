@@ -104,7 +104,7 @@ test("memos archive rendering is delegated to the view module", () => {
   assert.match(memosViewSource, /data-memos-clear/);
   assert.match(memosViewSource, /data-memo-detail/);
   assert.match(indexSource, /src="\/memos-view\.js\?v=9"/);
-  assert.ok(indexSource.indexOf('src="/memos-view.js?v=9"') < indexSource.indexOf('src="/app.js?v=368"'));
+  assert.ok(indexSource.indexOf('src="/memos-view.js?v=9"') < indexSource.indexOf('src="/app.js?v=369"'));
 });
 
 test("documents archive rendering is delegated to the view module", () => {
@@ -113,8 +113,16 @@ test("documents archive rendering is delegated to the view module", () => {
   assert.match(documentsViewSource, /id="documentsIndexTitle">RECORD BOARD/);
   assert.match(documentsViewSource, /id="documentsInboxTitle">INBOX BOARD/);
   assert.match(documentsViewSource, /data-document-search/);
+  assert.match(documentsViewSource, /data-document-mode="archive"[^>]*>Archive<\/button>/);
+  assert.match(documentsViewSource, /data-documents-toolbar="search"[^>]*>Search<\/button>/);
+  assert.match(documentsViewSource, /data-documents-toolbar="tags"[^>]*>Tags<\/button>/);
+  assert.match(documentsViewSource, /data-document-mode="inbox"[^>]*>Inbox<\/button>/);
+  assert.match(documentsViewSource, /data-documents-refresh[^>]*>Reload<\/button>/);
+  assert.match(documentsViewSource, /class="archiveSearchBox documentToolbarPanel"/);
+  assert.match(appSource, /documentsToolbarToggle\.dataset\.documentsToolbar/);
+  assert.match(styles, /\[data-archive-kind="documents"\] \.documentArchiveCommands \{[\s\S]*grid-template-columns: repeat\(5, minmax\(0, 1fr\)\);/);
   assert.match(documentsViewSource, /data-paperless-open/);
   assert.match(documentsViewSource, /data-paperless-detail/);
-  assert.match(indexSource, /src="\/documents-view\.js\?v=1"/);
-  assert.ok(indexSource.indexOf('src="/documents-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=368"'));
+  assert.match(indexSource, /src="\/documents-view\.js\?v=2"/);
+  assert.ok(indexSource.indexOf('src="/documents-view.js?v=2"') < indexSource.indexOf('src="/app.js?v=369"'));
 });

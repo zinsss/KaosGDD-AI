@@ -173,23 +173,27 @@ window.KAOS_DOCUMENTS_VIEW = (() => {
       `;
       })()
       : "";
-    const modeTabs = `
-      <div class="segmentedTabs archiveModeTabs" role="tablist" aria-label="Document board mode">
-        <button type="button" role="tab" data-document-mode="archive" aria-selected="${archiveActive}" class="${archiveActive ? "isActive" : ""}">Archive</button>
-        <button type="button" role="tab" data-document-mode="inbox" aria-selected="${inboxActive}" class="${inboxActive ? "isActive" : ""}">Inbox</button>
-      </div>
-    `;
-    const archiveBoard = `
-      <form class="archiveCommand archiveSearchBar" data-document-search role="search">
-        <label class="archiveSearchBox" for="paperlessQuery">
-          <span class="archiveSearchIcon" aria-hidden="true">⌕</span>
-          <input id="paperlessQuery" name="query" type="search" value="${deps.escapeHtml(documents.query)}" placeholder="Search documents" autocomplete="off" />
-          ${documents.appliedQuery ? `<button class="archiveSearchClear" type="button" data-documents-clear aria-label="Clear document search">×</button>` : ""}
-        </label>
-        <button class="archiveAction archiveTopAction" type="button" data-documents-refresh aria-label="Refresh documents" title="Refresh documents" ${documents.loading ? "disabled" : ""}>↻</button>
+    const documentToolbar = `
+      <form class="archiveCommand documentArchiveToolbar" data-document-search role="search">
+        <div class="documentArchiveCommands" role="tablist" aria-label="Document controls">
+          <button class="archiveAction archiveTopAction ${archiveActive && !documents.toolbarPanel ? "isActive" : ""}" type="button" role="tab" data-document-mode="archive" aria-selected="${archiveActive && !documents.toolbarPanel}">Archive</button>
+          <button class="archiveAction archiveTopAction ${archiveActive && documents.toolbarPanel === "search" ? "isActive" : ""}" type="button" data-documents-toolbar="search" aria-expanded="${archiveActive && documents.toolbarPanel === "search"}">Search</button>
+          <button class="archiveAction archiveTopAction ${archiveActive && documents.toolbarPanel === "tags" ? "isActive" : ""}" type="button" data-documents-toolbar="tags" aria-expanded="${archiveActive && documents.toolbarPanel === "tags"}">Tags</button>
+          <button class="archiveAction archiveTopAction ${inboxActive ? "isActive" : ""}" type="button" role="tab" data-document-mode="inbox" aria-selected="${inboxActive}">Inbox</button>
+          <button class="archiveAction archiveTopAction" type="button" data-documents-refresh aria-label="Reload documents" title="Reload documents" ${documents.loading || documents.inboxLoading ? "disabled" : ""}>Reload</button>
+        </div>
+        ${archiveActive && documents.toolbarPanel === "search" ? `
+          <label class="archiveSearchBox documentToolbarPanel" for="paperlessQuery">
+            <span class="archiveSearchIcon" aria-hidden="true">⌕</span>
+            <input id="paperlessQuery" name="query" type="search" value="${deps.escapeHtml(documents.query)}" placeholder="Search documents" autocomplete="off" />
+            ${documents.appliedQuery ? `<button class="archiveSearchClear" type="button" data-documents-clear aria-label="Clear document search">×</button>` : ""}
+          </label>
+        ` : `<input type="hidden" name="query" value="${deps.escapeHtml(documents.query)}" />`}
+        ${archiveActive && documents.toolbarPanel === "tags" ? `<div class="documentToolbarPanel">${tagFilters || `<p class="archiveTagStatus">No tags found.</p>`}</div>` : ""}
         <button class="srOnly" type="submit">Search</button>
       </form>
-      ${tagFilters}
+    `;
+    const archiveBoard = `
       <div class="archiveWorkspace ${hasDetail ? "hasDetail" : ""}">
         <section class="archiveIndex" aria-labelledby="documentsIndexTitle" aria-busy="${documents.loading}">
           <header class="archiveIndexHeader">
@@ -258,7 +262,7 @@ window.KAOS_DOCUMENTS_VIEW = (() => {
     `;
     return `
       <section class="archiveTerminal" data-archive-kind="documents" aria-label="Document archive">
-        ${modeTabs}
+        ${documentToolbar}
         ${archiveActive ? archiveBoard : inboxBoard}
       </section>
     `;

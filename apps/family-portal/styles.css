@@ -7470,6 +7470,20 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   margin: 0;
 }
 
+.app[data-profile="main"] [data-archive-kind="documents"] .documentArchiveToolbar {
+  display: grid;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+
+.documentToolbarPanel {
+  width: 100%;
+  margin: 0;
+}
+
 .app[data-profile="main"] [data-archive-kind="fax"] .archiveCommand,
 .app[data-profile="main"] [data-archive-kind="mail"] .archiveCommand {
   display: flex;
@@ -7797,18 +7811,41 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   color: var(--main-tab-active-text);
 }
 
-.app[data-profile="main"] [data-archive-kind="memos"] .memoToolbarPanel .archiveTagChip {
-  border-color: rgba(76, 86, 106, 0.72);
-  background: rgba(20, 24, 31, 0.72);
+.app[data-profile="main"] [data-archive-kind="documents"] .documentArchiveCommands {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
 }
 
-.app[data-profile="main"] [data-archive-kind="memos"] .memoToolbarPanel .archiveTagChip:hover {
+.app[data-profile="main"] [data-archive-kind="documents"] .documentArchiveCommands .archiveTopAction {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  padding: 6px 3px;
+  font-size: 0.72rem;
+  text-align: center;
+}
+
+.app[data-profile="main"] [data-archive-kind="documents"] .documentArchiveCommands .archiveTopAction::before,
+.app[data-profile="main"] [data-archive-kind="documents"] .documentArchiveCommands .archiveTopAction::after {
+  content: none;
+}
+
+.app[data-profile="main"] [data-archive-kind="documents"] .documentArchiveCommands .archiveTopAction:hover,
+.app[data-profile="main"] [data-archive-kind="documents"] .documentArchiveCommands .archiveTopAction:focus-visible {
   border-color: var(--line-strong);
+  color: var(--nord6);
 }
 
-.app[data-profile="main"] [data-archive-kind="memos"] .memoToolbarPanel .archiveTagChip.isActive {
+.app[data-profile="main"] [data-archive-kind="documents"] .documentArchiveCommands .archiveTopAction.isActive,
+.app[data-profile="main"] [data-archive-kind="documents"] .documentArchiveCommands .archiveTopAction.isActive:hover,
+.app[data-profile="main"] [data-archive-kind="documents"] .documentArchiveCommands .archiveTopAction.isActive:focus-visible {
   border-color: var(--main-tab-active-border);
   background: var(--main-tab-active-bg);
+  color: var(--main-tab-active-text);
 }
 
 .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"], [data-profile="family"][data-route="memos"]) .archiveAction:hover,
