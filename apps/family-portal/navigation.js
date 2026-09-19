@@ -4,6 +4,7 @@
   if (root) root.KAOS_PORTAL_NAVIGATION = api;
 })(typeof globalThis === "object" ? globalThis : this, function createPortalNavigation() {
   const personalMenu = Object.freeze([
+    Object.freeze({ route: "today", label: "Today" }),
     Object.freeze({ route: "agenda", label: "Agenda" }),
     Object.freeze({ route: "scribble", label: "Scribble" }),
     Object.freeze({ route: "calendar", label: "Calendar" }),

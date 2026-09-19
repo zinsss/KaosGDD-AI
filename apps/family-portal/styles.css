@@ -9012,6 +9012,30 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   gap: 4px;
 }
 
+.notificationInbox .kaosTodayToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0 3px;
+}
+
+.notificationInbox .kaosTodayToolbar .archiveStatusMessage {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notificationInbox .kaosTodayToolbar .archiveAction {
+  flex: 0 0 auto;
+}
+
 .notificationInbox .archiveCommand strong {
   color: var(--archive-text);
   letter-spacing: 0.05em;

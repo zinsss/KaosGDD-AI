@@ -8,13 +8,10 @@ window.KAOS_NOTIFICATIONS_VIEW = (() => {
         ? `UPDATED ${deps.escapeHtml(deps.formatNotificationDate(payload.generatedAt))}`
         : "TODAY";
     return `
-      <section class="archiveTerminal notificationInbox kaosToday" aria-label="KaosToday">
-        <div class="archiveCommand">
-          <div>
-            <strong>KAOS TODAY</strong>
-            <p class="archiveStatusMessage" role="status" aria-live="polite">${summary}</p>
-          </div>
-          <button class="archiveAction archiveRefreshAction" type="button" data-notifications-refresh aria-label="Refresh KaosToday" title="Refresh KaosToday" ${briefing.loading ? "disabled" : ""}>↻</button>
+      <section class="archiveTerminal notificationInbox kaosToday" aria-label="KaosGDD Today">
+        <div class="archiveCommand kaosTodayToolbar">
+          <p class="archiveStatusMessage" role="status" aria-live="polite">${summary}</p>
+          <button class="archiveAction" type="button" data-notifications-refresh aria-label="Reload KaosGDD Today" title="Reload KaosGDD Today" ${briefing.loading ? "disabled" : ""}>Reload</button>
         </div>
         ${
           briefing.error

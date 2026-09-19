@@ -9,6 +9,7 @@ test("personal menu has the accepted labels and order", () => {
   assert.deepEqual(
     personalMenu.map((item) => [item.route, item.label]),
     [
+      ["today", "Today"],
       ["agenda", "Agenda"],
       ["scribble", "Scribble"],
       ["calendar", "Calendar"],
@@ -49,8 +50,8 @@ test("unknown personal routes safely select Agenda", () => {
   assert.equal(selectedPersonalRoute("not-a-route"), "agenda");
 });
 
-test("Today stays routable without adding another main menu item", () => {
-  assert.equal(personalMenu.some((item) => item.route === "today"), false);
+test("Today is independently selectable in the main menu", () => {
+  assert.equal(personalMenu.some((item) => item.route === "today"), true);
   assert.equal(personalMenu.some((item) => item.route === "notifications"), false);
   assert.equal(selectedPersonalRoute("today"), "today");
   assert.equal(selectedPersonalRoute("notifications"), "today");
@@ -66,13 +67,13 @@ test("notification categories point at the selector destination that can acknowl
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=384"');
-  const navigationIndex = index.indexOf('src="/navigation.js?v=10"');
+  const styleIndex = index.indexOf('href="/styles.css?v=385"');
+  const navigationIndex = index.indexOf('src="/navigation.js?v=11"');
   const calendarViewIndex = index.indexOf('src="/calendar-view.js?v=2"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
   const faxIndex = index.indexOf('src="/fax.js?v=2"');
   const mailIndex = index.indexOf('src="/mail.js?v=7"');
-  const applicationIndex = index.indexOf('src="/app.js?v=370"');
+  const applicationIndex = index.indexOf('src="/app.js?v=371"');
   assert.ok(styleIndex >= 0);
   assert.ok(navigationIndex >= 0);
   assert.ok(calendarViewIndex > navigationIndex);
@@ -176,7 +177,7 @@ test("calendar month panel rendering is delegated to the view module", () => {
   assert.match(calendarViewSource, /data-date="\$\{cell\.value\}"/);
   assert.match(calendarViewSource, /data-calendar-add-event/);
   assert.match(index, /src="\/calendar-view\.js\?v=2"/);
-  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=370"'));
+  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=371"'));
   assert.match(calendarViewSource, /dayCaregiverMark" role="img"/);
   assert.match(calendarViewSource, /hasMarket \|\| eventCount \|\| taskCount/);
 });
