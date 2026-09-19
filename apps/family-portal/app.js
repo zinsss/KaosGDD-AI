@@ -6694,7 +6694,7 @@ function renderWeatherParts(dayparts) {
       const part = dayparts.find((item) => item.label === label) || {};
       const localizedLabel = {
         Morning: uiText("weather.morning", "Morning"),
-        Afternoon: uiText("weather.afternoon", "Afternoon"),
+        Afternoon: uiText("weather.afternoon", "Day"),
         Evening: uiText("weather.evening", "Evening"),
         Night: uiText("weather.night", "Night"),
       }[label];
@@ -6746,7 +6746,7 @@ function renderWeatherDetail(item) {
           .map((part) => {
             const localizedLabel = {
               Morning: uiText("weather.morning", "Morning"),
-              Afternoon: uiText("weather.afternoon", "Afternoon"),
+              Afternoon: uiText("weather.afternoon", "Day"),
               Evening: uiText("weather.evening", "Evening"),
               Night: uiText("weather.night", "Night"),
             }[part.label] || part.label;

@@ -72,7 +72,7 @@ test("the navigation contract loads before the portal application", () => {
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
   const faxIndex = index.indexOf('src="/fax.js?v=2"');
   const mailIndex = index.indexOf('src="/mail.js?v=7"');
-  const applicationIndex = index.indexOf('src="/app.js?v=363"');
+  const applicationIndex = index.indexOf('src="/app.js?v=364"');
   assert.ok(styleIndex >= 0);
   assert.ok(navigationIndex >= 0);
   assert.ok(calendarViewIndex > navigationIndex);
@@ -157,6 +157,12 @@ test("main buttons keep Sarasa and bracketed commands have no inner spaces", () 
   assert.doesNotMatch(styles, /content: "\[[ ]+"|content: "[ ]+\]"/);
 });
 
+test("main weather uses the compact Day label for afternoon forecasts", () => {
+  const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
+  assert.match(appSource, /Afternoon: uiText\("weather\.afternoon", "Day"\)/);
+  assert.doesNotMatch(appSource, /Afternoon: uiText\("weather\.afternoon", "Afternoon"\)/);
+});
+
 test("calendar month panel rendering is delegated to the view module", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
   const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
@@ -169,7 +175,7 @@ test("calendar month panel rendering is delegated to the view module", () => {
   assert.match(calendarViewSource, /data-date="\$\{cell\.value\}"/);
   assert.match(calendarViewSource, /data-calendar-add-event/);
   assert.match(index, /src="\/calendar-view\.js\?v=2"/);
-  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=363"'));
+  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=364"'));
   assert.match(calendarViewSource, /dayCaregiverMark" role="img"/);
   assert.match(calendarViewSource, /hasMarket \|\| eventCount \|\| taskCount/);
 });
