@@ -60,10 +60,14 @@ window.KAOS_SCRIBBLE_VIEW = (() => {
             <span>TEXT</span>
             <textarea name="text" rows="4" placeholder="Write something to sort out later…" data-scribble-capture-text data-markdown-editor></textarea>
           </label>
-          <label class="archiveCommandLine scribbleFilePicker">
+          <div class="archiveCommandLine scribbleFilePicker">
             <span>FILE</span>
-            <input name="file" type="file" />
-          </label>
+            <label class="appFileControl">
+              <input name="file" type="file" data-app-file />
+              <span class="appFileChoose">파일 선택</span>
+              <span class="appFileSelection" data-app-file-selection>선택한 파일 없음</span>
+            </label>
+          </div>
           <div class="scribbleCaptureFooter">
             <p class="archiveStatusMessage">30-DAY BUFFER // TEXT → MEMOS // PDF → PAPERLESS</p>
             <div class="archiveCommandActions">

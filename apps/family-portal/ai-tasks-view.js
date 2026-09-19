@@ -419,10 +419,14 @@ window.KAOS_AI_TASKS_VIEW = (() => {
             <span>${deps.escapeHtml(labels.prompt)}</span>
             <textarea name="prompt" rows="4" placeholder="예: 알모그란정 급여기준과 차트 기재 추천">${deps.escapeHtml(aiTasks.prompt)}</textarea>
           </label>
-          <label class="archiveCommandLine">
+          <div class="archiveCommandLine">
             <span>PDF</span>
-            <input name="sourcePdf" type="file" accept="application/pdf,.pdf" />
-          </label>
+            <label class="appFileControl">
+              <input name="sourcePdf" type="file" accept="application/pdf,.pdf" data-app-file />
+              <span class="appFileChoose">파일 선택</span>
+              <span class="appFileSelection" data-app-file-selection>선택한 파일 없음</span>
+            </label>
+          </div>
           <label class="archiveInlineToggle aiTaskLanguageToggle">
             <input name="outputKorean" type="checkbox" ${aiTasks.korean ? "checked" : ""} />
             <span>한국어</span>

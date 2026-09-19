@@ -72,7 +72,8 @@ test("documents archive supports multiple selected tag filters", () => {
 });
 
 test("documents upload and metadata editor use aligned label columns", () => {
-  assert.match(appSource, /<label class="archiveCommandLine">[\s\S]*<span>FILE<\/span>[\s\S]*<span>TITLE<\/span>/);
+  assert.match(appSource, /<div class="archiveCommandLine">[\s\S]*<span>FILE<\/span>[\s\S]*name="document"[^>]*data-app-file[\s\S]*<span>TITLE<\/span>/);
+  assert.match(appSource, /class="appFileControl"/);
   assert.match(appSource, /<div class="archiveCommandLine">[\s\S]*<span>TITLE<\/span>[\s\S]*<span>TAGS<\/span>/);
   assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\], \[data-profile="family"\]\[data-route="memos"\]\) \.archiveCommandLine \{\n  display: grid;\n  grid-template-columns: 5\.25ch minmax\(0, 1fr\);/);
   assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\], \[data-profile="family"\]\[data-route="memos"\]\) \.archiveMetadataReview \{\n  display: grid;\n  gap: 8px;/);
@@ -103,8 +104,8 @@ test("memos archive rendering is delegated to the view module", () => {
   assert.match(memosViewSource, /data-memos-refresh/);
   assert.match(memosViewSource, /data-memos-clear/);
   assert.match(memosViewSource, /data-memo-detail/);
-  assert.match(indexSource, /src="\/memos-view\.js\?v=9"/);
-  assert.ok(indexSource.indexOf('src="/memos-view.js?v=9"') < indexSource.indexOf('src="/app.js?v=369"'));
+  assert.match(indexSource, /src="\/memos-view\.js\?v=10"/);
+  assert.ok(indexSource.indexOf('src="/memos-view.js?v=10"') < indexSource.indexOf('src="/app.js?v=370"'));
 });
 
 test("documents archive rendering is delegated to the view module", () => {
@@ -124,5 +125,5 @@ test("documents archive rendering is delegated to the view module", () => {
   assert.match(documentsViewSource, /data-paperless-open/);
   assert.match(documentsViewSource, /data-paperless-detail/);
   assert.match(indexSource, /src="\/documents-view\.js\?v=2"/);
-  assert.ok(indexSource.indexOf('src="/documents-view.js?v=2"') < indexSource.indexOf('src="/app.js?v=369"'));
+  assert.ok(indexSource.indexOf('src="/documents-view.js?v=2"') < indexSource.indexOf('src="/app.js?v=370"'));
 });

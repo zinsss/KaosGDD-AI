@@ -8041,10 +8041,14 @@ function renderAddDocument() {
           <a class="archiveAction" href="#/documents">BACK</a>
         </header>
         <div class="archiveUploadGrid">
-          <label class="archiveCommandLine">
+          <div class="archiveCommandLine">
             <span>FILE</span>
-            <input name="document" type="file" accept="application/pdf,.pdf" required />
-          </label>
+            <label class="appFileControl">
+              <input name="document" type="file" accept="application/pdf,.pdf" required data-app-file />
+              <span class="appFileChoose">파일 선택</span>
+              <span class="appFileSelection" data-app-file-selection>선택한 파일 없음</span>
+            </label>
+          </div>
           <label class="archiveCommandLine">
             <span>TITLE</span>
             <input name="title" type="text" autocomplete="off" placeholder="optional; filename is used if blank" />
@@ -9653,10 +9657,10 @@ function renderAddMemo() {
         </label>
         <div class="memoFilePicker">
           <span>Files</span>
-          <label class="memoFileControl">
-            <input name="files" type="file" multiple data-memo-files />
-            <span class="memoFileChoose">파일 선택</span>
-            <span class="memoFileSelection" data-memo-file-selection>선택한 파일 없음</span>
+          <label class="appFileControl">
+            <input name="files" type="file" multiple data-app-file data-memo-files />
+            <span class="appFileChoose">파일 선택</span>
+            <span class="appFileSelection" data-app-file-selection>선택한 파일 없음</span>
           </label>
         </div>
         ${
@@ -12490,10 +12494,10 @@ document.addEventListener("keydown", (event) => {
 });
 
 document.addEventListener("change", async (event) => {
-  const memoFiles = event.target.closest("[data-memo-files]");
-  if (memoFiles) {
-    const files = Array.from(memoFiles.files || []);
-    const status = memoFiles.closest(".memoFileControl")?.querySelector("[data-memo-file-selection]");
+  const selectedFiles = event.target.closest("[data-app-file]");
+  if (selectedFiles) {
+    const files = Array.from(selectedFiles.files || []);
+    const status = selectedFiles.closest(".appFileControl")?.querySelector("[data-app-file-selection]");
     if (status) {
       status.textContent = files.length === 0
         ? "선택한 파일 없음"

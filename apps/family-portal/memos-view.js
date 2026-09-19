@@ -103,10 +103,10 @@ window.KAOS_MEMOS_VIEW = (() => {
                       ${renderAttachmentList(deps, memos.editAttachments, { editing: true })}
                       <div class="memoFilePicker">
                         <span>ADD FILES</span>
-                        <label class="memoFileControl">
-                          <input name="files" type="file" multiple data-memo-files />
-                          <span class="memoFileChoose">파일 선택</span>
-                          <span class="memoFileSelection" data-memo-file-selection>선택한 파일 없음</span>
+                        <label class="appFileControl">
+                          <input name="files" type="file" multiple data-app-file data-memo-files />
+                          <span class="appFileChoose">파일 선택</span>
+                          <span class="appFileSelection" data-app-file-selection>선택한 파일 없음</span>
                         </label>
                       </div>
                       ${memos.editError ? `<p class="formNote isError" role="alert">${deps.escapeHtml(memos.editError)}</p>` : ""}

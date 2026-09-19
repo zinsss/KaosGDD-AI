@@ -40,12 +40,15 @@ test("Scribble is a small staging inbox with both handoff actions", () => {
   assert.match(navigation, /route: "scribble", label: "Scribble"/);
   assert.match(index, /src="\/navigation\.js\?v=10"/);
   assert.match(index, /src="\/scribble\.js\?v=1"/);
-  assert.match(index, /href="\/styles\.css\?v=383"/);
-  assert.match(index, /src="\/scribble-view\.js\?v=4"/);
-  assert.ok(index.indexOf('src="/scribble-view.js?v=4"') < index.indexOf('src="/app.js?v=369"'));
+  assert.match(index, /href="\/styles\.css\?v=384"/);
+  assert.match(index, /src="\/scribble-view\.js\?v=5"/);
+  assert.ok(index.indexOf('src="/scribble-view.js?v=5"') < index.indexOf('src="/app.js?v=370"'));
   assert.match(view, /class="archiveTerminal scribbleBoard"/);
   assert.doesNotMatch(view, /QUICK CAPTURE|Scribble Inbox/);
   assert.match(view, /STAGING QUEUE/);
+  assert.match(view, /name="file" type="file" data-app-file/);
+  assert.match(view, /class="appFileControl"/);
+  assert.doesNotMatch(view, /input::file-selector-button/);
 });
 
 test("family portal deployment makes every static asset nginx-readable", () => {

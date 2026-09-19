@@ -2056,7 +2056,7 @@ h3 {
   gap: 8px;
 }
 
-.memoFilePicker input[type="file"] {
+.appFileControl input[type="file"] {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -2065,8 +2065,8 @@ h3 {
   cursor: pointer;
 }
 
-.memoFilePicker input[type="file"]::file-selector-button,
-.memoFilePicker input[type="file"]::-webkit-file-upload-button {
+.appFileControl input[type="file"]::file-selector-button,
+.appFileControl input[type="file"]::-webkit-file-upload-button {
   min-height: 34px;
   margin-right: 10px;
   padding: 0 12px;
@@ -2077,7 +2077,7 @@ h3 {
   cursor: pointer;
 }
 
-.memoFileControl {
+.appFileControl {
   position: relative;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -2090,7 +2090,7 @@ h3 {
   cursor: pointer;
 }
 
-.memoFileChoose {
+.appFileChoose {
   display: inline-flex;
   align-items: center;
   align-self: stretch;
@@ -2100,7 +2100,7 @@ h3 {
   white-space: nowrap;
 }
 
-.memoFileSelection {
+.appFileSelection {
   min-width: 0;
   padding: 0 10px;
   overflow: hidden;
@@ -2108,7 +2108,7 @@ h3 {
   white-space: nowrap;
 }
 
-.memoFileControl:focus-within {
+.appFileControl:focus-within {
   outline: 2px solid var(--nord13);
   outline-offset: 2px;
 }
@@ -9078,22 +9078,6 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   margin: 0;
   color: var(--archive-muted);
   font-size: 0.72rem;
-}
-
-.scribbleFilePicker input {
-  color: var(--archive-muted);
-  cursor: pointer;
-}
-
-.scribbleFilePicker input::file-selector-button {
-  min-height: 30px;
-  margin-right: 10px;
-  border: 1px solid var(--archive-line);
-  border-radius: 0;
-  background: var(--archive-raised);
-  color: var(--archive-cyan);
-  padding: 0 10px;
-  font: 850 0.72rem/1 "Sarasa Gothic Mono", ui-monospace, monospace;
 }
 
 .scribbleWorkspace {

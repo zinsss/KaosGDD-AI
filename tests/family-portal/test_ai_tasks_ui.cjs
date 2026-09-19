@@ -67,6 +67,8 @@ test("AI Tasks official document memo flow previews before saving to Memos", () 
   assert.match(aiTasksViewSource, /data-ai-task-copy/);
   assert.match(appSource, /\/api\/ai-tasks\/official-doc-memo\/preview/);
   assert.match(aiTasksViewSource, /name="sourcePdf" type="file" accept="application\/pdf,\.pdf"/);
+  assert.match(aiTasksViewSource, /name="sourcePdf"[^>]*data-app-file/);
+  assert.match(aiTasksViewSource, /class="appFileControl"/);
   assert.match(appSource, /const hasSourcePdf = sourcePdf instanceof File && sourcePdf\.size > 0;/);
   assert.match(appSource, /body: formData/);
   assert.match(appSource, /Save this AI draft to Memos/);
@@ -78,8 +80,8 @@ test("AI Tasks official document memo flow previews before saving to Memos", () 
   assert.match(appSource, /method: "DELETE"/);
   assert.match(appSource, /\/api\/ai-tasks\/\$\{encodeURIComponent\(taskId\)\}/);
   assert.match(appSource, /이 AI 기록을 삭제할까요\?/);
-  assert.match(indexSource, /src="\/ai-tasks-view\.js\?v=3"/);
-  assert.ok(indexSource.indexOf('src="/ai-tasks-view.js?v=3"') < indexSource.indexOf('src="/app.js?v=369"'));
+  assert.match(indexSource, /src="\/ai-tasks-view\.js\?v=4"/);
+  assert.ok(indexSource.indexOf('src="/ai-tasks-view.js?v=4"') < indexSource.indexOf('src="/app.js?v=370"'));
 });
 
 test("Family AI Tasks keeps its own light theme surface", () => {
