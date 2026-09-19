@@ -53,6 +53,9 @@ test("main and family memos routes render native archive board controls", () => 
   assert.match(appSource, /memoToolbarToggle\.dataset\.memosToolbar/);
   assert.match(appSource, /state\.memos\.appliedQuery === tagQuery \? "" : tagQuery/);
   assert.match(stylesSource, /\.memoArchiveCommands \{[\s\S]*display: flex;[\s\S]*gap: 0;/);
+  assert.match(stylesSource, /\[data-archive-kind="memos"\] \.memoArchiveCommands \{[\s\S]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\);/);
+  assert.match(stylesSource, /\.memoArchiveCommands \.archiveTopAction\.isActive \{[\s\S]*background: var\(--main-tab-active-bg\);/);
+  assert.match(stylesSource, /\.memoArchiveCommands \.archiveTopAction::before,[\s\S]*\.memoArchiveCommands \.archiveTopAction::after \{\s*content: none;/);
   assert.match(memosViewSource, /data-memo-open/);
   assert.match(appSource, /if \(route === "memos"\) loadMemos\(\);/);
   assert.doesNotMatch(appSource, /portalProfile\(\) === "family"[\s\S]*memosFrame/);
