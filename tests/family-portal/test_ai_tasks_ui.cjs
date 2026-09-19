@@ -28,8 +28,8 @@ test("AI Tasks official document memo flow previews before saving to Memos", () 
   assert.match(aiTasksViewSource, /details: "DETAILS"/);
   assert.match(aiTasksViewSource, /details: "자료 추가"/);
   assert.match(stylesSource, /\.aiTaskSourceDetails summary/);
-  assert.match(stylesSource, /\.aiTaskSourceDetails summary::before \{[\s\S]*content: none;/);
-  assert.match(stylesSource, /\.aiTaskSourceDetails summary::after \{[\s\S]*content: none;/);
+  assert.match(stylesSource, /content: "\["/);
+  assert.match(stylesSource, /content: "\]"/);
   assert.match(appSource, /async function startUnifiedAiTask\(form\)/);
   assert.match(appSource, /\/api\/ai-tasks\/run/);
   assert.match(appSource, /scheduleAiTasksPoll\(1200\)/);
@@ -79,7 +79,7 @@ test("AI Tasks official document memo flow previews before saving to Memos", () 
   assert.match(appSource, /\/api\/ai-tasks\/\$\{encodeURIComponent\(taskId\)\}/);
   assert.match(appSource, /이 AI 기록을 삭제할까요\?/);
   assert.match(indexSource, /src="\/ai-tasks-view\.js\?v=3"/);
-  assert.ok(indexSource.indexOf('src="/ai-tasks-view.js?v=3"') < indexSource.indexOf('src="/app.js?v=365"'));
+  assert.ok(indexSource.indexOf('src="/ai-tasks-view.js?v=3"') < indexSource.indexOf('src="/app.js?v=364"'));
 });
 
 test("Family AI Tasks keeps its own light theme surface", () => {

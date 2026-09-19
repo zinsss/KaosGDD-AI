@@ -66,13 +66,13 @@ test("notification categories point at the selector destination that can acknowl
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=370"');
+  const styleIndex = index.indexOf('href="/styles.css?v=369"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=10"');
   const calendarViewIndex = index.indexOf('src="/calendar-view.js?v=2"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
   const faxIndex = index.indexOf('src="/fax.js?v=2"');
   const mailIndex = index.indexOf('src="/mail.js?v=7"');
-  const applicationIndex = index.indexOf('src="/app.js?v=365"');
+  const applicationIndex = index.indexOf('src="/app.js?v=364"');
   assert.ok(styleIndex >= 0);
   assert.ok(navigationIndex >= 0);
   assert.ok(calendarViewIndex > navigationIndex);
@@ -149,13 +149,12 @@ test("main typography avoids heavy synthesized bold while keeping light hierarch
   assert.match(styles, /\.app\[data-profile="main"\] :where\([\s\S]*strong,[\s\S]*button,[\s\S]*summary,[\s\S]*\) \{\s*font-weight: 500 !important;/);
 });
 
-test("main buttons keep Sarasa, use Nord10, brighten on hover, and omit brackets", () => {
+test("main buttons keep Sarasa and bracketed commands have no inner spaces", () => {
   const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
   const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
-  assert.match(styles, /\.app\[data-profile="main"\]\[data-main-font\] button,[\s\S]*font-family: "Sarasa Gothic Mono"[\s\S]*color: var\(--nord10\) !important;/);
-  assert.match(styles, /button:hover,[\s\S]*button:focus-visible,[\s\S]*color: var\(--nord6\) !important;/);
-  assert.doesNotMatch(appSource, />\[[^<]+\]<\/button>/);
-  assert.doesNotMatch(styles, /content: "\["|content: "\]"/);
+  assert.match(styles, /\.app\[data-profile="main"\]\[data-main-font\] button,[\s\S]*font-family: "Sarasa Gothic Mono"[\s\S]*!important;/);
+  assert.doesNotMatch(appSource, />\[[ ]+[^<]+[ ]+\]<\/button>/);
+  assert.doesNotMatch(styles, /content: "\[[ ]+"|content: "[ ]+\]"/);
 });
 
 test("main weather uses the compact Day label for afternoon forecasts", () => {
@@ -176,7 +175,7 @@ test("calendar month panel rendering is delegated to the view module", () => {
   assert.match(calendarViewSource, /data-date="\$\{cell\.value\}"/);
   assert.match(calendarViewSource, /data-calendar-add-event/);
   assert.match(index, /src="\/calendar-view\.js\?v=2"/);
-  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=365"'));
+  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=364"'));
   assert.match(calendarViewSource, /dayCaregiverMark" role="img"/);
   assert.match(calendarViewSource, /hasMarket \|\| eventCount \|\| taskCount/);
 });
@@ -307,8 +306,8 @@ test("main offers a global reload button while family reloads from its title", (
   const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
 
   assert.match(appSource, /class="topReloadButton"[^>]*data-app-reload/);
-  assert.match(appSource, />Reload<\/button>/);
-  assert.match(appSource, />Add<\/button>/);
+  assert.match(appSource, />\[Reload\]<\/button>/);
+  assert.match(appSource, />\[Add\]<\/button>/);
   assert.match(appSource, /identity\.dataset\.appReload = "";/);
   assert.match(appSource, /identity\.setAttribute\("aria-label", "새로고침"\);/);
   assert.match(appSource, /event\.target\.closest\("\[data-app-reload\]"\)[\s\S]*window\.location\.reload\(\);/);

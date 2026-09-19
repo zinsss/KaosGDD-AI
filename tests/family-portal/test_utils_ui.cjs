@@ -20,9 +20,9 @@ test("embedded desktop service actions use bracket command styling", () => {
   assert.match(appSource, /const openAction = `<a class="archiveAction"/);
 });
 
-test("main form action rows use compact colored command styling", () => {
-  assert.match(styles, /\.app\[data-profile="main"\] \.formActions \.primaryButton::before,[\s\S]*content: none;/);
-  assert.match(styles, /\.app\[data-profile="main"\] \.formActions \.primaryButton::after,[\s\S]*content: none;/);
+test("main form action rows use compact bracket command styling", () => {
+  assert.match(styles, /\.app\[data-profile="main"\] \.formActions \.primaryButton::before,[\s\S]*content: "\[";/);
+  assert.match(styles, /\.app\[data-profile="main"\] \.formActions \.primaryButton::after,[\s\S]*content: "\]";/);
   assert.match(styles, /\.app\[data-profile="main"\] \.formActions \.dangerButton,[\s\S]*\.app\[data-profile="main"\] \.eventReadOnly \.dangerButton \{[\s\S]*color: var\(--archive-error\);/);
   assert.match(styles, /\.app\[data-profile="main"\] \.settingsActionRow \.openButton \{[\s\S]*background: transparent;/);
 });
