@@ -66,7 +66,7 @@ test("notification categories point at the selector destination that can acknowl
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=369"');
+  const styleIndex = index.indexOf('href="/styles.css?v=370"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=10"');
   const calendarViewIndex = index.indexOf('src="/calendar-view.js?v=2"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
@@ -153,6 +153,7 @@ test("main buttons keep Sarasa and bracketed commands have no inner spaces", () 
   const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
   const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
   assert.match(styles, /\.app\[data-profile="main"\]\[data-main-font\] button,[\s\S]*font-family: "Sarasa Gothic Mono"[\s\S]*!important;/);
+  assert.match(styles, /input\[type="file"\]::file-selector-button,[\s\S]*input\[type="file"\]::-webkit-file-upload-button[\s\S]*font-family: "Sarasa Gothic Mono"/);
   assert.doesNotMatch(appSource, />\[[ ]+[^<]+[ ]+\]<\/button>/);
   assert.doesNotMatch(styles, /content: "\[[ ]+"|content: "[ ]+\]"/);
 });

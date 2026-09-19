@@ -2068,7 +2068,8 @@ h3 {
   font: inherit;
 }
 
-.memoFilePicker input[type="file"]::file-selector-button {
+.memoFilePicker input[type="file"]::file-selector-button,
+.memoFilePicker input[type="file"]::-webkit-file-upload-button {
   min-height: 34px;
   margin-right: 10px;
   padding: 0 12px;
@@ -5427,7 +5428,9 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 
 /* Controls keep the terminal UI typeface while the selected font applies to content. */
 .app[data-profile="main"][data-main-font] button,
-.app[data-profile="main"][data-main-font] input::file-selector-button {
+.app[data-profile="main"][data-main-font] input[type="file"],
+.app[data-profile="main"][data-main-font] input[type="file"]::file-selector-button,
+.app[data-profile="main"][data-main-font] input[type="file"]::-webkit-file-upload-button {
   font-family: "Sarasa Gothic Mono", ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace !important;
 }
 
