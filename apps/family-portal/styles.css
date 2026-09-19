@@ -7765,10 +7765,16 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 }
 
 .app[data-profile="main"] [data-archive-kind="memos"] .memoToolbarPanel .archiveTagChip {
+  border-color: rgba(76, 86, 106, 0.72);
   background: rgba(20, 24, 31, 0.72);
 }
 
+.app[data-profile="main"] [data-archive-kind="memos"] .memoToolbarPanel .archiveTagChip:hover {
+  border-color: var(--line-strong);
+}
+
 .app[data-profile="main"] [data-archive-kind="memos"] .memoToolbarPanel .archiveTagChip.isActive {
+  border-color: var(--main-tab-active-border);
   background: var(--main-tab-active-bg);
 }
 
