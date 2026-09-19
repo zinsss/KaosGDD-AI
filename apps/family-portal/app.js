@@ -9601,6 +9601,7 @@ function memosViewContext() {
     memoAttachmentUrl,
     isMemoImageAttachment,
     formatBytes,
+    renderMarkdown: window.KAOS_MARKDOWN_EDITOR.renderMarkdown,
   };
 }
 

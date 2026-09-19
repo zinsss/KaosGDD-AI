@@ -120,7 +120,7 @@ window.KAOS_MEMOS_VIEW = (() => {
                     ${renderAttachmentList(deps, selected.attachments)}
                     <div class="archiveOcrRegion" role="region" aria-label="Memo content" tabindex="0">
                       <p>MEMO TEXT</p>
-                      <pre>${deps.escapeHtml(selected.content || "No memo content.")}</pre>
+                      <article class="memoMarkdown">${deps.renderMarkdown(selected.content)}</article>
                     </div>
                   `
               }

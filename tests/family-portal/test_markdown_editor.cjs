@@ -10,7 +10,7 @@ const memosView = fs.readFileSync(path.join(root, "apps/family-portal/memos-view
 const scribbleView = fs.readFileSync(path.join(root, "apps/family-portal/scribble-view.js"), "utf8");
 const styles = fs.readFileSync(path.join(root, "apps/family-portal/styles.css"), "utf8");
 const deployHelper = fs.readFileSync(path.join(root, "deploy/h3-backend/kaos-h3"), "utf8");
-const { editText, highlightMarkdown } = require("../../apps/family-portal/markdown-editor.js");
+const { editText, highlightMarkdown, renderMarkdown } = require("../../apps/family-portal/markdown-editor.js");
 
 test("Markdown source highlighting distinguishes headings and escapes HTML", () => {
   const html = highlightMarkdown("# Heading\n## Subheading\n- **item**\n<script>");
@@ -42,13 +42,23 @@ test("Markdown editing moves the current line without changing its selection", (
   );
 });
 
+test("memo Markdown renders semantic HTML without allowing raw HTML or unsafe links", () => {
+  const html = renderMarkdown("# 제목\n\n- **항목**\n- [안전](https://example.com)\n\n<script>alert(1)</script>\n[위험](javascript:alert(1))");
+  assert.match(html, /<h1>제목<\/h1>/);
+  assert.match(html, /<ul><li><strong>항목<\/strong><\/li>/);
+  assert.match(html, /href="https:\/\/example\.com"/);
+  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.doesNotMatch(html, /<script>|href="javascript:/);
+});
+
 test("Memos and Scribble share the lightweight editor", () => {
-  assert.match(index, /src="\/markdown-editor\.js\?v=1"/);
-  assert.ok(index.indexOf('src="/markdown-editor.js?v=1"') < index.indexOf('src="/app.js?v=366"'));
+  assert.match(index, /src="\/markdown-editor\.js\?v=2"/);
+  assert.ok(index.indexOf('src="/markdown-editor.js?v=2"') < index.indexOf('src="/app.js?v=367"'));
   assert.match(app, /KAOS_MARKDOWN_EDITOR\?\.enhanceAll\(view\)/);
   assert.match(app, /data-memo-content[\s\S]*data-markdown-editor/);
   assert.match(memosView, /data-memo-edit-start/);
   assert.match(memosView, /data-memo-edit-content data-markdown-editor/);
+  assert.match(memosView, /class="memoMarkdown">\$\{deps\.renderMarkdown\(selected\.content\)\}<\/article>/);
   assert.match(scribbleView, /data-scribble-capture-text data-markdown-editor/);
   assert.match(scribbleView, /name="text" rows="10"[\s\S]*data-markdown-editor/);
   assert.match(styles, /--markdown-editor-red: var\(--nord11\);/);

@@ -8568,6 +8568,81 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   overflow-wrap: anywhere;
 }
 
+.app:is([data-profile="main"], [data-profile="family"][data-route="memos"]) .archiveOcrRegion .memoMarkdown {
+  min-width: 0;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--archive-line);
+  background: rgba(20, 24, 31, 0.52);
+  color: var(--archive-text);
+  font-size: 0.88rem;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.memoMarkdown > :first-child {
+  margin-top: 0;
+}
+
+.memoMarkdown > :last-child {
+  margin-bottom: 0;
+}
+
+.memoMarkdown h1,
+.memoMarkdown h2,
+.memoMarkdown h3,
+.memoMarkdown h4,
+.memoMarkdown h5,
+.memoMarkdown h6 {
+  margin: 1.15em 0 0.45em;
+  color: var(--archive-amber);
+  line-height: 1.3;
+}
+
+.memoMarkdown p,
+.memoMarkdown ul,
+.memoMarkdown ol,
+.memoMarkdown blockquote,
+.memoMarkdown pre {
+  margin: 0.65em 0;
+}
+
+.memoMarkdown ul,
+.memoMarkdown ol {
+  padding-left: 1.5em;
+}
+
+.memoMarkdown blockquote {
+  padding-left: 0.85em;
+  border-left: 3px solid var(--archive-line-strong);
+  color: var(--archive-muted);
+}
+
+.memoMarkdown a {
+  color: var(--archive-cyan);
+  text-underline-offset: 0.16em;
+}
+
+.memoMarkdown code {
+  padding: 0.12em 0.32em;
+  background: var(--nord0);
+  color: var(--archive-cyan);
+  font-family: "Sarasa Gothic Mono", ui-monospace, monospace !important;
+}
+
+.memoMarkdown pre {
+  padding: 10px;
+  overflow-x: auto;
+  border: 1px solid var(--archive-line);
+  background: var(--nord0);
+  white-space: pre;
+}
+
+.memoMarkdown pre code {
+  padding: 0;
+  background: transparent;
+}
+
 @media (max-width: 1179px) {
   .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"], [data-profile="family"][data-route="memos"]) .archiveWorkspace.hasDetail .archiveIndex {
     display: none;
@@ -8632,6 +8707,11 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   }
 
   .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"], [data-profile="family"][data-route="memos"]) .archiveOcrRegion pre {
+    max-height: 52dvh;
+    overflow: auto;
+  }
+
+  .app:is([data-profile="main"], [data-profile="family"][data-route="memos"]) .archiveOcrRegion .memoMarkdown {
     max-height: 52dvh;
     overflow: auto;
   }
@@ -8829,6 +8909,13 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   background: var(--archive-raised);
   color: var(--archive-text);
   font-family: inherit;
+}
+
+.app[data-profile="family"][data-route="memos"] .archiveOcrRegion .memoMarkdown {
+  border-color: rgba(122, 96, 132, 0.16);
+  border-radius: 12px;
+  background: var(--archive-raised);
+  color: var(--archive-text);
 }
 
 .app[data-profile="family"]:is([data-route="ai-tasks"], [data-route="memos"]) .archiveMetadata {
