@@ -4,6 +4,7 @@ const path = require("node:path");
 const test = require("node:test");
 
 const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
+const typographySource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/typography.js"), "utf8");
 const settingsViewSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/settings-view.js"), "utf8");
 const systemStatusViewSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/system-status-view.js"), "utf8");
 const indexSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
@@ -21,7 +22,7 @@ test("settings loads the read-only system status endpoint", () => {
   assert.match(systemStatusViewSource, /const worker = runtime\.worker \|\| \{\};/);
   assert.match(systemStatusViewSource, /Observation only\. No restart, deploy, reboot, shell, package-update, or system write controls are exposed in PWA\./);
   assert.match(indexSource, /src="\/system-status-view\.js\?v=2"/);
-  assert.ok(indexSource.indexOf('src="/system-status-view.js?v=2"') < indexSource.indexOf('src="/app.js?v=361"'));
+  assert.ok(indexSource.indexOf('src="/system-status-view.js?v=2"') < indexSource.indexOf('src="/app.js?v=362"'));
 });
 
 test("settings top add button is hidden because system writes are not exposed in PWA", () => {
@@ -55,14 +56,14 @@ test("main settings renders a compact KaosGDD settings terminal", () => {
 });
 
 test("main typography settings use the shared font list and step the saved font scale", () => {
-  assert.match(appSource, /MAIN_FONT_OPTIONS = new Set\(PORTAL_FONT_IDS\)/);
-  assert.match(appSource, /MAIN_FONT_SCALE_OPTIONS = Object\.freeze\(\[80, 85, 90, 95, 100, 105, 110, 115, 120\]\)/);
+  assert.match(appSource, /const MAIN_FONT_OPTIONS = FAMILY_FONT_OPTIONS/);
+  assert.match(typographySource, /fontScaleOptions = Object\.freeze\(\[80, 85, 90, 95, 100, 105, 110, 115, 120\]\)/);
   assert.match(appSource, /renderSharedFontOptions\(selectedFont\)/);
   assert.match(appSource, /data-main-font-step="-1"/);
   assert.match(appSource, /data-main-font-reset/);
   assert.match(appSource, /data-main-font-step="1"/);
-  assert.match(appSource, /document\.documentElement\.style\.fontSize = `\$\{normalized\}%`/);
-  assert.match(appSource, /window\.localStorage\.setItem\(MAIN_FONT_SCALE_STORAGE_KEY, String\(normalized\)\)/);
+  assert.match(typographySource, /global\.document\.documentElement\.style\.fontSize = `\$\{normalized\}%`/);
+  assert.match(typographySource, /global\.localStorage\.setItem\(profiles\[profile\]\.scaleKey, String\(normalized\)\)/);
   assert.match(styles, /font-family: "EllisDigitalCoding";[\s\S]*EliceDigitalBaeum_Regular\.woff2/);
   assert.match(styles, /font-family: "EllisDigitalCoding";[\s\S]*EliceDigitalBaeum_Bold\.woff2/);
   assert.match(styles, /data-main-font="elice"[\s\S]*--main-selected-font: "EllisDigitalCoding"/);
@@ -91,7 +92,7 @@ test("custom event settings rendering is delegated to the settings view module",
   assert.match(settingsViewSource, /data-custom-events-sync/);
   assert.match(settingsViewSource, /Generated calendar events/);
   assert.match(indexSource, /src="\/settings-view\.js\?v=1"/);
-  assert.ok(indexSource.indexOf('src="/settings-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=361"'));
+  assert.ok(indexSource.indexOf('src="/settings-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=362"'));
 });
 
 test("holiday settings rendering is delegated to the settings view module", () => {

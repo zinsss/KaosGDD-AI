@@ -70,29 +70,29 @@ const ROUNY_SYNC_REVISION_KEY = "kaosgdd.v2.rouny.syncRevision.v1";
 const ROUNY_SYNC_DIRTY_KEY = "kaosgdd.v2.rouny.syncDirty.v1";
 const EVENT_PRESET_STORAGE_KEY = "kaosgdd.v2.eventPresets.v1";
 const COMPOSER_RECOVERY_STORAGE_KEY = "kaosgdd.v2.composerRecovery.v1";
-const SHARED_FONT_OPTIONS = Object.freeze([
-  { id: "sarasa", label: "Sarasa Gothic Mono", translationKey: "settings.fontSarasa" },
-  { id: "elice", label: "Elice Digital Baeum", translationKey: "settings.fontElice" },
-  { id: "pretendard", label: "Pretendard", translationKey: "settings.fontPretendard" },
-  { id: "orbit", label: "Orbit", translationKey: "settings.fontOrbit" },
-  { id: "nanum", label: "NanumBarunPen", translationKey: "settings.fontNanum" },
-  { id: "nixgon", label: "Nixgon", translationKey: "settings.fontNixgon" },
-  { id: "skybori", label: "SKYBORI", translationKey: "settings.fontSkybori" },
-  { id: "watermelon", label: "Watermelon", translationKey: "settings.fontWatermelon" },
-  { id: "board-marker", label: "School Safe Board Marker", translationKey: "settings.fontBoardMarker" },
-  { id: "milky-way", label: "School Safety Milky Way", translationKey: "settings.fontMilkyWay" },
-  { id: "kita", label: "KITA", translationKey: "settings.fontKita" },
-  { id: "free-time", label: "School Safety Free Time", translationKey: "settings.fontFreeTime" },
-]);
-const PORTAL_FONT_IDS = SHARED_FONT_OPTIONS.map((option) => option.id);
-const FAMILY_FONT_STORAGE_KEY = "kaosgdd.v2.family.font.v1";
-const FAMILY_FONT_OPTIONS = new Set(PORTAL_FONT_IDS);
-const FAMILY_FONT_SCALE_STORAGE_KEY = "kaosgdd.v2.family.fontScale.v1";
-const FAMILY_FONT_SCALE_OPTIONS = Object.freeze([80, 85, 90, 95, 100, 105, 110, 115, 120]);
-const MAIN_FONT_STORAGE_KEY = "kaosgdd.v2.main.font.v1";
-const MAIN_FONT_OPTIONS = new Set(PORTAL_FONT_IDS);
-const MAIN_FONT_SCALE_STORAGE_KEY = "kaosgdd.v2.main.fontScale.v1";
-const MAIN_FONT_SCALE_OPTIONS = Object.freeze([80, 85, 90, 95, 100, 105, 110, 115, 120]);
+const {
+  fontOptions: SHARED_FONT_OPTIONS,
+  fontIds: PORTAL_FONT_IDS,
+  fontIdSet: FAMILY_FONT_OPTIONS,
+  fontScaleOptions: FAMILY_FONT_SCALE_OPTIONS,
+  familyFontPreference,
+  applyFamilyFontPreference,
+  setFamilyFontPreference,
+  familyFontScalePreference,
+  applyFamilyFontScalePreference,
+  setFamilyFontScalePreference,
+  stepFamilyFontScale,
+  mainFontPreference,
+  applyMainFontPreference,
+  setMainFontPreference,
+  mainFontScalePreference,
+  applyMainFontScalePreference,
+  setMainFontScalePreference,
+  stepMainFontScale,
+  applyPortalFontScalePreference,
+} = window.KAOS_PORTAL_TYPOGRAPHY;
+const MAIN_FONT_OPTIONS = FAMILY_FONT_OPTIONS;
+const MAIN_FONT_SCALE_OPTIONS = FAMILY_FONT_SCALE_OPTIONS;
 const WEATHER_LOCATION_STORAGE_KEY = "kaosgdd.v2.weather.location.v1";
 const WEATHER_LOCATION_OPTIONS = [
   { id: "pohang", label: "Pohang", translationKey: "weather.locationPohang" },
@@ -5606,57 +5606,6 @@ function portalProfile() {
   return window.location.hostname === "family.kaosgdd.net" ? "family" : "main";
 }
 
-function familyFontPreference() {
-  const stored = window.localStorage.getItem(FAMILY_FONT_STORAGE_KEY) || "";
-  return FAMILY_FONT_OPTIONS.has(stored) ? stored : "nanum";
-}
-
-function applyFamilyFontPreference(value = familyFontPreference()) {
-  const app = document.querySelector(".app");
-  if (!app) return;
-  if (portalProfile() !== "family") {
-    delete app.dataset.familyFont;
-    return;
-  }
-  app.dataset.familyFont = FAMILY_FONT_OPTIONS.has(value) ? value : "nanum";
-}
-
-function setFamilyFontPreference(value) {
-  const normalized = FAMILY_FONT_OPTIONS.has(value) ? value : "nanum";
-  window.localStorage.setItem(FAMILY_FONT_STORAGE_KEY, normalized);
-  applyFamilyFontPreference(normalized);
-}
-
-function familyFontScalePreference() {
-  const stored = Number(window.localStorage.getItem(FAMILY_FONT_SCALE_STORAGE_KEY));
-  return FAMILY_FONT_SCALE_OPTIONS.includes(stored) ? stored : 100;
-}
-
-function applyFamilyFontScalePreference(value = familyFontScalePreference()) {
-  const app = document.querySelector(".app");
-  const normalized = FAMILY_FONT_SCALE_OPTIONS.includes(Number(value)) ? Number(value) : 100;
-  if (!app || portalProfile() !== "family") {
-    if (app) delete app.dataset.familyFontScale;
-    return;
-  }
-  app.dataset.familyFontScale = String(normalized);
-  document.documentElement.style.fontSize = `${normalized}%`;
-}
-
-function setFamilyFontScalePreference(value) {
-  const requested = Number(value);
-  const normalized = FAMILY_FONT_SCALE_OPTIONS.includes(requested) ? requested : 100;
-  window.localStorage.setItem(FAMILY_FONT_SCALE_STORAGE_KEY, String(normalized));
-  applyFamilyFontScalePreference(normalized);
-}
-
-function stepFamilyFontScale(direction) {
-  const currentIndex = FAMILY_FONT_SCALE_OPTIONS.indexOf(familyFontScalePreference());
-  const delta = Math.sign(Number(direction) || 0);
-  const nextIndex = Math.max(0, Math.min(FAMILY_FONT_SCALE_OPTIONS.length - 1, currentIndex + delta));
-  setFamilyFontScalePreference(FAMILY_FONT_SCALE_OPTIONS[nextIndex]);
-}
-
 function normalizeFamilyTextPresets(value) {
   const source = Array.isArray(value)
     ? value
@@ -5683,63 +5632,6 @@ function textPresetContext() {
 
 async function loadFamilyTextPresets(options = {}) {
   return window.KAOS_TEXT_PRESETS.load(textPresetContext(), options);
-}
-
-function mainFontPreference() {
-  const stored = window.localStorage.getItem(MAIN_FONT_STORAGE_KEY) || "";
-  return MAIN_FONT_OPTIONS.has(stored) ? stored : "sarasa";
-}
-
-function applyMainFontPreference(value = mainFontPreference()) {
-  const app = document.querySelector(".app");
-  if (!app) return;
-  if (portalProfile() !== "main") {
-    delete app.dataset.mainFont;
-    return;
-  }
-  app.dataset.mainFont = MAIN_FONT_OPTIONS.has(value) ? value : "sarasa";
-}
-
-function setMainFontPreference(value) {
-  const normalized = MAIN_FONT_OPTIONS.has(value) ? value : "sarasa";
-  window.localStorage.setItem(MAIN_FONT_STORAGE_KEY, normalized);
-  applyMainFontPreference(normalized);
-}
-
-function mainFontScalePreference() {
-  const stored = Number(window.localStorage.getItem(MAIN_FONT_SCALE_STORAGE_KEY));
-  return MAIN_FONT_SCALE_OPTIONS.includes(stored) ? stored : 100;
-}
-
-function applyMainFontScalePreference(value = mainFontScalePreference()) {
-  const app = document.querySelector(".app");
-  const normalized = MAIN_FONT_SCALE_OPTIONS.includes(Number(value)) ? Number(value) : 100;
-  if (!app || portalProfile() !== "main") {
-    if (app) delete app.dataset.mainFontScale;
-    return;
-  }
-  app.dataset.mainFontScale = String(normalized);
-  document.documentElement.style.fontSize = `${normalized}%`;
-}
-
-function setMainFontScalePreference(value) {
-  const requested = Number(value);
-  const normalized = MAIN_FONT_SCALE_OPTIONS.includes(requested) ? requested : 100;
-  window.localStorage.setItem(MAIN_FONT_SCALE_STORAGE_KEY, String(normalized));
-  applyMainFontScalePreference(normalized);
-}
-
-function stepMainFontScale(direction) {
-  const currentIndex = MAIN_FONT_SCALE_OPTIONS.indexOf(mainFontScalePreference());
-  const delta = Math.sign(Number(direction) || 0);
-  const nextIndex = Math.max(0, Math.min(MAIN_FONT_SCALE_OPTIONS.length - 1, currentIndex + delta));
-  setMainFontScalePreference(MAIN_FONT_SCALE_OPTIONS[nextIndex]);
-}
-
-function applyPortalFontScalePreference() {
-  document.documentElement.style.removeProperty("font-size");
-  applyFamilyFontScalePreference();
-  applyMainFontScalePreference();
 }
 
 function weatherLocationPreference() {
