@@ -227,9 +227,23 @@ class TimezoneTests(unittest.TestCase):
             "### 2026년 9월 14일 (월)\n\n"
             "지금까지 기록 없음\n\n"
             "오늘 남은 일정 없음\n\n"
-            "주의 말씀은 내 발에 등이요 내 길에 빛이니이다 - 시편 119:105\n\n"
-            "If you correct your mind, the rest of your life will fall into place. - Laozi",
+            "<시편 119:105>\n"
+            "주의 말씀은 내 발에 등이요 내 길에 빛이니이다\n\n"
+            "<Laozi>\n"
+            "If you correct your mind, the rest of your life will fall into place.",
         )
+
+    def test_kaos_today_uses_quote_of_the_day_when_author_is_unavailable(self) -> None:
+        payload = shortcut_briefing_payload(
+            {},
+            {},
+            current=datetime(2026, 9, 14, 8, 0, tzinfo=timezone(timedelta(hours=9))),
+            bible_reference="로마서 8:28",
+            bible_text="모든 것이 합력하여 선을 이루느니라",
+            quote_text="Small steps still move us forward.",
+        )
+
+        self.assertIn("<Quote of the Day>\nSmall steps still move us forward.", payload["plainText"])
 
 
 class PendingMutationSerializationTests(unittest.TestCase):
@@ -792,10 +806,9 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("10:00  Call mom", payload["plainText"])
         self.assertIn("<시간표>", payload["plainText"])
         self.assertIn("<예정>\n21:00  Something Important", payload["plainText"])
-        self.assertIn(" - ", payload["plainText"])
+        self.assertRegex(payload["plainText"], r"<[^>\n]+>\n[^\n]+\n\n<[^>\n]+>\n[^\n]+$")
         self.assertNotIn("*", payload["plainText"])
         self.assertNotIn("<오늘의 성경 말씀>", payload["plainText"])
-        self.assertNotIn("<오늘의 명언>", payload["plainText"])
         self.assertNotIn("inspiration", payload)
         self.assertNotIn("timelineText", payload)
         fax_item = next(item for item in payload["items"] if item["kind"] == "Fax")

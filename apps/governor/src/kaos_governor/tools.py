@@ -2669,9 +2669,8 @@ def shortcut_briefing_payload(
         quote_text = ENCOURAGEMENT_ROTATION[
             today.toordinal() % len(ENCOURAGEMENT_ROTATION)
         ]
-    bible_display = f"{bible_text} - {bible_reference}"
-    quote_attribution = f" - {quote_author}" if quote_author else ""
-    quote_display = f"{quote_text}{quote_attribution}"
+    bible_display = f"<{bible_reference}>\n{bible_text}"
+    quote_display = f"<{quote_author or 'Quote of the Day'}>\n{quote_text}"
     lines.extend(("", bible_display, "", quote_display))
 
     plain_lines = [
