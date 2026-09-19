@@ -63,6 +63,7 @@ test("main and family memos routes render native archive board controls", () => 
   assert.match(stylesSource, /\.memoArchiveCommands \.archiveTopAction\.isActive \{[\s\S]*background: var\(--main-tab-active-bg\);/);
   assert.match(stylesSource, /\.archiveTopAction\.isActive:hover,[\s\S]*\.archiveTopAction\.isActive:focus-visible \{[\s\S]*color: var\(--main-tab-active-text\);/);
   assert.match(stylesSource, /\.memoArchiveCommands \.archiveTopAction::before,[\s\S]*\.memoArchiveCommands \.archiveTopAction::after \{\s*content: none;/);
+  assert.match(stylesSource, /\.memoArchiveToolbar > \.archiveTagFilters,[\s\S]*\.documentToolbarPanel > \.archiveTagFilters \{[\s\S]*gap: 10px;[\s\S]*padding: 6px 2px 10px;/);
   assert.doesNotMatch(stylesSource, /\[data-archive-kind="memos"\] \.memoToolbarPanel \.archiveTagChip \{/);
   assert.match(stylesSource, /\.archiveTagChip \{[\s\S]*background: rgba\(67, 76, 94, 0\.34\);/);
   assert.match(memosViewSource, /data-memo-open/);

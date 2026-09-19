@@ -7484,6 +7484,13 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   margin: 0;
 }
 
+.memoArchiveToolbar > .archiveTagFilters,
+.documentToolbarPanel > .archiveTagFilters {
+  gap: 10px;
+  box-sizing: border-box;
+  padding: 6px 2px 10px;
+}
+
 .app[data-profile="main"] [data-archive-kind="fax"] .archiveCommand,
 .app[data-profile="main"] [data-archive-kind="mail"] .archiveCommand {
   display: flex;
