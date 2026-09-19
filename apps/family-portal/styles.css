@@ -2086,7 +2086,7 @@ h3 {
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--text);
-  font-family: "Sarasa Gothic Mono", ui-monospace, monospace !important;
+  font-family: inherit !important;
   cursor: pointer;
 }
 
