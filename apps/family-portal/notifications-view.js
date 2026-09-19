@@ -9,10 +9,6 @@ window.KAOS_NOTIFICATIONS_VIEW = (() => {
         : "TODAY";
     return `
       <section class="archiveTerminal notificationInbox kaosToday" aria-label="KaosGDD Today">
-        <div class="archiveCommand kaosTodayToolbar">
-          <p class="archiveStatusMessage" role="status" aria-live="polite">${summary}</p>
-          <button class="archiveAction" type="button" data-notifications-refresh aria-label="Reload KaosGDD Today" title="Reload KaosGDD Today" ${briefing.loading ? "disabled" : ""}>Reload</button>
-        </div>
         ${
           briefing.error
             ? `<div class="archiveError" role="alert"><p>${deps.escapeHtml(briefing.error)}</p><button class="archiveAction" type="button" data-notifications-refresh>RETRY</button></div>`
@@ -22,6 +18,10 @@ window.KAOS_NOTIFICATIONS_VIEW = (() => {
                 ? `<pre class="kaosTodayText">${deps.escapeHtml(payload.plainText)}</pre>`
                 : `<p class="archiveStatusMessage notificationEmpty">No briefing available.</p>`
         }
+        <div class="archiveCommand kaosTodayToolbar">
+          <p class="archiveStatusMessage" role="status" aria-live="polite">${summary}</p>
+          <button class="archiveAction" type="button" data-notifications-refresh aria-label="Reload KaosGDD Today" title="Reload KaosGDD Today" ${briefing.loading ? "disabled" : ""}>Reload</button>
+        </div>
       </section>
     `;
   }

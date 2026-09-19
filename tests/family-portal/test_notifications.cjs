@@ -19,8 +19,9 @@ test("personal PWA renders the shared KaosToday briefing instead of an ACK list"
   assert.match(viewSource, /payload\.plainText/);
   assert.match(viewSource, /class="kaosTodayText"/);
   assert.doesNotMatch(viewSource, /data-notification-ack=/);
-  assert.match(indexSource, /src="\/notifications-view\.js\?v=6"/);
-  assert.ok(indexSource.indexOf('src="/notifications-view.js?v=6"') < indexSource.indexOf('src="/app.js?v=371"'));
+  assert.match(indexSource, /src="\/notifications-view\.js\?v=7"/);
+  assert.ok(indexSource.indexOf('src="/notifications-view.js?v=7"') < indexSource.indexOf('src="/app.js?v=371"'));
+  assert.ok(viewSource.indexOf('class="kaosTodayText"') < viewSource.indexOf('class="archiveCommand kaosTodayToolbar"'));
 });
 
 test("main Today is a selectable briefing route while Agenda remains the default page", () => {
