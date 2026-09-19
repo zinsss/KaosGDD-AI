@@ -7414,6 +7414,9 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 .app:is([data-profile="main"], [data-profile="family"][data-route="memos"]) [data-archive-kind="memos"] .memoArchiveToolbar {
   display: grid;
   gap: 8px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
   padding: 0;
 }
 

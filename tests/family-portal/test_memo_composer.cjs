@@ -54,6 +54,7 @@ test("main and family memos routes render native archive board controls", () => 
   assert.match(appSource, /state\.memos\.appliedQuery === tagQuery \? "" : tagQuery/);
   assert.match(stylesSource, /\.memoArchiveCommands \{[\s\S]*display: flex;[\s\S]*gap: 0;/);
   assert.match(stylesSource, /\[data-archive-kind="memos"\] \.memoArchiveCommands \{[\s\S]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\);/);
+  assert.match(stylesSource, /\[data-archive-kind="memos"\] \.memoArchiveToolbar \{[\s\S]*border: 0;[\s\S]*background: transparent;[\s\S]*box-shadow: none;/);
   assert.match(stylesSource, /\.memoArchiveCommands \.archiveTopAction\.isActive \{[\s\S]*background: var\(--main-tab-active-bg\);/);
   assert.match(stylesSource, /\.memoArchiveCommands \.archiveTopAction::before,[\s\S]*\.memoArchiveCommands \.archiveTopAction::after \{\s*content: none;/);
   assert.match(memosViewSource, /data-memo-open/);
