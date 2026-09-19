@@ -6008,12 +6008,12 @@ function renderTopNav(route) {
           `).join("")}
         </nav>
         <div class="topHeaderActions">
-          <button class="topReloadButton" type="button" data-app-reload aria-label="Reload KaosGDD" title="Reload KaosGDD">[Reload]</button>
+          <button class="topReloadButton" type="button" data-app-reload aria-label="Reload KaosGDD" title="Reload KaosGDD">Reload</button>
           ${
             topAction
               ? `
               <div class="topAddWrap">
-                <button class="topAddButton" type="button" data-top-add="${escapeHtml(topAction)}" aria-label="Add" aria-haspopup="menu" aria-expanded="false">[Add]</button>
+                <button class="topAddButton" type="button" data-top-add="${escapeHtml(topAction)}" aria-label="Add" aria-haspopup="menu" aria-expanded="false">Add</button>
                 ${renderTopAddMenu(route)}
               </div>
             `

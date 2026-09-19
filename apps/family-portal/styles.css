@@ -552,8 +552,8 @@ html.isAgendaSuppliesEmbed body {
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: var(--nord8);
-  padding: 0 2px;
+  color: var(--nord10);
+  padding: 0 10px;
   font: 650 0.78rem/1 "Sarasa Gothic Mono", ui-monospace, monospace;
   white-space: nowrap;
 }
@@ -561,7 +561,7 @@ html.isAgendaSuppliesEmbed body {
 .topReloadButton:hover,
 .topReloadButton:focus-visible,
 .topReloadButton:active {
-  color: var(--nord13);
+  color: var(--nord6);
   background: transparent;
 }
 
@@ -575,15 +575,15 @@ html.isAgendaSuppliesEmbed body {
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: var(--nord8);
-  padding: 0 2px;
+  color: var(--nord10);
+  padding: 0 10px;
   font: 650 0.78rem/1 "Sarasa Gothic Mono", ui-monospace, monospace;
   white-space: nowrap;
 }
 
 .topAddButton:active,
 .topAddButton[aria-expanded="true"] {
-  color: var(--nord13);
+  color: var(--nord6);
   background: transparent;
 }
 
@@ -5429,6 +5429,13 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 .app[data-profile="main"][data-main-font] button,
 .app[data-profile="main"][data-main-font] input::file-selector-button {
   font-family: "Sarasa Gothic Mono", ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace !important;
+  color: var(--nord10) !important;
+}
+
+.app[data-profile="main"][data-main-font] button:hover,
+.app[data-profile="main"][data-main-font] button:focus-visible,
+.app[data-profile="main"][data-main-font] input::file-selector-button:hover {
+  color: var(--nord6) !important;
 }
 
 .app[data-profile="main"] {
@@ -7574,14 +7581,26 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 
 .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"], [data-profile="family"][data-route="memos"]) .archiveAction::before,
 .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"], [data-profile="family"][data-route="memos"]) .archiveSourceLink::before {
-  content: "[";
+  content: none;
   color: currentColor;
 }
 
 .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"], [data-profile="family"][data-route="memos"]) .archiveAction::after,
 .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"], [data-profile="family"][data-route="memos"]) .archiveSourceLink::after {
-  content: "]";
+  content: none;
   color: currentColor;
+}
+
+.app[data-profile="main"] .archiveSourceLink,
+.app[data-profile="main"] .aiTaskSourceDetails summary {
+  color: var(--nord10);
+}
+
+.app[data-profile="main"] .archiveSourceLink:hover,
+.app[data-profile="main"] .archiveSourceLink:focus-visible,
+.app[data-profile="main"] .aiTaskSourceDetails summary:hover,
+.app[data-profile="main"] .aiTaskSourceDetails summary:focus-visible {
+  color: var(--nord6);
 }
 
 .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"], [data-profile="family"][data-route="memos"]) .archiveCommandActions .archiveAction {
@@ -7607,20 +7626,20 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   border: 0;
   border-radius: 0;
   background: transparent;
-  padding: 0 3px;
-  color: var(--archive-cyan);
+  padding: 0 10px;
+  color: var(--nord10);
   font: 850 0.76rem/1 "Sarasa Gothic Mono", ui-monospace, monospace;
   text-transform: uppercase;
   box-shadow: none;
 }
 
 .app[data-profile="main"] .formActions .primaryButton {
-  color: var(--archive-ok);
+  color: var(--nord10);
 }
 
 .app[data-profile="main"] .formActions .dangerButton,
 .app[data-profile="main"] .eventReadOnly .dangerButton {
-  color: var(--archive-error);
+  color: var(--archive-error) !important;
 }
 
 .app[data-profile="main"] .formActions .openButton::before,
@@ -7628,7 +7647,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 .app[data-profile="main"] .formActions .dangerButton::before,
 .app[data-profile="main"] .eventReadOnly .dangerButton::before,
 .app[data-profile="main"] .settingsActionRow .openButton::before {
-  content: "[";
+  content: none;
 }
 
 .app[data-profile="main"] .formActions .openButton::after,
@@ -7636,7 +7655,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 .app[data-profile="main"] .formActions .dangerButton::after,
 .app[data-profile="main"] .eventReadOnly .dangerButton::after,
 .app[data-profile="main"] .settingsActionRow .openButton::after {
-  content: "]";
+  content: none;
 }
 
 .app[data-profile="main"] .formActions .openButton:hover,
@@ -7920,12 +7939,12 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 }
 
 .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"], [data-profile="family"][data-route="memos"]) .aiTaskSourceDetails summary::before {
-  content: "[";
+  content: none;
   color: var(--archive-amber);
 }
 
 .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"], [data-profile="family"][data-route="memos"]) .aiTaskSourceDetails summary::after {
-  content: "]";
+  content: none;
   color: var(--archive-amber);
 }
 
