@@ -9012,6 +9012,10 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   gap: 4px;
 }
 
+.app[data-profile="main"] .notificationInbox.kaosToday {
+  gap: 4px;
+}
+
 .app[data-profile="main"] .notificationInbox .kaosTodayToolbar {
   display: flex;
   align-items: center;
