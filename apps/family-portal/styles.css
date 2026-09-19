@@ -5425,6 +5425,12 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   font-family: var(--main-selected-font) !important;
 }
 
+/* Controls keep the terminal UI typeface while the selected font applies to content. */
+.app[data-profile="main"][data-main-font] button,
+.app[data-profile="main"][data-main-font] input::file-selector-button {
+  font-family: "Sarasa Gothic Mono", ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace !important;
+}
+
 .app[data-profile="main"] {
   --page-bottom-reserve: 0px;
   --main-tab-active-border: rgba(180, 142, 173, 0.62);
@@ -7914,12 +7920,12 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 }
 
 .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"], [data-profile="family"][data-route="memos"]) .aiTaskSourceDetails summary::before {
-  content: "[ ";
+  content: "[";
   color: var(--archive-amber);
 }
 
 .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"], [data-profile="family"][data-route="memos"]) .aiTaskSourceDetails summary::after {
-  content: " ]";
+  content: "]";
   color: var(--archive-amber);
 }
 

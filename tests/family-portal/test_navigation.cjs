@@ -66,7 +66,7 @@ test("notification categories point at the selector destination that can acknowl
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=368"');
+  const styleIndex = index.indexOf('href="/styles.css?v=369"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=10"');
   const calendarViewIndex = index.indexOf('src="/calendar-view.js?v=2"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
@@ -147,6 +147,14 @@ test("main typography avoids heavy synthesized bold while keeping light hierarch
   assert.match(styles, /\.app\[data-profile="main"\],\s*\.app\[data-profile="main"\] \* \{\s*font-synthesis-weight: none;/);
   assert.match(styles, /\.app\[data-profile="main"\] \* \{\s*font-weight: 400 !important;/);
   assert.match(styles, /\.app\[data-profile="main"\] :where\([\s\S]*strong,[\s\S]*button,[\s\S]*summary,[\s\S]*\) \{\s*font-weight: 500 !important;/);
+});
+
+test("main buttons keep Sarasa and bracketed commands have no inner spaces", () => {
+  const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
+  const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
+  assert.match(styles, /\.app\[data-profile="main"\]\[data-main-font\] button,[\s\S]*font-family: "Sarasa Gothic Mono"[\s\S]*!important;/);
+  assert.doesNotMatch(appSource, />\[[ ]+[^<]+[ ]+\]<\/button>/);
+  assert.doesNotMatch(styles, /content: "\[[ ]+"|content: "[ ]+\]"/);
 });
 
 test("calendar month panel rendering is delegated to the view module", () => {

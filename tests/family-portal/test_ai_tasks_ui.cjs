@@ -28,8 +28,8 @@ test("AI Tasks official document memo flow previews before saving to Memos", () 
   assert.match(aiTasksViewSource, /details: "DETAILS"/);
   assert.match(aiTasksViewSource, /details: "자료 추가"/);
   assert.match(stylesSource, /\.aiTaskSourceDetails summary/);
-  assert.match(stylesSource, /content: "\[ "/);
-  assert.match(stylesSource, /content: " \]"/);
+  assert.match(stylesSource, /content: "\["/);
+  assert.match(stylesSource, /content: "\]"/);
   assert.match(appSource, /async function startUnifiedAiTask\(form\)/);
   assert.match(appSource, /\/api\/ai-tasks\/run/);
   assert.match(appSource, /scheduleAiTasksPoll\(1200\)/);
