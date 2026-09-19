@@ -66,7 +66,7 @@ test("notification categories point at the selector destination that can acknowl
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=375"');
+  const styleIndex = index.indexOf('href="/styles.css?v=376"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=10"');
   const calendarViewIndex = index.indexOf('src="/calendar-view.js?v=2"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');

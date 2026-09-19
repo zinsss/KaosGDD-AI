@@ -7756,6 +7756,14 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   color: var(--nord6);
 }
 
+.app[data-profile="main"] [data-archive-kind="memos"] .memoToolbarPanel .archiveTagChip {
+  background: rgba(20, 24, 31, 0.72);
+}
+
+.app[data-profile="main"] [data-archive-kind="memos"] .memoToolbarPanel .archiveTagChip.isActive {
+  background: var(--main-tab-active-bg);
+}
+
 .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"], [data-profile="family"][data-route="memos"]) .archiveAction:hover,
 .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"], [data-profile="family"][data-route="memos"]) .archiveSourceLink:hover,
 .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"], [data-profile="family"][data-route="memos"]) .archiveRecordButton:hover .archiveRecordTitle {
