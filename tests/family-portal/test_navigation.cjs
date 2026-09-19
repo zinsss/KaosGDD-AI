@@ -72,7 +72,7 @@ test("the navigation contract loads before the portal application", () => {
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
   const faxIndex = index.indexOf('src="/fax.js?v=2"');
   const mailIndex = index.indexOf('src="/mail.js?v=7"');
-  const applicationIndex = index.indexOf('src="/app.js?v=362"');
+  const applicationIndex = index.indexOf('src="/app.js?v=363"');
   assert.ok(styleIndex >= 0);
   assert.ok(navigationIndex >= 0);
   assert.ok(calendarViewIndex > navigationIndex);
@@ -161,7 +161,7 @@ test("calendar month panel rendering is delegated to the view module", () => {
   assert.match(calendarViewSource, /data-date="\$\{cell\.value\}"/);
   assert.match(calendarViewSource, /data-calendar-add-event/);
   assert.match(index, /src="\/calendar-view\.js\?v=2"/);
-  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=362"'));
+  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=363"'));
   assert.match(calendarViewSource, /dayCaregiverMark" role="img"/);
   assert.match(calendarViewSource, /hasMarket \|\| eventCount \|\| taskCount/);
 });
@@ -292,8 +292,8 @@ test("main offers a global reload button while family reloads from its title", (
   const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
 
   assert.match(appSource, /class="topReloadButton"[^>]*data-app-reload/);
-  assert.match(appSource, />\[ Reload \]<\/button>/);
-  assert.match(appSource, />\[ Add \]<\/button>/);
+  assert.match(appSource, />\[Reload\]<\/button>/);
+  assert.match(appSource, />\[Add\]<\/button>/);
   assert.match(appSource, /identity\.dataset\.appReload = "";/);
   assert.match(appSource, /identity\.setAttribute\("aria-label", "새로고침"\);/);
   assert.match(appSource, /event\.target\.closest\("\[data-app-reload\]"\)[\s\S]*window\.location\.reload\(\);/);
