@@ -66,7 +66,7 @@ test("notification categories point at the selector destination that can acknowl
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=367"');
+  const styleIndex = index.indexOf('href="/styles.css?v=368"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=10"');
   const calendarViewIndex = index.indexOf('src="/calendar-view.js?v=2"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
@@ -105,10 +105,10 @@ test("main and family settings share the complete font list", () => {
   assert.match(appSource, /const MAIN_FONT_OPTIONS = FAMILY_FONT_OPTIONS/);
   assert.match(appSource, /renderSharedFontOptions\(selectedFont, \{ translate: true \}\)/);
   assert.match(appSource, /renderSharedFontOptions\(selectedFont\)/);
-  assert.match(styles, /font-family: "Watermelon";[\s\S]*EF_watermelonSalad\.woff2/);
+  assert.match(styles, /font-family: "Watermelon";[\s\S]*EF-watermelonSalad\.woff2/);
   assert.match(styles, /font-family: "SchoolSafeBoardMarker";[\s\S]*HakgyoansimBoadmarkerR\.woff2/);
   assert.match(styles, /font-family: "SchoolSafetyMilkyWay";[\s\S]*TTHakgyoansimEunhasuR\.woff2/);
-  assert.match(styles, /font-family: "Kita";[\s\S]*-KITA-Regular\.woff/);
+  assert.match(styles, /font-family: "Kita";[\s\S]*KITA-Regular\.woff/);
   assert.match(styles, /font-family: "SchoolSafetyFreeTime";[\s\S]*HakgyoansimJayusiganR\.woff2/);
   assert.match(styles, /data-family-font="watermelon"[\s\S]*"Watermelon"/);
   assert.match(styles, /data-family-font="board-marker"[\s\S]*"SchoolSafeBoardMarker"/);
@@ -130,6 +130,7 @@ test("main and family settings share the complete font list", () => {
   assert.match(translations, /"settings\.fontMilkyWay": "학교안심 은하수"/);
   assert.match(translations, /"settings\.fontKita": "KITA"/);
   assert.match(translations, /"settings\.fontFreeTime": "학교안심 자유시간"/);
+  assert.doesNotMatch(styles, /@font-face\s*\{[\s\S]*?src:\s*url\("https?:\/\//);
   assert.match(typographySource, /fontScaleOptions = Object\.freeze\(\[80, 85, 90, 95, 100, 105, 110, 115, 120\]\)/);
   assert.match(appSource, /data-family-font-step="-1"/);
   assert.match(appSource, /data-family-font-reset/);

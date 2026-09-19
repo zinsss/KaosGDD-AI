@@ -71,7 +71,7 @@
 
 @font-face {
   font-family: "EllisDigitalCoding";
-  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_220508@1.0/EliceDigitalBaeum_Regular.woff2") format("woff2");
+  src: url("./fonts/EliceDigitalBaeum-Regular.woff2?v=1") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -79,7 +79,7 @@
 
 @font-face {
   font-family: "EllisDigitalCoding";
-  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_220508@1.0/EliceDigitalBaeum_Bold.woff2") format("woff2");
+  src: url("./fonts/EliceDigitalBaeum-Bold.woff2?v=1") format("woff2");
   font-weight: 700;
   font-style: normal;
   font-display: swap;
@@ -144,7 +144,7 @@
 
 @font-face {
   font-family: "Watermelon";
-  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2210-EF@1.0/EF_watermelonSalad.woff2") format("woff2");
+  src: url("./fonts/EF-watermelonSalad.woff2?v=1") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -152,7 +152,7 @@
 
 @font-face {
   font-family: "SchoolSafeBoardMarker";
-  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/2511-1@1.0/HakgyoansimBoadmarkerR.woff2") format("woff2");
+  src: url("./fonts/HakgyoansimBoadmarkerR.woff2?v=1") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -160,7 +160,7 @@
 
 @font-face {
   font-family: "SchoolSafetyMilkyWay";
-  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2402_keris@1.0/TTHakgyoansimEunhasuR.woff2") format("woff2");
+  src: url("./fonts/TTHakgyoansimEunhasuR.woff2?v=1") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -168,7 +168,7 @@
 
 @font-face {
   font-family: "Kita";
-  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2201-2@1.0/-KITA-Regular.woff") format("woff");
+  src: url("./fonts/KITA-Regular.woff?v=1") format("woff");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -176,7 +176,7 @@
 
 @font-face {
   font-family: "SchoolSafetyFreeTime";
-  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/2508-2@1.0/HakgyoansimJayusiganR.woff2") format("woff2");
+  src: url("./fonts/HakgyoansimJayusiganR.woff2?v=1") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;

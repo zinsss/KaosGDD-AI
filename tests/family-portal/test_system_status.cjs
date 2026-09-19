@@ -64,8 +64,8 @@ test("main typography settings use the shared font list and step the saved font 
   assert.match(appSource, /data-main-font-step="1"/);
   assert.match(typographySource, /global\.document\.documentElement\.style\.fontSize = `\$\{normalized\}%`/);
   assert.match(typographySource, /global\.localStorage\.setItem\(profiles\[profile\]\.scaleKey, String\(normalized\)\)/);
-  assert.match(styles, /font-family: "EllisDigitalCoding";[\s\S]*EliceDigitalBaeum_Regular\.woff2/);
-  assert.match(styles, /font-family: "EllisDigitalCoding";[\s\S]*EliceDigitalBaeum_Bold\.woff2/);
+  assert.match(styles, /font-family: "EllisDigitalCoding";[\s\S]*EliceDigitalBaeum-Regular\.woff2/);
+  assert.match(styles, /font-family: "EllisDigitalCoding";[\s\S]*EliceDigitalBaeum-Bold\.woff2/);
   assert.match(styles, /data-main-font="elice"[\s\S]*--main-selected-font: "EllisDigitalCoding"/);
   assert.match(styles, /data-main-font="nanum"[\s\S]*--main-selected-font: "NanumBarunPen"/);
   assert.match(styles, /\.settingsTypographyControls \{/);
