@@ -7666,6 +7666,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   min-height: 32px;
   padding: 0;
   font-size: 1.05rem;
+  font-family: "Sarasa Gothic Mono", ui-monospace, monospace !important;
   text-transform: none;
 }
 

@@ -43,6 +43,7 @@ test("main and family memos routes render native archive board controls", () => 
   assert.match(stylesSource, /\.memoHeaderCancel \{[\s\S]*font: 500 0\.78rem\/1 "Sarasa Gothic Mono"/);
   assert.match(stylesSource, /\.memoHeaderCancel::before \{\s*content: "\[";/);
   assert.match(stylesSource, /\.memoHeaderCancel::after \{\s*content: "\]";/);
+  assert.match(stylesSource, /\.archiveTopAction \{[\s\S]*font-family: "Sarasa Gothic Mono"[\s\S]*!important;/);
   assert.ok(memosViewSource.indexOf('class="archiveSearchBox"') < memosViewSource.indexOf('data-memos-refresh'));
   assert.match(stylesSource, /\[data-archive-kind="memos"\] \.archiveSearchBar \{\n  grid-template-columns: auto minmax\(0, 1fr\) 44px;/);
   assert.match(memosViewSource, /data-memo-open/);
