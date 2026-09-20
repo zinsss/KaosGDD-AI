@@ -8005,6 +8005,10 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   grid-template-columns: minmax(0, 1fr) 74px;
 }
 
+.app[data-profile="main"] [data-archive-kind="memos"] .archiveRecord {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"], [data-profile="family"][data-route="memos"]) .archiveRecord.isSelected {
   background: rgba(235, 203, 139, 0.08);
 }

@@ -96,6 +96,11 @@ test("desktop archive rows keep no date and title in separate lanes", () => {
   assert.match(styles, /\.app:is\(\[data-profile="main"\], \[data-profile="family"\]\[data-route="ai-tasks"\], \[data-profile="family"\]\[data-route="memos"\]\) \.archiveRecordButton \{[\s\S]*grid-template-columns: 12ch 18ch minmax\(0, 1fr\);/);
 });
 
+test("memos dates align to the right edge without an empty action column", () => {
+  assert.match(styles, /\.app\[data-profile="main"\] \[data-archive-kind="memos"\] \.archiveRecord \{\n  grid-template-columns: minmax\(0, 1fr\);\n\}/);
+  assert.match(styles, /\.archiveRecordDate \{[\s\S]*justify-self: end;/);
+});
+
 test("memos archive rendering is delegated to the view module", () => {
   assert.match(appSource, /KAOS_MEMOS_VIEW\.renderMemos\(memosViewContext\(\)\)/);
   assert.match(memosViewSource, /data-archive-kind="memos"/);
