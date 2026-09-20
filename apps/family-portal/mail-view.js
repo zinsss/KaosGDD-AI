@@ -24,7 +24,7 @@ window.KAOS_MAIL_VIEW = (() => {
       .map((itemMode) => {
         const active = itemMode === mode;
         const label = mailApi.modeLabels[itemMode] || itemMode.toUpperCase();
-        return `<button class="archiveAction ${active ? "isActive" : ""}" type="button" data-mail-mode="${deps.escapeHtml(itemMode)}" aria-pressed="${active}">${deps.escapeHtml(label)}</button>`;
+        return `<button class="archiveAction archiveTopAction ${active ? "isActive" : ""}" type="button" data-mail-mode="${deps.escapeHtml(itemMode)}" aria-pressed="${active}">${deps.escapeHtml(label)}</button>`;
       })
       .join("");
     const modeLabel = mailApi.modeLabels[mode] || mode.toUpperCase();
@@ -146,9 +146,11 @@ window.KAOS_MAIL_VIEW = (() => {
           : "";
     return `
       <section class="archiveTerminal" data-archive-kind="mail" aria-label="Mail board">
-        <div class="archiveCommand" aria-label="Mail board actions">
-          <div class="archiveCommandActions">${modeButtons}</div>
-          <button class="archiveAction archiveRefreshAction" type="button" data-mail-refresh aria-label="Refresh mail board" title="Refresh mail board" ${activeLoading ? "disabled" : ""}>↻</button>
+        <div class="archiveCommand mailArchiveToolbar" aria-label="Mail board actions">
+          <div class="mailArchiveCommands">
+            ${modeButtons}
+            <button class="archiveAction archiveTopAction" type="button" data-mail-refresh aria-label="Reload mail board" title="Reload mail board" ${activeLoading ? "disabled" : ""}>Reload</button>
+          </div>
         </div>
         <div class="archiveWorkspace ${hasDetail ? "hasDetail" : ""}">
           <section class="archiveIndex" aria-labelledby="mailIndexTitle" aria-busy="${activeLoading}">
