@@ -8,6 +8,7 @@ const { counts, filterItems, mailboxMatchesTarget, normalizeDetail, normalizeMes
 const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
 const mailViewSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/mail-view.js"), "utf8");
 const indexSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
+const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
 
 test("normalizes Naver mail headers for the portal", () => {
   const message = normalizeMessage({
@@ -94,6 +95,7 @@ test("mail board rendering is delegated to the view module", () => {
   assert.match(mailViewSource, /class="mailArchiveCommands"/);
   assert.match(mailViewSource, /data-mail-refresh[^>]*>Reload<\/button>/);
   assert.doesNotMatch(mailViewSource, />↻<\/button>/);
+  assert.match(styles, /\.mailArchiveCommands \{[\s\S]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\);[\s\S]*width: 100%;/);
   assert.match(mailViewSource, /mailReloginUrl/);
   assert.match(indexSource, /src="\/mail-view\.js\?v=2"/);
   assert.ok(indexSource.indexOf('src="/mail-view.js?v=2"') < indexSource.indexOf('src="/app.js?v=372"'));
