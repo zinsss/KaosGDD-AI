@@ -3688,6 +3688,9 @@ function formatNotificationDate(value) {
     month: "short",
     day: "numeric",
     year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
     timeZone: "Asia/Seoul",
   }).format(date);
 }
