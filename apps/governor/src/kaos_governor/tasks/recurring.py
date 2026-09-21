@@ -8,9 +8,9 @@ import threading
 from typing import Any, Literal
 
 
-Frequency = Literal["daily", "weekly", "monthly", "yearly"]
+Frequency = Literal["daily", "weekly", "monthly", "yearly", "claim_day"]
 CreationPolicy = Literal["on_schedule", "on_completion"]
-FREQUENCIES = {"daily", "weekly", "monthly", "yearly"}
+FREQUENCIES = {"daily", "weekly", "monthly", "yearly", "claim_day"}
 CREATION_POLICIES = {"on_schedule", "on_completion"}
 PRIORITIES = {"", "1", "5", "9"}
 DEFAULT_TIME = "10:00"
@@ -188,15 +188,70 @@ def _existing_occurrence(tasks: Iterable[Mapping[str, Any]], uid: str, collectio
     return next((task for task in tasks if task.get("uid") == uid and task.get("collection") == collection_id), None)
 
 
+def claim_day_dates(events: Iterable[Mapping[str, Any]]) -> list[date]:
+    values = set()
+    for event in events:
+        categories = {clean_text(value).upper() for value in (event.get("categories") or [])}
+        if "KAOS-CLAIM-DAY" not in categories:
+            continue
+        try:
+            values.add(date.fromisoformat(clean_text(event.get("startDate") or event.get("date"))))
+        except ValueError:
+            continue
+    return sorted(values)
+
+
+def _claim_day_plan(
+    item: dict[str, Any],
+    task_items: list[Mapping[str, Any]],
+    *,
+    today: date,
+    scheduled_dates: Iterable[date],
+) -> RecurringTaskPlan:
+    dates = sorted(set(scheduled_dates))
+    active_uid = item.get("active_uid")
+    clear_active = False
+    active_completed = False
+    minimum = max(item.get("next_due_date") or item["first_due_date"], today)
+    if active_uid:
+        active = next((task for task in task_items if _task_matches_active(item, task)), None)
+        if active and not _is_completed(active):
+            return RecurringTaskPlan(action="none")
+        clear_active = True
+        active_completed = bool(active)
+        minimum = max(item["active_due_date"] + timedelta(days=1), today)
+    due_date = next((value for value in dates if value >= minimum), None)
+    if due_date is None or due_date > today:
+        return RecurringTaskPlan(
+            action="none",
+            clear_active=clear_active,
+            active_completed=active_completed,
+            next_due_date=due_date,
+        )
+    uid = occurrence_uid(item, due_date)
+    action = "adopt" if _existing_occurrence(task_items, uid, item["collection_id"]) else "create"
+    return RecurringTaskPlan(
+        action=action,
+        due_date=due_date,
+        uid=uid,
+        clear_active=clear_active,
+        active_completed=active_completed,
+        next_due_date=due_date,
+    )
+
+
 def plan_synchronization(
     definition: Mapping[str, Any] | RecurringTaskDefinition,
     tasks: Iterable[Mapping[str, Any]],
     *,
     today: date,
+    scheduled_dates: Iterable[date] = (),
 ) -> RecurringTaskPlan:
     task_items = list(tasks)
     item = definition.as_planner_mapping() if isinstance(definition, RecurringTaskDefinition) else dict(definition)
     creation_policy = clean_text(item.get("creation_policy") or DEFAULT_CREATION_POLICY)
+    if item.get("frequency") == "claim_day":
+        return _claim_day_plan(item, task_items, today=today, scheduled_dates=scheduled_dates)
     active_uid = item.get("active_uid")
     if active_uid:
         active = next((task for task in task_items if _task_matches_active(item, task)), None)
@@ -609,8 +664,19 @@ class RecurringTaskService:
         today: date,
         now: datetime | None = None,
     ) -> RecurringTaskPlan:
-        tasks = self.calendar_adapter.list_tasks(definition.adapter_profile)
-        plan = plan_synchronization(definition.as_planner_mapping(), tasks, today=today)
+        scheduled_dates: list[date] = []
+        if definition.frequency == "claim_day":
+            bootstrap = self.calendar_adapter.bootstrap(definition.adapter_profile)
+            tasks = list(bootstrap.get("tasks") or [])
+            scheduled_dates = claim_day_dates(bootstrap.get("events") or [])
+        else:
+            tasks = self.calendar_adapter.list_tasks(definition.adapter_profile)
+        plan = plan_synchronization(
+            definition.as_planner_mapping(),
+            tasks,
+            today=today,
+            scheduled_dates=scheduled_dates,
+        )
         if plan.clear_active and plan.next_due_date:
             self.store.clear_active_occurrence(
                 definition.definition_id,

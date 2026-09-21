@@ -3308,7 +3308,7 @@ def upsert_recurring_task(payload: dict[str, object], profile: str, item_id: str
     existing = store.get_definition(item_id) if item_id else None
     definition = recurring_definition_from_request({**payload, "id": item_id or payload.get("id") or ""}, profile, existing=existing)
     saved = store.upsert_definition(definition)
-    RecurringTaskService(store, CalendarAdapterClient()).synchronize_definition(saved, today=datetime.now().date())
+    RecurringTaskService(store, CalendarAdapterClient()).synchronize_definition(saved, today=datetime.now(KST).date())
     return recurring_task_payload(store.get_definition(saved.definition_id))
 
 
@@ -3320,7 +3320,7 @@ def delete_recurring_task(item_id: str) -> dict[str, object]:
 def sync_recurring_tasks(profile: str) -> dict[str, object]:
     store = recurring_store()
     service = RecurringTaskService(store, CalendarAdapterClient())
-    results = service.run_once(today=datetime.now().date())
+    results = service.run_once(today=datetime.now(KST).date())
     return {
         "ok": True,
         "profile": profile,

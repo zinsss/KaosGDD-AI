@@ -43,6 +43,17 @@ class RecurringTaskValidationTests(unittest.TestCase):
             recurring.validate_time("10:03")
         self.assertEqual(recurring.validate_time("10:05"), time(10, 5))
 
+    def test_claim_day_is_a_supported_generated_schedule(self) -> None:
+        payload = {
+            "title": "청구하기",
+            "firstDueDate": "2026-09-23",
+            "dueTime": "22:00",
+            "priority": "",
+            "frequency": "claim_day",
+        }
+
+        self.assertEqual(recurring.validate_payload(payload)["frequency"], "claim_day")
+
 
 class RecurringTaskDateTests(unittest.TestCase):
     def test_monthly_schedule_preserves_original_day(self) -> None:
@@ -123,6 +134,30 @@ class RecurringTaskSynchronizationTests(unittest.TestCase):
         self.assertIsNone(plan.due_date)
         self.assertEqual(plan.next_due_date, date(2026, 8, 24))
 
+    def test_claim_day_waits_then_creates_on_generated_event_date(self) -> None:
+        item = self.definition(
+            frequency="claim_day",
+            first_due_date=date(2026, 9, 23),
+            next_due_date=date(2026, 9, 23),
+        )
+        dates = [date(2026, 9, 23), date(2026, 10, 2)]
+
+        waiting = recurring.plan_synchronization(item, [], today=date(2026, 9, 22), scheduled_dates=dates)
+        due = recurring.plan_synchronization(item, [], today=date(2026, 9, 23), scheduled_dates=dates)
+
+        self.assertEqual(waiting.action, "none")
+        self.assertEqual(waiting.next_due_date, date(2026, 9, 23))
+        self.assertEqual(due.action, "create")
+        self.assertEqual(due.due_date, date(2026, 9, 23))
+
+    def test_claim_day_dates_follow_generated_event_adjustments(self) -> None:
+        events = [
+            {"startDate": "2026-09-23", "categories": ["KAOS-SYSTEM", "KAOS-CLAIM-DAY"]},
+            {"startDate": "2026-09-25", "categories": ["OTHER"]},
+        ]
+
+        self.assertEqual(recurring.claim_day_dates(events), [date(2026, 9, 23)])
+
 
 class FakeCalendarAdapter:
     def __init__(self, tasks=None, result=None):
@@ -134,6 +169,16 @@ class FakeCalendarAdapter:
     def list_tasks(self, profile):
         self.listed_profiles.append(profile)
         return list(self.tasks)
+
+    def bootstrap(self, profile):
+        self.listed_profiles.append(profile)
+        return {
+            "tasks": list(self.tasks),
+            "events": [
+                {"startDate": "2026-09-23", "categories": ["KAOS-CLAIM-DAY"]},
+                {"startDate": "2026-10-02", "categories": ["KAOS-CLAIM-DAY"]},
+            ],
+        }
 
     def create_task(self, profile, payload):
         self.created.append((profile, payload))
@@ -264,6 +309,9 @@ class RecurringTaskStoreAndServiceTests(unittest.TestCase):
             "Actual task data remains authoritative in Radicale",
         ):
             self.assertIn(required, migration)
+
+        claim_migration = migration_path.with_name("006_claim_day_recurring_tasks.sql").read_text(encoding="utf-8")
+        self.assertIn("'claim_day'", claim_migration)
 
     def test_completed_occurrence_waits_for_next_scheduled_date(self) -> None:
         item = self.definition(
