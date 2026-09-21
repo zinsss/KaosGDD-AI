@@ -215,10 +215,10 @@ def _claim_day_plan(
     minimum = max(item.get("next_due_date") or item["first_due_date"], today)
     if active_uid:
         active = next((task for task in task_items if _task_matches_active(item, task)), None)
-        if active and not _is_completed(active):
+        if active and not _is_completed(active) and item["active_due_date"] >= today:
             return RecurringTaskPlan(action="none")
         clear_active = True
-        active_completed = bool(active)
+        active_completed = _is_completed(active) if active else False
         minimum = max(item["active_due_date"] + timedelta(days=1), today)
     due_date = next((value for value in dates if value >= minimum), None)
     if due_date is None or due_date > today:

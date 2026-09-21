@@ -158,6 +158,29 @@ class RecurringTaskSynchronizationTests(unittest.TestCase):
 
         self.assertEqual(recurring.claim_day_dates(events), [date(2026, 9, 23)])
 
+    def test_claim_day_creates_current_occurrence_when_previous_is_unfinished(self) -> None:
+        item = self.definition(
+            frequency="claim_day",
+            first_due_date=date(2026, 9, 23),
+            active_uid="claim-previous",
+            active_collection_id="zin:tasks",
+            active_due_date=date(2026, 9, 23),
+            next_due_date=None,
+        )
+        tasks = [{"uid": "claim-previous", "collection": "zin:tasks", "status": "NEEDS-ACTION"}]
+
+        plan = recurring.plan_synchronization(
+            item,
+            tasks,
+            today=date(2026, 10, 2),
+            scheduled_dates=[date(2026, 9, 23), date(2026, 10, 2)],
+        )
+
+        self.assertEqual(plan.action, "create")
+        self.assertTrue(plan.clear_active)
+        self.assertFalse(plan.active_completed)
+        self.assertEqual(plan.due_date, date(2026, 10, 2))
+
 
 class FakeCalendarAdapter:
     def __init__(self, tasks=None, result=None):
