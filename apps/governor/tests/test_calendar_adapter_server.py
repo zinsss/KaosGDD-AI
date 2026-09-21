@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+from datetime import datetime, timezone
 from pathlib import Path
 import tempfile
 import unittest
@@ -366,6 +367,26 @@ class CalendarAdapterServerTests(unittest.TestCase):
             server.collections_for_profile = original_collections
             server.select_collection = original_select
             server.radicale_request = original_radicale
+
+    def test_recurring_due_check_uses_local_date_at_kst_midnight(self) -> None:
+        server = load_server_module()
+
+        class FrozenDateTime(datetime):
+            @classmethod
+            def now(cls, _timezone):
+                return datetime(2026, 9, 20, 15, 4, tzinfo=timezone.utc)
+
+        original_datetime = server.datetime
+        try:
+            server.datetime = FrozenDateTime
+            server.reject_future_recurring_occurrence(
+                {
+                    "uid": "KAOSGDD-REPEAT-A50D23EBEBBE4E5AA9FDDEEFF54A528C-20260921",
+                    "dueDate": "2026-09-21",
+                }
+            )
+        finally:
+            server.datetime = original_datetime
 
     def test_forecast_weather_includes_precipitation_humidity_and_wind(self) -> None:
         server = load_server_module()

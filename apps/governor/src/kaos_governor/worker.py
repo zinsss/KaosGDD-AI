@@ -253,6 +253,9 @@ class GovernorWorker:
         if self._last_recurring_task_sync_date == today:
             return 0
         results = service.run_once(today=today, now=current)
+        errors = [plan.error for _definition_id, plan in results if getattr(plan, "error", "")]
+        if errors:
+            raise WorkerCycleError("; ".join(errors))
         self._last_recurring_task_sync_date = today
         self._last_recurring_task_sync_count = sum(1 for _definition_id, plan in results if recurring_plan_changed(plan))
         self._last_recurring_task_sync_error = ""

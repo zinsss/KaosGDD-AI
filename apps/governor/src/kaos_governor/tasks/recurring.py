@@ -29,6 +29,7 @@ class RecurringTaskPlan:
     clear_active: bool = False
     active_completed: bool = False
     next_due_date: date | None = None
+    error: str = ""
 
 
 @dataclass(frozen=True)
@@ -658,8 +659,9 @@ class RecurringTaskService:
                 plan = self.synchronize_definition(definition, today=today, now=now)
                 results.append((definition.definition_id, plan))
             except Exception as exc:
-                self.store.record_error(definition.definition_id, str(exc) or type(exc).__name__, now=now)
-                results.append((definition.definition_id, RecurringTaskPlan(action="none")))
+                error = str(exc) or type(exc).__name__
+                self.store.record_error(definition.definition_id, error, now=now)
+                results.append((definition.definition_id, RecurringTaskPlan(action="none", error=error)))
         return results
 
 

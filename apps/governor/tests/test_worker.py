@@ -184,6 +184,40 @@ class GovernorWorkerTests(unittest.TestCase):
         self.assertEqual(status["recurringTasks"]["lastSyncDate"], "2026-09-08")
         self.assertEqual(status["recurringTasks"]["lastSyncCount"], 1)
 
+    def test_worker_retries_recurring_tasks_after_definition_error(self) -> None:
+        first = datetime(2026, 9, 21, 0, 1, tzinfo=KST)
+        retry = first + timedelta(minutes=5)
+        recurring = SimpleNamespace(
+            run_once=mock.Mock(
+                side_effect=[
+                    [("one", SimpleNamespace(action="none", clear_active=False, error="recurring_occurrence_not_due"))],
+                    [("one", SimpleNamespace(action="create", clear_active=False, error=""))],
+                ]
+            )
+        )
+        notifications = SimpleNamespace(
+            config=SimpleNamespace(poll_seconds=5),
+            deliver_pending=mock.Mock(return_value=0),
+            enqueue=mock.Mock(return_value=True),
+            status=mock.Mock(return_value={"pendingCount": 0, "deliveryMode": "worker"}),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            worker = GovernorWorker(
+                WorkerConfig(status_path=Path(temporary) / "worker.json"),
+                notifications,
+                recurring_tasks=recurring,
+                recurring_task_config=RecurringTaskSyncConfig(enabled=True, poll_seconds=300),
+            )
+
+            with self.assertRaisesRegex(Exception, "recurring_occurrence_not_due"):
+                worker.run_once(first)
+            worker.run_once(retry)
+            status = json.loads(worker.config.status_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(recurring.run_once.call_count, 2)
+        self.assertEqual(status["recurringTasks"]["lastSyncDate"], "2026-09-21")
+        self.assertEqual(status["recurringTasks"]["lastSyncCount"], 1)
+
     def test_worker_schedules_maintenance_then_flushes_web_push(self) -> None:
         now = datetime(2026, 9, 17, 8, 0, tzinfo=timezone.utc)
         notifications = SimpleNamespace(

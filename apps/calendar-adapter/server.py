@@ -2266,7 +2266,7 @@ def reject_future_recurring_occurrence(payload):
     due_date = date.fromisoformat(validate_date(payload.get("dueDate") or occurrence_date.isoformat()))
     if occurrence_date != due_date:
         raise ValueError("recurring_occurrence_uid_due_mismatch")
-    if due_date > date.today():
+    if due_date > datetime.now(timezone.utc).astimezone(LOCAL_TIMEZONE).date():
         raise ValueError("recurring_occurrence_not_due")
 
 
