@@ -64,7 +64,7 @@
   }
 
   function render(context) {
-    const { journal, profile, date, escapeHtml } = context;
+    const { journal, profile, date, escapeHtml, scope = "agenda", embedded = false } = context;
     const copy = labels(profile);
     if (journal.date !== date && !journal.dirty) resetForDate(journal, date);
     const items = normalizeItems(journal.items);
@@ -76,7 +76,7 @@
           ? `<p class="gratitudeStatus isSaved">${escapeHtml(copy.saved)}</p>`
           : `<p class="gratitudeStatus" aria-hidden="true">&nbsp;</p>`;
     return `
-      <details class="panel gratitudePanel" data-gratitude-disclosure ${journal.open ? "open" : ""}>
+      <details class="${embedded ? "calendarGratitudeEditor" : "panel gratitudePanel"}" data-gratitude-disclosure data-gratitude-scope="${escapeHtml(scope)}" ${journal.open ? "open" : ""}>
         <summary class="panelHeader gratitudeHeader">
           <div>
             <p class="label">${escapeHtml(copy.kicker)}</p>
@@ -85,7 +85,7 @@
           ${status}
           <span class="gratitudeToggle" aria-hidden="true">⌄</span>
         </summary>
-        <form class="panelBody gratitudeForm" data-gratitude-form>
+        <form class="panelBody gratitudeForm" data-gratitude-form data-gratitude-scope="${escapeHtml(scope)}">
           <div class="gratitudeFields">
             ${items.map((item, index) => `
               <label class="gratitudeField">
@@ -97,6 +97,7 @@
                   placeholder="${escapeHtml(copy.placeholder(index))}"
                   aria-label="${escapeHtml(copy.placeholder(index))}"
                   data-gratitude-item="${index}"
+                  data-gratitude-scope="${escapeHtml(scope)}"
                   ${journal.loading || journal.saving ? "disabled" : ""}
                 />
               </label>

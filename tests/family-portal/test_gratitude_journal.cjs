@@ -17,7 +17,7 @@ function loadModule(fetchImpl = async () => ({ ok: true, json: async () => ({ ok
 }
 
 test("gratitude journal module loads before the portal app", () => {
-  assert.ok(indexSource.indexOf('src="/gratitude-journal.js?v=3"') < indexSource.indexOf('src="/app.js?v=372"'));
+  assert.ok(indexSource.indexOf('src="/gratitude-journal.js?v=4"') < indexSource.indexOf('src="/app.js?v=373"'));
   assert.match(appSource, /gratitude: window\.KAOS_GRATITUDE_JOURNAL\.initialState\(\)/);
   assert.match(appSource, /calendarGratitude: window\.KAOS_GRATITUDE_JOURNAL\.initialState\(\)/);
   assert.match(appSource, /renderGratitudeJournal\(today\)/);
@@ -80,9 +80,28 @@ test("renders five text fields for both profiles", () => {
       escapeHtml: (value) => String(value),
     });
     assert.equal((html.match(/data-gratitude-item=/g) || []).length, 5);
-    assert.match(html, /<details class="panel gratitudePanel" data-gratitude-disclosure >/);
+    assert.match(html, /<details class="panel gratitudePanel" data-gratitude-disclosure data-gratitude-scope="agenda" >/);
     assert.doesNotMatch(html, /data-gratitude-disclosure open/);
   }
+});
+
+test("calendar gratitude editor scopes past-date fields and saves separately", () => {
+  const journalModule = loadModule();
+  const html = journalModule.render({
+    journal: journalModule.initialState(),
+    profile: "main",
+    date: "2026-09-15",
+    scope: "calendar",
+    embedded: true,
+    escapeHtml: (value) => String(value),
+  });
+
+  assert.match(html, /class="calendarGratitudeEditor"/);
+  assert.match(html, /data-gratitude-form data-gratitude-scope="calendar"/);
+  assert.equal((html.match(/data-gratitude-scope="calendar"/g) || []).length, 7);
+  assert.match(appSource, /if \(date <= ymd\(new Date\(\)\)\)/);
+  assert.match(appSource, /gratitudeForm\.dataset\.gratitudeScope === "calendar"/);
+  assert.match(appSource, /gratitudeInput\.dataset\.gratitudeScope === "calendar"/);
 });
 
 test("save sends the five slots and current etag", async () => {

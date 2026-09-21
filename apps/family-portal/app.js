@@ -7285,6 +7285,13 @@ function calendarGratitudeContext(date = state.selectedDate) {
 }
 
 function renderCalendarGratitude(date, hasPrevious = false) {
+  if (date <= ymd(new Date())) {
+    return window.KAOS_GRATITUDE_JOURNAL.render({
+      ...calendarGratitudeContext(date),
+      scope: "calendar",
+      embedded: true,
+    });
+  }
   return window.KAOS_GRATITUDE_JOURNAL.renderReadOnly({
     ...calendarGratitudeContext(date),
     hasPrevious,
@@ -11905,7 +11912,10 @@ document.addEventListener("submit", async (event) => {
   const gratitudeForm = event.target.closest("[data-gratitude-form]");
   if (gratitudeForm) {
     event.preventDefault();
-    await window.KAOS_GRATITUDE_JOURNAL.save(gratitudeJournalContext());
+    const context = gratitudeForm.dataset.gratitudeScope === "calendar"
+      ? calendarGratitudeContext()
+      : gratitudeJournalContext();
+    await window.KAOS_GRATITUDE_JOURNAL.save(context);
     return;
   }
 
@@ -12440,7 +12450,10 @@ document.addEventListener(
     if (disclosure.matches("[data-holidays]")) state.holidays.expanded = disclosure.open;
     if (disclosure.matches("[data-custom-events]")) state.customEvents.expanded = disclosure.open;
     if (disclosure.matches("[data-mail-organizer]")) state.mailOrganizer.expanded = disclosure.open;
-    if (disclosure.matches("[data-gratitude-disclosure]")) state.gratitude.open = disclosure.open;
+    if (disclosure.matches("[data-gratitude-disclosure]")) {
+      const journal = disclosure.dataset.gratitudeScope === "calendar" ? state.calendarGratitude : state.gratitude;
+      journal.open = disclosure.open;
+    }
   },
   true,
 );
@@ -12450,7 +12463,11 @@ document.addEventListener("input", (event) => {
     return;
   }
 
-  if (window.KAOS_GRATITUDE_JOURNAL.handleInput(state.gratitude, event)) return;
+  const gratitudeInput = event.target.closest("[data-gratitude-item]");
+  if (gratitudeInput) {
+    const journal = gratitudeInput.dataset.gratitudeScope === "calendar" ? state.calendarGratitude : state.gratitude;
+    if (window.KAOS_GRATITUDE_JOURNAL.handleInput(journal, event)) return;
+  }
 
   if (event.target.matches("[data-memo-edit-content]")) {
     state.memos.editDraft = event.target.value;

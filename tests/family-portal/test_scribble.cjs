@@ -40,9 +40,9 @@ test("Scribble is a small staging inbox with both handoff actions", () => {
   assert.match(navigation, /route: "scribble", label: "Scribble"/);
   assert.match(index, /src="\/navigation\.js\?v=11"/);
   assert.match(index, /src="\/scribble\.js\?v=1"/);
-  assert.match(index, /href="\/styles\.css\?v=390"/);
+  assert.match(index, /href="\/styles\.css\?v=391"/);
   assert.match(index, /src="\/scribble-view\.js\?v=5"/);
-  assert.ok(index.indexOf('src="/scribble-view.js?v=5"') < index.indexOf('src="/app.js?v=372"'));
+  assert.ok(index.indexOf('src="/scribble-view.js?v=5"') < index.indexOf('src="/app.js?v=373"'));
   assert.match(view, /class="archiveTerminal scribbleBoard"/);
   assert.doesNotMatch(view, /QUICK CAPTURE|Scribble Inbox/);
   assert.match(view, /STAGING QUEUE/);
