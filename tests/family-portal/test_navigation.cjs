@@ -67,7 +67,7 @@ test("notification categories point at the selector destination that can acknowl
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=391"');
+  const styleIndex = index.indexOf('href="/styles.css?v=392"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=11"');
   const calendarViewIndex = index.indexOf('src="/calendar-view.js?v=2"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
@@ -83,9 +83,12 @@ test("the navigation contract loads before the portal application", () => {
   assert.ok(applicationIndex > mailIndex);
 });
 
-test("main PWA does not reserve the iOS bottom safe area", () => {
+test("all PWA pages end with scrollable flow space independent of the iOS safe area", () => {
   const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
-  assert.match(styles, /\.app\[data-profile="main"\] \{\s*--page-bottom-reserve: 0px;/);
+  assert.match(styles, /--page-bottom-reserve: clamp\(96px, 14dvh, 144px\);/);
+  assert.doesNotMatch(styles, /--page-bottom-reserve: max\([^;]*safe-bottom/);
+  assert.doesNotMatch(styles, /\.app\[data-profile="main"\] \{\s*--page-bottom-reserve: 0px;/);
+  assert.match(styles, /\.view \{[\s\S]*?padding: 14px 0 var\(--page-bottom-reserve\);[\s\S]*?overflow-y: auto;/);
   assert.match(styles, /@media \(display-mode: standalone\) \{[\s\S]*html:has\(\.app\[data-profile="main"\]\),[\s\S]*height: 100vh;[\s\S]*\.app\[data-profile="main"\] \{\s*position: relative;\s*inset: auto;\s*height: 100vh;\s*min-height: 100vh;/);
 });
 

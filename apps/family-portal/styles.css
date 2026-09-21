@@ -28,7 +28,8 @@
   --shadow: rgba(20, 24, 32, 0.34);
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --page-bottom-reserve: max(8px, var(--safe-bottom));
+  /* Flow space after page content, visible only when the page is scrolled to its end. */
+  --page-bottom-reserve: clamp(96px, 14dvh, 144px);
   --weather-icon-font:
     "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Sarasa Gothic Mono",
     ui-monospace, monospace;
@@ -5473,7 +5474,6 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 }
 
 .app[data-profile="main"] {
-  --page-bottom-reserve: 0px;
   --main-tab-active-border: rgba(180, 142, 173, 0.62);
   --main-tab-active-bg: rgba(180, 142, 173, 0.14);
   --main-tab-active-text: var(--nord15);
