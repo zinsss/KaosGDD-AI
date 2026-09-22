@@ -58,6 +58,11 @@ Delivery and alert scheduling run only in the independent
 `kaos-governor-worker` container. The outboxes are protected by file locks and
 `PUSHOVER_DELIVERY_MODE` must remain `worker`.
 
+Every worker cycle first reloads the live Main and Family Radicale event/task
+bootstrap through Calendar Adapter. This refresh is fail-closed: if either
+profile cannot be read, pending notifications are not delivered and scheduled
+jobs are not run with stale calendar or task state.
+
 The durable outbox sends minimal one-line alerts: `Good Morning.`, one
 `Today. <event>.` line per daily event, final fax receipt/sent/failure states,
 `Mail received.`, auth renewal reminders, and fresh actionable maintenance

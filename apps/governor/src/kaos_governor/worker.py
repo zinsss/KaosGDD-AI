@@ -135,6 +135,7 @@ class GovernorWorker:
         recurring_task_config: RecurringTaskSyncConfig | None = None,
         web_push: WebPushService | None = None,
         maintenance_reminders: MaintenanceReminderService | None = None,
+        calendar_sync: CalendarAdapterClient | None = None,
     ) -> None:
         self.config = config
         self.notifications = notifications
@@ -145,6 +146,7 @@ class GovernorWorker:
         self.recurring_task_config = recurring_task_config or RecurringTaskSyncConfig(enabled=False)
         self.web_push = web_push
         self.maintenance_reminders = maintenance_reminders
+        self.calendar_sync = calendar_sync
         self._next_digest_check_at: datetime | None = None
         self._next_content_refresh_at: datetime | None = None
         self._next_mail_check_at: datetime | None = None
@@ -153,6 +155,21 @@ class GovernorWorker:
         self._last_recurring_task_sync_date: date | None = None
         self._last_recurring_task_sync_count = 0
         self._last_recurring_task_sync_error = ""
+        self._last_calendar_sync_at = ""
+        self._last_calendar_sync_error = ""
+
+    def _sync_calendar_sources(self, now: datetime | None) -> None:
+        """Refresh live event/task sources before notifications or scheduled jobs."""
+        if self.calendar_sync is None:
+            return
+        try:
+            for profile in ("main", "family"):
+                self.calendar_sync.bootstrap(profile)
+        except Exception as exc:
+            self._last_calendar_sync_error = f"{type(exc).__name__}: {exc}"
+            raise
+        self._last_calendar_sync_at = _timestamp(now)
+        self._last_calendar_sync_error = ""
 
     @staticmethod
     def _current_kst(now: datetime | None) -> datetime:
@@ -270,6 +287,22 @@ class GovernorWorker:
         fax_result = ImportCycleResult()
         errors = []
         try:
+            self._sync_calendar_sources(now)
+        except Exception as exc:
+            error = f"{type(exc).__name__}: {exc}"
+            self._write_status(
+                status="degraded",
+                delivered=0,
+                scheduled=0,
+                maintenance_scheduled=0,
+                recurring_task_result=0,
+                mail_result=mail_result,
+                fax_result=fax_result,
+                error=error,
+                now=now,
+            )
+            raise WorkerCycleError(error) from exc
+        try:
             delivered += self.notifications.deliver_pending()
         except Exception as exc:
             errors.append(f"{type(exc).__name__}: {exc}")
@@ -367,6 +400,12 @@ class GovernorWorker:
                 "lastMailProcessedCount": mail_result.processed,
                 "lastFaxActionCount": fax_result.processed,
                 "lastError": error,
+                "calendarSources": {
+                    "enabled": self.calendar_sync is not None,
+                    "profiles": ["main", "family"],
+                    "lastSyncAt": self._last_calendar_sync_at,
+                    "lastError": self._last_calendar_sync_error,
+                },
                 "pushover": self.notifications.status(),
                 "webPush": self.web_push.status() if self.web_push is not None else {"enabled": False},
                 "dailyDigest": self.daily_digest.status() if self.daily_digest is not None else {"enabled": False},
@@ -463,9 +502,10 @@ def main() -> None:
         "CALENDAR_ADAPTER_INTERNAL_URL",
         "http://calendar-adapter:8091",
     ).strip()
+    calendar_adapter = CalendarAdapterClient(CalendarAdapterConfig(calendar_url))
     digest_state = DailyDigestService(
         digest_config,
-        CalendarAdapterClient(CalendarAdapterConfig(calendar_url)),
+        calendar_adapter,
     )
     retired_publications = digest_state.retire_pending_publications()
     if retired_publications:
@@ -508,7 +548,7 @@ def main() -> None:
         ).strip()
         recurring_tasks = RecurringTaskService(
             PostgresRecurringTaskStore(connect),
-            CalendarAdapterClient(CalendarAdapterConfig(calendar_url)),
+            calendar_adapter,
         )
     asyncio.run(
         _run(
@@ -522,6 +562,7 @@ def main() -> None:
                 recurring_task_config,
                 web_push,
                 maintenance_reminders,
+                calendar_adapter,
             )
         )
     )

@@ -14,6 +14,7 @@ from kaos_governor.worker import (
     RecurringTaskSyncConfig,
     WorkerConfig,
     WorkerConfigurationError,
+    WorkerCycleError,
     validate_delivery_ownership,
     worker_healthy,
 )
@@ -49,6 +50,45 @@ class GovernorWorkerTests(unittest.TestCase):
         self.assertEqual(status["lastMailProcessedCount"], 0)
         self.assertEqual(status["lastFaxActionCount"], 0)
         self.assertEqual(status["pushover"]["deliveryMode"], "worker")
+
+    def test_cycle_syncs_live_main_and_family_calendars_before_delivery(self) -> None:
+        now = datetime(2026, 9, 22, 0, 0, tzinfo=timezone.utc)
+        calendar_sync = SimpleNamespace(bootstrap=mock.Mock(return_value={"live": True}))
+        with tempfile.TemporaryDirectory() as temporary:
+            worker, notifications = self.worker(Path(temporary))
+            worker.calendar_sync = calendar_sync
+
+            worker.run_once(now)
+            status = json.loads(worker.config.status_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(
+            calendar_sync.bootstrap.call_args_list,
+            [mock.call("main"), mock.call("family")],
+        )
+        notifications.deliver_pending.assert_called_once_with()
+        self.assertEqual(status["calendarSources"]["lastSyncAt"], "2026-09-22T00:00:00Z")
+        self.assertEqual(status["calendarSources"]["lastError"], "")
+
+    def test_calendar_sync_failure_blocks_notifications_and_jobs(self) -> None:
+        now = datetime(2026, 9, 22, 0, 0, tzinfo=timezone.utc)
+        calendar_sync = SimpleNamespace(bootstrap=mock.Mock(side_effect=RuntimeError("radicale offline")))
+        maintenance = SimpleNamespace(
+            run_due=mock.Mock(return_value=1),
+            status=mock.Mock(return_value={"enabled": True}),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            worker, notifications = self.worker(Path(temporary))
+            worker.calendar_sync = calendar_sync
+            worker.maintenance_reminders = maintenance
+
+            with self.assertRaisesRegex(WorkerCycleError, "radicale offline"):
+                worker.run_once(now)
+            status = json.loads(worker.config.status_path.read_text(encoding="utf-8"))
+
+        notifications.deliver_pending.assert_not_called()
+        maintenance.run_due.assert_not_called()
+        self.assertEqual(status["status"], "degraded")
+        self.assertIn("radicale offline", status["calendarSources"]["lastError"])
 
     def test_failed_cycle_records_degraded_health(self) -> None:
         now = datetime(2026, 8, 30, 6, 30, tzinfo=timezone.utc)
