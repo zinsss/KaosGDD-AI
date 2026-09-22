@@ -1451,6 +1451,16 @@ async function syncRecurringTasksNow() {
   }
 }
 
+async function syncAndReloadApplication() {
+  try {
+    await syncRecurringTasksNow();
+  } catch (error) {
+    window.alert(`최신 일정과 반복 할 일을 동기화할 수 없습니다: ${error.message || "unknown error"}`);
+    return;
+  }
+  window.location.reload();
+}
+
 async function deleteRecurringTask(id) {
   const response = await fetch(`/api/recurring-tasks/${encodeURIComponent(id)}`, {
     method: "DELETE",
@@ -6024,7 +6034,7 @@ function renderTopNav(route) {
           `).join("")}
         </nav>
         <div class="topHeaderActions">
-          <button class="topReloadButton" type="button" data-app-reload aria-label="Reload KaosGDD" title="Reload KaosGDD">[Reload]</button>
+          <button class="topReloadButton" type="button" data-app-reload aria-label="Sync and reload KaosGDD" title="Sync recurring tasks and reload KaosGDD">[Reload]</button>
           ${
             topAction
               ? `
@@ -10578,7 +10588,7 @@ document.addEventListener("click", async (event) => {
 
   if (event.target.closest("[data-app-reload]")) {
     event.preventDefault();
-    window.location.reload();
+    await syncAndReloadApplication();
     return;
   }
 
@@ -12314,7 +12324,7 @@ document.addEventListener("submit", async (event) => {
 document.addEventListener("keydown", (event) => {
   if (event.target.closest("[data-app-reload]") && ["Enter", " "].includes(event.key)) {
     event.preventDefault();
-    window.location.reload();
+    event.target.closest("[data-app-reload]").click();
     return;
   }
 

@@ -21,7 +21,7 @@ test("personal PWA renders the shared KaosToday briefing instead of an ACK list"
   assert.match(viewSource, /class="kaosTodayText"/);
   assert.doesNotMatch(viewSource, /data-notification-ack=/);
   assert.match(indexSource, /src="\/notifications-view\.js\?v=7"/);
-  assert.ok(indexSource.indexOf('src="/notifications-view.js?v=7"') < indexSource.indexOf('src="/app.js?v=373"'));
+  assert.ok(indexSource.indexOf('src="/notifications-view.js?v=7"') < indexSource.indexOf('src="/app.js?v=374"'));
   assert.ok(viewSource.indexOf('class="kaosTodayText"') < viewSource.indexOf('class="archiveCommand kaosTodayToolbar"'));
 });
 
