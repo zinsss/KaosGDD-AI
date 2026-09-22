@@ -178,6 +178,7 @@ const taskPriorityOptions = {
 };
 
 const state = {
+  appReloadStatus: "idle",
   selectedDate: ymd(new Date()),
   calendarPicker: "",
   embedView: "calendar",
@@ -1452,12 +1453,20 @@ async function syncRecurringTasksNow() {
 }
 
 async function syncAndReloadApplication() {
+  if (state.appReloadStatus === "syncing") return;
+  state.appReloadStatus = "syncing";
+  renderTopNav(getRoute());
   try {
     await syncRecurringTasksNow();
   } catch (error) {
+    state.appReloadStatus = "idle";
+    renderTopNav(getRoute());
     window.alert(`최신 일정과 반복 할 일을 동기화할 수 없습니다: ${error.message || "unknown error"}`);
     return;
   }
+  state.appReloadStatus = "synced";
+  renderTopNav(getRoute());
+  await new Promise((resolve) => window.setTimeout(resolve, 650));
   window.location.reload();
 }
 
@@ -6001,6 +6010,7 @@ function renderTopNav(route) {
     const selectedItem = profileConfig().nav.find((item) => item.route === selectedRoute);
     const selectedLabel = selectedItem?.label || routes[selectedRoute] || "Agenda";
     const topAction = topAddActionForRoute(route);
+    const reloadLabel = state.appReloadStatus === "syncing" ? "[Syncing…]" : state.appReloadStatus === "synced" ? "[Synced]" : "[Reload]";
     nav.innerHTML = `
       <div class="mainMenuPicker">
         <span>Main menu</span>
@@ -6034,7 +6044,7 @@ function renderTopNav(route) {
           `).join("")}
         </nav>
         <div class="topHeaderActions">
-          <button class="topReloadButton" type="button" data-app-reload aria-label="Sync and reload KaosGDD" title="Sync recurring tasks and reload KaosGDD">[Reload]</button>
+          <button class="topReloadButton" type="button" data-app-reload aria-label="Sync and reload KaosGDD" title="Sync recurring tasks and reload KaosGDD" ${state.appReloadStatus === "syncing" ? "disabled" : ""}>${reloadLabel}</button>
           ${
             topAction
               ? `
@@ -9714,12 +9724,14 @@ function renderGovernorSettingsStatus(options = {}) {
   const generated = data.generatedCalendar || {};
   const presets = data.eventPresets || {};
   const recurring = data.recurringTasks || {};
+  const calendarSync = data.calendarSync || {};
   return `
     <section class="settingsStatusPanel">
       <div class="settingsStatusHeader">
         <strong>KaosGovernor</strong>
         <small>${escapeHtml(settingsUpdatedLabel(data.updatedAt))}</small>
       </div>
+      <p class="taskMeta">${escapeHtml(calendarSync.lastSuccessAt ? `마지막 일정·할 일 동기화 ${settingsUpdatedLabel(calendarSync.lastSuccessAt).replace(/^업데이트 /, "")}` : "일정·할 일 동기화 기록 없음")}</p>
       <div class="settingsStatusGrid">
         <div>
           <span>${escapeHtml(uiText("settings.defaultWeather", "Default weather"))}</span>

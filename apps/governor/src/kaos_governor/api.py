@@ -69,6 +69,7 @@ CALENDAR_ADAPTER_INTERNAL_URL = os.environ.get("CALENDAR_ADAPTER_INTERNAL_URL", 
 CALENDAR_ADAPTER_TIMEOUT_SECONDS = float(os.environ.get("CALENDAR_ADAPTER_TIMEOUT_SECONDS", "20"))
 SYSTEM_STATUS_TOOLS_BASE_URL = os.environ.get("SYSTEM_STATUS_TOOLS_BASE_URL", "http://governor-tools:8098").rstrip("/")
 SYSTEM_STATUS_TIMEOUT_SECONDS = float(os.environ.get("SYSTEM_STATUS_TIMEOUT_SECONDS", "5"))
+GOVERNOR_WORKER_STATE_PATH = Path(os.environ.get("GOVERNOR_WORKER_STATE_PATH", "/data/notifications/governor-worker.json"))
 DOCUMENT_TAG_AI_URL = os.environ.get("DOCUMENT_TAG_AI_URL", "").strip()
 DOCUMENT_TAG_AI_TOKEN = os.environ.get("DOCUMENT_TAG_AI_TOKEN", "").strip()
 DOCUMENT_TAG_AI_TOKEN_FILE = os.environ.get("DOCUMENT_TAG_AI_TOKEN_FILE", "").strip()
@@ -3469,6 +3470,13 @@ def settings_status_payload(profile: str) -> dict[str, object]:
     enabled_recurring = [item for item in recurring if item.get("enabled") is not False]
     on_schedule = [item for item in recurring if item.get("creationPolicy") == "on_schedule"]
     on_completion = [item for item in recurring if item.get("creationPolicy") == "on_completion"]
+    try:
+        worker_status = json.loads(GOVERNOR_WORKER_STATE_PATH.read_text(encoding="utf-8"))
+        calendar_sources = worker_status.get("calendarSources") if isinstance(worker_status, dict) else {}
+        if not isinstance(calendar_sources, dict):
+            calendar_sources = {}
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        calendar_sources = {}
     return {
         "ok": True,
         "profile": profile,
@@ -3498,6 +3506,10 @@ def settings_status_payload(profile: str) -> dict[str, object]:
             "onCompletionCount": len(on_completion),
             "activeTaskLookupError": active_task_error,
             "items": [_recurring_status_item(item, active_tasks) for item in recurring],
+        },
+        "calendarSync": {
+            "lastSuccessAt": str(calendar_sources.get("lastSyncAt") or ""),
+            "lastError": str(calendar_sources.get("lastError") or ""),
         },
         "authority": {
             "settings": "KaosGovernor PostgreSQL",

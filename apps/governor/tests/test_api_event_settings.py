@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -188,13 +191,20 @@ class EventPresetApiTests(unittest.TestCase):
                 testcase.assertEqual((profile, method, path), ("main", "GET", "/api/custom-events"))
                 return {"sync": {"total": 12, "created": 2, "updated": 1, "deleted": 0, "unchanged": 9}}
 
-        with (
-            patch.object(api, "_read_setting", side_effect=fake_read),
-            patch.object(api, "list_recurring_tasks", return_value=recurring_payload),
-            patch.object(api, "list_event_presets", return_value=presets_payload),
-            patch.object(api, "CalendarAdapterClient", FakeCalendarAdapter),
-        ):
-            payload = api.settings_status_payload("family")
+        with tempfile.TemporaryDirectory() as temporary:
+            worker_status_path = Path(temporary) / "worker.json"
+            worker_status_path.write_text(
+                json.dumps({"calendarSources": {"lastSyncAt": "2026-09-22T12:34:56Z", "lastError": ""}}),
+                encoding="utf-8",
+            )
+            with (
+                patch.object(api, "_read_setting", side_effect=fake_read),
+                patch.object(api, "list_recurring_tasks", return_value=recurring_payload),
+                patch.object(api, "list_event_presets", return_value=presets_payload),
+                patch.object(api, "CalendarAdapterClient", FakeCalendarAdapter),
+                patch.object(api, "GOVERNOR_WORKER_STATE_PATH", worker_status_path),
+            ):
+                payload = api.settings_status_payload("family")
 
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["profile"], "family")
@@ -215,6 +225,8 @@ class EventPresetApiTests(unittest.TestCase):
         self.assertEqual(payload["recurringTasks"]["items"][0]["activeTask"]["title"], "인플루엔자 표본감시 신고")
         self.assertEqual(payload["generatedCalendar"]["sync"]["created"], 2)
         self.assertEqual(payload["recurringTasks"]["items"][1]["lastError"], "temporary_failure")
+        self.assertEqual(payload["calendarSync"]["lastSuccessAt"], "2026-09-22T12:34:56Z")
+        self.assertEqual(payload["calendarSync"]["lastError"], "")
 
 
 if __name__ == "__main__":
