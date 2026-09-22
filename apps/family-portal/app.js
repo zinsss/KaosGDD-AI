@@ -10928,6 +10928,26 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const memoCopyToken = event.target.closest("[data-memo-copy-token]");
+  if (memoCopyToken) {
+    const copyText = memoCopyToken.dataset.memoCopyToken || "";
+    try {
+      await writeTextToClipboard(copyText);
+      memoCopyToken.classList.add("isCopied");
+      memoCopyToken.setAttribute("title", "Copied");
+      memoCopyToken.setAttribute("aria-label", `Copied ${copyText}`);
+      window.setTimeout(() => {
+        if (!memoCopyToken.isConnected) return;
+        memoCopyToken.classList.remove("isCopied");
+        memoCopyToken.setAttribute("title", "Copy to clipboard");
+        memoCopyToken.setAttribute("aria-label", `Copy ${copyText}`);
+      }, 1400);
+    } catch (_error) {
+      window.alert("Could not copy to clipboard.");
+    }
+    return;
+  }
+
   const memoToolbarToggle = event.target.closest("[data-memos-toolbar]");
   if (memoToolbarToggle) {
     const panel = memoToolbarToggle.dataset.memosToolbar || "";

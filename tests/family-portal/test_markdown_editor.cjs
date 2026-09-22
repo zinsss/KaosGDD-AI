@@ -51,9 +51,19 @@ test("memo Markdown renders semantic HTML without allowing raw HTML or unsafe li
   assert.doesNotMatch(html, /<script>|href="javascript:/);
 });
 
+test("memo Markdown renders copy tokens outside code as safe buttons", () => {
+  const html = renderMarkdown("Use << account-123 >> or `<<not copied>>`.\n\n```\n<<also not copied>>\n```");
+  assert.match(html, /class="memoCopyToken"/);
+  assert.match(html, /data-memo-copy-token="account-123"/);
+  assert.match(html, />account-123<\/button>/);
+  assert.match(html, /<code>&lt;&lt;not copied&gt;&gt;<\/code>/);
+  assert.match(html, /<pre><code>&lt;&lt;also not copied&gt;&gt;<\/code><\/pre>/);
+  assert.equal((html.match(/class="memoCopyToken"/g) || []).length, 1);
+});
+
 test("Memos and Scribble share the lightweight editor", () => {
-  assert.match(index, /src="\/markdown-editor\.js\?v=2"/);
-  assert.ok(index.indexOf('src="/markdown-editor.js?v=2"') < index.indexOf('src="/app.js?v=375"'));
+  assert.match(index, /src="\/markdown-editor\.js\?v=3"/);
+  assert.ok(index.indexOf('src="/markdown-editor.js?v=3"') < index.indexOf('src="/app.js?v=376"'));
   assert.match(app, /KAOS_MARKDOWN_EDITOR\?\.enhanceAll\(view\)/);
   assert.match(app, /data-memo-content[\s\S]*data-markdown-editor/);
   assert.match(memosView, /data-memo-edit-start/);
@@ -65,6 +75,9 @@ test("Memos and Scribble share the lightweight editor", () => {
   assert.match(styles, /\.markdownEditorHighlight \.mdH1 \{ color: var\(--markdown-editor-red\); \}/);
   assert.match(styles, /\.app\[data-profile="family"\] \.markdownEditor/);
   assert.match(styles, /\.markdownEditorToolbar/);
+  assert.match(styles, /\.memoMarkdown \.memoCopyToken/);
+  assert.match(app, /data-memo-copy-token/);
+  assert.match(app, /writeTextToClipboard\(copyText\)/);
   assert.match(styles, /\.scribbleCapture \.markdownEditorInput \{[\s\S]*?min-height: 124px !important;/);
 });
 

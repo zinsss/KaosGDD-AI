@@ -20,5 +20,5 @@ test("caregiver page rendering is delegated to the view module", () => {
   assert.match(appSource, /<select name="sessionEnd"/);
   assert.doesNotMatch(appSource, /name="session(?:Start|End)" type="time"/);
   assert.match(indexSource, /src="\/caregiver-view\.js\?v=1"/);
-  assert.ok(indexSource.indexOf('src="/caregiver-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=375"'));
+  assert.ok(indexSource.indexOf('src="/caregiver-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=376"'));
 });

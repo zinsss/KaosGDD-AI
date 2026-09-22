@@ -16,7 +16,7 @@
 
   function inlineMarkup(value) {
     const source = String(value || "");
-    const pattern = /(`[^`\n]+`|\*\*[^*\n]+\*\*|__[^_\n]+__|\[[^\]\n]+\]\([^\n)]+\))/g;
+    const pattern = /(`[^`\n]+`|<<[^<>\n]+>>|\*\*[^*\n]+\*\*|__[^_\n]+__|\[[^\]\n]+\]\([^\n)]+\))/g;
     let html = "";
     let cursor = 0;
     for (const match of source.matchAll(pattern)) {
@@ -68,7 +68,7 @@
 
   function renderInlineMarkdown(value) {
     const source = String(value || "");
-    const pattern = /(`[^`\n]+`|\*\*[^*\n]+\*\*|__[^_\n]+__|\[[^\]\n]+\]\([^\n)]+\))/g;
+    const pattern = /(`[^`\n]+`|<<[^<>\n]+>>|\*\*[^*\n]+\*\*|__[^_\n]+__|\[[^\]\n]+\]\([^\n)]+\))/g;
     let html = "";
     let cursor = 0;
     for (const match of source.matchAll(pattern)) {
@@ -76,6 +76,9 @@
       const token = match[0];
       if (token.startsWith("`")) {
         html += `<code>${escapeHtml(token.slice(1, -1))}</code>`;
+      } else if (token.startsWith("<<")) {
+        const copyText = token.slice(2, -2).trim();
+        html += `<button class="memoCopyToken" type="button" data-memo-copy-token="${escapeHtml(copyText)}" aria-label="Copy ${escapeHtml(copyText)}" title="Copy to clipboard">${escapeHtml(copyText)}</button>`;
       } else if (token.startsWith("[")) {
         const parts = token.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
         const target = safeLinkTarget(parts?.[2]);
