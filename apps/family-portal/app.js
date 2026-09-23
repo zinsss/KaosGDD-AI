@@ -2116,7 +2116,7 @@ async function loadSupplies(options = {}) {
       items: [],
     };
   }
-  if (getRoute() === "supplies" || isAgendaSuppliesEmbed()) render();
+  if (getRoute() === "supplies" || isAgendaSuppliesEmbed() || isMainTodayRoute()) render();
 }
 
 async function createSupply(title) {
@@ -3719,7 +3719,27 @@ function renderNotifications() {
     state,
     escapeHtml,
     formatNotificationDate,
+    counters: todayCounters(),
   });
+}
+
+function todayCounters() {
+  const tasks = activeCalendarData().tasks
+    .map(normalizeTask)
+    .filter((task) => taskMatchesMode(task, "active"));
+  const byOwner = tasks.reduce((counts, task) => {
+    const owner = collectionOwnerForItem(task);
+    counts[owner] = (counts[owner] || 0) + 1;
+    return counts;
+  }, {});
+  return {
+    tasks: tasks.length,
+    gddzin: byOwner.zin || 0,
+    family: byOwner.family || 0,
+    supplies: state.supplies.items.length,
+    tasksReady: state.remoteCalendar.checked,
+    suppliesReady: state.supplies.checked,
+  };
 }
 
 async function loadDocuments(options = {}) {
@@ -10472,6 +10492,7 @@ function render() {
   if (route === "scribble") loadScribbles();
   if (isMainTodayRoute(route)) {
     loadTodayBriefing();
+    loadSupplies();
   }
   if (route === "documents" && portalProfile() === "main") {
     loadDocumentTags();
@@ -10624,7 +10645,12 @@ document.addEventListener("click", async (event) => {
 
   if (event.target.closest("[data-notifications-refresh]")) {
     state.todayBriefing.checked = false;
-    await loadTodayBriefing({ force: true });
+    state.supplies.checked = false;
+    await Promise.all([
+      loadTodayBriefing({ force: true }),
+      loadRemoteCalendar(),
+      loadSupplies({ force: true }),
+    ]);
     return;
   }
 

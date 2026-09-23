@@ -9191,6 +9191,23 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   padding: 0 3px;
 }
 
+.app[data-profile="main"] .notificationInbox .kaosTodayCounters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 0;
+  padding: 6px 3px 2px;
+  color: var(--archive-muted);
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.app[data-profile="main"] .notificationInbox .kaosTodayCounters strong {
+  color: var(--archive-cyan);
+  font-weight: inherit;
+}
+
 .app[data-profile="main"] .notificationInbox .kaosTodayToolbar .archiveStatusMessage {
   min-width: 0;
   margin: 0;
