@@ -22,7 +22,7 @@ test("Markdown source highlighting distinguishes headings and escapes HTML", () 
   assert.doesNotMatch(html, /<script>/);
 });
 
-test("Markdown editing indents and outdents selected lines", () => {
+test("Markdown keyboard editing uses two-space indentation", () => {
   const indented = editText("alpha\nbeta", 0, 10, "indent");
   assert.equal(indented.value, "  alpha\n  beta");
   assert.deepEqual(
@@ -62,8 +62,8 @@ test("memo Markdown renders copy tokens outside code as safe buttons", () => {
 });
 
 test("Memos and Scribble share the lightweight editor", () => {
-  assert.match(index, /src="\/markdown-editor\.js\?v=3"/);
-  assert.ok(index.indexOf('src="/markdown-editor.js?v=3"') < index.indexOf('src="/app.js?v=378"'));
+  assert.match(index, /src="\/markdown-editor\.js\?v=4"/);
+  assert.ok(index.indexOf('src="/markdown-editor.js?v=4"') < index.indexOf('src="/app.js?v=378"'));
   assert.match(app, /KAOS_MARKDOWN_EDITOR\?\.enhanceAll\(view\)/);
   assert.match(app, /data-memo-content[\s\S]*data-markdown-editor/);
   assert.match(memosView, /data-memo-edit-start/);
@@ -74,7 +74,7 @@ test("Memos and Scribble share the lightweight editor", () => {
   assert.match(styles, /--markdown-editor-red: var\(--nord11\);/);
   assert.match(styles, /\.markdownEditorHighlight \.mdH1 \{ color: var\(--markdown-editor-red\); \}/);
   assert.match(styles, /\.app\[data-profile="family"\] \.markdownEditor/);
-  assert.match(styles, /\.markdownEditorToolbar/);
+  assert.doesNotMatch(fs.readFileSync(path.join(root, "apps/family-portal/markdown-editor.js"), "utf8"), /data\.markdownCommand|markdownEditorToolbar/);
   assert.match(styles, /\.memoMarkdown \.memoCopyToken/);
   assert.match(styles, /\.archiveOcrRegion \.memoMarkdown \{[\s\S]*?font-size: 1\.12rem;/);
   assert.match(styles, /\.memoMarkdown h1 \{[\s\S]*?font-size: 1\.76rem;/);

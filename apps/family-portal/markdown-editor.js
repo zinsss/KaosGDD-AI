@@ -250,16 +250,6 @@
     return { value: source, start, end };
   }
 
-  function commandButton(command, label, title) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.dataset.markdownCommand = command;
-    button.textContent = label;
-    button.title = title;
-    button.setAttribute("aria-label", title);
-    return button;
-  }
-
   function enhance(textarea) {
     if (!textarea || textarea.dataset.markdownEnhanced === "true") return;
     textarea.dataset.markdownEnhanced = "true";
@@ -267,17 +257,6 @@
 
     const editor = document.createElement("div");
     editor.className = "markdownEditor";
-    const toolbar = document.createElement("div");
-    toolbar.className = "markdownEditorToolbar";
-    toolbar.setAttribute("role", "toolbar");
-    toolbar.setAttribute("aria-label", "Markdown editing controls");
-    toolbar.append(
-      commandButton("outdent", "←", "Outdent selected lines"),
-      commandButton("indent", "→", "Indent selected lines"),
-      commandButton("up", "↑", "Move selected lines up"),
-      commandButton("down", "↓", "Move selected lines down"),
-    );
-
     const surface = document.createElement("div");
     surface.className = "markdownEditorSurface";
     const highlight = document.createElement("pre");
@@ -285,7 +264,7 @@
     highlight.setAttribute("aria-hidden", "true");
 
     textarea.parentNode.insertBefore(editor, textarea);
-    editor.append(toolbar, surface);
+    editor.append(surface);
     surface.append(highlight, textarea);
 
     const refresh = () => {
@@ -302,11 +281,6 @@
       refresh();
     };
 
-    toolbar.addEventListener("pointerdown", (event) => event.preventDefault());
-    toolbar.addEventListener("click", (event) => {
-      const button = event.target.closest("[data-markdown-command]");
-      if (button) run(button.dataset.markdownCommand || "");
-    });
     textarea.addEventListener("input", refresh);
     textarea.addEventListener("scroll", refresh, { passive: true });
     textarea.addEventListener("keydown", (event) => {
