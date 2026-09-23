@@ -51,10 +51,10 @@ test("main and family memos routes render native archive board controls", () => 
   assert.match(memosViewSource, /class="archiveTagFilters memoToolbarPanel"/);
   assert.match(memosViewSource, /data-memo-tag=/);
   assert.match(appSource, /class="openButton memoHeaderCancel" href="#\/memos">Cancel<\/a>/);
-  assert.match(stylesSource, /\.memoHeaderCancel \{[\s\S]*font: 500 0\.78rem\/1 "Sarasa Gothic Mono"/);
+  assert.match(stylesSource, /\.memoHeaderCancel \{[\s\S]*font-size: 0\.78rem;[\s\S]*font-weight: 500;[\s\S]*line-height: 1;/);
   assert.match(stylesSource, /\.memoHeaderCancel::before \{\s*content: "\[";/);
   assert.match(stylesSource, /\.memoHeaderCancel::after \{\s*content: "\]";/);
-  assert.match(stylesSource, /\.archiveTopAction \{[\s\S]*font-family: "Sarasa Gothic Mono"[\s\S]*!important;/);
+  assert.doesNotMatch(stylesSource, /\.archiveTopAction \{[^}]*font-family:/);
   assert.match(appSource, /memoToolbarToggle\.dataset\.memosToolbar/);
   assert.match(appSource, /state\.memos\.appliedQuery === tagQuery \? "" : tagQuery/);
   assert.match(stylesSource, /\.memoArchiveCommands \{[\s\S]*display: flex;[\s\S]*gap: 0;/);

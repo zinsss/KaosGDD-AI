@@ -65,6 +65,8 @@ test("typography asset loads before the portal application", () => {
   assert.ok(index.indexOf('src="/typography.js?v=1"') < index.indexOf('src="/app.js?v=377"'));
 });
 
-test("archive tag pills follow the selected global font", () => {
-  assert.match(styles, /\.app\[data-profile="main"\]\[data-main-font\] \.archiveTagChip \{[\s\S]*?font-family: var\(--main-selected-font\) !important;/);
+test("every textual UI element follows the profile global font", () => {
+  assert.match(styles, /\.app\[data-profile="main"\]\[data-main-font\] :where\(\*\),/);
+  assert.match(styles, /\.app\[data-profile="family"\]\[data-family-font\] :where\(\*\) \{[\s\S]*?font-family: inherit !important;/);
+  assert.match(styles, /Glyph-only elements retain the icon fonts/);
 });

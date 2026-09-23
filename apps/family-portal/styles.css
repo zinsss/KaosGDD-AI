@@ -5456,23 +5456,6 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   --main-selected-font: "SchoolSafetyFreeTime", "Pretendard", ui-sans-serif, system-ui, sans-serif;
 }
 
-.app[data-profile="main"][data-main-font] :where(
-  .compactMainMenuButton,
-  .compactMainMenuPopup,
-  .archiveTerminal,
-  .archiveTerminal *
-) {
-  font-family: var(--main-selected-font) !important;
-}
-
-/* Controls keep the terminal UI typeface while the selected font applies to content. */
-.app[data-profile="main"][data-main-font] button,
-.app[data-profile="main"][data-main-font] input[type="file"],
-.app[data-profile="main"][data-main-font] input[type="file"]::file-selector-button,
-.app[data-profile="main"][data-main-font] input[type="file"]::-webkit-file-upload-button {
-  font-family: "Sarasa Gothic Mono", ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace !important;
-}
-
 .app[data-profile="main"] {
   --main-tab-active-border: rgba(180, 142, 173, 0.62);
   --main-tab-active-bg: rgba(180, 142, 173, 0.14);
@@ -7631,10 +7614,6 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   cursor: pointer;
 }
 
-.app[data-profile="main"][data-main-font] .archiveTagChip {
-  font-family: var(--main-selected-font) !important;
-}
-
 .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"], [data-profile="family"][data-route="memos"]) .archiveTagChip:hover,
 .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"], [data-profile="family"][data-route="memos"]) .archiveTagChip.isActive {
   border-color: var(--main-tab-active-border);
@@ -7766,7 +7745,6 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   min-height: 32px;
   padding: 0;
   font-size: 1.05rem;
-  font-family: "Sarasa Gothic Mono", ui-monospace, monospace !important;
   text-transform: none;
 }
 
@@ -7777,7 +7755,9 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   background: transparent;
   padding: 0 3px;
   color: var(--nord8);
-  font: 500 0.78rem/1 "Sarasa Gothic Mono", ui-monospace, monospace;
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1;
   text-transform: none;
 }
 
@@ -9890,4 +9870,39 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   th
 ) {
   font-weight: 500 !important;
+}
+
+/* Typography settings are authoritative for every textual control and surface. */
+.app[data-profile="main"][data-main-font] :where(*),
+.app[data-profile="family"][data-family-font] :where(*) {
+  font-family: inherit !important;
+}
+
+.app[data-profile="main"][data-main-font] input::file-selector-button,
+.app[data-profile="main"][data-main-font] input::-webkit-file-upload-button,
+.app[data-profile="family"][data-family-font] input::file-selector-button,
+.app[data-profile="family"][data-family-font] input::-webkit-file-upload-button {
+  font-family: inherit !important;
+}
+
+/* Glyph-only elements retain the icon fonts required to render their symbols. */
+.app:is([data-profile="main"][data-main-font], [data-profile="family"][data-family-font]) :is(
+  .familyAgendaDateWeather b,
+  .dayWeatherGlyph,
+  .selectedWeatherCompact strong,
+  .selectedWeatherGlyph,
+  .overviewWeatherGlyph,
+  .weatherPartGlyph,
+  .weatherDetailSummary span,
+  .weatherDetailPeriod header span,
+  .weatherLocationGlyph
+) {
+  font-family: var(--weather-icon-font) !important;
+}
+
+.app:is([data-profile="main"][data-main-font], [data-profile="family"][data-family-font]) :is(
+  .rounyBlockIcon,
+  .rounyIconInput
+) {
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif !important;
 }

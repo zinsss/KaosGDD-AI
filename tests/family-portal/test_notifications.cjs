@@ -15,7 +15,7 @@ test("personal PWA renders the shared KaosToday briefing instead of an ACK list"
   assert.match(viewSource, /aria-label="KaosGDD Today"/);
   assert.match(viewSource, /class="archiveCommand kaosTodayToolbar"/);
   assert.match(viewSource, /data-notifications-refresh[^>]*>Reload<\/button>/);
-  assert.match(indexSource, /href="\/styles\.css\?v=397"/);
+  assert.match(indexSource, /href="\/styles\.css\?v=398"/);
   assert.match(fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8"), /\.notificationInbox\.kaosToday \{\s*gap: 4px;/);
   assert.match(viewSource, /payload\.plainText/);
   assert.match(viewSource, /class="kaosTodayText"/);
