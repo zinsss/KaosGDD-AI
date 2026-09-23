@@ -1621,6 +1621,11 @@ h3 {
   border-top: 1px solid var(--line);
 }
 
+.selectedWeather + .calendarGratitudeEditor,
+.selectedWeatherCompact + .calendarGratitudeEditor {
+  border-top: 0;
+}
+
 .calendarGratitudeList {
   display: grid;
   gap: 6px;
