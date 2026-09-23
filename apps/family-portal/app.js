@@ -109,6 +109,8 @@ const ROUNY_DRAG_MOVE_THRESHOLD = 8;
 const desktopMedia = window.matchMedia(DESKTOP_MEDIA_QUERY);
 let rounyPointerDrag = null;
 let suppressRounyGridClick = false;
+let calendarSwipe = null;
+let suppressCalendarGridClick = false;
 let topAddLongPressTimer = null;
 let suppressTopAddClick = false;
 let aiTaskPollTimer = null;
@@ -6301,6 +6303,17 @@ function shiftSelectedMonth(offset) {
   state.selectedDate = ymd(target);
 }
 
+function moveSelectedMonth(offset) {
+  const previousMonth = state.selectedDate.slice(0, 7);
+  if (getRoute() === "add-event" || (getRoute() === "add" && state.addKind === "event")) collectAddEventDraft();
+  if (getRoute() === "add-task" || (getRoute() === "add" && state.addKind === "task")) collectAddTaskDraft();
+  state.calendarPicker = "";
+  shiftSelectedMonth(offset);
+  if (state.addTaskDraft && state.taskDueEnabled) state.addTaskDraft.due = state.selectedDate;
+  render();
+  if (getRoute() !== "caregiver" && state.selectedDate.slice(0, 7) !== previousMonth) loadRemoteWeatherForSelectedMonth();
+}
+
 function setSelectedYearMonth(nextYear, nextMonth) {
   const [_year, _month, day] = state.selectedDate.split("-").map(Number);
   const target = new Date(nextYear, nextMonth - 1, 1);
@@ -10557,6 +10570,11 @@ function updateTopBarShadow() {
 }
 
 document.addEventListener("click", async (event) => {
+  if (suppressCalendarGridClick && event.target.closest(".calendarGrid")) {
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
   const compactMainMenuToggle = event.target.closest("[data-compact-main-menu-toggle]");
   if (compactMainMenuToggle) {
     event.preventDefault();
@@ -11771,14 +11789,7 @@ document.addEventListener("click", async (event) => {
 
   const monthShift = event.target.closest("[data-month-shift]");
   if (monthShift) {
-    const previousMonth = state.selectedDate.slice(0, 7);
-    if (getRoute() === "add-event" || (getRoute() === "add" && state.addKind === "event")) collectAddEventDraft();
-    if (getRoute() === "add-task" || (getRoute() === "add" && state.addKind === "task")) collectAddTaskDraft();
-    state.calendarPicker = "";
-    shiftSelectedMonth(Number(monthShift.dataset.monthShift));
-    if (state.addTaskDraft && state.taskDueEnabled) state.addTaskDraft.due = state.selectedDate;
-    render();
-    if (getRoute() !== "caregiver" && state.selectedDate.slice(0, 7) !== previousMonth) loadRemoteWeatherForSelectedMonth();
+    moveSelectedMonth(Number(monthShift.dataset.monthShift));
     return;
   }
 
@@ -12429,6 +12440,18 @@ document.addEventListener("pointerdown", (event) => {
     return;
   }
 
+  const calendarGrid = event.target.closest(".calendarGrid");
+  if (calendarGrid && event.pointerType !== "mouse") {
+    calendarGrid.setPointerCapture?.(event.pointerId);
+    calendarSwipe = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      element: calendarGrid,
+    };
+    return;
+  }
+
   const handle = event.target.closest("[data-rouny-block-handle]");
   const block = handle?.closest("[data-rouny-grid-item]");
   if (!block || (event.pointerType === "mouse" && event.button !== 0)) return;
@@ -12461,6 +12484,12 @@ document.addEventListener("contextmenu", (event) => {
 });
 
 document.addEventListener("pointermove", (event) => {
+  if (calendarSwipe?.pointerId === event.pointerId) {
+    const deltaX = event.clientX - calendarSwipe.startX;
+    const deltaY = event.clientY - calendarSwipe.startY;
+    if (Math.abs(deltaX) > 12 && Math.abs(deltaX) > Math.abs(deltaY)) event.preventDefault();
+    return;
+  }
   const drag = rounyPointerDrag;
   if (!drag || drag.pointerId !== event.pointerId) return;
   const moved =
@@ -12476,6 +12505,21 @@ document.addEventListener("pointermove", (event) => {
 });
 
 document.addEventListener("pointerup", (event) => {
+  if (calendarSwipe?.pointerId === event.pointerId) {
+    const swipe = calendarSwipe;
+    calendarSwipe = null;
+    const deltaX = event.clientX - swipe.startX;
+    const deltaY = event.clientY - swipe.startY;
+    if (Math.abs(deltaX) >= 48 && Math.abs(deltaX) > Math.abs(deltaY) * 1.25) {
+      event.preventDefault();
+      suppressCalendarGridClick = true;
+      moveSelectedMonth(deltaX < 0 ? 1 : -1);
+      window.setTimeout(() => {
+        suppressCalendarGridClick = false;
+      }, 120);
+    }
+    return;
+  }
   const drag = rounyPointerDrag;
   if (!drag || drag.pointerId !== event.pointerId) return;
   if (drag.moved) {
@@ -12499,6 +12543,7 @@ document.addEventListener("pointerup", (event) => {
 });
 
 document.addEventListener("pointercancel", (event) => {
+  if (calendarSwipe?.pointerId === event.pointerId) calendarSwipe = null;
   if (!rounyPointerDrag || rounyPointerDrag.pointerId !== event.pointerId) return;
   clearRounyPointerDrag();
 });
