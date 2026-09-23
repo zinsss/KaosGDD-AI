@@ -2,8 +2,6 @@ window.KAOS_AI_TASKS_VIEW = (() => {
   function labelsForProfile(deps) {
     return deps.portalProfile() === "family"
       ? {
-          page: "AI 도움",
-          note: "질문만 입력하면 공식/의학 자료를 찾아 요약해요. PDF가 있으면 파일을 더할 수 있어요.",
           prompt: "질문",
           details: "자료 추가",
           detailsHint: "URL / 원문",
@@ -43,8 +41,6 @@ window.KAOS_AI_TASKS_VIEW = (() => {
           web: "웹",
         }
       : {
-          page: "AI TASK",
-          note: "Prompt-only searches official sources. Add PDF or open Details for URL/source text.",
           prompt: "PROMPT",
           details: "DETAILS",
           detailsHint: "URL / source text",
@@ -408,13 +404,6 @@ window.KAOS_AI_TASKS_VIEW = (() => {
     return `
       <section class="archiveTerminal" data-archive-kind="ai-tasks" aria-label="${deps.escapeHtml(familyAiTasks ? "Family AI Tasks" : "AI Tasks")}">
         <form class="archiveIndex aiTaskComposer" data-ai-task-unified>
-          <header class="archiveIndexHeader">
-            <div>
-              <h3>${deps.escapeHtml(labels.page)}</h3>
-              <p class="archiveStatusMessage">${deps.escapeHtml(labels.note)}</p>
-            </div>
-            <button class="archiveAction" type="button" data-ai-tasks-refresh ${aiTasks.loading ? "disabled" : ""}>↻</button>
-          </header>
           <label class="archiveCommandLine aiTaskPrompt">
             <span>${deps.escapeHtml(labels.prompt)}</span>
             <textarea name="prompt" rows="4" placeholder="예: 알모그란정 급여기준과 차트 기재 추천">${deps.escapeHtml(aiTasks.prompt)}</textarea>

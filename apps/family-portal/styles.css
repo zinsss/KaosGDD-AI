@@ -5722,6 +5722,10 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.app[data-profile="main"] [data-archive-kind="ai-tasks"] .archiveRecord {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .app[data-profile="family"] {
   color-scheme: light;
   font-family:

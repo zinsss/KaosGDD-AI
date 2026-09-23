@@ -22,8 +22,11 @@ test("AI Tasks official document memo flow previews before saving to Memos", () 
   assert.match(appSource, /function aiTaskViewContext\(\)/);
   assert.match(appSource, /KAOS_AI_TASKS_VIEW\.renderAiTasks\(aiTaskViewContext\(\)\)/);
   assert.match(aiTasksViewSource, /data-ai-task-unified/);
-  assert.match(aiTasksViewSource, /Prompt-only searches official sources\. Add PDF or open Details for URL\/source text\./);
-  assert.match(aiTasksViewSource, /질문만 입력하면 공식\/의학 자료를 찾아 요약해요/);
+  assert.doesNotMatch(aiTasksViewSource, /Prompt-only searches official sources\. Add PDF or open Details for URL\/source text\./);
+  assert.doesNotMatch(aiTasksViewSource, /질문만 입력하면 공식\/의학 자료를 찾아 요약해요/);
+  const composer = aiTasksViewSource.match(/<form class="archiveIndex aiTaskComposer"[\s\S]*?<\/form>/)?.[0] || "";
+  assert.doesNotMatch(composer, /archiveIndexHeader|data-ai-tasks-refresh/);
+  assert.match(composer, /type="submit"[\s\S]*data-ai-task-clear/);
   assert.match(aiTasksViewSource, /<details class="aiTaskSourceDetails">/);
   assert.match(aiTasksViewSource, /details: "DETAILS"/);
   assert.match(aiTasksViewSource, /details: "자료 추가"/);
@@ -80,8 +83,8 @@ test("AI Tasks official document memo flow previews before saving to Memos", () 
   assert.match(appSource, /method: "DELETE"/);
   assert.match(appSource, /\/api\/ai-tasks\/\$\{encodeURIComponent\(taskId\)\}/);
   assert.match(appSource, /이 AI 기록을 삭제할까요\?/);
-  assert.match(indexSource, /src="\/ai-tasks-view\.js\?v=4"/);
-  assert.ok(indexSource.indexOf('src="/ai-tasks-view.js?v=4"') < indexSource.indexOf('src="/app.js?v=378"'));
+  assert.match(indexSource, /src="\/ai-tasks-view\.js\?v=5"/);
+  assert.ok(indexSource.indexOf('src="/ai-tasks-view.js?v=5"') < indexSource.indexOf('src="/app.js?v=378"'));
 });
 
 test("Family AI Tasks keeps its own light theme surface", () => {
@@ -95,6 +98,10 @@ test("AI Task detail keeps its title and actions on separate single rows", () =>
   assert.match(stylesSource, /\.aiTaskPreview > \.archiveDetailHeader \{[\s\S]*grid-template-columns: minmax\(0, 1fr\);/);
   assert.match(stylesSource, /\.aiTaskPreview > \.archiveDetailHeader h3 \{[\s\S]*text-overflow: ellipsis;[\s\S]*white-space: nowrap;/);
   assert.match(stylesSource, /\.aiTaskPreview > \.archiveDetailHeader > \.archiveActions \{[\s\S]*flex-wrap: nowrap;[\s\S]*overflow-x: auto;/);
+});
+
+test("AI Task archive dates reach the right edge", () => {
+  assert.match(stylesSource, /\[data-archive-kind="ai-tasks"\] \.archiveRecord \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\);/);
 });
 
 test("AI Tasks preview errors use actionable messages", () => {
