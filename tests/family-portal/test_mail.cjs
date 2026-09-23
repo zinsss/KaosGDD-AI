@@ -98,5 +98,5 @@ test("mail board rendering is delegated to the view module", () => {
   assert.match(styles, /\.mailArchiveCommands \{[\s\S]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\);[\s\S]*width: 100%;/);
   assert.match(mailViewSource, /mailReloginUrl/);
   assert.match(indexSource, /src="\/mail-view\.js\?v=2"/);
-  assert.ok(indexSource.indexOf('src="/mail-view.js?v=2"') < indexSource.indexOf('src="/app.js?v=376"'));
+  assert.ok(indexSource.indexOf('src="/mail-view.js?v=2"') < indexSource.indexOf('src="/app.js?v=377"'));
 });

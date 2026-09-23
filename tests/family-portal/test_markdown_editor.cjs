@@ -63,7 +63,7 @@ test("memo Markdown renders copy tokens outside code as safe buttons", () => {
 
 test("Memos and Scribble share the lightweight editor", () => {
   assert.match(index, /src="\/markdown-editor\.js\?v=3"/);
-  assert.ok(index.indexOf('src="/markdown-editor.js?v=3"') < index.indexOf('src="/app.js?v=376"'));
+  assert.ok(index.indexOf('src="/markdown-editor.js?v=3"') < index.indexOf('src="/app.js?v=377"'));
   assert.match(app, /KAOS_MARKDOWN_EDITOR\?\.enhanceAll\(view\)/);
   assert.match(app, /data-memo-content[\s\S]*data-markdown-editor/);
   assert.match(memosView, /data-memo-edit-start/);
@@ -78,6 +78,7 @@ test("Memos and Scribble share the lightweight editor", () => {
   assert.match(styles, /\.memoMarkdown \.memoCopyToken/);
   assert.match(app, /data-memo-copy-token/);
   assert.match(app, /writeTextToClipboard\(copyText\)/);
+  assert.match(app, /navigator\.clipboard\?\.writeText[\s\S]*?catch \(_error\)[\s\S]*?document\.execCommand\("copy"\)/);
   assert.match(styles, /\.scribbleCapture \.markdownEditorInput \{[\s\S]*?min-height: 124px !important;/);
 });
 

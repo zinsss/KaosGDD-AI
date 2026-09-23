@@ -8685,8 +8685,13 @@ function rounyTimetableCopyText(template) {
 
 async function writeTextToClipboard(text) {
   if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return;
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch (_error) {
+      // Desktop browsers can expose the API while denying it in an embedded or
+      // non-secure context. Fall through to the selection-based copy path.
+    }
   }
   const textarea = document.createElement("textarea");
   textarea.value = text;
