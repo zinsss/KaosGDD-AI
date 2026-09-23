@@ -8782,29 +8782,28 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 
 .memoMarkdown .memoCopyToken {
   display: inline;
-  margin: 0 0.08em;
-  padding: 0.08em 0.38em;
-  border: 1px solid color-mix(in srgb, var(--archive-amber) 72%, var(--archive-line));
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--archive-amber) 16%, var(--nord0));
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--archive-amber);
   font: inherit;
   line-height: inherit;
+  text-decoration: underline;
+  text-decoration-color: currentColor;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
   cursor: copy;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
 }
 
 .memoMarkdown .memoCopyToken:hover,
 .memoMarkdown .memoCopyToken:focus-visible {
-  border-color: var(--nord6);
   color: var(--nord6);
-  outline: none;
+  outline: 1px dotted currentColor;
+  outline-offset: 2px;
 }
 
 .memoMarkdown .memoCopyToken.isCopied {
-  border-color: var(--nord14);
-  background: color-mix(in srgb, var(--nord14) 18%, var(--nord0));
   color: var(--nord14);
 }
 
