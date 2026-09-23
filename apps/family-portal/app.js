@@ -6303,6 +6303,15 @@ function shiftSelectedMonth(offset) {
   state.selectedDate = ymd(target);
 }
 
+function revealCalendarCollectionTabs() {
+  const view = document.getElementById("view");
+  if (!view) return;
+  view.scrollTop = 0;
+  window.requestAnimationFrame(() => {
+    view.scrollTop = 0;
+  });
+}
+
 function moveSelectedMonth(offset, options = {}) {
   const previousMonth = state.selectedDate.slice(0, 7);
   if (getRoute() === "add-event" || (getRoute() === "add" && state.addKind === "event")) collectAddEventDraft();
@@ -6311,10 +6320,7 @@ function moveSelectedMonth(offset, options = {}) {
   shiftSelectedMonth(offset);
   if (state.addTaskDraft && state.taskDueEnabled) state.addTaskDraft.due = state.selectedDate;
   render();
-  if (options.revealCollectionTabs) {
-    const view = document.getElementById("view");
-    if (view) view.scrollTop = 0;
-  }
+  if (options.revealCollectionTabs) revealCalendarCollectionTabs();
   if (getRoute() !== "caregiver" && state.selectedDate.slice(0, 7) !== previousMonth) loadRemoteWeatherForSelectedMonth();
 }
 
@@ -10485,6 +10491,7 @@ function render() {
   else if (route === "ledger") view.innerHTML = renderLedger();
   else if (route === "settings") view.innerHTML = renderSettings();
   else view.innerHTML = portalProfile() === "family" ? renderFamilyAgenda() : renderMainAgenda();
+  if (enteringRoute) view.scrollTop = 0;
   window.KAOS_MARKDOWN_EDITOR?.enhanceAll(view);
   if (overlayRoot) overlayRoot.innerHTML = route === "rouny" ? renderRounyOverlay() : "";
   updateOverlayMetrics();

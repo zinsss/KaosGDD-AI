@@ -73,7 +73,7 @@ test("the navigation contract loads before the portal application", () => {
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
   const faxIndex = index.indexOf('src="/fax.js?v=3"');
   const mailIndex = index.indexOf('src="/mail.js?v=7"');
-  const applicationIndex = index.indexOf('src="/app.js?v=382"');
+  const applicationIndex = index.indexOf('src="/app.js?v=383"');
   assert.ok(styleIndex >= 0);
   assert.ok(navigationIndex >= 0);
   assert.ok(calendarViewIndex > navigationIndex);
@@ -181,7 +181,7 @@ test("calendar month panel rendering is delegated to the view module", () => {
   assert.match(calendarViewSource, /data-date="\$\{cell\.value\}"/);
   assert.match(calendarViewSource, /data-calendar-add-event/);
   assert.match(index, /src="\/calendar-view\.js\?v=2"/);
-  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=382"'));
+  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=383"'));
   assert.match(calendarViewSource, /dayCaregiverMark" role="img"/);
   assert.match(calendarViewSource, /hasMarket \|\| eventCount \|\| taskCount/);
 });
@@ -301,6 +301,8 @@ test("main desktop navigation renders an open list while preserving the mobile p
   assert.match(styles, /\.topAddButton \{[\s\S]*display: inline-flex;[\s\S]*width: auto;[\s\S]*height: 36px;[\s\S]*border-radius: 0;/);
   assert.match(styles, /\.topHeaderActions \{[\s\S]*grid-row: 1;[\s\S]*align-self: end;/);
   assert.match(styles, /:is\(\[data-route="calendar"\], \[data-route="tasks"\]\) \.collectionRail button,[\s\S]*?justify-content: center;[\s\S]*?text-align: center;/);
+  assert.match(appSource, /function revealCalendarCollectionTabs\(\) \{[\s\S]*?view\.scrollTop = 0;[\s\S]*?requestAnimationFrame/);
+  assert.match(appSource, /if \(enteringRoute\) view\.scrollTop = 0;/);
   assert.match(styles, /\.app\[data-profile="main"\] \.appIdentity \{\n    padding-right: 140px;/);
   assert.match(styles, /\.app\[data-profile="main"\] \.topNav \{\n    margin-top: 28px;/);
   assert.match(styles, /@media \(min-width: 1180px\) \{[\s\S]*\.app\[data-profile="main"\] \.view \{[\s\S]*padding-top: 0;[\s\S]*padding-bottom: 40px;/);
