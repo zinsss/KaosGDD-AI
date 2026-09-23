@@ -5752,14 +5752,6 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   background: transparent;
 }
 
-.app[data-profile="main"] [data-archive-kind="memos"] .archiveRecord {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.app[data-profile="main"] [data-archive-kind="ai-tasks"] .archiveRecord {
-  grid-template-columns: minmax(0, 1fr);
-}
-
 .app[data-profile="family"] {
   color-scheme: light;
   font-family:
@@ -8138,6 +8130,10 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 }
 
 .app[data-profile="main"] [data-archive-kind="memos"] .archiveRecord {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.app[data-profile="main"] [data-archive-kind="ai-tasks"] .archiveRecord {
   grid-template-columns: minmax(0, 1fr);
 }
 

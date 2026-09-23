@@ -102,6 +102,10 @@ test("AI Task detail keeps its title and actions on separate single rows", () =>
 
 test("AI Task archive dates reach the right edge", () => {
   assert.match(stylesSource, /\[data-archive-kind="ai-tasks"\] \.archiveRecord \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\);/);
+  assert.ok(
+    stylesSource.lastIndexOf('[data-archive-kind="ai-tasks"] .archiveRecord')
+      > stylesSource.lastIndexOf("grid-template-columns: minmax(0, 1fr) 48px"),
+  );
 });
 
 test("AI Tasks preview errors use actionable messages", () => {
