@@ -1,4 +1,18 @@
 window.KAOS_SUPPLIES_VIEW = (() => {
+  function renderSupplyHistory(deps) {
+    if (deps.state.supplies.mode !== "active" || !deps.state.supplies.presets.length) return "";
+    return `
+      <details class="supplyPresetHistory">
+        <summary>History</summary>
+        <div class="supplyPresets" aria-label="Recent supplies">
+          ${deps.state.supplies.presets
+            .map((preset) => `<button type="button" data-supply-preset="${deps.escapeHtml(preset.name)}">${deps.escapeHtml(preset.name)}</button>`)
+            .join("")}
+        </div>
+      </details>
+    `;
+  }
+
   function renderSupplyRow(deps, item) {
     const done = deps.state.supplies.mode === "done";
     return `
@@ -49,15 +63,7 @@ window.KAOS_SUPPLIES_VIEW = (() => {
             <button type="button" role="tab" class="${active ? "isActive" : ""}" data-supplies-mode="active" aria-selected="${active}">Active</button>
             <button type="button" role="tab" class="${!active ? "isActive" : ""}" data-supplies-mode="done" aria-selected="${!active}">Done</button>
           </div>
-          ${
-            active && deps.state.supplies.presets.length
-              ? `<div class="supplyPresets" aria-label="Recent supplies">
-                  ${deps.state.supplies.presets
-                    .map((preset) => `<button type="button" data-supply-preset="${deps.escapeHtml(preset.name)}">${deps.escapeHtml(preset.name)}</button>`)
-                    .join("")}
-                </div>`
-              : ""
-          }
+          ${renderSupplyHistory(deps)}
           <section class="archiveIndex" aria-labelledby="suppliesIndexTitle" aria-busy="${deps.state.supplies.loading}">
             <header class="archiveIndexHeader">
               <h3 id="suppliesIndexTitle">RECORD BOARD</h3>
@@ -93,15 +99,7 @@ window.KAOS_SUPPLIES_VIEW = (() => {
             <button type="button" class="${active ? "isActive" : ""}" data-supplies-mode="active">Active</button>
             <button type="button" class="${!active ? "isActive" : ""}" data-supplies-mode="done">Done</button>
           </div>
-          ${
-            active && deps.state.supplies.presets.length
-              ? `<div class="supplyPresets" aria-label="Recent supplies">
-                  ${deps.state.supplies.presets
-                    .map((preset) => `<button type="button" data-supply-preset="${deps.escapeHtml(preset.name)}">${deps.escapeHtml(preset.name)}</button>`)
-                    .join("")}
-                </div>`
-              : ""
-          }
+          ${renderSupplyHistory(deps)}
           ${
             deps.state.supplies.error
               ? `<div class="emptyState">${deps.escapeHtml(deps.state.supplies.error)}</div>`
