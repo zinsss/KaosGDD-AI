@@ -117,6 +117,14 @@ install_state_directories() {
   sudo install -d -m 0770 -o "${uid}" -g "${gid}" "${paths[@]}"
 }
 
+install_ledger_backup_directory() {
+  local root=${KAOS_ROOT:-/srv/kaos}
+  local gid=${KAOS_HOST_GID:-$(id -g)}
+  [[ "${gid}" =~ ^[0-9]+$ ]] || die "KAOS_HOST_GID must be numeric"
+  require_command sudo
+  sudo install -d -m 0770 -o root -g "${gid}" "${root}/backups/kaosgdd/ledger"
+}
+
 governor_state_root() {
   if [[ -n "${GOVERNOR_STATE_ROOT:-}" ]]; then
     printf '%s' "${GOVERNOR_STATE_ROOT}"
@@ -164,6 +172,7 @@ setup() {
   fi
   load_env
   install_state_directories "$(governor_state_root)"
+  install_ledger_backup_directory
   for secret in \
     memos_access_token \
     naver_mail_password \
@@ -873,7 +882,7 @@ case "${command}" in
   services-up) services_preflight; "${SERVICES_COMPOSE[@]}" up --detach memos radicale vaultwarden sftpgo family-portal ;;
   services-down) load_env; "${SERVICES_COMPOSE[@]}" stop memos radicale vaultwarden sftpgo family-portal ;;
   family-preflight) family_transition_preflight ;;
-  family-up) family_transition_preflight; load_env; install_state_directories "$(governor_state_root)"; COMPOSE_PROFILES=family-transition "${SERVICES_COMPOSE[@]}" up --detach --build governor-postgres governor-api calendar-adapter family-memos-web personal-memos-web ;;
+  family-up) family_transition_preflight; load_env; install_state_directories "$(governor_state_root)"; install_ledger_backup_directory; COMPOSE_PROFILES=family-transition "${SERVICES_COMPOSE[@]}" up --detach --build governor-postgres governor-api calendar-adapter family-memos-web personal-memos-web ;;
   family-down) load_env; COMPOSE_PROFILES=family-transition "${SERVICES_COMPOSE[@]}" stop governor-api family-memos-web personal-memos-web calendar-adapter governor-postgres ;;
   edge-preflight) edge_preflight ;;
   edge-config) load_env; "${EDGE_COMPOSE[@]}" config | redact_config ;;
