@@ -69,4 +69,5 @@ test("every textual UI element follows the profile global font", () => {
   assert.match(styles, /\.app\[data-profile="main"\]\[data-main-font\] :where\(\*\),/);
   assert.match(styles, /\.app\[data-profile="family"\]\[data-family-font\] :where\(\*\) \{[\s\S]*?font-family: inherit !important;/);
   assert.match(styles, /Glyph-only elements retain the icon fonts/);
+  assert.match(styles, /font-family: "Kaos Weather Icons", var\(--weather-icon-font\) !important;/);
 });

@@ -9897,7 +9897,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   .weatherDetailPeriod header span,
   .weatherLocationGlyph
 ) {
-  font-family: var(--weather-icon-font) !important;
+  font-family: "Kaos Weather Icons", var(--weather-icon-font) !important;
 }
 
 .app:is([data-profile="main"][data-main-font], [data-profile="family"][data-family-font]) :is(
