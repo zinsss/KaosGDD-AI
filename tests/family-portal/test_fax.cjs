@@ -8,6 +8,7 @@ const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal
 const faxViewSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/fax-view.js"), "utf8");
 const indexSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
 const composeServices = fs.readFileSync(path.join(__dirname, "../../deploy/h3-backend/compose.services.yaml"), "utf8");
+const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
 
 const incomingId = "0123456789abcdef0123456789abcdef";
 const outgoingId = "sent-1";
@@ -58,8 +59,18 @@ test("fax archive board uses the common no date title header", () => {
   assert.match(appSource, /KAOS_FAX_VIEW\.renderFax\(faxViewContext\(\)\)/);
   assert.match(faxViewSource, /id="faxIndexTitle">RECORD BOARD[\s\S]*<span>NO\.<\/span><span>DATE<\/span><span>TITLE<\/span>/);
   assert.doesNotMatch(faxViewSource, /<span>ID<\/span><span>DATE<\/span><span>REMOTE<\/span><span>TITLE<\/span>/);
-  assert.match(indexSource, /src="\/fax-view\.js\?v=1"/);
-  assert.ok(indexSource.indexOf('src="/fax-view.js?v=1"') < indexSource.indexOf('src="/app.js?v=377"'));
+  assert.match(indexSource, /src="\/fax-view\.js\?v=2"/);
+  assert.ok(indexSource.indexOf('src="/fax-view.js?v=2"') < indexSource.indexOf('src="/app.js?v=377"'));
+});
+
+test("fax modes and reload use the full-width archive tab layout", () => {
+  assert.match(faxViewSource, /class="archiveCommand faxArchiveToolbar"/);
+  assert.match(faxViewSource, /class="faxArchiveCommands"/);
+  assert.match(faxViewSource, /archiveTopAction[^>]*data-fax-mode=/);
+  assert.match(faxViewSource, /data-fax-refresh[^>]*>Reload<\/button>/);
+  assert.doesNotMatch(faxViewSource, /data-fax-refresh[^>]*>↻<\/button>/);
+  assert.match(styles, /\.faxArchiveCommands \{[\s\S]*?grid-template-columns: repeat\(5, minmax\(0, 1fr\)\);/);
+  assert.match(styles, /\.faxArchiveCommands \.archiveTopAction\.isActive \{[\s\S]*?var\(--main-tab-active-bg\)/);
 });
 
 test("failed fax detail exposes ACK and attention markers use unacknowledged failures", () => {

@@ -7475,6 +7475,14 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   padding: 0;
 }
 
+.app[data-profile="main"] [data-archive-kind="fax"] .faxArchiveToolbar {
+  display: block;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+
 .documentToolbarPanel {
   width: 100%;
   margin: 0;
@@ -7788,6 +7796,13 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   width: 100%;
 }
 
+.app[data-profile="main"] [data-archive-kind="fax"] .faxArchiveCommands {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
 .app:is([data-profile="main"], [data-profile="family"][data-route="memos"]) [data-archive-kind="memos"] .memoArchiveCommands .archiveTopAction {
   width: 100%;
   min-width: 0;
@@ -7812,12 +7827,35 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   text-align: center;
 }
 
+.app[data-profile="main"] [data-archive-kind="fax"] .faxArchiveCommands .archiveTopAction {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  padding: 6px 3px;
+  font-size: 0.72rem;
+  text-align: center;
+}
+
 .app[data-profile="main"] [data-archive-kind="mail"] .mailArchiveCommands .archiveTopAction::before,
 .app[data-profile="main"] [data-archive-kind="mail"] .mailArchiveCommands .archiveTopAction::after {
   content: none;
 }
 
+.app[data-profile="main"] [data-archive-kind="fax"] .faxArchiveCommands .archiveTopAction::before,
+.app[data-profile="main"] [data-archive-kind="fax"] .faxArchiveCommands .archiveTopAction::after {
+  content: none;
+}
+
 .app[data-profile="main"] [data-archive-kind="mail"] .mailArchiveCommands .archiveTopAction.isActive {
+  border-color: var(--main-tab-active-border);
+  background: var(--main-tab-active-bg);
+  color: var(--main-tab-active-text);
+}
+
+.app[data-profile="main"] [data-archive-kind="fax"] .faxArchiveCommands .archiveTopAction.isActive {
   border-color: var(--main-tab-active-border);
   background: var(--main-tab-active-bg);
   color: var(--main-tab-active-text);
@@ -7829,8 +7867,21 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   color: var(--nord6);
 }
 
+.app[data-profile="main"] [data-archive-kind="fax"] .faxArchiveCommands .archiveTopAction:hover,
+.app[data-profile="main"] [data-archive-kind="fax"] .faxArchiveCommands .archiveTopAction:focus-visible {
+  border-color: var(--line-strong);
+  color: var(--nord6);
+}
+
 .app[data-profile="main"] [data-archive-kind="mail"] .mailArchiveCommands .archiveTopAction.isActive:hover,
 .app[data-profile="main"] [data-archive-kind="mail"] .mailArchiveCommands .archiveTopAction.isActive:focus-visible {
+  border-color: var(--main-tab-active-border);
+  background: var(--main-tab-active-bg);
+  color: var(--main-tab-active-text);
+}
+
+.app[data-profile="main"] [data-archive-kind="fax"] .faxArchiveCommands .archiveTopAction.isActive:hover,
+.app[data-profile="main"] [data-archive-kind="fax"] .faxArchiveCommands .archiveTopAction.isActive:focus-visible {
   border-color: var(--main-tab-active-border);
   background: var(--main-tab-active-bg);
   color: var(--main-tab-active-text);

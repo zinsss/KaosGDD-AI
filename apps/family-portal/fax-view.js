@@ -9,7 +9,7 @@ window.KAOS_FAX_VIEW = (() => {
     const modeButtons = faxApi.modes
       .map((itemMode) => {
         const active = itemMode === mode;
-        return `<button class="archiveAction ${active ? "isActive" : ""}" type="button" data-fax-mode="${deps.escapeHtml(itemMode)}" aria-pressed="${active}">${deps.escapeHtml(itemMode.toUpperCase())}</button>`;
+        return `<button class="archiveAction archiveTopAction ${active ? "isActive" : ""}" type="button" data-fax-mode="${deps.escapeHtml(itemMode)}" aria-pressed="${active}">${deps.escapeHtml(itemMode.toUpperCase())}</button>`;
       })
       .join("");
     const rows = items
@@ -76,9 +76,11 @@ window.KAOS_FAX_VIEW = (() => {
         : "FAX BOARD STANDBY";
     return `
       <section class="archiveTerminal" data-archive-kind="fax" aria-label="Fax board">
-        <div class="archiveCommand" aria-label="Fax board modes">
-          <div class="archiveCommandActions">${modeButtons}</div>
-          <button class="archiveAction archiveRefreshAction" type="button" data-fax-refresh aria-label="Refresh fax board" title="Refresh fax board" ${fax.loading ? "disabled" : ""}>↻</button>
+        <div class="archiveCommand faxArchiveToolbar" aria-label="Fax board actions">
+          <div class="faxArchiveCommands">
+            ${modeButtons}
+            <button class="archiveAction archiveTopAction" type="button" data-fax-refresh aria-label="Reload fax board" title="Reload fax board" ${fax.loading ? "disabled" : ""}>Reload</button>
+          </div>
         </div>
         <div class="archiveWorkspace ${hasDetail ? "hasDetail" : ""}">
           <section class="archiveIndex" aria-labelledby="faxIndexTitle" aria-busy="${fax.loading}">
