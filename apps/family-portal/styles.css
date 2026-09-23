@@ -8637,7 +8637,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 
 .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"], [data-profile="family"][data-route="memos"]) .archiveUnreadApplyBar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(96px, 0.34fr);
+  grid-template-columns: minmax(0, 1fr) auto minmax(96px, 0.34fr);
   gap: 10px;
   align-items: center;
   margin-top: 10px;

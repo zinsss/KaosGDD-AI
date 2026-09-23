@@ -173,6 +173,7 @@ window.KAOS_MAIL_VIEW = (() => {
                           mode === "unread"
                             ? `<div class="archiveUnreadApplyBar">
                                 <p>${deps.escapeHtml(unreadReadCount)} READ // ${deps.escapeHtml(unreadDeleteCount)} DEL</p>
+                                <button class="archiveAction" type="button" data-mail-unread-delete-all ${mail.unreadApplying || !items.length ? "disabled" : ""}>DELETE ALL</button>
                                 <button class="archiveAction isActive" type="button" data-mail-unread-apply ${mail.unreadApplying || !items.length ? "disabled" : ""}>${mail.unreadApplying ? "APPLYING" : "APPLY"}</button>
                               </div>`
                             : ""

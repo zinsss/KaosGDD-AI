@@ -91,12 +91,16 @@ test("mail board rendering is delegated to the view module", () => {
   assert.match(mailViewSource, /<span>NO\.<\/span><span>DATE<\/span><span>TITLE<\/span>/);
   assert.match(mailViewSource, /data-mail-unread-action="read"/);
   assert.match(mailViewSource, /data-mail-unread-action="delete"/);
+  assert.match(mailViewSource, /data-mail-unread-delete-all[^>]*>DELETE ALL<\/button>/);
   assert.match(mailViewSource, /data-mail-unread-apply/);
   assert.match(mailViewSource, /class="mailArchiveCommands"/);
   assert.match(mailViewSource, /data-mail-refresh[^>]*>Reload<\/button>/);
   assert.doesNotMatch(mailViewSource, />↻<\/button>/);
   assert.match(styles, /\.mailArchiveCommands \{[\s\S]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\);[\s\S]*width: 100%;/);
   assert.match(mailViewSource, /mailReloginUrl/);
-  assert.match(indexSource, /src="\/mail-view\.js\?v=2"/);
-  assert.ok(indexSource.indexOf('src="/mail-view.js?v=2"') < indexSource.indexOf('src="/app.js?v=377"'));
+  assert.match(appSource, /function selectAllUnreadMailForDelete\(\)[\s\S]*?Object\.fromEntries\([\s\S]*?\[item\.id, "delete"\]/);
+  assert.match(appSource, /data-mail-unread-delete-all[\s\S]*?selectAllUnreadMailForDelete\(\)/);
+  assert.match(styles, /\.archiveUnreadApplyBar \{[\s\S]*grid-template-columns: minmax\(0, 1fr\) auto minmax\(96px, 0\.34fr\);/);
+  assert.match(indexSource, /src="\/mail-view\.js\?v=3"/);
+  assert.ok(indexSource.indexOf('src="/mail-view.js?v=3"') < indexSource.indexOf('src="/app.js?v=378"'));
 });

@@ -4080,6 +4080,19 @@ function setUnreadMailAction(key, action) {
   render();
 }
 
+function selectAllUnreadMailForDelete() {
+  if (
+    state.mail.mode !== "unread"
+    || state.mail.unreadLoading
+    || state.mail.unreadApplying
+    || !state.mail.unreadItems.length
+  ) return;
+  state.mail.unreadActions = Object.fromEntries(
+    state.mail.unreadItems.map((item) => [item.id, "delete"]),
+  );
+  render();
+}
+
 async function applyUnreadMailActions() {
   if (state.mail.unreadApplying || state.mail.unreadLoading || !state.mail.unreadItems.length) return;
   const items = state.mail.unreadItems.map((item) => ({
@@ -11066,6 +11079,11 @@ document.addEventListener("click", async (event) => {
 
   if (event.target.closest("[data-mail-unread-apply]")) {
     await applyUnreadMailActions();
+    return;
+  }
+
+  if (event.target.closest("[data-mail-unread-delete-all]")) {
+    selectAllUnreadMailForDelete();
     return;
   }
 
