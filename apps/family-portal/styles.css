@@ -5493,7 +5493,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 }
 
 .app :where(input, textarea)::placeholder {
-  color: var(--dim) !important;
+  color: color-mix(in srgb, var(--dim) 62%, var(--bg)) !important;
   opacity: 1;
 }
 
