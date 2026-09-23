@@ -5460,7 +5460,41 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   --main-tab-active-border: rgba(180, 142, 173, 0.62);
   --main-tab-active-bg: rgba(180, 142, 173, 0.14);
   --main-tab-active-text: var(--nord15);
+  --main-ui-font-size: 0.86rem;
   background: var(--bg);
+}
+
+/* Keep primary controls and form labels at the same readable size used by
+   Scribble. Metadata and secondary status copy retain their compact sizes. */
+.app[data-profile="main"] :where(
+  .archiveAction,
+  .openButton,
+  .primaryButton,
+  .dangerButton,
+  .plainButton,
+  .collectionRail button,
+  .collectionRail a,
+  .segmentedTabs button,
+  .taskFilters select,
+  .appFileControl
+) {
+  font-size: var(--main-ui-font-size) !important;
+}
+
+.app[data-profile="main"] .composer label > span {
+  font-size: var(--main-ui-font-size);
+}
+
+.app[data-profile="main"] .composer .appFileControl > span {
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  text-transform: none;
+}
+
+.app :where(input, textarea)::placeholder {
+  color: var(--dim) !important;
+  opacity: 1;
 }
 
 .app[data-profile="main"] .view {

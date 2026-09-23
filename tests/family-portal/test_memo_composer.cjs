@@ -24,6 +24,9 @@ test("memo composer uploads arbitrary files and links them to a private memo", (
   assert.match(appSource, /files\.length === 1[\s\S]*files\[0\]\.name[\s\S]*개 파일 선택됨/);
   assert.match(stylesSource, /\.appFileControl \{[\s\S]*font-family: inherit !important;/);
   assert.match(stylesSource, /\.appFileControl input\[type="file"\] \{[\s\S]*opacity: 0;/);
+  assert.match(stylesSource, /--main-ui-font-size: 0\.86rem;/);
+  assert.match(stylesSource, /\.composer \.appFileControl > span \{[\s\S]*font-size: inherit;[\s\S]*text-transform: none;/);
+  assert.match(stylesSource, /\.app :where\(input, textarea\)::placeholder \{[\s\S]*color: var\(--dim\) !important;[\s\S]*opacity: 1;/);
   assert.match(appSource, /memo_content_or_attachment_required/);
   assert.match(appSource, /cleanupMemoAttachments/);
 });
