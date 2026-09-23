@@ -526,6 +526,7 @@ html.isAgendaSuppliesEmbed body {
   display: flex;
   grid-column: 3;
   grid-row: 1;
+  align-self: end;
   align-items: center;
   justify-self: end;
   gap: 8px;

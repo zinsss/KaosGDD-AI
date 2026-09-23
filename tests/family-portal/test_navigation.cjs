@@ -67,7 +67,7 @@ test("notification categories point at the selector destination that can acknowl
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=406"');
+  const styleIndex = index.indexOf('href="/styles.css?v=407"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=11"');
   const calendarViewIndex = index.indexOf('src="/calendar-view.js?v=2"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
@@ -288,6 +288,7 @@ test("main desktop navigation renders an open list while preserving the mobile p
   assert.match(styles, /\.app\[data-profile="main"\] \.desktopMainMenuList \{\n    display: grid;/);
   assert.match(styles, /\.app\[data-profile="main"\] \.appTop \{\n    border-radius: 0;/);
   assert.match(styles, /\.topAddButton \{[\s\S]*display: inline-flex;[\s\S]*width: auto;[\s\S]*height: 36px;[\s\S]*border-radius: 0;/);
+  assert.match(styles, /\.topHeaderActions \{[\s\S]*grid-row: 1;[\s\S]*align-self: end;/);
   assert.match(styles, /\.app\[data-profile="main"\] \.appIdentity \{\n    padding-right: 140px;/);
   assert.match(styles, /\.app\[data-profile="main"\] \.topNav \{\n    margin-top: 28px;/);
   assert.match(styles, /@media \(min-width: 1180px\) \{[\s\S]*\.app\[data-profile="main"\] \.view \{[\s\S]*padding-top: 0;[\s\S]*padding-bottom: 40px;/);
