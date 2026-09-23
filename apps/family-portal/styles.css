@@ -5720,6 +5720,12 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   color: var(--main-tab-active-text);
 }
 
+.app[data-profile="main"][data-route="tasks"] .collectionRail button,
+.app[data-profile="main"][data-route="tasks"] .collectionRail a {
+  justify-content: center;
+  text-align: center;
+}
+
 .app[data-profile="main"] .openButton,
 .app[data-profile="main"] .primaryButton,
 .app[data-profile="main"] .dangerButton,
