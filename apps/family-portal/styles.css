@@ -7853,7 +7853,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 
 .app:is([data-profile="main"], [data-profile="family"][data-route="memos"]) [data-archive-kind="memos"] .memoArchiveCommands {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -7866,7 +7866,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 
 .app[data-profile="main"] [data-archive-kind="fax"] .faxArchiveCommands {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   width: 100%;
 }

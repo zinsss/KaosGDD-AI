@@ -428,7 +428,7 @@ const state = {
     checked: false,
     loading: false,
     error: "",
-    mode: "all",
+    mode: "received",
     items: [],
     counts: { all: 0, received: 0, sent: 0, failed: 0 },
     attention: { failed: 0 },
@@ -11055,7 +11055,7 @@ document.addEventListener("click", async (event) => {
 
   const faxMode = event.target.closest("[data-fax-mode]");
   if (faxMode) {
-    setFaxMode(faxMode.dataset.faxMode || "all");
+    setFaxMode(faxMode.dataset.faxMode || "received");
     return;
   }
 

@@ -47,7 +47,7 @@ test("main and family memos routes render native archive board controls", () => 
   assert.match(memosViewSource, /data-memos-refresh/);
   assert.match(memosViewSource, /data-memos-refresh[^>]*>Reload<\/button>/);
   assert.doesNotMatch(memosViewSource, /data-memos-refresh[^>]*>↻<\/button>/);
-  assert.match(memosViewSource, /href="#\/add-memo">New<\/a>/);
+  assert.doesNotMatch(memosViewSource, /href="#\/add-memo">New<\/a>/);
   assert.match(memosViewSource, /data-memos-toolbar="search"[^>]*>Search<\/button>/);
   assert.match(memosViewSource, /data-memos-toolbar="tags"[^>]*>Tags<\/button>/);
   assert.match(memosViewSource, /class="archiveSearchBox memoToolbarPanel"/);
@@ -61,7 +61,7 @@ test("main and family memos routes render native archive board controls", () => 
   assert.match(appSource, /memoToolbarToggle\.dataset\.memosToolbar/);
   assert.match(appSource, /state\.memos\.appliedQuery === tagQuery \? "" : tagQuery/);
   assert.match(stylesSource, /\.memoArchiveCommands \{[\s\S]*display: flex;[\s\S]*gap: 0;/);
-  assert.match(stylesSource, /\[data-archive-kind="memos"\] \.memoArchiveCommands \{[\s\S]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\);/);
+  assert.match(stylesSource, /\[data-archive-kind="memos"\] \.memoArchiveCommands \{[\s\S]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/);
   assert.match(stylesSource, /\[data-archive-kind="memos"\] \.memoArchiveToolbar \{[\s\S]*border: 0;[\s\S]*background: transparent;[\s\S]*box-shadow: none;/);
   assert.match(stylesSource, /\.memoArchiveCommands \.archiveTopAction\.isActive \{[\s\S]*background: var\(--main-tab-active-bg\);/);
   assert.match(stylesSource, /\.archiveTopAction\.isActive:hover,[\s\S]*\.archiveTopAction\.isActive:focus-visible \{[\s\S]*color: var\(--main-tab-active-text\);/);

@@ -51,16 +51,17 @@ test("derives board counts and filters from normalized records", () => {
   assert.equal(filterItems(archive.items, "failed")[0].status, "failed");
 });
 
-test("unknown board modes safely select all", () => {
-  assert.equal(normalizeMode("not-a-mode"), "all");
+test("unknown and retired all board modes safely select received", () => {
+  assert.equal(normalizeMode("not-a-mode"), "received");
+  assert.equal(normalizeMode("all"), "received");
 });
 
 test("fax archive board uses the common no date title header", () => {
   assert.match(appSource, /KAOS_FAX_VIEW\.renderFax\(faxViewContext\(\)\)/);
   assert.match(faxViewSource, /id="faxIndexTitle">RECORD BOARD[\s\S]*<span>NO\.<\/span><span>DATE<\/span><span>TITLE<\/span>/);
   assert.doesNotMatch(faxViewSource, /<span>ID<\/span><span>DATE<\/span><span>REMOTE<\/span><span>TITLE<\/span>/);
-  assert.match(indexSource, /src="\/fax-view\.js\?v=2"/);
-  assert.ok(indexSource.indexOf('src="/fax-view.js?v=2"') < indexSource.indexOf('src="/app.js?v=379"'));
+  assert.match(indexSource, /src="\/fax-view\.js\?v=3"/);
+  assert.ok(indexSource.indexOf('src="/fax-view.js?v=3"') < indexSource.indexOf('src="/app.js?v=380"'));
 });
 
 test("fax modes and reload use the full-width archive tab layout", () => {
@@ -69,7 +70,8 @@ test("fax modes and reload use the full-width archive tab layout", () => {
   assert.match(faxViewSource, /archiveTopAction[^>]*data-fax-mode=/);
   assert.match(faxViewSource, /data-fax-refresh[^>]*>Reload<\/button>/);
   assert.doesNotMatch(faxViewSource, /data-fax-refresh[^>]*>↻<\/button>/);
-  assert.match(styles, /\.faxArchiveCommands \{[\s\S]*?grid-template-columns: repeat\(5, minmax\(0, 1fr\)\);/);
+  assert.doesNotMatch(faxViewSource, /data-fax-mode="all"/);
+  assert.match(styles, /\.faxArchiveCommands \{[\s\S]*?grid-template-columns: repeat\(4, minmax\(0, 1fr\)\);/);
   assert.match(styles, /\.faxArchiveCommands \.archiveTopAction\.isActive \{[\s\S]*?var\(--main-tab-active-bg\)/);
 });
 

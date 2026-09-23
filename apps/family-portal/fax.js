@@ -5,7 +5,7 @@
 })(typeof globalThis === "object" ? globalThis : this, function createPortalFax() {
   const faxIdPattern = /^[0-9a-f]{32}$/;
   const jobIdPattern = /^[A-Za-z0-9_.:-]{1,80}$/;
-  const modes = Object.freeze(["all", "received", "sent", "failed"]);
+  const modes = Object.freeze(["received", "sent", "failed"]);
 
   function clean(value, maximum = 160) {
     return String(value || "").trim().slice(0, maximum);
@@ -73,7 +73,7 @@
 
   function normalizeMode(value) {
     const mode = clean(value, 16).toLowerCase();
-    return modes.includes(mode) ? mode : "all";
+    return modes.includes(mode) ? mode : "received";
   }
 
   function filterItems(items, mode) {

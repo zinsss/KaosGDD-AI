@@ -135,7 +135,6 @@ window.KAOS_MEMOS_VIEW = (() => {
       <section class="archiveTerminal" data-archive-kind="memos" aria-label="Memo archive">
         <form class="archiveCommand memoArchiveToolbar" data-memo-search role="search">
           <div class="memoArchiveCommands">
-            <a class="archiveAction archiveTopAction" href="#/add-memo">New</a>
             <button class="archiveAction archiveTopAction ${memos.toolbarPanel === "search" ? "isActive" : ""}" type="button" data-memos-toolbar="search" aria-expanded="${memos.toolbarPanel === "search"}">Search</button>
             <button class="archiveAction archiveTopAction ${memos.toolbarPanel === "tags" ? "isActive" : ""}" type="button" data-memos-toolbar="tags" aria-expanded="${memos.toolbarPanel === "tags"}">Tags</button>
             <button class="archiveAction archiveTopAction" type="button" data-memos-refresh aria-label="Reload memos" title="Reload memos" ${memos.loading ? "disabled" : ""}>Reload</button>
