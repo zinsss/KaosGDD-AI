@@ -5752,8 +5752,8 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   color: var(--main-tab-active-text);
 }
 
-.app[data-profile="main"][data-route="tasks"] .collectionRail button,
-.app[data-profile="main"][data-route="tasks"] .collectionRail a {
+.app[data-profile="main"]:is([data-route="calendar"], [data-route="tasks"]) .collectionRail button,
+.app[data-profile="main"]:is([data-route="calendar"], [data-route="tasks"]) .collectionRail a {
   justify-content: center;
   text-align: center;
 }

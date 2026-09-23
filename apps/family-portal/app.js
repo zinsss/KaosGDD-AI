@@ -6303,7 +6303,7 @@ function shiftSelectedMonth(offset) {
   state.selectedDate = ymd(target);
 }
 
-function moveSelectedMonth(offset) {
+function moveSelectedMonth(offset, options = {}) {
   const previousMonth = state.selectedDate.slice(0, 7);
   if (getRoute() === "add-event" || (getRoute() === "add" && state.addKind === "event")) collectAddEventDraft();
   if (getRoute() === "add-task" || (getRoute() === "add" && state.addKind === "task")) collectAddTaskDraft();
@@ -6311,6 +6311,10 @@ function moveSelectedMonth(offset) {
   shiftSelectedMonth(offset);
   if (state.addTaskDraft && state.taskDueEnabled) state.addTaskDraft.due = state.selectedDate;
   render();
+  if (options.revealCollectionTabs) {
+    const view = document.getElementById("view");
+    if (view) view.scrollTop = 0;
+  }
   if (getRoute() !== "caregiver" && state.selectedDate.slice(0, 7) !== previousMonth) loadRemoteWeatherForSelectedMonth();
 }
 
@@ -12513,7 +12517,7 @@ document.addEventListener("pointerup", (event) => {
     if (Math.abs(deltaX) >= 48 && Math.abs(deltaX) > Math.abs(deltaY) * 1.25) {
       event.preventDefault();
       suppressCalendarGridClick = true;
-      moveSelectedMonth(deltaX < 0 ? 1 : -1);
+      moveSelectedMonth(deltaX < 0 ? 1 : -1, { revealCollectionTabs: true });
       window.setTimeout(() => {
         suppressCalendarGridClick = false;
       }, 120);

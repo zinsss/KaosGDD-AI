@@ -67,13 +67,13 @@ test("notification categories point at the selector destination that can acknowl
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=411"');
+  const styleIndex = index.indexOf('href="/styles.css?v=412"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=11"');
   const calendarViewIndex = index.indexOf('src="/calendar-view.js?v=2"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
   const faxIndex = index.indexOf('src="/fax.js?v=3"');
   const mailIndex = index.indexOf('src="/mail.js?v=7"');
-  const applicationIndex = index.indexOf('src="/app.js?v=381"');
+  const applicationIndex = index.indexOf('src="/app.js?v=382"');
   assert.ok(styleIndex >= 0);
   assert.ok(navigationIndex >= 0);
   assert.ok(calendarViewIndex > navigationIndex);
@@ -181,7 +181,7 @@ test("calendar month panel rendering is delegated to the view module", () => {
   assert.match(calendarViewSource, /data-date="\$\{cell\.value\}"/);
   assert.match(calendarViewSource, /data-calendar-add-event/);
   assert.match(index, /src="\/calendar-view\.js\?v=2"/);
-  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=381"'));
+  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=382"'));
   assert.match(calendarViewSource, /dayCaregiverMark" role="img"/);
   assert.match(calendarViewSource, /hasMarket \|\| eventCount \|\| taskCount/);
 });
@@ -261,7 +261,8 @@ test("calendar month grid supports guarded horizontal touch swipes", () => {
   assert.match(styles, /\.calendarGrid \{[\s\S]*?touch-action: pan-y;/);
   assert.match(appSource, /Math\.abs\(deltaX\) >= 48/);
   assert.match(appSource, /Math\.abs\(deltaX\) > Math\.abs\(deltaY\) \* 1\.25/);
-  assert.match(appSource, /moveSelectedMonth\(deltaX < 0 \? 1 : -1\)/);
+  assert.match(appSource, /moveSelectedMonth\(deltaX < 0 \? 1 : -1, \{ revealCollectionTabs: true \}\)/);
+  assert.match(appSource, /options\.revealCollectionTabs[\s\S]*?view\.scrollTop = 0/);
   assert.match(appSource, /suppressCalendarGridClick && event\.target\.closest\("\.calendarGrid"\)/);
 });
 
@@ -299,7 +300,7 @@ test("main desktop navigation renders an open list while preserving the mobile p
   assert.match(styles, /\.app\[data-profile="main"\] \.appTop \{\n    border-radius: 0;/);
   assert.match(styles, /\.topAddButton \{[\s\S]*display: inline-flex;[\s\S]*width: auto;[\s\S]*height: 36px;[\s\S]*border-radius: 0;/);
   assert.match(styles, /\.topHeaderActions \{[\s\S]*grid-row: 1;[\s\S]*align-self: end;/);
-  assert.match(styles, /\[data-route="tasks"\] \.collectionRail button,[\s\S]*?justify-content: center;[\s\S]*?text-align: center;/);
+  assert.match(styles, /:is\(\[data-route="calendar"\], \[data-route="tasks"\]\) \.collectionRail button,[\s\S]*?justify-content: center;[\s\S]*?text-align: center;/);
   assert.match(styles, /\.app\[data-profile="main"\] \.appIdentity \{\n    padding-right: 140px;/);
   assert.match(styles, /\.app\[data-profile="main"\] \.topNav \{\n    margin-top: 28px;/);
   assert.match(styles, /@media \(min-width: 1180px\) \{[\s\S]*\.app\[data-profile="main"\] \.view \{[\s\S]*padding-top: 0;[\s\S]*padding-bottom: 40px;/);
