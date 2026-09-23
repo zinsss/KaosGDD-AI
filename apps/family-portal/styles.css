@@ -7624,8 +7624,15 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   background: rgba(67, 76, 94, 0.34);
   color: var(--archive-muted);
   padding: 0 12px;
-  font: 850 0.78rem/1 "Sarasa Gothic Mono", ui-monospace, monospace;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 850;
+  line-height: 1;
   cursor: pointer;
+}
+
+.app[data-profile="main"][data-main-font] .archiveTagChip {
+  font-family: var(--main-selected-font) !important;
 }
 
 .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"], [data-profile="family"][data-route="memos"]) .archiveTagChip:hover,

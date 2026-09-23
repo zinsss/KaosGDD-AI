@@ -5,6 +5,7 @@ const test = require("node:test");
 const vm = require("node:vm");
 
 const source = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/typography.js"), "utf8");
+const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
 
 function loadTypography(hostname = "kaosgdd.net") {
   const values = new Map();
@@ -62,4 +63,8 @@ test("typography scale stepping is bounded and applies only to the active profil
 test("typography asset loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
   assert.ok(index.indexOf('src="/typography.js?v=1"') < index.indexOf('src="/app.js?v=377"'));
+});
+
+test("archive tag pills follow the selected global font", () => {
+  assert.match(styles, /\.app\[data-profile="main"\]\[data-main-font\] \.archiveTagChip \{[\s\S]*?font-family: var\(--main-selected-font\) !important;/);
 });
