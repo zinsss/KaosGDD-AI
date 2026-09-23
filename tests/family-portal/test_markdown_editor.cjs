@@ -76,7 +76,7 @@ test("Memos and Scribble share the lightweight editor", () => {
   assert.match(styles, /\.app\[data-profile="family"\] \.markdownEditor/);
   assert.match(styles, /\.markdownEditorToolbar/);
   assert.match(styles, /\.memoMarkdown \.memoCopyToken/);
-  assert.match(styles, /\.archiveOcrRegion \.memoMarkdown \{[\s\S]*?font-size: 1rem;/);
+  assert.match(styles, /\.archiveOcrRegion \.memoMarkdown \{[\s\S]*?font-size: 1\.12rem;/);
   assert.match(styles, /\.memoMarkdown h1 \{[\s\S]*?font-size: 1\.76rem;/);
   assert.match(app, /data-memo-copy-token/);
   assert.match(app, /writeTextToClipboard\(copyText\)/);

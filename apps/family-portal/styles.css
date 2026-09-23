@@ -8712,7 +8712,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   border: 1px solid var(--archive-line);
   background: rgba(20, 24, 31, 0.52);
   color: var(--archive-text);
-  font-size: 1rem;
+  font-size: 1.12rem;
   line-height: 1.7;
   overflow-wrap: anywhere;
 }
