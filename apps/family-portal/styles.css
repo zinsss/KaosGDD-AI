@@ -3069,7 +3069,7 @@ h3 {
 }
 
 .selectedDayWeather .weatherPart {
-  grid-template-columns: auto auto;
+  grid-template-columns: minmax(0, 1fr) 6.25rem;
   justify-content: stretch;
   gap: 5px;
 }
@@ -3096,6 +3096,7 @@ h3 {
 }
 
 .selectedDayWeather .weatherPartValue {
+  width: 100%;
   justify-self: end;
 }
 
@@ -3179,8 +3180,8 @@ h3 {
 
 .weatherPart {
   display: grid;
-  grid-template-columns: 88px auto;
-  justify-content: start;
+  grid-template-columns: minmax(0, 1fr) 6.25rem;
+  justify-content: stretch;
   gap: 10px;
   align-items: center;
   min-height: 22px;
@@ -3194,10 +3195,11 @@ h3 {
 
 .weatherPartValue {
   display: inline-grid;
-  grid-template-columns: 1.1em auto;
+  grid-template-columns: 1.25rem minmax(0, 1fr);
   gap: 7px;
   align-items: center;
   justify-content: end;
+  width: 100%;
   color: var(--text);
   font-weight: 850;
   white-space: nowrap;
@@ -3206,18 +3208,37 @@ h3 {
 .weatherPartGlyph {
   color: var(--text);
   font-family: var(--weather-icon-font);
-  font-size: 0.92rem;
+  font-size: 1.08rem;
   font-weight: 400;
   line-height: 1;
+  text-align: center;
 }
 
 .weatherPartTemperature {
   color: var(--text);
   font-family: "Sarasa Gothic Mono", ui-monospace, monospace;
-  font-size: 0.92rem;
+  font-size: 0.84rem;
   font-weight: 850;
   font-variant-numeric: tabular-nums;
   line-height: 1;
+  text-align: right;
+}
+
+.calendarAgendaPanel > .panelHeader,
+.calendarAgendaPanel > :is(
+  .selectedWeather,
+  .selectedDayWeather,
+  .selectedWeatherCompact,
+  .panelBody,
+  .calendarGratitudeEditor,
+  .caregiverDayEditor
+) {
+  border-top: 0;
+  border-bottom: 0;
+}
+
+.calendarAgendaPanel > * + * {
+  border-top: 1px solid var(--line);
 }
 
 .weatherPopupTrigger {
