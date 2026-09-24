@@ -6104,6 +6104,9 @@ function renderTopNav(route) {
       `,
     )
     .join("");
+  window.requestAnimationFrame(() => {
+    nav.querySelector("[data-nav].isActive")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  });
 }
 
 function closeTopAddMenu() {
@@ -10584,6 +10587,13 @@ document.addEventListener("click", async (event) => {
   if (suppressCalendarGridClick && event.target.closest(".calendarGrid")) {
     event.preventDefault();
     event.stopPropagation();
+    return;
+  }
+  const familyNavLink = event.target.closest("[data-nav]");
+  if (familyNavLink && portalProfile() === "family") {
+    event.preventDefault();
+    const route = String(familyNavLink.dataset.nav || "");
+    if (profileConfig().nav.some((item) => item.route === route)) window.location.hash = `#/${route}`;
     return;
   }
   const compactMainMenuToggle = event.target.closest("[data-compact-main-menu-toggle]");

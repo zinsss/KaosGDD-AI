@@ -5914,6 +5914,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 
 .app[data-profile="family"] .topNav a {
   font-size: 0.9rem;
+  touch-action: manipulation;
 }
 
 .app[data-profile="family"] .topNav {

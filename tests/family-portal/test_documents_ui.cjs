@@ -110,7 +110,7 @@ test("memos archive rendering is delegated to the view module", () => {
   assert.match(memosViewSource, /data-memos-clear/);
   assert.match(memosViewSource, /data-memo-detail/);
   assert.match(indexSource, /src="\/memos-view\.js\?v=11"/);
-  assert.ok(indexSource.indexOf('src="/memos-view.js?v=11"') < indexSource.indexOf('src="/app.js?v=383"'));
+  assert.ok(indexSource.indexOf('src="/memos-view.js?v=11"') < indexSource.indexOf('src="/app.js?v=384"'));
 });
 
 test("documents archive rendering is delegated to the view module", () => {
@@ -130,5 +130,5 @@ test("documents archive rendering is delegated to the view module", () => {
   assert.match(documentsViewSource, /data-paperless-open/);
   assert.match(documentsViewSource, /data-paperless-detail/);
   assert.match(indexSource, /src="\/documents-view\.js\?v=2"/);
-  assert.ok(indexSource.indexOf('src="/documents-view.js?v=2"') < indexSource.indexOf('src="/app.js?v=383"'));
+  assert.ok(indexSource.indexOf('src="/documents-view.js?v=2"') < indexSource.indexOf('src="/app.js?v=384"'));
 });

@@ -67,13 +67,13 @@ test("notification categories point at the selector destination that can acknowl
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=413"');
+  const styleIndex = index.indexOf('href="/styles.css?v=414"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=11"');
   const calendarViewIndex = index.indexOf('src="/calendar-view.js?v=2"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
   const faxIndex = index.indexOf('src="/fax.js?v=3"');
   const mailIndex = index.indexOf('src="/mail.js?v=7"');
-  const applicationIndex = index.indexOf('src="/app.js?v=383"');
+  const applicationIndex = index.indexOf('src="/app.js?v=384"');
   assert.ok(styleIndex >= 0);
   assert.ok(navigationIndex >= 0);
   assert.ok(calendarViewIndex > navigationIndex);
@@ -181,7 +181,7 @@ test("calendar month panel rendering is delegated to the view module", () => {
   assert.match(calendarViewSource, /data-date="\$\{cell\.value\}"/);
   assert.match(calendarViewSource, /data-calendar-add-event/);
   assert.match(index, /src="\/calendar-view\.js\?v=2"/);
-  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=383"'));
+  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=384"'));
   assert.match(calendarViewSource, /dayCaregiverMark" role="img"/);
   assert.match(calendarViewSource, /hasMarket \|\| eventCount \|\| taskCount/);
 });
@@ -341,8 +341,12 @@ test("global reload synchronizes recurring tasks before reloading while family r
 });
 
 test("family mobile navigation stays on one horizontal row", () => {
+  const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
   const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
 
   assert.match(styles, /@media \(max-width: 1179px\) \{[\s\S]*\.app\[data-profile="family"\] \.topNav \{[\s\S]*display: flex;[\s\S]*flex-wrap: nowrap;[\s\S]*overflow-x: auto;/);
+  assert.match(styles, /\.app\[data-profile="family"\] \.topNav a \{[\s\S]*touch-action: manipulation;/);
   assert.match(styles, /\.app\[data-profile="family"\] \.topNav a \{[\s\S]*flex: 0 0 auto;/);
+  assert.match(appSource, /const familyNavLink = event\.target\.closest\("\[data-nav\]"\);[\s\S]*?window\.location\.hash = `#\/\$\{route\}`;/);
+  assert.match(appSource, /nav\.querySelector\("\[data-nav\]\.isActive"\)\?\.scrollIntoView\(\{ block: "nearest", inline: "nearest" \}\);/);
 });
