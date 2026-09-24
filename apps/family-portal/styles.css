@@ -7588,24 +7588,33 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   margin-bottom: 16px;
 }
 
-.app[data-profile="main"] .faxSendForm {
+.app[data-profile="main"] .faxComposer {
+  border-bottom: 0;
+}
+
+.app[data-profile="main"] .faxSendForm,
+.app[data-profile="main"] .faxSendPreview {
   display: grid;
-  gap: 14px;
-  padding: 16px;
+  gap: 10px;
 }
 
-.app[data-profile="main"] .faxSendForm label {
-  display: grid;
-  gap: 7px;
+.app[data-profile="main"] .faxSendPreview p {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
 }
 
-.app[data-profile="main"] .faxSendForm label > span {
-  color: var(--accent-warm);
-  font-size: 0.78em;
+.app[data-profile="main"] .faxSendPreview span {
+  color: var(--dim);
 }
 
-.app[data-profile="main"] .faxSendForm input {
-  width: 100%;
+.app[data-profile="main"] .faxSendPreview strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
 }
 
 .documentToolbarPanel {

@@ -77,37 +77,52 @@ window.KAOS_FAX_VIEW = (() => {
     const proposal = fax.compose?.proposal;
     const composer = fax.compose?.open
       ? `
-        <section class="archiveDetail faxSendComposer" aria-labelledby="faxSendTitle">
-          <header class="archiveDetailHeader">
-            <div><p>OUTGOING FAX</p><h3 id="faxSendTitle">Send fax</h3></div>
-            <button class="archiveAction" type="button" data-fax-send-cancel ${fax.compose.saving ? "disabled" : ""}>Cancel</button>
-          </header>
-          ${proposal ? `
-            <dl class="archiveMetadata">
-              ${deps.archiveMeta("Destination", proposal.fax?.destination || "")}
-              ${deps.archiveMeta("File", proposal.fax?.filename || "")}
-              ${deps.archiveMeta("Pages", String(proposal.fax?.pageCount || ""))}
-            </dl>
-            <p class="archiveStatusMessage">Check the destination and document before transmitting.</p>
-            <div class="archiveActions">
-              <button class="archiveAction isActive" type="button" data-fax-send-approve ${fax.compose.saving ? "disabled" : ""}>${fax.compose.saving ? "Sending…" : "Send"}</button>
-              <button class="archiveAction" type="button" data-fax-send-cancel ${fax.compose.saving ? "disabled" : ""}>Cancel</button>
-            </div>
-          ` : `
-            <form class="faxSendForm" data-fax-send-form>
-              <label><span>FAX NUMBER</span><input name="destination" type="tel" inputmode="tel" autocomplete="tel" placeholder="02-1234-5678" required></label>
-              <label><span>PDF OR IMAGE</span><input name="document" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/tiff,image/bmp" required></label>
-              ${fax.compose?.error ? `<p class="archiveError" role="alert">${deps.escapeHtml(fax.compose.error)}</p>` : ""}
-              <button class="archiveAction isActive" type="submit" ${fax.compose?.saving ? "disabled" : ""}>${fax.compose?.saving ? "Preparing…" : "Review"}</button>
-            </form>
-          `}
-          ${proposal && fax.compose?.error ? `<p class="archiveError" role="alert">${deps.escapeHtml(fax.compose.error)}</p>` : ""}
+        <section class="panel memoComposerPanel faxSendComposer" aria-labelledby="faxSendTitle">
+          <div class="panelHeader">
+            <div><p class="label">Fax</p><h2 id="faxSendTitle">Send fax</h2></div>
+            <button class="openButton memoHeaderCancel" type="button" data-fax-send-cancel ${fax.compose.saving ? "disabled" : ""}>Cancel</button>
+          </div>
+          <div class="composer faxComposer">
+            ${proposal ? `
+              <div class="faxSendPreview">
+                <p><span>Fax number</span><strong>${deps.escapeHtml(proposal.fax?.destination || "")}</strong></p>
+                <p><span>File</span><strong>${deps.escapeHtml(proposal.fax?.filename || "")}</strong></p>
+                <p><span>Pages</span><strong>${deps.escapeHtml(String(proposal.fax?.pageCount || ""))}</strong></p>
+              </div>
+              <p class="formNote">Check the fax number and document before transmitting.</p>
+              ${fax.compose?.error ? `<p class="formNote isError" role="alert">${deps.escapeHtml(fax.compose.error)}</p>` : ""}
+              <div class="formActions">
+                <button class="dangerButton" type="button" data-fax-send-cancel ${fax.compose.saving ? "disabled" : ""}>Cancel</button>
+                <button class="primaryButton" type="button" data-fax-send-approve ${fax.compose.saving ? "disabled" : ""}>${fax.compose.saving ? "Sending…" : "Send fax"}</button>
+              </div>
+            ` : `
+              <form class="faxSendForm" data-fax-send-form>
+                <label>
+                  <span>Fax number</span>
+                  <input name="destination" type="tel" inputmode="tel" autocomplete="tel" placeholder="02-1234-5678" required>
+                </label>
+                <div class="memoFilePicker">
+                  <span>File</span>
+                  <label class="appFileControl">
+                    <input name="document" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/tiff,image/bmp" required data-app-file>
+                    <span class="appFileChoose">파일 선택</span>
+                    <span class="appFileSelection" data-app-file-selection>선택한 파일 없음</span>
+                  </label>
+                </div>
+                ${fax.compose?.error ? `<p class="formNote isError" role="alert">${deps.escapeHtml(fax.compose.error)}</p>` : `<p class="formNote">PDF or image. You will review the destination and page count before sending.</p>`}
+                <div class="formActions">
+                  <button class="dangerButton" type="button" data-fax-send-cancel ${fax.compose?.saving ? "disabled" : ""}>Cancel</button>
+                  <button class="primaryButton" type="submit" ${fax.compose?.saving ? "disabled" : ""}>${fax.compose?.saving ? "Preparing…" : "Review fax"}</button>
+                </div>
+              </form>
+            `}
+          </div>
         </section>
       `
       : "";
     return `
+      ${composer}
       <section class="archiveTerminal" data-archive-kind="fax" aria-label="Fax board">
-        ${composer}
         <div class="archiveCommand faxArchiveToolbar" aria-label="Fax board actions">
           <div class="faxArchiveCommands">
             ${modeButtons}
