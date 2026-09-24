@@ -22,7 +22,7 @@ test("settings loads the read-only system status endpoint", () => {
   assert.match(systemStatusViewSource, /const worker = runtime\.worker \|\| \{\};/);
   assert.match(systemStatusViewSource, /Observation only\. No restart, deploy, reboot, shell, package-update, or system write controls are exposed in PWA\./);
   assert.match(indexSource, /src="\/system-status-view\.js\?v=2"/);
-  assert.ok(indexSource.indexOf('src="/system-status-view.js?v=2"') < indexSource.indexOf('src="/app.js?v=386"'));
+  assert.ok(indexSource.indexOf('src="/system-status-view.js?v=2"') < indexSource.indexOf('src="/app.js?v=387"'));
 });
 
 test("settings top add button is hidden because system writes are not exposed in PWA", () => {
@@ -80,8 +80,18 @@ test("main settings avoids legacy editor stacks and keeps system writes out of P
   assert.match(appSource, /System writes", "KaosSystemOperator \/ Codex, not PWA"/);
   assert.doesNotMatch(mainSettingsSource, /renderMailOrganizerSettings\(\)/);
   assert.doesNotMatch(mainSettingsSource, /renderCustomEventSettings\(\)/);
-  assert.match(appSource, /if \(route === "settings"\) \{[\s\S]*loadSystemStatus\(\);[\s\S]*loadGovernorSettingsStatus\(\);[\s\S]*if \(portalProfile\(\) !== "main"\) \{[\s\S]*loadWeatherSettings\(\);[\s\S]*loadRecurringTasks\(\);[\s\S]*\}/);
+  assert.match(appSource, /if \(route === "settings"\) \{[\s\S]*if \(portalProfile\(\) === "main"\) \{[\s\S]*loadSystemStatus\(\);[\s\S]*loadGovernorSettingsStatus\(\);[\s\S]*\} else \{[\s\S]*loadWeatherSettings\(\);[\s\S]*\}/);
   assert.match(styles, /\.app\[data-profile="main"\] \.settingsLinkGrid \{/);
+});
+
+test("Family settings contains only weather and typography controls", () => {
+  const settingsStart = appSource.indexOf("function renderSettings()");
+  const settingsEnd = appSource.indexOf("function renderMailOrganizerSettings()", settingsStart);
+  const familySettingsSource = appSource.slice(settingsStart, settingsEnd);
+  assert.match(familySettingsSource, /renderWeatherSettingsRow/);
+  assert.match(familySettingsSource, /renderFamilyFontSettingsRow/);
+  assert.doesNotMatch(familySettingsSource, /renderGovernorSettingsStatus|renderHolidaySettings|renderGeneratedCalendarPolicyStatus|renderEventPresetSettings|renderRecurringTaskSettings/);
+  assert.doesNotMatch(familySettingsSource, /settings\.portal|settings\.calendar|settings\.tasks|settings\.theme/);
 });
 
 test("custom event settings rendering is delegated to the settings view module", () => {
@@ -92,7 +102,7 @@ test("custom event settings rendering is delegated to the settings view module",
   assert.match(settingsViewSource, /data-custom-events-sync/);
   assert.match(settingsViewSource, /Generated calendar events/);
   assert.match(indexSource, /src="\/settings-view\.js\?v=2"/);
-  assert.ok(indexSource.indexOf('src="/settings-view.js?v=2"') < indexSource.indexOf('src="/app.js?v=386"'));
+  assert.ok(indexSource.indexOf('src="/settings-view.js?v=2"') < indexSource.indexOf('src="/app.js?v=387"'));
 });
 
 test("holiday settings rendering is delegated to the settings view module", () => {

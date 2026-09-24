@@ -10296,14 +10296,7 @@ function renderFamilySettingsSection(name, renderer) {
 
 function renderSettings() {
   if (portalProfile() === "main") return renderMainSettings();
-  ensureEventPresets();
   const config = profileConfig();
-  const items = [
-    [uiText("settings.portal", "Portal"), uiText("settings.familyPortal", "Family")],
-    [uiText("settings.calendar", "Calendar"), uiText("settings.familyCalendarValue", "Family shared")],
-    [uiText("settings.tasks", "Tasks"), uiText("settings.familyTasksValue", "Family shared")],
-    [uiText("settings.theme", "Theme"), uiText("settings.familyThemeValue", "Pastel family")],
-  ];
   return `
     <section class="panel">
       <div class="panelHeader">
@@ -10314,15 +10307,9 @@ function renderSettings() {
       </div>
       <div class="panelBody">
         <dl class="settingsList">
-          ${renderSettingsRows(items)}
           ${renderFamilySettingsSection("날씨", renderWeatherSettingsRow)}
           ${renderFamilySettingsSection("글꼴", renderFamilyFontSettingsRow)}
         </dl>
-        ${renderFamilySettingsSection("KaosGovernor", renderGovernorSettingsStatus)}
-        ${renderFamilySettingsSection("공휴일", renderHolidaySettings)}
-        ${renderFamilySettingsSection("생성 일정", renderGeneratedCalendarPolicyStatus)}
-        ${renderFamilySettingsSection("일정 프리셋", renderEventPresetSettings)}
-        ${renderFamilySettingsSection("반복 할 일", renderRecurringTaskSettings)}
       </div>
     </section>
   `;
@@ -10555,19 +10542,16 @@ function render() {
     window.setTimeout(() => document.querySelector('[data-upload-document] input[type="file"]')?.focus(), 0);
   }
   if (route === "settings") {
-    loadSystemStatus();
-    loadGovernorSettingsStatus();
-    if (portalProfile() === "main" && !window.KAOS_WEB_PUSH?.state.checked && !window.KAOS_WEB_PUSH?.state.loading) {
-      window.KAOS_WEB_PUSH?.refresh().then(() => {
-        if (getRoute() === "settings") render();
-      });
-    }
-    if (portalProfile() !== "main") {
+    if (portalProfile() === "main") {
+      loadSystemStatus();
+      loadGovernorSettingsStatus();
+      if (!window.KAOS_WEB_PUSH?.state.checked && !window.KAOS_WEB_PUSH?.state.loading) {
+        window.KAOS_WEB_PUSH?.refresh().then(() => {
+          if (getRoute() === "settings") render();
+        });
+      }
+    } else {
       loadWeatherSettings();
-      loadHolidays();
-      loadCustomEvents();
-      loadMailOrganizerSettings();
-      loadRecurringTasks();
     }
   }
   if (portalProfile() === "main") void loadMainAttention();
