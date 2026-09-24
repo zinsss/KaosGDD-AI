@@ -512,6 +512,11 @@ class BrainToolServer:
             "/shortcuts/fax/send/proposals/{confirmation_id}/approve",
             self._approve_fax_send,
         )
+        app.router.add_post("/tools/fax/send/proposals", self._propose_fax_send)
+        app.router.add_post(
+            "/tools/fax/send/proposals/{confirmation_id}/approve",
+            self._approve_fax_send,
+        )
         app.router.add_get("/tools/today", self._today)
         app.router.add_get("/tools/briefing", self._shortcut_briefing)
         app.router.add_get("/tools/events/upcoming", self._upcoming_events)

@@ -69,6 +69,7 @@ CALENDAR_ADAPTER_INTERNAL_URL = os.environ.get("CALENDAR_ADAPTER_INTERNAL_URL", 
 CALENDAR_ADAPTER_TIMEOUT_SECONDS = float(os.environ.get("CALENDAR_ADAPTER_TIMEOUT_SECONDS", "20"))
 SYSTEM_STATUS_TOOLS_BASE_URL = os.environ.get("SYSTEM_STATUS_TOOLS_BASE_URL", "http://governor-tools:8098").rstrip("/")
 SYSTEM_STATUS_TIMEOUT_SECONDS = float(os.environ.get("SYSTEM_STATUS_TIMEOUT_SECONDS", "5"))
+FAX_SEND_TIMEOUT_SECONDS = float(os.environ.get("FAX_SEND_TIMEOUT_SECONDS", "30"))
 GOVERNOR_WORKER_STATE_PATH = Path(os.environ.get("GOVERNOR_WORKER_STATE_PATH", "/data/notifications/governor-worker.json"))
 DOCUMENT_TAG_AI_URL = os.environ.get("DOCUMENT_TAG_AI_URL", "").strip()
 DOCUMENT_TAG_AI_TOKEN = os.environ.get("DOCUMENT_TAG_AI_TOKEN", "").strip()
@@ -2759,6 +2760,47 @@ def fax_status_for_error(exc: Exception) -> int:
     return 503
 
 
+def fax_send_tool_payload(
+    path: str,
+    *,
+    body: bytes,
+    content_type: str,
+    urlopen=urllib.request.urlopen,
+) -> dict[str, object]:
+    token = secret_value("GOVERNOR_API_TOKEN", default_file="/run/secrets/governor_api_token")
+    if not token:
+        raise FaxError("fax_send_token_missing")
+    request = urllib.request.Request(
+        f"{SYSTEM_STATUS_TOOLS_BASE_URL}{path}",
+        data=body,
+        method="POST",
+        headers={
+            "Accept": "application/json",
+            "Authorization": f"Bearer {token}",
+            "Content-Type": content_type,
+        },
+    )
+    try:
+        with urlopen(request, timeout=FAX_SEND_TIMEOUT_SECONDS) as response:
+            raw = response.read()
+    except urllib.error.HTTPError as exc:
+        try:
+            payload = json.loads(exc.read().decode("utf-8"))
+            code = str(payload.get("error") or f"fax_send_http_{exc.code}")
+        except Exception:
+            code = f"fax_send_http_{exc.code}"
+        raise FaxError(code) from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise FaxError("fax_send_unreachable") from exc
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise FaxError("fax_send_invalid_json") from exc
+    if not isinstance(payload, dict):
+        raise FaxError("fax_send_invalid_payload")
+    return payload
+
+
 def _fax_query_int(params: dict[str, list[str]], name: str, default: int) -> int:
     raw = (params.get(name) or [str(default)])[0]
     try:
@@ -4108,6 +4150,66 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == "/api/fax/send/proposals":
+            try:
+                actor_id = require_main_access(self.headers)
+                fields, files = multipart_form_request(
+                    self,
+                    max_bytes=FaxConfig.from_env().max_pdf_bytes + MAX_MULTIPART_OVERHEAD_BYTES,
+                )
+                filename, document = files.get("document") or files.get("file") or ("", b"")
+                if not filename or not document:
+                    raise FaxError("fax_attachment_required")
+                boundary = f"----kaosfax{uuid.uuid4().hex}"
+                parts: list[bytes] = []
+                relay_fields = {
+                    "destination": fields.get("destination", ""),
+                    "idempotencyKey": fields.get("idempotencyKey", ""),
+                    "actorId": actor_id,
+                }
+                for name, value in relay_fields.items():
+                    clean_value = str(value).replace("\r", " ").replace("\n", " ")
+                    parts.append(
+                        f"--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{clean_value}\r\n".encode("utf-8")
+                    )
+                safe_filename = filename.replace('"', "").replace("\\", "").replace("\r", "").replace("\n", "")
+                parts.append(
+                    f"--{boundary}\r\nContent-Disposition: form-data; name=\"document\"; filename=\"{safe_filename}\"\r\nContent-Type: application/octet-stream\r\n\r\n".encode("utf-8")
+                    + document
+                    + b"\r\n"
+                )
+                parts.append(f"--{boundary}--\r\n".encode("ascii"))
+                payload = fax_send_tool_payload(
+                    "/tools/fax/send/proposals",
+                    body=b"".join(parts),
+                    content_type=f"multipart/form-data; boundary={boundary}",
+                )
+                json_response(self, 201, {"ok": True, **payload})
+            except (ValueError, FaxError, DocumentIntakeError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, (DocumentIntakeError, memos_relay.MemosRelayError)) else str(exc)
+                json_response(self, fax_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Fax proposal failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "fax_send_unavailable"})
+            return
+        fax_send_approval = re.fullmatch(r"/api/fax/send/proposals/([A-Za-z0-9_-]{1,160})/approve", parsed.path)
+        if fax_send_approval:
+            try:
+                actor_id = require_main_access(self.headers)
+                confirmation_id = fax_send_approval.group(1)
+                payload = fax_send_tool_payload(
+                    f"/tools/fax/send/proposals/{confirmation_id}/approve",
+                    body=json.dumps({"actorId": actor_id}).encode("utf-8"),
+                    content_type="application/json",
+                )
+                json_response(self, 200, {"ok": True, **payload})
+            except (ValueError, FaxError, memos_relay.MemosRelayError) as exc:
+                code = exc.code if isinstance(exc, memos_relay.MemosRelayError) else str(exc)
+                json_response(self, fax_status_for_error(exc), {"ok": False, "error": code})
+            except Exception as exc:
+                print(f"Fax approval failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "fax_send_unavailable"})
+            return
         if parsed.path == "/api/scribble":
             try:
                 require_main_access(self.headers)

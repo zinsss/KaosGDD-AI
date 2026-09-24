@@ -435,6 +435,7 @@ const state = {
     counts: { all: 0, received: 0, sent: 0, failed: 0 },
     attention: { failed: 0 },
     selectedKey: "",
+    compose: { open: false, saving: false, error: "", proposal: null },
   },
   mail: {
     checked: false,
@@ -3955,6 +3956,58 @@ async function acknowledgeFaxFailure(jobId) {
   render();
 }
 
+function openFaxComposer() {
+  state.fax.compose = { open: true, saving: false, error: "", proposal: null };
+  render();
+  window.setTimeout(() => document.querySelector('[data-fax-send-form] [name="destination"]')?.focus(), 0);
+}
+
+function closeFaxComposer() {
+  state.fax.compose = { open: false, saving: false, error: "", proposal: null };
+  render();
+}
+
+async function proposeFaxSend(form) {
+  const formData = new FormData(form);
+  formData.set("idempotencyKey", window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`);
+  state.fax.compose = { ...state.fax.compose, saving: true, error: "", proposal: null };
+  render();
+  try {
+    const response = await fetch("/api/fax/send/proposals", {
+      method: "POST",
+      headers: { Accept: "application/json" },
+      body: formData,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.confirmationId) throw new Error(payload.error || `HTTP ${response.status}`);
+    state.fax.compose = { open: true, saving: false, error: "", proposal: payload };
+  } catch (error) {
+    state.fax.compose = { open: true, saving: false, error: error.message || "Could not prepare fax", proposal: null };
+  }
+  render();
+}
+
+async function approveFaxSend() {
+  const confirmationId = String(state.fax.compose.proposal?.confirmationId || "");
+  if (!confirmationId) return;
+  state.fax.compose = { ...state.fax.compose, saving: true, error: "" };
+  render();
+  try {
+    const response = await fetch(`/api/fax/send/proposals/${encodeURIComponent(confirmationId)}/approve`, {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    state.fax.compose = { open: false, saving: false, error: "", proposal: null };
+    await refreshFax();
+  } catch (error) {
+    state.fax.compose = { ...state.fax.compose, saving: false, error: error.message || "Could not send fax" };
+    render();
+  }
+}
+
 async function loadMail(options = {}) {
   if (portalProfile() !== "main") return;
   if (state.mail.loading) return;
@@ -6012,7 +6065,7 @@ function topAddMenuItems(route) {
     { action: "supply", label: "Supply" },
     { action: "memo", label: "Memo" },
     { action: "document", label: "Document", note: "Later" },
-    { action: "fax", label: "Fax", note: "Later" },
+    { action: "fax", label: "Fax" },
     { action: "mail", label: "Mail", note: "Later" },
     { action: "ai-task", label: "AI Task" },
   ];
@@ -6182,6 +6235,11 @@ async function runTopAddAction(action) {
     window.location.hash = "#/add-document";
     return;
   }
+  if (action === "fax") {
+    if (getRoute() !== "fax") window.location.hash = "#/fax";
+    openFaxComposer();
+    return;
+  }
   if (action === "ai-task") {
     window.location.hash = "#/ai-tasks";
     return;
@@ -6190,10 +6248,7 @@ async function runTopAddAction(action) {
     openTopAddMenu();
     return;
   }
-  const labels = {
-    fax: "Fax sending from the top + is not wired yet.",
-    mail: "Mail compose/import from the top + is not wired yet.",
-  };
+  const labels = { mail: "Mail compose/import from the top + is not wired yet." };
   window.alert(labels[action] || "This add action is not wired yet.");
 }
 
@@ -11093,6 +11148,16 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (event.target.closest("[data-fax-send-cancel]")) {
+    closeFaxComposer();
+    return;
+  }
+
+  if (event.target.closest("[data-fax-send-approve]")) {
+    await approveFaxSend();
+    return;
+  }
+
   const faxMode = event.target.closest("[data-fax-mode]");
   if (faxMode) {
     setFaxMode(faxMode.dataset.faxMode || "received");
@@ -12040,6 +12105,13 @@ document.addEventListener("submit", async (event) => {
       ? calendarGratitudeContext()
       : gratitudeJournalContext();
     await window.KAOS_GRATITUDE_JOURNAL.save(context);
+    return;
+  }
+
+  const faxSendForm = event.target.closest("[data-fax-send-form]");
+  if (faxSendForm) {
+    event.preventDefault();
+    await proposeFaxSend(faxSendForm);
     return;
   }
 

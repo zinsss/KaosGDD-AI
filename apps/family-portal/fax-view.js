@@ -74,8 +74,40 @@ window.KAOS_FAX_VIEW = (() => {
       : fax.loading
         ? "LOADING FAX BOARD"
         : "FAX BOARD STANDBY";
+    const proposal = fax.compose?.proposal;
+    const composer = fax.compose?.open
+      ? `
+        <section class="archiveDetail faxSendComposer" aria-labelledby="faxSendTitle">
+          <header class="archiveDetailHeader">
+            <div><p>OUTGOING FAX</p><h3 id="faxSendTitle">Send fax</h3></div>
+            <button class="archiveAction" type="button" data-fax-send-cancel ${fax.compose.saving ? "disabled" : ""}>Cancel</button>
+          </header>
+          ${proposal ? `
+            <dl class="archiveMetadata">
+              ${deps.archiveMeta("Destination", proposal.fax?.destination || "")}
+              ${deps.archiveMeta("File", proposal.fax?.filename || "")}
+              ${deps.archiveMeta("Pages", String(proposal.fax?.pageCount || ""))}
+            </dl>
+            <p class="archiveStatusMessage">Check the destination and document before transmitting.</p>
+            <div class="archiveActions">
+              <button class="archiveAction isActive" type="button" data-fax-send-approve ${fax.compose.saving ? "disabled" : ""}>${fax.compose.saving ? "Sending…" : "Send"}</button>
+              <button class="archiveAction" type="button" data-fax-send-cancel ${fax.compose.saving ? "disabled" : ""}>Cancel</button>
+            </div>
+          ` : `
+            <form class="faxSendForm" data-fax-send-form>
+              <label><span>FAX NUMBER</span><input name="destination" type="tel" inputmode="tel" autocomplete="tel" placeholder="02-1234-5678" required></label>
+              <label><span>PDF OR IMAGE</span><input name="document" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/tiff,image/bmp" required></label>
+              ${fax.compose?.error ? `<p class="archiveError" role="alert">${deps.escapeHtml(fax.compose.error)}</p>` : ""}
+              <button class="archiveAction isActive" type="submit" ${fax.compose?.saving ? "disabled" : ""}>${fax.compose?.saving ? "Preparing…" : "Review"}</button>
+            </form>
+          `}
+          ${proposal && fax.compose?.error ? `<p class="archiveError" role="alert">${deps.escapeHtml(fax.compose.error)}</p>` : ""}
+        </section>
+      `
+      : "";
     return `
       <section class="archiveTerminal" data-archive-kind="fax" aria-label="Fax board">
+        ${composer}
         <div class="archiveCommand faxArchiveToolbar" aria-label="Fax board actions">
           <div class="faxArchiveCommands">
             ${modeButtons}

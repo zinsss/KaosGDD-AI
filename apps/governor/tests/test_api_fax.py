@@ -75,6 +75,39 @@ class CaptureHandler(api.Handler):
 
 
 class FaxApiTests(unittest.TestCase):
+    def test_send_facade_relays_to_authenticated_tools_endpoint(self) -> None:
+        captured = {}
+
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return None
+
+            def read(self):
+                return b'{"confirmationId":"confirm-1","fax":{"pageCount":1}}'
+
+        def open_request(request, timeout):
+            captured["request"] = request
+            captured["timeout"] = timeout
+            return Response()
+
+        with patch.object(api, "secret_value", return_value="server-secret"):
+            payload = api.fax_send_tool_payload(
+                "/tools/fax/send/proposals",
+                body=b"multipart-body",
+                content_type="multipart/form-data; boundary=test",
+                urlopen=open_request,
+            )
+
+        request = captured["request"]
+        self.assertEqual(request.full_url, "http://governor-tools:8098/tools/fax/send/proposals")
+        self.assertEqual(request.get_header("Authorization"), "Bearer server-secret")
+        self.assertEqual(request.data, b"multipart-body")
+        self.assertEqual(captured["timeout"], api.FAX_SEND_TIMEOUT_SECONDS)
+        self.assertEqual(payload["confirmationId"], "confirm-1")
+
     def test_list_returns_archive_counts_and_retained_document_url(self) -> None:
         service = FakeFax()
 

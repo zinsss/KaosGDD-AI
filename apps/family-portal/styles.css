@@ -7584,6 +7584,30 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   padding: 0;
 }
 
+.app[data-profile="main"] .faxSendComposer {
+  margin-bottom: 16px;
+}
+
+.app[data-profile="main"] .faxSendForm {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.app[data-profile="main"] .faxSendForm label {
+  display: grid;
+  gap: 7px;
+}
+
+.app[data-profile="main"] .faxSendForm label > span {
+  color: var(--accent-warm);
+  font-size: 0.78em;
+}
+
+.app[data-profile="main"] .faxSendForm input {
+  width: 100%;
+}
+
 .documentToolbarPanel {
   width: 100%;
   margin: 0;
