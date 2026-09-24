@@ -10593,7 +10593,11 @@ document.addEventListener("click", async (event) => {
   if (familyNavLink && portalProfile() === "family") {
     event.preventDefault();
     const route = String(familyNavLink.dataset.nav || "");
-    if (profileConfig().nav.some((item) => item.route === route)) window.location.hash = `#/${route}`;
+    if (profileConfig().nav.some((item) => item.route === route)) {
+      const nextHash = `#/${route}`;
+      if (window.location.hash === nextHash) render();
+      else window.location.hash = nextHash;
+    }
     return;
   }
   const compactMainMenuToggle = event.target.closest("[data-compact-main-menu-toggle]");

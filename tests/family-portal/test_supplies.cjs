@@ -34,7 +34,7 @@ test("main supplies route renders as an archive board instead of an inline compo
   assert.doesNotMatch(suppliesViewSource, /<details class="supplyPresetHistory" open>/);
   assert.match(styles, /\.supplyPresetHistory\[open\] summary::after/);
   assert.match(indexSource, /src="\/supplies-view\.js\?v=2"/);
-  assert.ok(indexSource.indexOf('src="/supplies-view.js?v=2"') < indexSource.indexOf('src="/app.js?v=384"'));
+  assert.ok(indexSource.indexOf('src="/supplies-view.js?v=2"') < indexSource.indexOf('src="/app.js?v=385"'));
 });
 
 test("family portal routes supplies api only to governor", () => {
