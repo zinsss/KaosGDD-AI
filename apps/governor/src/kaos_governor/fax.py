@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 import fcntl
 import hashlib
 import json
@@ -96,6 +96,7 @@ class FaxConfig:
     connector_token: str = ""
     connector_timeout_seconds: int = 20
     owner: str = "worker"
+    retention_days: int = 90
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "FaxConfig":
@@ -166,6 +167,7 @@ class FaxConfig:
             connector_token=_secret(source, "FAX_CONNECTOR_TOKEN"),
             connector_timeout_seconds=_int(source, "FAX_CONNECTOR_TIMEOUT_SECONDS", 20, 1),
             owner=owner,
+            retention_days=_int(source, "FAX_RETENTION_DAYS", 90, 1),
         )
 
 
@@ -440,6 +442,45 @@ class FaxService:
         state["version"] = 1
         _atomic_json(self.config.state_path, state)
 
+    @staticmethod
+    def _record_time(value: object) -> datetime | None:
+        try:
+            parsed = datetime.fromisoformat(str(value or "").replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=UTC)
+        return parsed.astimezone(UTC)
+
+    def _prune_expired_records(self, state: dict, *, now: datetime | None = None) -> dict[str, int]:
+        cutoff = (now or datetime.now(UTC)) - timedelta(days=self.config.retention_days)
+        removed = {"incoming": 0, "outgoing": 0, "documents": 0}
+        for incoming_id, incoming in list(state["incoming"].items()):
+            if not isinstance(incoming, dict):
+                continue
+            recorded_at = self._record_time(incoming.get("receivedAt") or incoming.get("archivedAt"))
+            if recorded_at is None or recorded_at > cutoff:
+                continue
+            document = self._incoming_document_path(incoming)
+            if document is not None:
+                try:
+                    document.unlink()
+                    removed["documents"] += 1
+                except OSError:
+                    continue
+            state["incoming"].pop(incoming_id, None)
+            removed["incoming"] += 1
+        for job_id, job in list(state["jobs"].items()):
+            if not isinstance(job, dict) or str(job.get("status") or "") not in {"sent", "failed"}:
+                continue
+            recorded_at = self._record_time(job.get("completedAt") or job.get("createdAt"))
+            if recorded_at is None or recorded_at > cutoff:
+                continue
+            state["jobs"].pop(job_id, None)
+            state["acknowledgedFailures"].pop(job_id, None)
+            removed["outgoing"] += 1
+        return removed
+
     def remember_prompt(self, source_message_id: int, prompt_message_id: int) -> None:
         with self._state_lock():
             state = self._load()
@@ -684,6 +725,7 @@ class FaxService:
             return []
         with self._state_lock():
             state = self._load()
+            removed = self._prune_expired_records(state)
             self._reconcile_jobs(state)
             candidates = self._incoming_actions()
             for job_id, job in state["jobs"].items():
@@ -704,7 +746,12 @@ class FaxService:
                 self.last_error = ""
                 return []
             state["initialized"] = True
-            state["runtime"] = {"lastScanAt": _timestamp(), "lastError": ""}
+            state["runtime"] = {
+                "lastScanAt": _timestamp(),
+                "lastError": "",
+                "lastRetentionPurge": removed,
+                "retentionDays": self.config.retention_days,
+            }
             self._save(state)
             self.last_scan_at = str(state["runtime"]["lastScanAt"])
             self.last_error = ""
@@ -966,4 +1013,5 @@ class FaxService:
             "incomingCount": len(state["incoming"]),
             "trackedJobs": len(state["jobs"]),
             "deliveredActions": len(state["delivered"]),
+            "retentionDays": self.config.retention_days,
         }

@@ -66,6 +66,24 @@ If either spool file is missing, a submitted TIFF can fail before dialing with
 corresponding canonical `/etc/hylafax` files with mode `0444`, then rerun
 `preflight`. This repair does not require a HylaFAX restart.
 
+## Retention
+
+Fax data is retained for 90 days in both directions. The daily
+`kaos-faxmail-retention.service` runs the received-fax cleanup with
+`--retention-days 90`; it removes only received TIFFs that have already been
+archived successfully. HylaFAX's weekly `faxqclean` uses `-j 7776000` (90 days)
+for completed sent jobs. Pending or active outbound jobs are not age-pruned.
+
+After changing either host setting, verify the received side without deleting
+data:
+
+```bash
+sudo /usr/bin/python3 /usr/local/lib/kaosgdd/faxmail/cleanup-received-faxes.py \
+  --retention-days 90 --dry-run
+systemctl cat kaos-faxmail-retention.service
+grep FAXQCLEAN_OPTS /etc/cron.weekly/hylafax
+```
+
 ## Rollback
 
 The previous bridge image is retained locally during the observation period.

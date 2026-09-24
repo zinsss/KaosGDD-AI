@@ -102,6 +102,11 @@ document path; it never contains PDF bytes. The Brain tool endpoint
 `GET /tools/imports/fax/<fax-id>/document` uses the same Governor bearer token
 as the other narrow H4 tools.
 
+Received and terminal sent/failed Fax records are retained for 90 days. The
+Governor worker removes expired H3 archive PDFs and metadata during its normal
+fax scan. Office Kaos independently keeps HylaFAX `recvq`, its receive backup,
+and terminal `doneq` records for the same 90-day period.
+
 The Discord flow is deliberately split:
 
 1. Office Fax Connector returns the validated received PDF to Governor.

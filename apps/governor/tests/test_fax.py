@@ -1,5 +1,6 @@
 import json
 import base64
+from datetime import datetime, timedelta, timezone
 import os
 from pathlib import Path
 import tempfile
@@ -66,6 +67,46 @@ class FaxTests(unittest.TestCase):
         self.assertTrue(status["lastScanAt"])
         self.assertEqual(status["lastError"], "")
         self.assertEqual(status["owner"], "worker")
+        self.assertEqual(status["retentionDays"], 90)
+
+    def test_retention_defaults_to_ninety_days_and_validates_override(self) -> None:
+        self.assertEqual(FaxConfig.from_env({}).retention_days, 90)
+        self.assertEqual(FaxConfig.from_env({"FAX_RETENTION_DAYS": "120"}).retention_days, 120)
+
+    def test_scan_prunes_terminal_sent_and_received_records_after_ninety_days(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = self.config(root)
+            old = (datetime.now(timezone.utc) - timedelta(days=91)).isoformat().replace("+00:00", "Z")
+            recent = (datetime.now(timezone.utc) - timedelta(days=89)).isoformat().replace("+00:00", "Z")
+            archive = root / "archive"
+            archive.mkdir()
+            (archive / "old.pdf").write_bytes(b"%PDF-old")
+            (archive / "recent.pdf").write_bytes(b"%PDF-recent")
+            config.state_path.write_text(json.dumps({
+                "initialized": True,
+                "incoming": {
+                    "old": {"receivedAt": old, "documentPath": "archive/old.pdf"},
+                    "recent": {"receivedAt": recent, "documentPath": "archive/recent.pdf"},
+                },
+                "jobs": {
+                    "old-sent": {"status": "sent", "completedAt": old},
+                    "old-pending": {"status": "submitted", "createdAt": old},
+                    "recent-sent": {"status": "sent", "completedAt": recent},
+                },
+            }), encoding="utf-8")
+
+            service = FaxService(config)
+            service.scan_actions()
+            state = json.loads(config.state_path.read_text(encoding="utf-8"))
+            self.assertNotIn("old", state["incoming"])
+            self.assertIn("recent", state["incoming"])
+            self.assertNotIn("old-sent", state["jobs"])
+            self.assertIn("old-pending", state["jobs"])
+            self.assertIn("recent-sent", state["jobs"])
+            self.assertFalse((archive / "old.pdf").exists())
+            self.assertTrue((archive / "recent.pdf").exists())
+            self.assertEqual(state["runtime"]["retentionDays"], 90)
 
     def test_normalizes_domestic_and_country_code_numbers(self) -> None:
         self.assertEqual(normalize_destination("02-284-8302"), "022848302")
