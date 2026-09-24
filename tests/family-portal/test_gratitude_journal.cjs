@@ -24,6 +24,7 @@ test("gratitude journal module loads before the portal app", () => {
   assert.match(appSource, /renderCalendarGratitude\(\s*state\.selectedDate,/);
   assert.match(appSource, /route === "calendar"\) window\.KAOS_GRATITUDE_JOURNAL\.load\(calendarGratitudeContext\(\)\)/);
   assert.match(styleSource, /\.gratitudePanel\s*\{[^}]*grid-column: 1 \/ -1/s);
+  assert.match(styleSource, /\.gratitudePanel:not\(\[open\]\) > \.gratitudeHeader,[\s\S]*?\.calendarGratitudeEditor:not\(\[open\]\) > \.gratitudeHeader \{\s*border-bottom: 0;/);
   assert.match(styleSource, /\.gratitudeField input::placeholder\s*\{[^}]*rgba\(216, 222, 233, 0\.26\)[^}]*opacity: 1;/s);
   assert.match(styleSource, /\.app\[data-profile="main"\] \.gratitudeField input\s*\{[^}]*border-radius: 0;/s);
   assert.match(styleSource, /\.gratitudeField input:focus\s*\{[^}]*outline: none;[^}]*inset 2px 0 0/s);

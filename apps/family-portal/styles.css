@@ -1507,6 +1507,11 @@ h3 {
   display: none;
 }
 
+.gratitudePanel:not([open]) > .gratitudeHeader,
+.calendarGratitudeEditor:not([open]) > .gratitudeHeader {
+  border-bottom: 0;
+}
+
 .gratitudeHeader h2 {
   margin: 2px 0 0;
 }
