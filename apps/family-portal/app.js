@@ -10281,6 +10281,19 @@ function renderMainSettings() {
   `;
 }
 
+function renderFamilySettingsSection(name, renderer) {
+  try {
+    return renderer();
+  } catch (error) {
+    console.error(`Could not render Family settings section: ${name}`, error);
+    return `
+      <div class="caregiverError" role="alert">
+        <span>${escapeHtml(`${name} 설정을 표시할 수 없습니다.`)}</span>
+      </div>
+    `;
+  }
+}
+
 function renderSettings() {
   if (portalProfile() === "main") return renderMainSettings();
   ensureEventPresets();
@@ -10302,14 +10315,14 @@ function renderSettings() {
       <div class="panelBody">
         <dl class="settingsList">
           ${renderSettingsRows(items)}
-          ${renderWeatherSettingsRow()}
-          ${renderFamilyFontSettingsRow()}
+          ${renderFamilySettingsSection("날씨", renderWeatherSettingsRow)}
+          ${renderFamilySettingsSection("글꼴", renderFamilyFontSettingsRow)}
         </dl>
-        ${renderGovernorSettingsStatus()}
-        ${renderHolidaySettings()}
-        ${renderGeneratedCalendarPolicyStatus()}
-        ${renderEventPresetSettings()}
-        ${renderRecurringTaskSettings()}
+        ${renderFamilySettingsSection("KaosGovernor", renderGovernorSettingsStatus)}
+        ${renderFamilySettingsSection("공휴일", renderHolidaySettings)}
+        ${renderFamilySettingsSection("생성 일정", renderGeneratedCalendarPolicyStatus)}
+        ${renderFamilySettingsSection("일정 프리셋", renderEventPresetSettings)}
+        ${renderFamilySettingsSection("반복 할 일", renderRecurringTaskSettings)}
       </div>
     </section>
   `;

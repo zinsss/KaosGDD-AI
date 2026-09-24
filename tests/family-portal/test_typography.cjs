@@ -62,7 +62,7 @@ test("typography scale stepping is bounded and applies only to the active profil
 
 test("typography asset loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  assert.ok(index.indexOf('src="/typography.js?v=1"') < index.indexOf('src="/app.js?v=385"'));
+  assert.ok(index.indexOf('src="/typography.js?v=1"') < index.indexOf('src="/app.js?v=386"'));
 });
 
 test("every textual UI element follows the profile global font", () => {

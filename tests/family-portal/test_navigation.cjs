@@ -73,7 +73,7 @@ test("the navigation contract loads before the portal application", () => {
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
   const faxIndex = index.indexOf('src="/fax.js?v=3"');
   const mailIndex = index.indexOf('src="/mail.js?v=7"');
-  const applicationIndex = index.indexOf('src="/app.js?v=385"');
+  const applicationIndex = index.indexOf('src="/app.js?v=386"');
   assert.ok(styleIndex >= 0);
   assert.ok(navigationIndex >= 0);
   assert.ok(calendarViewIndex > navigationIndex);
@@ -181,7 +181,7 @@ test("calendar month panel rendering is delegated to the view module", () => {
   assert.match(calendarViewSource, /data-date="\$\{cell\.value\}"/);
   assert.match(calendarViewSource, /data-calendar-add-event/);
   assert.match(index, /src="\/calendar-view\.js\?v=2"/);
-  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=385"'));
+  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=386"'));
   assert.match(calendarViewSource, /dayCaregiverMark" role="img"/);
   assert.match(calendarViewSource, /hasMarket \|\| eventCount \|\| taskCount/);
 });
@@ -349,4 +349,5 @@ test("family mobile navigation stays on one horizontal row", () => {
   assert.match(styles, /\.app\[data-profile="family"\] \.topNav a \{[\s\S]*flex: 0 0 auto;/);
   assert.match(appSource, /const familyNavLink = event\.target\.closest\("\[data-nav\]"\);[\s\S]*?if \(window\.location\.hash === nextHash\) render\(\);[\s\S]*?else window\.location\.hash = nextHash;/);
   assert.match(appSource, /nav\.querySelector\("\[data-nav\]\.isActive"\)\?\.scrollIntoView\(\{ block: "nearest", inline: "nearest" \}\);/);
+  assert.match(appSource, /function renderFamilySettingsSection\(name, renderer\) \{[\s\S]*?try \{[\s\S]*?return renderer\(\);[\s\S]*?catch \(error\)/);
 });
