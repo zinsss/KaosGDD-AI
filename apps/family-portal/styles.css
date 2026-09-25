@@ -168,6 +168,22 @@
 }
 
 @font-face {
+  font-family: "HsJibtokiRound";
+  src: url("./fonts/HSJiptokki-Round.woff2?v=1") format("woff2");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Lotteria";
+  src: url("./fonts/LOTTERIADDAG.woff2?v=1") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
   font-family: "SchoolSafeBoardMarker";
   src: url("./fonts/HakgyoansimBoadmarkerR.woff2?v=1") format("woff2");
   font-weight: 400;
@@ -10150,6 +10166,18 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   h1, h2, h3, h4, h5, h6, .panelHeader .label, .archiveIndexHeader strong, .recordBoardHeader strong, summary strong
 ) {
   font-family: "HsGultokki", sans-serif !important;
+}
+
+.app[data-profile="family"][data-family-title-font-enabled="true"][data-family-title-font="jibtokki-round"] :is(
+  h1, h2, h3, h4, h5, h6, .panelHeader .label, .archiveIndexHeader strong, .recordBoardHeader strong, summary strong
+) {
+  font-family: "HsJibtokiRound", sans-serif !important;
+}
+
+.app[data-profile="family"][data-family-title-font-enabled="true"][data-family-title-font="lotteria"] :is(
+  h1, h2, h3, h4, h5, h6, .panelHeader .label, .archiveIndexHeader strong, .recordBoardHeader strong, summary strong
+) {
+  font-family: "Lotteria", sans-serif !important;
 }
 
 /* Glyph-only elements retain the icon fonts required to render their symbols. */

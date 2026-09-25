@@ -18,6 +18,8 @@
   const familyTitleFontOptions = Object.freeze([
     { id: "subakhwa", label: "116수박화" },
     { id: "gultokki", label: "HS굴토끼" },
+    { id: "jibtokki-round", label: "HS집토끼 둥근체" },
+    { id: "lotteria", label: "롯데리아 딱붙어체" },
   ]);
   const familyTitleFontIds = new Set(familyTitleFontOptions.map((option) => option.id));
   const familyTitleFontKey = "kaosgdd.v2.family.titleFont.v1";

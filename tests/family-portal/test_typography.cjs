@@ -76,7 +76,7 @@ test("Family can opt into a separate title-only font", () => {
 
 test("typography asset loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  assert.ok(index.indexOf('src="/typography.js?v=2"') < index.indexOf('src="/app.js?v=391"'));
+  assert.ok(index.indexOf('src="/typography.js?v=3"') < index.indexOf('src="/app.js?v=391"'));
 });
 
 test("every textual UI element follows the profile global font", () => {
@@ -86,4 +86,6 @@ test("every textual UI element follows the profile global font", () => {
   assert.match(styles, /font-family: "Kaos Weather Icons", var\(--weather-icon-font\) !important;/);
   assert.match(styles, /data-family-title-font-enabled="true"\]\[data-family-title-font="subakhwa"\][\s\S]*font-family: "116Subakhwa", sans-serif !important;/);
   assert.match(styles, /data-family-title-font-enabled="true"\]\[data-family-title-font="gultokki"\][\s\S]*font-family: "HsGultokki", sans-serif !important;/);
+  assert.match(styles, /data-family-title-font-enabled="true"\]\[data-family-title-font="jibtokki-round"\][\s\S]*font-family: "HsJibtokiRound", sans-serif !important;/);
+  assert.match(styles, /data-family-title-font-enabled="true"\]\[data-family-title-font="lotteria"\][\s\S]*font-family: "Lotteria", sans-serif !important;/);
 });
