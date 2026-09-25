@@ -156,7 +156,7 @@ const profileConfigs = {
     nav: window.KAOS_PORTAL_NAVIGATION?.personalMenu || [],
   },
   family: {
-    label: "Family",
+    label: "",
     defaultRoute: "today",
     nav: [
       { route: "today", label: uiText("route.today", "Today") },

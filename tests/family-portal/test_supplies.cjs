@@ -18,7 +18,7 @@ test("top add opens the native supply composer route", () => {
   assert.match(styles, /\.supplyAddPanel \.archiveFormRow input \{[\s\S]*?min-height: 52px;/);
   assert.match(styles, /\.supplyAddPanel \.archiveFormRow input \{[\s\S]*?border: 1px solid var\(--archive-line\);/);
   assert.match(styles, /\.supplyAddPanel \.archiveFormRow input \{[\s\S]*?background: var\(--archive-surface\);/);
-  assert.match(indexSource, /href="\/styles\.css\?v=420"/);
+  assert.match(indexSource, /href="\/styles\.css\?v=421"/);
 });
 
 test("main supplies route renders as an archive board instead of an inline composer", () => {
@@ -34,7 +34,7 @@ test("main supplies route renders as an archive board instead of an inline compo
   assert.doesNotMatch(suppliesViewSource, /<details class="supplyPresetHistory" open>/);
   assert.match(styles, /\.supplyPresetHistory\[open\] summary::after/);
   assert.match(indexSource, /src="\/supplies-view\.js\?v=2"/);
-  assert.ok(indexSource.indexOf('src="/supplies-view.js?v=2"') < indexSource.indexOf('src="/app.js?v=389"'));
+  assert.ok(indexSource.indexOf('src="/supplies-view.js?v=2"') < indexSource.indexOf('src="/app.js?v=390"'));
 });
 
 test("family portal routes supplies api only to governor", () => {

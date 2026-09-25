@@ -67,13 +67,13 @@ test("notification categories point at the selector destination that can acknowl
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=420"');
+  const styleIndex = index.indexOf('href="/styles.css?v=421"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=11"');
   const calendarViewIndex = index.indexOf('src="/calendar-view.js?v=2"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
   const faxIndex = index.indexOf('src="/fax.js?v=3"');
   const mailIndex = index.indexOf('src="/mail.js?v=7"');
-  const applicationIndex = index.indexOf('src="/app.js?v=389"');
+  const applicationIndex = index.indexOf('src="/app.js?v=390"');
   assert.ok(styleIndex >= 0);
   assert.ok(navigationIndex >= 0);
   assert.ok(calendarViewIndex > navigationIndex);
@@ -83,15 +83,14 @@ test("the navigation contract loads before the portal application", () => {
   assert.ok(applicationIndex > mailIndex);
 });
 
-test("family mobile header puts identity above the full navigation", () => {
+test("family mobile header keeps the page title and right-aligned navigation on one line", () => {
   const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
   const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
 
-  assert.match(appSource, /family:\s*\{\s*label: "Family"/);
-  assert.match(styles, /@media \(max-width: 1179px\)[\s\S]*?\.app\[data-profile="family"\] \.appTop \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\);[\s\S]*?grid-template-rows: auto auto;/);
-  assert.match(styles, /\.app\[data-profile="family"\] \.appIdentity \{[\s\S]*?display: flex;[\s\S]*?align-items: baseline;/);
-  assert.match(styles, /\.app\[data-profile="family"\] \.topNav \{[\s\S]*?width: 100%;/);
+  assert.match(appSource, /family:\s*\{\s*label: ""/);
+  assert.match(styles, /\.app\[data-profile="family"\] \.appIdentity \.kicker \{\s*display: none;/);
   assert.match(styles, /\.app\[data-profile="family"\] \.topNav a:first-child \{\s*margin-left: auto;/);
+  assert.doesNotMatch(styles, /\.app\[data-profile="family"\] \.appTop \{[\s\S]*?grid-template-rows: auto auto;/);
 });
 
 test("all PWA pages end with scrollable flow space independent of the iOS safe area", () => {
@@ -200,7 +199,7 @@ test("calendar month panel rendering is delegated to the view module", () => {
   assert.match(calendarViewSource, /data-date="\$\{cell\.value\}"/);
   assert.match(calendarViewSource, /data-calendar-add-event/);
   assert.match(index, /src="\/calendar-view\.js\?v=2"/);
-  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=389"'));
+  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=390"'));
   assert.match(calendarViewSource, /dayCaregiverMark" role="img"/);
   assert.match(calendarViewSource, /hasMarket \|\| eventCount \|\| taskCount/);
 });
