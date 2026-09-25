@@ -89,7 +89,6 @@ window.KAOS_FAX_VIEW = (() => {
                 <p><span>File</span><strong>${deps.escapeHtml(proposal.fax?.filename || "")}</strong></p>
                 <p><span>Pages</span><strong>${deps.escapeHtml(String(proposal.fax?.pageCount || ""))}</strong></p>
               </div>
-              <p class="formNote">Check the fax number and document before transmitting.</p>
               ${fax.compose?.error ? `<p class="formNote isError" role="alert">${deps.escapeHtml(fax.compose.error)}</p>` : ""}
               <div class="formActions">
                 <button class="dangerButton" type="button" data-fax-send-cancel ${fax.compose.saving ? "disabled" : ""}>Cancel</button>
@@ -102,14 +101,14 @@ window.KAOS_FAX_VIEW = (() => {
                   <input name="destination" type="tel" inputmode="tel" autocomplete="tel" placeholder="02-1234-5678" required>
                 </label>
                 <div class="memoFilePicker">
-                  <span>File</span>
+                  <span>FILE&nbsp;&nbsp;•&nbsp;&nbsp;PDF or Image</span>
                   <label class="appFileControl">
                     <input name="document" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/tiff,image/bmp" required data-app-file>
                     <span class="appFileChoose">파일 선택</span>
                     <span class="appFileSelection" data-app-file-selection>선택한 파일 없음</span>
                   </label>
                 </div>
-                ${fax.compose?.error ? `<p class="formNote isError" role="alert">${deps.escapeHtml(fax.compose.error)}</p>` : `<p class="formNote">PDF or image. You will review the destination and page count before sending.</p>`}
+                ${fax.compose?.error ? `<p class="formNote isError" role="alert">${deps.escapeHtml(fax.compose.error)}</p>` : ""}
                 <div class="formActions">
                   <button class="dangerButton" type="button" data-fax-send-cancel ${fax.compose?.saving ? "disabled" : ""}>Cancel</button>
                   <button class="primaryButton" type="submit" ${fax.compose?.saving ? "disabled" : ""}>${fax.compose?.saving ? "Preparing…" : "Review fax"}</button>
