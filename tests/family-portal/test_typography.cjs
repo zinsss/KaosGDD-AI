@@ -89,7 +89,7 @@ test("Family title font choices stay selectable before separate-title mode is en
   assert.doesNotMatch(appSource, /data-family-title-font-setting[^>]*disabled/);
   assert.match(appSource, /setFamilyTitleFontEnabled\(familyTitleFontEnabledControl\.checked\);\s*applyFamilyTitleFontElements\(\);\s*return;/);
   assert.doesNotMatch(appSource, /setFamilyTitleFontEnabled\(familyTitleFontEnabledControl\.checked\);\s*render\(\);/);
-  assert.match(appSource, /setFamilyTitleFontPreference\(familyTitleFont\.value\);\s*applyFamilyTitleFontElements\(\);\s*return;/);
+  assert.match(appSource, /setFamilyTitleFontPreference\(familyTitleFont\.value\);\s*setFamilyTitleFontEnabled\(true\);[\s\S]*enabledControl\.checked = true;\s*applyFamilyTitleFontElements\(\);\s*return;/);
   assert.doesNotMatch(appSource, /setFamilyTitleFontPreference\(familyTitleFont\.value\);\s*render\(\);/);
   assert.match(appSource, /function applyFamilyTitleFontElements\(\)[\s\S]*element\.style\.setProperty\("font-family", family, "important"\)/);
   assert.match(appSource, /view\.innerHTML = portalProfile\(\) === "family" \? renderFamilyAgenda\(\) : renderMainAgenda\(\);\s*applyFamilyTitleFontElements\(\);/);
@@ -97,7 +97,7 @@ test("Family title font choices stay selectable before separate-title mode is en
 
 test("typography asset loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  assert.ok(index.indexOf('src="/typography.js?v=5"') < index.indexOf('src="/app.js?v=395"'));
+  assert.ok(index.indexOf('src="/typography.js?v=5"') < index.indexOf('src="/app.js?v=396"'));
 });
 
 test("every textual UI element follows the profile global font", () => {

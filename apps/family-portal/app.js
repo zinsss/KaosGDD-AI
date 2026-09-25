@@ -12933,6 +12933,9 @@ document.addEventListener("change", async (event) => {
   const familyTitleFont = event.target.closest("[data-family-title-font-setting]");
   if (familyTitleFont) {
     setFamilyTitleFontPreference(familyTitleFont.value);
+    setFamilyTitleFontEnabled(true);
+    const enabledControl = document.querySelector("[data-family-title-font-enabled]");
+    if (enabledControl) enabledControl.checked = true;
     applyFamilyTitleFontElements();
     return;
   }
