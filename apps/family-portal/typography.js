@@ -73,6 +73,10 @@
     return global.localStorage.getItem(familyTitleFontEnabledKey) === "true";
   }
 
+  function familyTitleFontFamily() {
+    return familyTitleFontFamilies[familyTitleFontPreference()];
+  }
+
   function applyFamilyTitleFontPreference() {
     const app = global.document.querySelector(".app");
     if (!app || activeProfile() !== "family") {
@@ -147,6 +151,7 @@
     setFamilyFontPreference: (value) => setFontPreference("family", value),
     familyTitleFontPreference,
     familyTitleFontEnabled,
+    familyTitleFontFamily,
     applyFamilyTitleFontPreference,
     setFamilyTitleFontPreference,
     setFamilyTitleFontEnabled,

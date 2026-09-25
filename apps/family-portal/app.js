@@ -85,6 +85,7 @@ const {
   familyTitleFontOptions: FAMILY_TITLE_FONT_OPTIONS,
   familyTitleFontPreference,
   familyTitleFontEnabled,
+  familyTitleFontFamily,
   applyFamilyTitleFontPreference,
   setFamilyTitleFontPreference,
   setFamilyTitleFontEnabled,
@@ -99,6 +100,7 @@ const {
 } = window.KAOS_PORTAL_TYPOGRAPHY;
 const MAIN_FONT_OPTIONS = FAMILY_FONT_OPTIONS;
 const MAIN_FONT_SCALE_OPTIONS = FAMILY_FONT_SCALE_OPTIONS;
+const FAMILY_TITLE_SELECTOR = "h1, h2, h3, h4, h5, h6, .panelHeader .label, .archiveIndexHeader strong, .recordBoardHeader strong, summary strong";
 const WEATHER_LOCATION_STORAGE_KEY = "kaosgdd.v2.weather.location.v1";
 const WEATHER_LOCATION_OPTIONS = [
   { id: "pohang", label: "Pohang", translationKey: "weather.locationPohang" },
@@ -6479,6 +6481,15 @@ function routeTitle(route) {
   renderTopNav(route);
 }
 
+function applyFamilyTitleFontElements() {
+  const enabled = portalProfile() === "family" && familyTitleFontEnabled();
+  const family = familyTitleFontFamily();
+  document.querySelectorAll(FAMILY_TITLE_SELECTOR).forEach((element) => {
+    if (enabled) element.style.setProperty("font-family", family, "important");
+    else element.style.removeProperty("font-family");
+  });
+}
+
 function renderAddDatePicker({ title, allowNoDate = false }) {
   const month = state.selectedDate.slice(0, 7);
   const cells = addPageCells(month);
@@ -10570,6 +10581,7 @@ function render() {
   else if (route === "ledger") view.innerHTML = renderLedger();
   else if (route === "settings") view.innerHTML = renderSettings();
   else view.innerHTML = portalProfile() === "family" ? renderFamilyAgenda() : renderMainAgenda();
+  applyFamilyTitleFontElements();
   if (enteringRoute) view.scrollTop = 0;
   window.KAOS_MARKDOWN_EDITOR?.enhanceAll(view);
   if (overlayRoot) overlayRoot.innerHTML = route === "rouny" ? renderRounyOverlay() : "";
@@ -12914,12 +12926,14 @@ document.addEventListener("change", async (event) => {
   const familyTitleFontEnabledControl = event.target.closest("[data-family-title-font-enabled]");
   if (familyTitleFontEnabledControl) {
     setFamilyTitleFontEnabled(familyTitleFontEnabledControl.checked);
+    applyFamilyTitleFontElements();
     return;
   }
 
   const familyTitleFont = event.target.closest("[data-family-title-font-setting]");
   if (familyTitleFont) {
     setFamilyTitleFontPreference(familyTitleFont.value);
+    applyFamilyTitleFontElements();
     return;
   }
 

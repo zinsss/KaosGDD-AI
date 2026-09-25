@@ -102,5 +102,5 @@ test("mail board rendering is delegated to the view module", () => {
   assert.match(appSource, /data-mail-unread-delete-all[\s\S]*?selectAllUnreadMailForDelete\(\)/);
   assert.match(styles, /\.archiveUnreadApplyBar \{[\s\S]*grid-template-columns: minmax\(0, 1fr\) auto minmax\(96px, 0\.34fr\);/);
   assert.match(indexSource, /src="\/mail-view\.js\?v=3"/);
-  assert.ok(indexSource.indexOf('src="/mail-view.js?v=3"') < indexSource.indexOf('src="/app.js?v=394"'));
+  assert.ok(indexSource.indexOf('src="/mail-view.js?v=3"') < indexSource.indexOf('src="/app.js?v=395"'));
 });
