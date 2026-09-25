@@ -67,7 +67,7 @@ test("notification categories point at the selector destination that can acknowl
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=419"');
+  const styleIndex = index.indexOf('href="/styles.css?v=420"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=11"');
   const calendarViewIndex = index.indexOf('src="/calendar-view.js?v=2"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
@@ -91,6 +91,7 @@ test("family mobile header puts identity above the full navigation", () => {
   assert.match(styles, /@media \(max-width: 1179px\)[\s\S]*?\.app\[data-profile="family"\] \.appTop \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\);[\s\S]*?grid-template-rows: auto auto;/);
   assert.match(styles, /\.app\[data-profile="family"\] \.appIdentity \{[\s\S]*?display: flex;[\s\S]*?align-items: baseline;/);
   assert.match(styles, /\.app\[data-profile="family"\] \.topNav \{[\s\S]*?width: 100%;/);
+  assert.match(styles, /\.app\[data-profile="family"\] \.topNav a:first-child \{\s*margin-left: auto;/);
 });
 
 test("all PWA pages end with scrollable flow space independent of the iOS safe area", () => {

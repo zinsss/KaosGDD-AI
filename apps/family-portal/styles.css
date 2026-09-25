@@ -5997,6 +5997,10 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
     flex: 0 0 auto;
     font-size: clamp(0.78rem, 2.6vw, 0.9rem);
   }
+
+  .app[data-profile="family"] .topNav a:first-child {
+    margin-left: auto;
+  }
 }
 
 .app[data-profile="family"] .kicker,
