@@ -74,9 +74,17 @@ test("Family can opt into a separate title-only font", () => {
   assert.equal(family.values.get("kaosgdd.v2.family.titleFont.v1"), "gultokki");
 });
 
+test("Family title font choices stay selectable before separate-title mode is enabled", () => {
+  const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
+
+  assert.match(appSource, /<select data-family-title-font-setting aria-label="제목 폰트">/);
+  assert.doesNotMatch(appSource, /data-family-title-font-setting[^>]*disabled/);
+  assert.match(appSource, /setFamilyTitleFontPreference\(familyTitleFont\.value\);\s*render\(\);/);
+});
+
 test("typography asset loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  assert.ok(index.indexOf('src="/typography.js?v=3"') < index.indexOf('src="/app.js?v=391"'));
+  assert.ok(index.indexOf('src="/typography.js?v=3"') < index.indexOf('src="/app.js?v=392"'));
 });
 
 test("every textual UI element follows the profile global font", () => {

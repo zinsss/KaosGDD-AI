@@ -4076,10 +4076,6 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   accent-color: #9b5f8f;
 }
 
-.app[data-profile="family"] .familyTitleFontSetting select:disabled {
-  opacity: 0.42;
-}
-
 .settingsDisclosure {
   margin-top: 10px;
   border-top: 1px solid var(--line);

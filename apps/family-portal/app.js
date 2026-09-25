@@ -10194,7 +10194,7 @@ function renderFamilyFontSettingsRow() {
           <input type="checkbox" data-family-title-font-enabled ${separateTitleFont ? "checked" : ""} />
           <span>제목 폰트 따로 지정</span>
         </label>
-        <select data-family-title-font-setting aria-label="제목 폰트" ${separateTitleFont ? "" : "disabled"}>
+        <select data-family-title-font-setting aria-label="제목 폰트">
           ${FAMILY_TITLE_FONT_OPTIONS.map((option) => `<option value="${option.id}" ${selectedTitleFont === option.id ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
         </select>
       </dd>
@@ -12921,6 +12921,7 @@ document.addEventListener("change", async (event) => {
   const familyTitleFont = event.target.closest("[data-family-title-font-setting]");
   if (familyTitleFont) {
     setFamilyTitleFontPreference(familyTitleFont.value);
+    render();
     return;
   }
 
