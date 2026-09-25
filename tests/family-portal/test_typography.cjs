@@ -9,7 +9,13 @@ const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/st
 
 function loadTypography(hostname = "kaosgdd.net") {
   const values = new Map();
-  const app = { dataset: {} };
+  const styleValues = new Map();
+  const app = {
+    dataset: {},
+    style: {
+      setProperty: (name, value) => styleValues.set(name, value),
+    },
+  };
   const documentElement = {
     style: {
       fontSize: "",
@@ -30,7 +36,7 @@ function loadTypography(hostname = "kaosgdd.net") {
     },
   };
   vm.runInNewContext(source, { window });
-  return { typography: window.KAOS_PORTAL_TYPOGRAPHY, app, documentElement, values };
+  return { typography: window.KAOS_PORTAL_TYPOGRAPHY, app, documentElement, values, styleValues };
 }
 
 test("typography preferences remain profile-scoped with safe defaults", () => {
@@ -70,6 +76,7 @@ test("Family can opt into a separate title-only font", () => {
 
   assert.equal(family.app.dataset.familyTitleFontEnabled, "true");
   assert.equal(family.app.dataset.familyTitleFont, "gultokki");
+  assert.equal(family.styleValues.get("--family-title-font"), '"HsGultokki", sans-serif');
   assert.equal(family.values.get("kaosgdd.v2.family.titleFontEnabled.v1"), "true");
   assert.equal(family.values.get("kaosgdd.v2.family.titleFont.v1"), "gultokki");
 });
@@ -87,7 +94,7 @@ test("Family title font choices stay selectable before separate-title mode is en
 
 test("typography asset loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  assert.ok(index.indexOf('src="/typography.js?v=3"') < index.indexOf('src="/app.js?v=394"'));
+  assert.ok(index.indexOf('src="/typography.js?v=4"') < index.indexOf('src="/app.js?v=394"'));
 });
 
 test("every textual UI element follows the profile global font", () => {
@@ -95,8 +102,9 @@ test("every textual UI element follows the profile global font", () => {
   assert.match(styles, /\.app\[data-profile="family"\]\[data-family-font\] :where\(\*\) \{[\s\S]*?font-family: inherit !important;/);
   assert.match(styles, /Glyph-only elements retain the icon fonts/);
   assert.match(styles, /font-family: "Kaos Weather Icons", var\(--weather-icon-font\) !important;/);
-  assert.match(styles, /data-family-title-font-enabled="true"\]\[data-family-title-font="subakhwa"\][\s\S]*font-family: "116Subakhwa", sans-serif !important;/);
-  assert.match(styles, /data-family-title-font-enabled="true"\]\[data-family-title-font="gultokki"\][\s\S]*font-family: "HsGultokki", sans-serif !important;/);
-  assert.match(styles, /data-family-title-font-enabled="true"\]\[data-family-title-font="jibtokki-round"\][\s\S]*font-family: "HsJibtokiRound", sans-serif !important;/);
-  assert.match(styles, /data-family-title-font-enabled="true"\]\[data-family-title-font="lotteria"\][\s\S]*font-family: "Lotteria", sans-serif !important;/);
+  assert.match(styles, /data-family-title-font-enabled="true"\][\s\S]*font-family: var\(--family-title-font\) !important;/);
+  assert.match(source, /subakhwa: '\"116Subakhwa\", sans-serif'/);
+  assert.match(source, /gultokki: '\"HsGultokki\", sans-serif'/);
+  assert.match(source, /"jibtokki-round": '\"HsJibtokiRound\", sans-serif'/);
+  assert.match(source, /lotteria: '\"Lotteria\", sans-serif'/);
 });

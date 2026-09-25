@@ -10152,28 +10152,10 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   font-family: inherit !important;
 }
 
-.app[data-profile="family"][data-family-title-font-enabled="true"][data-family-title-font="subakhwa"] :is(
+.app[data-profile="family"][data-family-title-font-enabled="true"] :is(
   h1, h2, h3, h4, h5, h6, .panelHeader .label, .archiveIndexHeader strong, .recordBoardHeader strong, summary strong
 ) {
-  font-family: "116Subakhwa", sans-serif !important;
-}
-
-.app[data-profile="family"][data-family-title-font-enabled="true"][data-family-title-font="gultokki"] :is(
-  h1, h2, h3, h4, h5, h6, .panelHeader .label, .archiveIndexHeader strong, .recordBoardHeader strong, summary strong
-) {
-  font-family: "HsGultokki", sans-serif !important;
-}
-
-.app[data-profile="family"][data-family-title-font-enabled="true"][data-family-title-font="jibtokki-round"] :is(
-  h1, h2, h3, h4, h5, h6, .panelHeader .label, .archiveIndexHeader strong, .recordBoardHeader strong, summary strong
-) {
-  font-family: "HsJibtokiRound", sans-serif !important;
-}
-
-.app[data-profile="family"][data-family-title-font-enabled="true"][data-family-title-font="lotteria"] :is(
-  h1, h2, h3, h4, h5, h6, .panelHeader .label, .archiveIndexHeader strong, .recordBoardHeader strong, summary strong
-) {
-  font-family: "Lotteria", sans-serif !important;
+  font-family: var(--family-title-font) !important;
 }
 
 /* Glyph-only elements retain the icon fonts required to render their symbols. */

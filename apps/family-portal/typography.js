@@ -22,6 +22,12 @@
     { id: "lotteria", label: "롯데리아 딱붙어체" },
   ]);
   const familyTitleFontIds = new Set(familyTitleFontOptions.map((option) => option.id));
+  const familyTitleFontFamilies = Object.freeze({
+    subakhwa: '"116Subakhwa", sans-serif',
+    gultokki: '"HsGultokki", sans-serif',
+    "jibtokki-round": '"HsJibtokiRound", sans-serif',
+    lotteria: '"Lotteria", sans-serif',
+  });
   const familyTitleFontKey = "kaosgdd.v2.family.titleFont.v1";
   const familyTitleFontEnabledKey = "kaosgdd.v2.family.titleFontEnabled.v1";
   const fontScaleOptions = Object.freeze([80, 85, 90, 95, 100, 105, 110, 115, 120]);
@@ -76,8 +82,10 @@
       }
       return;
     }
-    app.dataset.familyTitleFont = familyTitleFontPreference();
+    const selectedFont = familyTitleFontPreference();
+    app.dataset.familyTitleFont = selectedFont;
     app.dataset.familyTitleFontEnabled = String(familyTitleFontEnabled());
+    app.style?.setProperty("--family-title-font", familyTitleFontFamilies[selectedFont]);
   }
 
   function setFamilyTitleFontPreference(value) {
