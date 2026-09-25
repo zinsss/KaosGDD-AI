@@ -82,6 +82,12 @@ const {
   applyFamilyFontScalePreference,
   setFamilyFontScalePreference,
   stepFamilyFontScale,
+  familyTitleFontOptions: FAMILY_TITLE_FONT_OPTIONS,
+  familyTitleFontPreference,
+  familyTitleFontEnabled,
+  applyFamilyTitleFontPreference,
+  setFamilyTitleFontPreference,
+  setFamilyTitleFontEnabled,
   mainFontPreference,
   applyMainFontPreference,
   setMainFontPreference,
@@ -6467,6 +6473,7 @@ function routeTitle(route) {
     delete app.dataset.attention;
   }
   applyFamilyFontPreference();
+  applyFamilyTitleFontPreference();
   applyMainFontPreference();
   applyPortalFontScalePreference();
   renderTopNav(route);
@@ -10161,6 +10168,8 @@ function renderWeatherSettingsRow() {
 function renderFamilyFontSettingsRow() {
   const selectedFont = familyFontPreference();
   const selectedScale = familyFontScalePreference();
+  const selectedTitleFont = familyTitleFontPreference();
+  const separateTitleFont = familyTitleFontEnabled();
   return `
     <div>
       <dt>${uiText("settings.font", "Font")}</dt>
@@ -10176,6 +10185,18 @@ function renderFamilyFontSettingsRow() {
         <button type="button" data-family-font-step="-1" ${selectedScale <= FAMILY_FONT_SCALE_OPTIONS[0] ? "disabled" : ""} aria-label="${uiText("settings.fontSmaller", "Decrease font size")}">A−</button>
         <button type="button" data-family-font-reset aria-label="${uiText("settings.fontReset", "Reset font size")}">${selectedScale}%</button>
         <button type="button" data-family-font-step="1" ${selectedScale >= FAMILY_FONT_SCALE_OPTIONS.at(-1) ? "disabled" : ""} aria-label="${uiText("settings.fontLarger", "Increase font size")}">A+</button>
+      </dd>
+    </div>
+    <div>
+      <dt>제목 폰트</dt>
+      <dd class="familyTitleFontSetting">
+        <label>
+          <input type="checkbox" data-family-title-font-enabled ${separateTitleFont ? "checked" : ""} />
+          <span>제목 폰트 따로 지정</span>
+        </label>
+        <select data-family-title-font-setting aria-label="제목 폰트" ${separateTitleFont ? "" : "disabled"}>
+          ${FAMILY_TITLE_FONT_OPTIONS.map((option) => `<option value="${option.id}" ${selectedTitleFont === option.id ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
+        </select>
       </dd>
     </div>
   `;
@@ -12887,6 +12908,19 @@ document.addEventListener("change", async (event) => {
   const familyFont = event.target.closest("[data-family-font-setting]");
   if (familyFont) {
     setFamilyFontPreference(familyFont.value);
+    return;
+  }
+
+  const familyTitleFontEnabledControl = event.target.closest("[data-family-title-font-enabled]");
+  if (familyTitleFontEnabledControl) {
+    setFamilyTitleFontEnabled(familyTitleFontEnabledControl.checked);
+    render();
+    return;
+  }
+
+  const familyTitleFont = event.target.closest("[data-family-title-font-setting]");
+  if (familyTitleFont) {
+    setFamilyTitleFontPreference(familyTitleFont.value);
     return;
   }
 

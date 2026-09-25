@@ -152,6 +152,22 @@
 }
 
 @font-face {
+  font-family: "116Subakhwa";
+  src: url("./fonts/116watermelon.woff?v=1") format("woff");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "HsGultokki";
+  src: url("./fonts/HSGooltokki.woff2?v=1") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
   font-family: "SchoolSafeBoardMarker";
   src: url("./fonts/HakgyoansimBoadmarkerR.woff2?v=1") format("woff2");
   font-weight: 400;
@@ -4021,6 +4037,31 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 
 .app[data-profile="family"] .familyFontScaleActions button:disabled {
   opacity: 0.38;
+}
+
+.app[data-profile="family"] .settingsList dd.familyTitleFontSetting {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+
+.app[data-profile="family"] .familyTitleFontSetting label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.app[data-profile="family"] .familyTitleFontSetting input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: #9b5f8f;
+}
+
+.app[data-profile="family"] .familyTitleFontSetting select:disabled {
+  opacity: 0.42;
 }
 
 .settingsDisclosure {
@@ -10097,6 +10138,18 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 .app[data-profile="family"][data-family-font] input::file-selector-button,
 .app[data-profile="family"][data-family-font] input::-webkit-file-upload-button {
   font-family: inherit !important;
+}
+
+.app[data-profile="family"][data-family-title-font-enabled="true"][data-family-title-font="subakhwa"] :is(
+  h1, h2, h3, h4, h5, h6, .panelHeader .label, .archiveIndexHeader strong, .recordBoardHeader strong, summary strong
+) {
+  font-family: "116Subakhwa", sans-serif !important;
+}
+
+.app[data-profile="family"][data-family-title-font-enabled="true"][data-family-title-font="gultokki"] :is(
+  h1, h2, h3, h4, h5, h6, .panelHeader .label, .archiveIndexHeader strong, .recordBoardHeader strong, summary strong
+) {
+  font-family: "HsGultokki", sans-serif !important;
 }
 
 /* Glyph-only elements retain the icon fonts required to render their symbols. */

@@ -15,6 +15,13 @@
   ]);
   const fontIds = fontOptions.map((option) => option.id);
   const fontIdSet = new Set(fontIds);
+  const familyTitleFontOptions = Object.freeze([
+    { id: "subakhwa", label: "116수박화" },
+    { id: "gultokki", label: "HS굴토끼" },
+  ]);
+  const familyTitleFontIds = new Set(familyTitleFontOptions.map((option) => option.id));
+  const familyTitleFontKey = "kaosgdd.v2.family.titleFont.v1";
+  const familyTitleFontEnabledKey = "kaosgdd.v2.family.titleFontEnabled.v1";
   const fontScaleOptions = Object.freeze([80, 85, 90, 95, 100, 105, 110, 115, 120]);
   const profiles = Object.freeze({
     family: { fontKey: "kaosgdd.v2.family.font.v1", scaleKey: "kaosgdd.v2.family.fontScale.v1", fallback: "nanum" },
@@ -47,6 +54,39 @@
     const normalized = fontIdSet.has(value) ? value : config.fallback;
     global.localStorage.setItem(config.fontKey, normalized);
     applyFontPreference(profile, normalized);
+  }
+
+  function familyTitleFontPreference() {
+    const stored = global.localStorage.getItem(familyTitleFontKey) || "";
+    return familyTitleFontIds.has(stored) ? stored : "subakhwa";
+  }
+
+  function familyTitleFontEnabled() {
+    return global.localStorage.getItem(familyTitleFontEnabledKey) === "true";
+  }
+
+  function applyFamilyTitleFontPreference() {
+    const app = global.document.querySelector(".app");
+    if (!app || activeProfile() !== "family") {
+      if (app) {
+        delete app.dataset.familyTitleFont;
+        delete app.dataset.familyTitleFontEnabled;
+      }
+      return;
+    }
+    app.dataset.familyTitleFont = familyTitleFontPreference();
+    app.dataset.familyTitleFontEnabled = String(familyTitleFontEnabled());
+  }
+
+  function setFamilyTitleFontPreference(value) {
+    const normalized = familyTitleFontIds.has(value) ? value : "subakhwa";
+    global.localStorage.setItem(familyTitleFontKey, normalized);
+    applyFamilyTitleFontPreference();
+  }
+
+  function setFamilyTitleFontEnabled(value) {
+    global.localStorage.setItem(familyTitleFontEnabledKey, String(Boolean(value)));
+    applyFamilyTitleFontPreference();
   }
 
   function fontScalePreference(profile) {
@@ -91,9 +131,15 @@
     fontIds,
     fontIdSet,
     fontScaleOptions,
+    familyTitleFontOptions,
     familyFontPreference: () => fontPreference("family"),
     applyFamilyFontPreference: (value) => applyFontPreference("family", value),
     setFamilyFontPreference: (value) => setFontPreference("family", value),
+    familyTitleFontPreference,
+    familyTitleFontEnabled,
+    applyFamilyTitleFontPreference,
+    setFamilyTitleFontPreference,
+    setFamilyTitleFontEnabled,
     familyFontScalePreference: () => fontScalePreference("family"),
     applyFamilyFontScalePreference: (value) => applyFontScalePreference("family", value),
     setFamilyFontScalePreference: (value) => setFontScalePreference("family", value),

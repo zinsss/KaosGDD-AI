@@ -60,9 +60,23 @@ test("typography scale stepping is bounded and applies only to the active profil
   assert.equal(family.app.dataset.mainFontScale, undefined);
 });
 
+test("Family can opt into a separate title-only font", () => {
+  const family = loadTypography("family.kaosgdd.net");
+
+  assert.equal(family.typography.familyTitleFontEnabled(), false);
+  assert.equal(family.typography.familyTitleFontPreference(), "subakhwa");
+  family.typography.setFamilyTitleFontEnabled(true);
+  family.typography.setFamilyTitleFontPreference("gultokki");
+
+  assert.equal(family.app.dataset.familyTitleFontEnabled, "true");
+  assert.equal(family.app.dataset.familyTitleFont, "gultokki");
+  assert.equal(family.values.get("kaosgdd.v2.family.titleFontEnabled.v1"), "true");
+  assert.equal(family.values.get("kaosgdd.v2.family.titleFont.v1"), "gultokki");
+});
+
 test("typography asset loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  assert.ok(index.indexOf('src="/typography.js?v=1"') < index.indexOf('src="/app.js?v=390"'));
+  assert.ok(index.indexOf('src="/typography.js?v=2"') < index.indexOf('src="/app.js?v=391"'));
 });
 
 test("every textual UI element follows the profile global font", () => {
@@ -70,4 +84,6 @@ test("every textual UI element follows the profile global font", () => {
   assert.match(styles, /\.app\[data-profile="family"\]\[data-family-font\] :where\(\*\) \{[\s\S]*?font-family: inherit !important;/);
   assert.match(styles, /Glyph-only elements retain the icon fonts/);
   assert.match(styles, /font-family: "Kaos Weather Icons", var\(--weather-icon-font\) !important;/);
+  assert.match(styles, /data-family-title-font-enabled="true"\]\[data-family-title-font="subakhwa"\][\s\S]*font-family: "116Subakhwa", sans-serif !important;/);
+  assert.match(styles, /data-family-title-font-enabled="true"\]\[data-family-title-font="gultokki"\][\s\S]*font-family: "HsGultokki", sans-serif !important;/);
 });
