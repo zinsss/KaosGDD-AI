@@ -110,4 +110,7 @@ test("every textual UI element follows the profile global font", () => {
   assert.match(source, /gultokki: '\"HsGultokki\", sans-serif'/);
   assert.match(source, /"jibtokki-round": '\"HsJibtokiRound\", sans-serif'/);
   assert.match(source, /lotteria: '\"Lotteria\", sans-serif'/);
+  assert.match(styles, /HSGooltokki\.ttf\?v=1[^}]*format\("truetype"\)/s);
+  assert.match(styles, /HSJiptokki-Round\.ttf\?v=1[^}]*format\("truetype"\)/s);
+  assert.match(styles, /LOTTERIADDAG\.ttf\?v=1[^}]*format\("truetype"\)/s);
 });

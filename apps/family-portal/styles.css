@@ -161,7 +161,7 @@
 
 @font-face {
   font-family: "HsGultokki";
-  src: url("./fonts/HSGooltokki.woff2?v=1") format("woff2");
+  src: url("./fonts/HSGooltokki.ttf?v=1") format("truetype");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -169,7 +169,7 @@
 
 @font-face {
   font-family: "HsJibtokiRound";
-  src: url("./fonts/HSJiptokki-Round.woff2?v=1") format("woff2");
+  src: url("./fonts/HSJiptokki-Round.ttf?v=1") format("truetype");
   font-weight: 800;
   font-style: normal;
   font-display: swap;
@@ -177,7 +177,7 @@
 
 @font-face {
   font-family: "Lotteria";
-  src: url("./fonts/LOTTERIADDAG.woff2?v=1") format("woff2");
+  src: url("./fonts/LOTTERIADDAG.ttf?v=1") format("truetype");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
