@@ -12921,7 +12921,6 @@ document.addEventListener("change", async (event) => {
   const familyTitleFont = event.target.closest("[data-family-title-font-setting]");
   if (familyTitleFont) {
     setFamilyTitleFontPreference(familyTitleFont.value);
-    render();
     return;
   }
 
