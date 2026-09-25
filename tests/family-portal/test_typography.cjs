@@ -79,13 +79,15 @@ test("Family title font choices stay selectable before separate-title mode is en
 
   assert.match(appSource, /<select data-family-title-font-setting aria-label="제목 폰트">/);
   assert.doesNotMatch(appSource, /data-family-title-font-setting[^>]*disabled/);
+  assert.match(appSource, /setFamilyTitleFontEnabled\(familyTitleFontEnabledControl\.checked\);\s*return;/);
+  assert.doesNotMatch(appSource, /setFamilyTitleFontEnabled\(familyTitleFontEnabledControl\.checked\);\s*render\(\);/);
   assert.match(appSource, /setFamilyTitleFontPreference\(familyTitleFont\.value\);\s*return;/);
   assert.doesNotMatch(appSource, /setFamilyTitleFontPreference\(familyTitleFont\.value\);\s*render\(\);/);
 });
 
 test("typography asset loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  assert.ok(index.indexOf('src="/typography.js?v=3"') < index.indexOf('src="/app.js?v=393"'));
+  assert.ok(index.indexOf('src="/typography.js?v=3"') < index.indexOf('src="/app.js?v=394"'));
 });
 
 test("every textual UI element follows the profile global font", () => {
