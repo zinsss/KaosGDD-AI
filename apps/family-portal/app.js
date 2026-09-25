@@ -156,7 +156,7 @@ const profileConfigs = {
     nav: window.KAOS_PORTAL_NAVIGATION?.personalMenu || [],
   },
   family: {
-    label: uiText("profile.family", "Family"),
+    label: "Family",
     defaultRoute: "today",
     nav: [
       { route: "today", label: uiText("route.today", "Today") },
@@ -10648,7 +10648,13 @@ document.addEventListener("click", async (event) => {
     if (profileConfig().nav.some((item) => item.route === route)) {
       const nextHash = `#/${route}`;
       if (window.location.hash === nextHash) render();
-      else window.location.hash = nextHash;
+      else {
+        window.location.hash = nextHash;
+        // iOS standalone PWAs can occasionally defer or drop hashchange while
+        // the horizontally scrolling Family navigation is settling. Render
+        // from the new hash immediately; a later hashchange is harmless.
+        render();
+      }
     }
     return;
   }

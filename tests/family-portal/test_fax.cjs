@@ -60,8 +60,8 @@ test("fax archive board uses the common no date title header", () => {
   assert.match(appSource, /KAOS_FAX_VIEW\.renderFax\(faxViewContext\(\)\)/);
   assert.match(faxViewSource, /id="faxIndexTitle">RECORD BOARD[\s\S]*<span>NO\.<\/span><span>DATE<\/span><span>TITLE<\/span>/);
   assert.doesNotMatch(faxViewSource, /<span>ID<\/span><span>DATE<\/span><span>REMOTE<\/span><span>TITLE<\/span>/);
-  assert.match(indexSource, /src="\/fax-view\.js\?v=3"/);
-  assert.ok(indexSource.indexOf('src="/fax-view.js?v=3"') < indexSource.indexOf('src="/app.js?v=387"'));
+  assert.match(indexSource, /src="\/fax-view\.js\?v=6"/);
+  assert.ok(indexSource.indexOf('src="/fax-view.js?v=6"') < indexSource.indexOf('src="/app.js?v=389"'));
 });
 
 test("fax modes and reload use the full-width archive tab layout", () => {

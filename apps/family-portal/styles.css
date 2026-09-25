@@ -5948,6 +5948,33 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 }
 
 @media (max-width: 1179px) {
+  .app[data-profile="family"] .appTop {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    align-items: stretch;
+    gap: 3px;
+  }
+
+  .app[data-profile="family"] .appIdentity {
+    display: flex;
+    align-items: baseline;
+    gap: 9px;
+    min-width: 0;
+  }
+
+  .app[data-profile="family"] .appIdentity .kicker {
+    flex: 0 0 auto;
+    font-size: 0.72rem;
+    line-height: 1;
+  }
+
+  .app[data-profile="family"] .appIdentity h1 {
+    overflow: hidden;
+    font-size: 1.58rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .app[data-profile="family"] .topNav {
     display: flex;
     flex-wrap: nowrap;
@@ -5955,6 +5982,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
     align-items: end;
     justify-content: flex-start;
     gap: 8px;
+    width: 100%;
     overflow-x: auto;
     overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
