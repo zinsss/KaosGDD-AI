@@ -6490,6 +6490,14 @@ function applyFamilyTitleFontElements() {
   });
 }
 
+function selectFamilyTitleFont(control) {
+  setFamilyTitleFontPreference(control.value);
+  setFamilyTitleFontEnabled(true);
+  const enabledControl = document.querySelector("[data-family-title-font-enabled]");
+  if (enabledControl) enabledControl.checked = true;
+  applyFamilyTitleFontElements();
+}
+
 function renderAddDatePicker({ title, allowNoDate = false }) {
   const month = state.selectedDate.slice(0, 7);
   const cells = addPageCells(month);
@@ -12728,6 +12736,12 @@ document.addEventListener(
 );
 
 document.addEventListener("input", (event) => {
+  const familyTitleFont = event.target.closest("[data-family-title-font-setting]");
+  if (familyTitleFont) {
+    selectFamilyTitleFont(familyTitleFont);
+    return;
+  }
+
   if (window.KAOS_FAMILY_SMART_EVENTS.handleInput(familySmartEventContext(), event)) {
     return;
   }
@@ -12932,11 +12946,7 @@ document.addEventListener("change", async (event) => {
 
   const familyTitleFont = event.target.closest("[data-family-title-font-setting]");
   if (familyTitleFont) {
-    setFamilyTitleFontPreference(familyTitleFont.value);
-    setFamilyTitleFontEnabled(true);
-    const enabledControl = document.querySelector("[data-family-title-font-enabled]");
-    if (enabledControl) enabledControl.checked = true;
-    applyFamilyTitleFontElements();
+    selectFamilyTitleFont(familyTitleFont);
     return;
   }
 
