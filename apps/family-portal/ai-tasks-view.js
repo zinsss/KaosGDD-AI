@@ -39,6 +39,30 @@ window.KAOS_AI_TASKS_VIEW = (() => {
           pubmed: "PubMed 초록",
           review: "임상 리뷰",
           web: "웹",
+          query: "검색어",
+          also: "추가 검색어",
+          domains: "대상 사이트",
+          task: "작업",
+          sources: "출처",
+          textbookBackground: "교과서 참고자료",
+          status: "상태",
+          started: "시작",
+          updated: "수정",
+          source: "자료",
+          checked: "확인",
+          model: "모델",
+          memo: "메모",
+          url: "URL",
+          number: "번호",
+          date: "날짜",
+          columnTitle: "제목",
+          optionalUrl: "선택 사항: 공식 자료 URL",
+          optionalText: "선택 사항: 붙여넣을 원문",
+          archiveAria: "가족 AI 작업",
+          resultAria: "AI 작업 결과",
+          memoAria: "AI 메모 내용",
+          partialResultAria: "AI 작업 일부 결과",
+          untitled: "AI 작업",
         }
       : {
           prompt: "PROMPT",
@@ -78,7 +102,47 @@ window.KAOS_AI_TASKS_VIEW = (() => {
           pubmed: "PUBMED ABSTRACT",
           review: "CLINICAL REVIEW",
           web: "WEB",
+          query: "Query",
+          also: "Also",
+          domains: "Domains",
+          task: "Task",
+          sources: "SOURCES",
+          textbookBackground: "TEXTBOOK BACKGROUND",
+          status: "Status",
+          started: "Started",
+          updated: "Updated",
+          source: "Source",
+          checked: "Checked",
+          model: "Model",
+          memo: "Memo",
+          url: "URL",
+          number: "NO.",
+          date: "DATE",
+          columnTitle: "TITLE",
+          optionalUrl: "optional official source URL",
+          optionalText: "optional pasted source text",
+          archiveAria: "AI Tasks",
+          resultAria: "AI task result",
+          memoAria: "AI memo content",
+          partialResultAria: "AI task partial result",
+          untitled: "AI Task",
         };
+  }
+
+  function statusLabel(deps, status) {
+    const value = String(status || "").toLowerCase();
+    if (deps.portalProfile() !== "family") return value.toUpperCase();
+    const labels = {
+      queued: "대기",
+      pending: "대기",
+      running: "진행 중",
+      failed: "실패",
+      applied: "저장됨",
+      completed: "완료",
+      succeeded: "완료",
+      success: "완료",
+    };
+    return labels[value] || value;
   }
 
   function aiTaskSourceHost(url) {
@@ -145,19 +209,20 @@ window.KAOS_AI_TASKS_VIEW = (() => {
   }
 
   function renderAiTaskSourceQuality(deps, sources, textbookSources, labels = {}) {
+    const displayLabels = { ...labelsForProfile(deps), ...labels };
     const counts = aiTaskSourceQualityCounts(sources, textbookSources);
     const entries = [
-      ["guideline", labels.guideline || "GUIDELINE"],
-      ["official", labels.official || "OFFICIAL"],
-      ["textbook", labels.textbook || "TEXTBOOK"],
-      ["pubmed", labels.pubmed || "PUBMED ABSTRACT"],
-      ["review", labels.review || "CLINICAL REVIEW"],
-      ["web", labels.web || "WEB"],
+      ["guideline", displayLabels.guideline],
+      ["official", displayLabels.official],
+      ["textbook", displayLabels.textbook],
+      ["pubmed", displayLabels.pubmed],
+      ["review", displayLabels.review],
+      ["web", displayLabels.web],
     ].filter(([key]) => counts[key] > 0);
     if (!entries.length) return "";
     return `
-      <section class="aiTaskSourceQuality" aria-label="${deps.escapeHtml(labels.title || "Source quality")}">
-        <p>${deps.escapeHtml(labels.title || "SOURCE QUALITY")}</p>
+      <section class="aiTaskSourceQuality" aria-label="${deps.escapeHtml(displayLabels.title || displayLabels.sourceQuality)}">
+        <p>${deps.escapeHtml(displayLabels.title || displayLabels.sourceQuality)}</p>
         <div>
           ${entries.map(([key, label]) => `<span class="aiTaskQualityChip is-${deps.escapeHtml(key)}">${deps.escapeHtml(label)} <small>${counts[key]}</small></span>`).join("")}
         </div>
@@ -167,23 +232,25 @@ window.KAOS_AI_TASKS_VIEW = (() => {
 
   function renderAiTaskPlan(deps, plan) {
     if (!plan || typeof plan !== "object") return "";
+    const labels = labelsForProfile(deps);
     const alternates = Array.isArray(plan.alternateQueries) ? plan.alternateQueries.join(" // ") : "";
     const domains = Array.isArray(plan.preferredDomains) ? plan.preferredDomains.join(" // ") : "";
     return `
       <dl class="archiveMetadata aiTaskPlan">
-        ${deps.archiveMeta("Query", plan.query || "")}
-        ${deps.archiveMeta("Also", alternates)}
-        ${deps.archiveMeta("Domains", domains)}
-        ${deps.archiveMeta("Task", plan.task || "")}
+        ${deps.archiveMeta(labels.query, plan.query || "")}
+        ${deps.archiveMeta(labels.also, alternates)}
+        ${deps.archiveMeta(labels.domains, domains)}
+        ${deps.archiveMeta(labels.task, plan.task || "")}
       </dl>
     `;
   }
 
   function renderAiTaskSources(deps, sources) {
     if (!Array.isArray(sources) || !sources.length) return "";
+    const labels = labelsForProfile(deps);
     return `
       <details class="aiTaskSources" open>
-        <summary><span>SOURCES</span><small>${sources.length}</small></summary>
+        <summary><span>${deps.escapeHtml(labels.sources)}</span><small>${sources.length}</small></summary>
         <ol>
           ${sources
             .map((source) => {
@@ -205,9 +272,10 @@ window.KAOS_AI_TASKS_VIEW = (() => {
 
   function renderAiTaskTextbookSources(deps, sources) {
     if (!Array.isArray(sources) || !sources.length) return "";
+    const labels = labelsForProfile(deps);
     return `
       <details class="aiTaskSources aiTaskTextbookSources" open>
-        <summary><span>TEXTBOOK BACKGROUND</span><small>${sources.length}</small></summary>
+        <summary><span>${deps.escapeHtml(labels.textbookBackground)}</span><small>${sources.length}</small></summary>
         <ol>
           ${sources
             .map((source) => {
@@ -281,15 +349,10 @@ window.KAOS_AI_TASKS_VIEW = (() => {
   function renderAiTaskStatePanel(deps, preview, labels = null) {
     const status = String(preview?.status || "");
     if (status !== "running" && status !== "failed") return "";
-    const text = labels || {
-      running: "AI TASK RUNNING",
-      failed: "AI TASK FAILED",
-      back: "BACK",
-      searchWeb: "SEARCH WEB",
-      copy: "copy",
-      partialResult: "PARTIAL RESULT",
-      sourceQuality: "SOURCE QUALITY",
+    const text = {
+      ...labelsForProfile(deps),
       runningMessage: "Governor is searching/fetching sources and waiting for KaosBrain. This card will refresh automatically.",
+      ...(labels || {}),
     };
     const isRunning = status === "running";
     const result = preview?.result && typeof preview.result === "object" ? preview.result : {};
@@ -309,11 +372,11 @@ window.KAOS_AI_TASKS_VIEW = (() => {
     const canSearchGeneralWeb = !isRunning && deps.aiTaskIsOfficialWebPreview(preview) && resultSources.length > 0;
     const needsOpenClawAuth = !isRunning && deps.portalProfile() === "main" && String(preview?.error || "") === "kaosbrain_openai_auth_required";
     return `
-      <section class="archiveDetail aiTaskPreview aiTaskStatePanel" aria-label="AI task ${deps.escapeHtml(status)}">
+      <section class="archiveDetail aiTaskPreview aiTaskStatePanel" aria-label="${deps.escapeHtml(text.resultAria)}">
         <header class="archiveDetailHeader">
           <div>
             <p>${deps.escapeHtml(isRunning ? text.running : text.failed)}</p>
-            <h3>${deps.escapeHtml(preview?.title || preview?.prompt || "AI Task")}</h3>
+            <h3>${deps.escapeHtml(preview?.title || preview?.prompt || text.untitled)}</h3>
           </div>
           <div class="archiveActions">
             ${preview?.archived ? `<button class="archiveAction" type="button" data-ai-task-close>${deps.escapeHtml(text.back)}</button>` : ""}
@@ -324,10 +387,10 @@ window.KAOS_AI_TASKS_VIEW = (() => {
           </div>
         </header>
         <dl class="archiveMetadata">
-          ${deps.archiveMeta("Status", status)}
-          ${deps.archiveMeta("Started", preview?.createdAt || "")}
-          ${deps.archiveMeta("Updated", preview?.updatedAt || "")}
-          ${deps.archiveMeta("Source", sourceInfo.type || "")}
+          ${deps.archiveMeta(text.status, statusLabel(deps, status))}
+          ${deps.archiveMeta(text.started, preview?.createdAt || "")}
+          ${deps.archiveMeta(text.updated, preview?.updatedAt || "")}
+          ${deps.archiveMeta(text.source, sourceInfo.type || "")}
         </dl>
         ${
           needsOpenClawAuth
@@ -340,7 +403,7 @@ window.KAOS_AI_TASKS_VIEW = (() => {
         ${renderAiTaskSourceQuality(deps, resultSources, textbookSources, {
           title: text.sourceQuality,
         })}
-        ${resultContent ? `<div class="archiveOcrRegion" role="region" aria-label="AI task partial result"><p>${deps.escapeHtml(text.partialResult)}</p><pre>${deps.escapeHtml(resultContent)}</pre></div>` : ""}
+        ${resultContent ? `<div class="archiveOcrRegion" role="region" aria-label="${deps.escapeHtml(text.partialResultAria)}"><p>${deps.escapeHtml(text.partialResult)}</p><pre>${deps.escapeHtml(resultContent)}</pre></div>` : ""}
         ${renderAiTaskSources(deps, resultSources)}
         ${renderAiTaskTextbookSources(deps, textbookSources)}
       </section>
@@ -361,7 +424,7 @@ window.KAOS_AI_TASKS_VIEW = (() => {
               <span class="archiveRecordId">#${deps.escapeHtml(item.id)}</span>
               <time class="archiveRecordDate" datetime="${deps.escapeHtml(date.raw)}">${deps.escapeHtml(date.label)}</time>
               <strong class="archiveRecordTitle">${deps.escapeHtml(item.title)}</strong>
-              <span class="archiveRecordStatus ${deps.archiveStatusClass(item.status)}">${deps.escapeHtml(item.status.toUpperCase())}</span>
+              <span class="archiveRecordStatus ${deps.archiveStatusClass(item.status)}">${deps.escapeHtml(statusLabel(deps, item.status))}</span>
             </button>
           </li>
         `;
@@ -382,7 +445,7 @@ window.KAOS_AI_TASKS_VIEW = (() => {
         ? sourceInfo.textbookSources
         : [];
     const webResult = {
-      title: String(result.title || memo.title || preview?.title || "AI Task"),
+      title: String(result.title || memo.title || preview?.title || labels.untitled),
       content: String(result.content || memo.content || ""),
       checkedAt: String(result.checkedAt || sourceInfo.checkedAt || ""),
       model: String(result.model || preview?.provider || ""),
@@ -402,7 +465,7 @@ window.KAOS_AI_TASKS_VIEW = (() => {
         : "Governor is searching/fetching sources and waiting for KaosBrain. This card will refresh automatically.",
     });
     return `
-      <section class="archiveTerminal" data-archive-kind="ai-tasks" aria-label="${deps.escapeHtml(familyAiTasks ? "Family AI Tasks" : "AI Tasks")}">
+      <section class="archiveTerminal" data-archive-kind="ai-tasks" aria-label="${deps.escapeHtml(labels.archiveAria)}">
         <form class="archiveIndex aiTaskComposer" data-ai-task-unified>
           <label class="archiveCommandLine aiTaskPrompt">
             <span>${deps.escapeHtml(labels.prompt)}</span>
@@ -425,11 +488,11 @@ window.KAOS_AI_TASKS_VIEW = (() => {
             <div class="aiTaskSourceDetailsBody">
               <label class="archiveCommandLine">
                 <span>URL</span>
-                <input name="sourceUrl" type="url" inputmode="url" autocomplete="url" placeholder="optional official source URL" value="${deps.escapeHtml(aiTasks.sourceUrl)}" />
+                <input name="sourceUrl" type="url" inputmode="url" autocomplete="url" placeholder="${deps.escapeHtml(labels.optionalUrl)}" value="${deps.escapeHtml(aiTasks.sourceUrl)}" />
               </label>
               <label class="archiveCommandLine aiTaskSourceText">
                 <span>${deps.escapeHtml(labels.sourceText)}</span>
-                <textarea name="sourceText" rows="4" placeholder="optional pasted source text">${deps.escapeHtml(aiTasks.sourceText)}</textarea>
+                <textarea name="sourceText" rows="4" placeholder="${deps.escapeHtml(labels.optionalText)}">${deps.escapeHtml(aiTasks.sourceText)}</textarea>
               </label>
             </div>
           </details>
@@ -448,7 +511,7 @@ window.KAOS_AI_TASKS_VIEW = (() => {
             ? statePanel
             : isResultPreview
             ? `
-              <section class="archiveDetail aiTaskPreview" aria-label="AI task result">
+              <section class="archiveDetail aiTaskPreview" aria-label="${deps.escapeHtml(labels.resultAria)}">
                 <header class="archiveDetailHeader">
                   <div>
                     <p>${deps.escapeHtml(isGeneralWebPreview ? labels.generalWeb : isArchivedPreview ? labels.archive : labels.result)}</p>
@@ -473,10 +536,10 @@ window.KAOS_AI_TASKS_VIEW = (() => {
                   </div>
                 </header>
                 <dl class="archiveMetadata">
-                  ${deps.archiveMeta("Status", preview?.status || "")}
-                  ${deps.archiveMeta("Checked", webResult.checkedAt)}
-                  ${deps.archiveMeta("Model", webResult.model)}
-                  ${deps.archiveMeta("Memo", result.memoName || "")}
+                  ${deps.archiveMeta(labels.status, statusLabel(deps, preview?.status || ""))}
+                  ${deps.archiveMeta(labels.checked, webResult.checkedAt)}
+                  ${deps.archiveMeta(labels.model, webResult.model)}
+                  ${deps.archiveMeta(labels.memo, result.memoName || "")}
                 </dl>
                 ${
                   isGeneralWebPreview
@@ -493,7 +556,7 @@ window.KAOS_AI_TASKS_VIEW = (() => {
                   review: labels.review,
                   web: labels.web,
                 })}
-                <div class="archiveOcrRegion" data-ai-task-detail role="region" aria-label="AI task result" tabindex="0">
+                <div class="archiveOcrRegion" data-ai-task-detail role="region" aria-label="${deps.escapeHtml(labels.resultAria)}" tabindex="0">
                   <p>${deps.escapeHtml(labels.result)}</p>
                   <pre>${deps.escapeHtml(webResult.content)}</pre>
                 </div>
@@ -503,11 +566,11 @@ window.KAOS_AI_TASKS_VIEW = (() => {
             `
             : preview
             ? `
-              <section class="archiveDetail aiTaskPreview" aria-label="AI memo preview">
+              <section class="archiveDetail aiTaskPreview" aria-label="${deps.escapeHtml(labels.memoPreview)}">
                 <header class="archiveDetailHeader">
                   <div>
                     <p>${deps.escapeHtml(isArchivedPreview ? labels.archive : labels.memoPreview)}</p>
-                    <h3>${deps.escapeHtml(memo.title || "AI memo")}</h3>
+                    <h3>${deps.escapeHtml(memo.title || labels.untitled)}</h3>
                   </div>
                   <div class="archiveActions">
                     ${isArchivedPreview ? `<button class="archiveAction" type="button" data-ai-task-close>${deps.escapeHtml(labels.back)}</button>` : ""}
@@ -523,13 +586,13 @@ window.KAOS_AI_TASKS_VIEW = (() => {
                   </div>
                 </header>
                 <dl class="archiveMetadata">
-                  ${deps.archiveMeta("Status", preview?.status || "")}
-                  ${deps.archiveMeta("Source", memo.sourceTitle || sourceInfo.title || "")}
-                  ${deps.archiveMeta("URL", memo.sourceUrl || sourceInfo.url || "")}
-                  ${deps.archiveMeta("Checked", memo.checkedAt || "")}
-                  ${deps.archiveMeta("Memo", result.memoName || "")}
+                  ${deps.archiveMeta(labels.status, statusLabel(deps, preview?.status || ""))}
+                  ${deps.archiveMeta(labels.source, memo.sourceTitle || sourceInfo.title || "")}
+                  ${deps.archiveMeta(labels.url, memo.sourceUrl || sourceInfo.url || "")}
+                  ${deps.archiveMeta(labels.checked, memo.checkedAt || "")}
+                  ${deps.archiveMeta(labels.memo, result.memoName || "")}
                 </dl>
-                <div class="archiveOcrRegion" data-ai-task-detail role="region" aria-label="AI memo content" tabindex="0">
+                <div class="archiveOcrRegion" data-ai-task-detail role="region" aria-label="${deps.escapeHtml(labels.memoAria)}" tabindex="0">
                   <p>${deps.escapeHtml(labels.memoText)}</p>
                   <pre>${deps.escapeHtml(memo.content || "")}</pre>
                 </div>
@@ -543,7 +606,7 @@ window.KAOS_AI_TASKS_VIEW = (() => {
             <p class="archiveStatusMessage" role="status" aria-live="polite">${deps.escapeHtml(aiTasks.checked && !aiTasks.error ? labels.count(aiTasks.items.length) : aiTasks.loading ? labels.loading : labels.standby)}</p>
           </header>
           <div class="archiveColumnHeader" aria-hidden="true">
-            <span>NO.</span><span>DATE</span><span>TITLE</span>
+            <span>${deps.escapeHtml(labels.number)}</span><span>${deps.escapeHtml(labels.date)}</span><span>${deps.escapeHtml(labels.columnTitle)}</span>
           </div>
           ${
             aiTasks.loading && !aiTasks.checked

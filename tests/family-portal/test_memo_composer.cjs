@@ -6,6 +6,7 @@ const test = require("node:test");
 const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
 const memosViewSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/memos-view.js"), "utf8");
 const stylesSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
+const translationsSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/translations.js"), "utf8");
 
 test("top add opens the native one-box memo composer", () => {
   assert.match(appSource, /if \(action === "memo"\) \{\s*window\.location\.hash = "#\/add-memo";/s);
@@ -19,8 +20,8 @@ test("memo composer uploads arbitrary files and links them to a private memo", (
   assert.match(appSource, /fetch\("\/api\/memos\/attachments\/upload"/);
   assert.match(appSource, /JSON\.stringify\(\{ content: normalized, visibility: "PRIVATE", attachments: attachmentReferences \}\)/);
   assert.match(appSource, /name="files" type="file" multiple data-app-file data-memo-files/);
-  assert.match(appSource, /class="appFileChoose">파일 선택<\/span>/);
-  assert.match(appSource, /data-app-file-selection>선택한 파일 없음<\/span>/);
+  assert.match(appSource, /uiText\("memos\.chooseFile", "파일 선택"\)/);
+  assert.match(appSource, /uiText\("memos\.noFileSelected", "선택한 파일 없음"\)/);
   assert.match(appSource, /files\.length === 1[\s\S]*files\[0\]\.name[\s\S]*개 파일 선택됨/);
   assert.match(stylesSource, /\.appFileControl \{[\s\S]*font-family: inherit !important;/);
   assert.match(stylesSource, /\.appFileControl input\[type="file"\] \{[\s\S]*opacity: 0;/);
@@ -45,15 +46,18 @@ test("main and family memos routes render native archive board controls", () => 
   assert.match(memosViewSource, /data-archive-kind="memos"/);
   assert.match(memosViewSource, /data-memo-search/);
   assert.match(memosViewSource, /data-memos-refresh/);
-  assert.match(memosViewSource, /data-memos-refresh[^>]*>Reload<\/button>/);
+  assert.match(memosViewSource, /text\(deps, "memos\.reload", "Reload"\)/);
   assert.doesNotMatch(memosViewSource, /data-memos-refresh[^>]*>↻<\/button>/);
   assert.doesNotMatch(memosViewSource, /href="#\/add-memo">New<\/a>/);
-  assert.match(memosViewSource, /data-memos-toolbar="search"[^>]*>Search<\/button>/);
-  assert.match(memosViewSource, /data-memos-toolbar="tags"[^>]*>Tags<\/button>/);
+  assert.match(memosViewSource, /text\(deps, "memos\.search", "Search"\)/);
+  assert.match(memosViewSource, /text\(deps, "memos\.tags", "Tags"\)/);
   assert.match(memosViewSource, /class="archiveSearchBox memoToolbarPanel"/);
   assert.match(memosViewSource, /class="archiveTagFilters memoToolbarPanel"/);
   assert.match(memosViewSource, /data-memo-tag=/);
-  assert.match(appSource, /class="openButton memoHeaderCancel" href="#\/memos">Cancel<\/a>/);
+  assert.match(appSource, /class="openButton memoHeaderCancel" href="#\/memos">\$\{escapeHtml\(uiText\("common\.cancel", "Cancel"\)\)\}<\/a>/);
+  assert.match(translationsSource, /"memos\.search": "검색"/);
+  assert.match(translationsSource, /"memos\.tags": "태그"/);
+  assert.match(translationsSource, /"memos\.reload": "새로고침"/);
   assert.match(stylesSource, /\.memoHeaderCancel \{[\s\S]*font-size: 0\.78rem;[\s\S]*font-weight: 500;[\s\S]*line-height: 1;/);
   assert.match(stylesSource, /\.memoHeaderCancel::before \{\s*content: "\[";/);
   assert.match(stylesSource, /\.memoHeaderCancel::after \{\s*content: "\]";/);

@@ -104,13 +104,13 @@ test("memos dates align to the right edge without an empty action column", () =>
 test("memos archive rendering is delegated to the view module", () => {
   assert.match(appSource, /KAOS_MEMOS_VIEW\.renderMemos\(memosViewContext\(\)\)/);
   assert.match(memosViewSource, /data-archive-kind="memos"/);
-  assert.match(memosViewSource, /id="memosIndexTitle">RECORD BOARD/);
+  assert.match(memosViewSource, /id="memosIndexTitle">\$\{deps\.escapeHtml\(text\(deps, "memos\.board", "RECORD BOARD"\)\)\}/);
   assert.match(memosViewSource, /data-memo-open/);
   assert.match(memosViewSource, /data-memos-refresh/);
   assert.match(memosViewSource, /data-memos-clear/);
   assert.match(memosViewSource, /data-memo-detail/);
-  assert.match(indexSource, /src="\/memos-view\.js\?v=11"/);
-  assert.ok(indexSource.indexOf('src="/memos-view.js?v=11"') < indexSource.indexOf('src="/app.js?v=397"'));
+  assert.match(indexSource, /src="\/memos-view\.js\?v=12"/);
+  assert.ok(indexSource.indexOf('src="/memos-view.js?v=12"') < indexSource.indexOf('src="/app.js?v=398"'));
 });
 
 test("documents archive rendering is delegated to the view module", () => {
@@ -130,5 +130,5 @@ test("documents archive rendering is delegated to the view module", () => {
   assert.match(documentsViewSource, /data-paperless-open/);
   assert.match(documentsViewSource, /data-paperless-detail/);
   assert.match(indexSource, /src="\/documents-view\.js\?v=2"/);
-  assert.ok(indexSource.indexOf('src="/documents-view.js?v=2"') < indexSource.indexOf('src="/app.js?v=397"'));
+  assert.ok(indexSource.indexOf('src="/documents-view.js?v=2"') < indexSource.indexOf('src="/app.js?v=398"'));
 });

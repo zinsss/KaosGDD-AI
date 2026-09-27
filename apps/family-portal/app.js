@@ -45,7 +45,7 @@ const familyRoutes = {
   service: uiText("route.services", "Utils"),
   rouny: uiText("route.rouny", "Rouny"),
   memos: uiText("route.memos", "Memos"),
-  "ai-tasks": "AI Tasks",
+  "ai-tasks": uiText("route.aiTasks", "AI Tasks"),
   "text-presets": uiText("route.textPresets", "Preset Text"),
   ledger: uiText("route.ledger", "Ledger"),
   settings: uiText("route.settings", "Settings"),
@@ -3053,7 +3053,9 @@ function aiTaskErrorMessage(code) {
     ai_task_brain_invalid_memo: "KaosBrain returned an incomplete memo draft.",
     ai_task_archive_write_failed: "AI draft was made, but Governor could not write the AI Task archive.",
     ai_task_archive_unavailable: "AI Tasks archive is unavailable.",
+    ai_task_archive_item_unavailable: "AI Task archive item is unavailable.",
     ai_task_delete_failed: "Could not delete the AI Task archive record.",
+    ai_task_memo_save_failed: "Could not save AI memo.",
     ai_task_running_cannot_delete: "A running AI Task cannot be deleted.",
     ai_task_network_failed: "Network request did not reach Governor. Refresh or re-open Cloudflare Access, then retry.",
     ai_task_start_failed: "Could not start the AI Task.",
@@ -3071,6 +3073,43 @@ function aiTaskErrorMessage(code) {
     main_profile_required: "This AI Tasks route is not available for this profile.",
     ai_task_profile_required: "AI Tasks are only available on kaosgdd.net and family.kaosgdd.net.",
   };
+  if (portalProfile() === "family") {
+    if (normalized === "cloudflare_access_required") {
+      return uiText("aiTasks.loginRequired", "Cloudflare login is required.");
+    }
+    const familyMessages = {
+      web_task_prompt_required: "질문을 입력해 주세요.",
+      web_task_prompt_too_long: "질문이 너무 깁니다.",
+      ai_task_source_required: "URL 또는 공식 자료 원문을 추가해 주세요.",
+      ai_task_source_url_invalid: "자료 URL이 올바르지 않습니다.",
+      ai_task_source_url_blocked: "안전을 위해 차단된 URL입니다.",
+      ai_task_source_host_not_allowed: "공식 보건 자료 사이트가 아닙니다.",
+      ai_task_source_fetch_failed: "자료를 가져오지 못했습니다. 특정 문서 주소를 사용하거나 원문을 붙여 넣어 주세요.",
+      ai_task_source_unsupported_content_type: "아직 읽을 수 없는 자료 형식입니다.",
+      ai_task_source_too_large: "AI 작업에서 처리하기에는 자료가 너무 큽니다.",
+      ai_task_source_not_found: "자료를 찾을 수 없습니다. 특정 문서 주소를 사용하거나 원문을 붙여 넣어 주세요.",
+      ai_task_source_empty: "읽을 수 있는 원문이 없습니다. 특정 문서 주소를 사용하거나 원문을 붙여 넣어 주세요.",
+      ai_task_pdf_required: "PDF 파일을 선택하거나 URL·원문을 사용해 주세요.",
+      ai_task_pdf_size_invalid: "PDF 파일이 너무 큽니다.",
+      ai_task_pdf_signature_invalid: "올바른 PDF 파일이 아닙니다.",
+      ai_task_pdf_reader_missing: "서버의 PDF 읽기 기능을 사용할 수 없습니다.",
+      ai_task_pdf_text_empty: "PDF에서 글자를 읽지 못했습니다. 스캔 문서는 OCR 후 사용하거나 원문을 붙여 넣어 주세요.",
+      ai_task_archive_unavailable: "AI 작업 기록을 불러올 수 없습니다.",
+      ai_task_archive_item_unavailable: "AI 작업 기록을 찾을 수 없습니다.",
+      ai_task_archive_write_failed: "AI 초안은 만들었지만 기록을 저장하지 못했습니다.",
+      ai_task_delete_failed: "AI 작업 기록을 삭제하지 못했습니다.",
+      ai_task_memo_save_failed: "AI 메모를 저장하지 못했습니다.",
+      ai_task_running_cannot_delete: "진행 중인 AI 작업은 삭제할 수 없습니다.",
+      ai_task_network_failed: "서버에 연결하지 못했습니다. 새로고침하거나 Cloudflare에 다시 로그인한 뒤 시도해 주세요.",
+      ai_task_start_failed: "AI 작업을 시작하지 못했습니다.",
+      ai_task_background_failed: "AI 작업이 완료되기 전에 중단되었습니다.",
+      kaosbrain_openai_auth_required: "KaosBrain의 OpenAI 로그인이 필요합니다.",
+      kaosbrain_openai_disabled: "KaosBrain OpenAI 기능이 꺼져 있습니다.",
+      main_profile_required: "가족 화면에서는 이 AI 작업을 사용할 수 없습니다.",
+      ai_task_profile_required: "AI 작업은 KaosGDD 또는 가족 화면에서만 사용할 수 있습니다.",
+    };
+    return familyMessages[normalized] || uiText("aiTasks.genericError", "AI Task preview failed");
+  }
   return messages[normalized] || normalized || "AI Task preview failed";
 }
 
@@ -3184,7 +3223,7 @@ async function saveAiTaskMemo() {
     state.aiTasks = {
       ...state.aiTasks,
       applying: false,
-      error: error.message || "Could not save AI memo",
+      error: aiTaskErrorMessage(aiTaskErrorCode(error, "ai_task_memo_save_failed")),
     };
     render();
   }
@@ -3243,7 +3282,7 @@ function openAiTaskArchive(id) {
     selectedId: taskId,
     preview: aiTaskPreviewFromRecord(selected),
     openclawAuth: emptyOpenClawAuthState(),
-    error: selected ? "" : "AI Task archive item is unavailable",
+    error: selected ? "" : aiTaskErrorMessage("ai_task_archive_item_unavailable"),
   };
   render();
   window.requestAnimationFrame(() => document.querySelector("[data-ai-task-detail]")?.focus());
@@ -3308,6 +3347,7 @@ function aiTaskViewContext() {
   return {
     state,
     portalProfile,
+    uiText,
     escapeHtml,
     archiveDateParts,
     archiveStatusClass,
@@ -3430,6 +3470,29 @@ function memoTagOptions(items) {
     .sort((left, right) => left.localeCompare(right));
 }
 
+function memoErrorMessage(error, fallbackKey = "memos.unavailable", fallbackEnglish = "Memos are unavailable") {
+  const code = String(error?.message || error || "").trim();
+  if (portalProfile() !== "family") {
+    if (code === "memo_changed_elsewhere") {
+      return "This memo changed elsewhere. Your draft was kept; close and reopen the memo before saving again.";
+    }
+    return code || fallbackEnglish;
+  }
+  if (code === "cloudflare_access_required" || code === "HTTP 401" || code === "HTTP 403") {
+    return uiText("memos.loginRequired", "Cloudflare login is required.");
+  }
+  if (code === "memo_changed_elsewhere") {
+    return uiText("memos.changedElsewhere", "This memo changed elsewhere. Refresh and try again.");
+  }
+  if (code === "memo_content_or_attachment_required" || code === "memo_attachment_required") {
+    return uiText("memos.fileHelp", "Add text, files, or both. Up to 20 MB per file.");
+  }
+  if (/file exceeds 20 MB$/i.test(code)) {
+    return code.replace(/:\s*file exceeds 20 MB$/i, ": 파일은 20MB 이하만 추가할 수 있습니다.");
+  }
+  return uiText(fallbackKey, fallbackEnglish);
+}
+
 async function loadMemos(options = {}) {
   if (state.memos.loading) return;
   if (state.memos.checked && !options.force) return;
@@ -3465,7 +3528,7 @@ async function loadMemos(options = {}) {
       ...state.memos,
       checked: true,
       loading: false,
-      error: error.message || "Memos are unavailable",
+      error: memoErrorMessage(error),
       items: [],
       selected: null,
       selectedName: "",
@@ -3513,7 +3576,7 @@ async function loadMemoDetail(name) {
   const selected = state.memos.items.find((memo) => memo.name === normalizedName) || null;
   state.memos.selectedName = normalizedName;
   state.memos.detailLoading = false;
-  state.memos.detailError = selected ? "" : "Memo is unavailable";
+  state.memos.detailError = selected ? "" : uiText("memos.unavailable", "Memo is unavailable");
   state.memos.selected = selected;
   state.memos.editing = false;
   state.memos.editDraft = "";
@@ -9771,6 +9834,7 @@ function renderMemos() {
 function memosViewContext() {
   return {
     state,
+    uiText,
     escapeHtml,
     archiveDateParts,
     memoDisplayNumber,
@@ -9811,14 +9875,14 @@ function renderAddMemo() {
     <form class="panel memoComposerPanel" data-create-memo>
       <div class="panelHeader">
         <div>
-          <p class="label">Memos</p>
-          <h2>Add memo</h2>
+          <p class="label">${escapeHtml(uiText("memos.label", "Memos"))}</p>
+          <h2>${escapeHtml(uiText("memos.addTitle", "Add memo"))}</h2>
         </div>
-        <a class="openButton memoHeaderCancel" href="#/memos">Cancel</a>
+        <a class="openButton memoHeaderCancel" href="#/memos">${escapeHtml(uiText("common.cancel", "Cancel"))}</a>
       </div>
       <div class="composer memoComposer">
         <label>
-          <span>Memo</span>
+          <span>${escapeHtml(uiText("memos.inputLabel", "Memo"))}</span>
           <textarea
             name="content"
             rows="12"
@@ -9829,21 +9893,21 @@ function renderAddMemo() {
           >${escapeHtml(composer.content)}</textarea>
         </label>
         <div class="memoFilePicker">
-          <span>Files</span>
+          <span>${escapeHtml(uiText("common.files", "Files"))}</span>
           <label class="appFileControl">
             <input name="files" type="file" multiple data-app-file data-memo-files />
-            <span class="appFileChoose">파일 선택</span>
-            <span class="appFileSelection" data-app-file-selection>선택한 파일 없음</span>
+            <span class="appFileChoose">${escapeHtml(uiText("memos.chooseFile", "파일 선택"))}</span>
+            <span class="appFileSelection" data-app-file-selection>${escapeHtml(uiText("memos.noFileSelected", "선택한 파일 없음"))}</span>
           </label>
         </div>
         ${
           composer.error
             ? `<p class="formNote isError" role="alert">${escapeHtml(composer.error)}</p>`
-            : `<p class="formNote">Text, files, or both. Up to 20 MB per file.</p>`
+            : `<p class="formNote">${escapeHtml(uiText("memos.fileHelp", "Text, files, or both. Up to 20 MB per file."))}</p>`
         }
         <div class="formActions">
-          <a class="dangerButton" href="#/memos">Cancel</a>
-          <button class="primaryButton" type="submit" ${composer.saving ? "disabled" : ""}>${composer.saving ? "Saving..." : "Save memo"}</button>
+          <a class="dangerButton" href="#/memos">${escapeHtml(uiText("common.cancel", "Cancel"))}</a>
+          <button class="primaryButton" type="submit" ${composer.saving ? "disabled" : ""}>${escapeHtml(composer.saving ? uiText("common.saving", "Saving...") : uiText("memos.save", "Save memo"))}</button>
         </div>
       </div>
     </form>
@@ -12296,9 +12360,7 @@ document.addEventListener("submit", async (event) => {
       state.memos.editError = "";
     } catch (error) {
       await cleanupMemoAttachments(uploaded);
-      state.memos.editError = error.message === "memo_changed_elsewhere"
-        ? "This memo changed elsewhere. Your draft was kept; close and reopen the memo before saving again."
-        : error.message || "Could not update memo";
+      state.memos.editError = memoErrorMessage(error, "memos.updateFailed", "Could not update memo");
     } finally {
       state.memos.editSaving = false;
       render();
@@ -12326,7 +12388,7 @@ document.addEventListener("submit", async (event) => {
       state.memoComposer = {
         content,
         saving: false,
-        error: error.message || "Could not save memo",
+        error: memoErrorMessage(error, "memos.saveFailed", "Could not save memo"),
       };
       render();
     }
