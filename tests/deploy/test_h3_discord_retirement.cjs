@@ -63,6 +63,8 @@ test("maintenance collection is host scheduled and Discord independent", () => {
   assert.doesNotMatch(collector, /kaosdiscoord|discord\.py/);
   assert.match(helper, /maintenance_collector\.py/);
   assert.match(helper, /sudo systemctl enable --now kaos-h3-maintenance-report\.timer/);
+  assert.match(helper, /rendered_service=\$\(mktemp\)/);
+  assert.doesNotMatch(helper, /sudo install[^\n]*\/dev\/stdin/);
   assert.doesNotMatch(helper, /systemctl --user/);
   assert.match(serviceUnit, /User=__KAOS_DEPLOY_USER__/);
   assert.match(serviceUnit, /ExecStart=\/srv\/projects\/KaosGDD-AI\/deploy\/h3-backend\/kaos-h3 maintenance-report/);

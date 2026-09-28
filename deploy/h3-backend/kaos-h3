@@ -403,7 +403,7 @@ migrate_maintenance_report() {
 }
 
 install_maintenance_timer() {
-  local deploy_user deploy_home
+  local deploy_user deploy_home rendered_service
   require_command cut
   require_command getent
   require_command install
@@ -416,11 +416,15 @@ install_maintenance_timer() {
     || die "deploy username cannot be rendered safely in systemd"
   [[ "${deploy_home}" =~ ^/[A-Za-z0-9._/-]+$ ]] \
     || die "deploy home cannot be rendered safely in systemd"
+  rendered_service=$(mktemp)
   sed \
     -e "s|__KAOS_DEPLOY_USER__|${deploy_user}|g" \
     -e "s|__KAOS_DEPLOY_HOME__|${deploy_home}|g" \
-    "${DEPLOY_DIR}/kaos-h3-maintenance-report.service" \
-    | sudo install -m 0644 /dev/stdin /etc/systemd/system/kaos-h3-maintenance-report.service
+    "${DEPLOY_DIR}/kaos-h3-maintenance-report.service" > "${rendered_service}"
+  sudo install -m 0644 \
+    "${rendered_service}" \
+    /etc/systemd/system/kaos-h3-maintenance-report.service
+  rm -f -- "${rendered_service}"
   sudo install -m 0644 \
     "${DEPLOY_DIR}/kaos-h3-maintenance-report.timer" \
     /etc/systemd/system/kaos-h3-maintenance-report.timer
