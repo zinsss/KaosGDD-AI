@@ -115,15 +115,43 @@ class NotificationInboxApiTests(unittest.TestCase):
             requests.append(request)
             return FakeResponse({"ok": True, "plainText": "KaosToday"})
 
-        with patch.object(api, "secret_value", return_value="server-token"):
+        with (
+            patch.object(api, "secret_value", return_value="server-token"),
+            patch.object(
+                api,
+                "weather_settings_payload",
+                return_value={"settings": {"location": "pohang"}},
+            ),
+        ):
             result = api.today_briefing_payload("main", urlopen=fake_urlopen)
 
         self.assertEqual(result["plainText"], "KaosToday")
-        self.assertTrue(requests[0].full_url.endswith("/tools/briefing"))
+        self.assertTrue(requests[0].full_url.endswith("/tools/briefing?city=pohang"))
         self.assertEqual(requests[0].headers["Authorization"], "Bearer server-token")
 
         with self.assertRaisesRegex(api.NotificationInboxAPIError, "main_profile_required"):
             api.today_briefing_payload("family", urlopen=fake_urlopen)
+
+    def test_today_proxy_keeps_working_when_weather_settings_are_unavailable(self) -> None:
+        requests: list[api.urllib.request.Request] = []
+
+        def fake_urlopen(request: api.urllib.request.Request, timeout: float) -> FakeResponse:
+            requests.append(request)
+            return FakeResponse({"ok": True, "plainText": "KaosToday"})
+
+        with (
+            patch.object(api, "secret_value", return_value="server-token"),
+            patch.object(api, "weather_settings_payload", side_effect=OSError("offline")),
+            patch("builtins.print") as print_message,
+        ):
+            result = api.today_briefing_payload("main", urlopen=fake_urlopen)
+
+        self.assertTrue(result["ok"])
+        self.assertTrue(requests[0].full_url.endswith("/tools/briefing?city=pohang"))
+        print_message.assert_called_once_with(
+            "Today weather settings read failed: OSError",
+            flush=True,
+        )
 
     def test_handler_requires_personal_access_for_read_and_ack(self) -> None:
         read = CaptureHandler("/api/notifications", {"Host": "kaosgdd.net"})

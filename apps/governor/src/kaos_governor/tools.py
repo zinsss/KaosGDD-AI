@@ -47,7 +47,13 @@ from .scribble import MAX_SCRIBBLE_FILE_BYTES, ScribbleError, ScribbleStore
 from .shortcut_weather import ShortcutWeatherError, WeatherComparisonService
 from .web_push import WebPushError, WebPushService
 from .tasks import TaskMutationCommand, TaskMutationError, TaskMutationService
-from .tool_calendar import month_markers, visible_month_grid_range, weather_agenda_summary, weather_items_by_date
+from .tool_calendar import (
+    month_markers,
+    visible_month_grid_range,
+    weather_agenda_summary,
+    weather_items_by_date,
+    weather_marker,
+)
 from .tool_tasks import TASK_PRIORITIES, is_supplies_collection, normalize_supplies_due, validate_edit_due
 
 
@@ -72,6 +78,33 @@ BRIEFING_KIND_LABELS = {
     "Mail": "메일",
     "System": "시스템",
     "Notification": "알림",
+}
+BRIEFING_KIND_ICONS = {
+    "ai": "🤖",
+    "ai-task": "🤖",
+    "backup": "💾",
+    "brain": "🤖",
+    "calendar": "📅",
+    "caregiver": "🤝",
+    "completed": "✅",
+    "document": "📄",
+    "done": "✅",
+    "event": "📅",
+    "failed": "⚠️",
+    "failure": "⚠️",
+    "fax": "📠",
+    "mail": "✉️",
+    "memo": "📝",
+    "memos": "📝",
+    "notification": "🔔",
+    "paperless": "📄",
+    "reminder": "🔔",
+    "security": "🔒",
+    "supplies": "🛒",
+    "system": "⚙️",
+    "task": "◻️",
+    "warning": "⚠️",
+    "weather": "🌦️",
 }
 BRIEFING_TITLE_TRANSLATIONS = {
     "Market Day": "장날",
@@ -683,12 +716,27 @@ class BrainToolServer:
             }
         )
 
-    async def _shortcut_briefing(self, _request: web.Request) -> web.Response:
+    async def _shortcut_briefing(self, request: web.Request) -> web.Response:
         current = kst_now(self._now_provider())
         try:
             bootstrap = await asyncio.to_thread(self._calendar_adapter.bootstrap, "main")
         except CalendarAdapterError as exc:
             return web.json_response({"error": str(exc)}, status=502)
+        weather_city = str(request.query.get("city") or "pohang").strip().lower()
+        try:
+            forecast = await asyncio.to_thread(
+                self._calendar_adapter.month_weather,
+                "main",
+                start=current.date().isoformat(),
+                end=current.date().isoformat(),
+                city=weather_city,
+            )
+            weather_items = forecast.get("items")
+            if isinstance(weather_items, list):
+                bootstrap = {**bootstrap, "weather": weather_items}
+        except CalendarAdapterError:
+            # Weather is useful context, but it must never make Today unavailable.
+            pass
         inbox = self._notification_inbox
         notifications = (
             await asyncio.to_thread(
@@ -2528,12 +2576,59 @@ def _briefing_display_title(value: object) -> str:
     return title
 
 
+def _briefing_kind_icon(item: Mapping[str, object]) -> str:
+    kind = str(item.get("kind") or "notification").strip().casefold()
+    if kind == "task" and bool(item.get("completed")):
+        return "✅"
+    return BRIEFING_KIND_ICONS.get(kind, "🔔")
+
+
+def _briefing_weather_context(
+    bootstrap: Mapping[str, Any], *, today: date, hour: int
+) -> dict[str, object]:
+    if 6 <= hour < 12:
+        source_label, period = "Morning", "morning"
+    elif 12 <= hour < 18:
+        source_label, period = "Afternoon", "day"
+    elif 18 <= hour < 22:
+        source_label, period = "Evening", "evening"
+    else:
+        source_label, period = "Night", "night"
+
+    weather = weather_items_by_date(bootstrap).get(today)
+    if not weather:
+        return {"period": period, "sourceLabel": source_label, "glyph": ""}
+    dayparts = weather.get("dayparts")
+    selected = (
+        next(
+            (
+                item
+                for item in dayparts
+                if isinstance(item, Mapping)
+                and str(item.get("label") or "").casefold()
+                == source_label.casefold()
+            ),
+            None,
+        )
+        if isinstance(dayparts, list)
+        else None
+    )
+    glyph = str((selected or {}).get("glyph") or "").strip() or weather_marker(weather)
+    return {
+        "period": period,
+        "sourceLabel": source_label,
+        "glyph": glyph,
+        "condition": str((selected or {}).get("condition") or weather.get("condition") or ""),
+    }
+
+
 def _briefing_render_item(item: Mapping[str, object], *, include_time: bool = True) -> str:
     parts: list[str] = []
     if include_time:
         parts.append(str(item.get("time") or ""))
     kind = str(item.get("kind") or "")
-    parts.append(BRIEFING_KIND_LABELS.get(kind, kind or "알림"))
+    label = BRIEFING_KIND_LABELS.get(kind, kind or "알림")
+    parts.append(f"{_briefing_kind_icon(item)} {label}")
     parts.append(_briefing_display_title(item.get("title")) or "제목 없음")
     return " · ".join(part for part in parts if part)
 
@@ -2544,7 +2639,8 @@ def _briefing_render_plain_item(
     parts: list[str] = []
     if include_time:
         parts.append(str(item.get("time") or ""))
-    parts.append(_briefing_display_title(item.get("title")) or "제목 없음")
+    title = _briefing_display_title(item.get("title")) or "제목 없음"
+    parts.append(f"{_briefing_kind_icon(item)} {title}")
     return "  ".join(part for part in parts if part)
 
 
@@ -2572,6 +2668,7 @@ def shortcut_briefing_payload(
             "kind": kind,
             "title": _briefing_line_text(title) or "Untitled",
             "source": "calendar",
+            "completed": completed,
         }
         if clock and clock > now_clock and not completed:
             planned.append(item)
@@ -2635,7 +2732,9 @@ def shortcut_briefing_payload(
 
     log.sort(key=sort_key)
     planned.sort(key=sort_key)
-    header = f"# {today.year}년 {today.month}월 {today.day}일 {BRIEFING_WEEKDAYS_KO[today.weekday()]}"
+    weather = _briefing_weather_context(bootstrap, today=today, hour=now.hour)
+    weather_suffix = f" {weather['glyph']}" if weather["glyph"] else ""
+    header = f"# {today.year}년 {today.month}월 {today.day}일 {BRIEFING_WEEKDAYS_KO[today.weekday()]}{weather_suffix}"
     routine_mail = [
         item
         for item in log
@@ -2658,7 +2757,7 @@ def shortcut_briefing_payload(
         first_mail = str(routine_mail[0].get("time") or "")
         last_mail = str(routine_mail[-1].get("time") or "")
         mail_range = last_mail if first_mail == last_mail else f"{first_mail}–{last_mail}"
-        lines.extend(("", "## 알림", f"- 메일 {len(routine_mail)}건 · {mail_range}"))
+        lines.extend(("", "## 알림", f"- ✉️ 메일 {len(routine_mail)}건 · {mail_range}"))
     if not all_day and not timeline and not routine_mail:
         lines.extend(("", "## 지금까지", "- 기록 없음"))
     lines.extend(("", "## 예정"))
@@ -2679,7 +2778,7 @@ def shortcut_briefing_payload(
     lines.extend(("", bible_display, "", quote_display))
 
     plain_lines = [
-        f"### {today.year}년 {today.month}월 {today.day}일 ({BRIEFING_WEEKDAYS_KO[today.weekday()][0]})"
+        f"### {today.year}년 {today.month}월 {today.day}일 ({BRIEFING_WEEKDAYS_KO[today.weekday()][0]}){weather_suffix}"
     ]
     if all_day:
         plain_lines.extend(
@@ -2692,7 +2791,7 @@ def shortcut_briefing_payload(
     if routine_mail:
         last_mail = str(routine_mail[-1].get("time") or "")
         plain_lines.extend(
-            ("", "<알림>", f"메일 {len(routine_mail)}건 · 최근 {last_mail}")
+            ("", "<알림>", f"✉️ 메일 {len(routine_mail)}건 · 최근 {last_mail}")
         )
     if not all_day and not timeline and not routine_mail:
         plain_lines.extend(("", "지금까지 기록 없음"))
@@ -2710,6 +2809,7 @@ def shortcut_briefing_payload(
         "plannedCount": len(planned),
         "pendingNotificationCount": int(notifications.get("pendingCount") or 0),
         "criticalNotificationCount": int(notifications.get("criticalCount") or 0),
+        "weather": weather,
         "items": log,
         "planned": planned,
         "text": "\n".join(lines),

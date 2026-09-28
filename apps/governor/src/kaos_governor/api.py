@@ -346,7 +346,14 @@ def today_briefing_payload(
 ) -> dict[str, object]:
     if profile != "main":
         raise NotificationInboxAPIError("main_profile_required", 404)
-    return _notification_tool_payload("/tools/briefing", urlopen=urlopen)
+    try:
+        weather = weather_settings_payload(profile)
+        location = str(weather["settings"]["location"])
+    except Exception as exc:
+        print(f"Today weather settings read failed: {type(exc).__name__}", flush=True)
+        location = "pohang"
+    query = urllib.parse.urlencode({"city": location})
+    return _notification_tool_payload(f"/tools/briefing?{query}", urlopen=urlopen)
 
 
 def notification_acknowledge_id(path: str) -> str:

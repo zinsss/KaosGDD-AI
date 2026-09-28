@@ -128,7 +128,14 @@ class FakeCalendarAdapter:
                             "precipitationMm": 1.2,
                             "humidityPercent": 88,
                             "windSpeedKmh": 11,
-                        }
+                        },
+                        {
+                            "label": "Afternoon",
+                            "glyph": "☁️",
+                            "condition": "cloudy",
+                            "minTemp": 26,
+                            "maxTemp": 28,
+                        },
                     ],
                 }
             ]
@@ -244,6 +251,75 @@ class TimezoneTests(unittest.TestCase):
         )
 
         self.assertIn("<Quote of the Day>\nSmall steps still move us forward.", payload["plainText"])
+
+    def test_kaos_today_selects_weather_for_the_load_time_daypart(self) -> None:
+        bootstrap = {
+            "weather": [
+                {
+                    "date": "2026-09-14",
+                    "condition": "cloudy",
+                    "dayparts": [
+                        {"label": "Morning", "glyph": "🌤️", "condition": "partly_cloudy"},
+                        {"label": "Afternoon", "glyph": "☀️", "condition": "clear"},
+                        {"label": "Evening", "glyph": "🌧️", "condition": "rain"},
+                        {"label": "Night", "glyph": "🌙", "condition": "clear"},
+                    ],
+                }
+            ]
+        }
+        cases = (
+            (8, "morning", "Morning", "🌤️"),
+            (13, "day", "Afternoon", "☀️"),
+            (19, "evening", "Evening", "🌧️"),
+            (23, "night", "Night", "🌙"),
+            (2, "night", "Night", "🌙"),
+        )
+
+        for hour, period, source_label, glyph in cases:
+            with self.subTest(hour=hour):
+                payload = shortcut_briefing_payload(
+                    bootstrap,
+                    {},
+                    current=datetime(
+                        2026,
+                        9,
+                        14,
+                        hour,
+                        0,
+                        tzinfo=timezone(timedelta(hours=9)),
+                    ),
+                )
+                self.assertEqual(payload["weather"]["period"], period)
+                self.assertEqual(payload["weather"]["sourceLabel"], source_label)
+                self.assertEqual(payload["weather"]["glyph"], glyph)
+                self.assertTrue(payload["plainText"].splitlines()[0].endswith(glyph))
+
+    def test_kaos_today_marks_completed_tasks_and_system_notifications(self) -> None:
+        payload = shortcut_briefing_payload(
+            {
+                "tasks": [
+                    {
+                        "uid": "TASK-DONE",
+                        "summary": "Finished report",
+                        "due": "2026-09-14",
+                        "status": "COMPLETED",
+                    }
+                ]
+            },
+            {
+                "items": [
+                    {
+                        "createdAt": "2026-09-14T00:30:00Z",
+                        "category": "system",
+                        "title": "Backup healthy",
+                    }
+                ]
+            },
+            current=datetime(2026, 9, 14, 10, 0, tzinfo=timezone(timedelta(hours=9))),
+        )
+
+        self.assertIn("• ✅ Finished report", payload["plainText"])
+        self.assertIn("09:30  ⚙️ Backup healthy", payload["plainText"])
 
 
 class PendingMutationSerializationTests(unittest.TestCase):
@@ -794,18 +870,21 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["pendingNotificationCount"], 0)
         self.assertEqual(payload["criticalNotificationCount"], 0)
         self.assertEqual(payload["plannedCount"], 1)
-        self.assertIn("# 2026년 8월 14일 금요일", payload["text"])
-        self.assertIn("- 10:00 · 할 일 · Call mom", payload["text"])
-        self.assertIn("- 10:50 · 일정 · Clinic", payload["text"])
+        self.assertIn("# 2026년 8월 14일 금요일 ☁️", payload["text"])
+        self.assertIn("- 10:00 · ◻️ 할 일 · Call mom", payload["text"])
+        self.assertIn("- 10:50 · 📅 일정 · Clinic", payload["text"])
         self.assertIn(
-            "- 11:30 · 팩스 · 팩스 서비스 중단 — Check the office connector.",
+            "- 11:30 · 📠 팩스 · 팩스 서비스 중단 — Check the office connector.",
             payload["text"],
         )
-        self.assertIn("## 예정\n- 21:00 · 할 일 · Something Important", payload["text"])
-        self.assertIn("### 2026년 8월 14일 (금)", payload["plainText"])
-        self.assertIn("10:00  Call mom", payload["plainText"])
+        self.assertIn("## 예정\n- 21:00 · ◻️ 할 일 · Something Important", payload["text"])
+        self.assertIn("### 2026년 8월 14일 (금) ☁️", payload["plainText"])
+        self.assertIn("10:00  ◻️ Call mom", payload["plainText"])
         self.assertIn("<시간표>", payload["plainText"])
-        self.assertIn("<예정>\n21:00  Something Important", payload["plainText"])
+        self.assertIn("<예정>\n21:00  ◻️ Something Important", payload["plainText"])
+        self.assertEqual(payload["weather"]["period"], "day")
+        self.assertEqual(payload["weather"]["sourceLabel"], "Afternoon")
+        self.assertEqual(payload["weather"]["glyph"], "☁️")
         self.assertRegex(payload["plainText"], r"<[^>\n]+>\n[^\n]+\n\n<[^>\n]+>\n[^\n]+$")
         self.assertNotIn("*", payload["plainText"])
         self.assertNotIn("<오늘의 성경 말씀>", payload["plainText"])
@@ -843,8 +922,8 @@ class BrainToolServerTests(unittest.IsolatedAsyncioTestCase):
         payload = await response.json()
 
         self.assertEqual(response.status, 200)
-        self.assertIn("## 알림\n- 메일 2건 · 09:05–11:45", payload["text"])
-        self.assertIn("<알림>\n메일 2건 · 최근 11:45", payload["plainText"])
+        self.assertIn("## 알림\n- ✉️ 메일 2건 · 09:05–11:45", payload["text"])
+        self.assertIn("<알림>\n✉️ 메일 2건 · 최근 11:45", payload["plainText"])
         self.assertNotIn("Mail received.", payload["text"])
         self.assertEqual(
             len([item for item in payload["items"] if item["kind"] == "Mail"]),
