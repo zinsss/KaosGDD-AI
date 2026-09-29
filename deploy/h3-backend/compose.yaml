@@ -154,3 +154,7 @@ secrets:
     file: ./secrets/pushover_user_key
   web_push_vapid_private_key:
     file: ./secrets/web_push_vapid_private_key
+  thermal_print_home_token:
+    file: ./secrets/thermal_print_home_token
+  thermal_print_office_token:
+    file: ./secrets/thermal_print_office_token

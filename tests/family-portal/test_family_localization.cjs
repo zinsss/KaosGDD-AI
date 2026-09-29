@@ -42,10 +42,10 @@ test("Family routes and refreshed assets cannot fall back to stale English label
   assert.match(appSource, /"ai-tasks": uiText\("route\.aiTasks", "AI Tasks"\)/);
   assert.equal(translations["route.settings"], "설정");
   assert.equal(translations["route.aiTasks"], "AI 작업");
-  assert.match(indexSource, /src="\/translations\.js\?v=195"/);
+  assert.match(indexSource, /src="\/translations\.js\?v=197"/);
   assert.match(indexSource, /src="\/ai-tasks-view\.js\?v=6"/);
-  assert.match(indexSource, /src="\/memos-view\.js\?v=12"/);
-  assert.match(indexSource, /src="\/app\.js\?v=398"/);
+  assert.match(indexSource, /src="\/memos-view\.js\?v=13"/);
+  assert.match(indexSource, /src="\/app\.js\?v=400"/);
 });
 
 test("Family memo board renders Korean controls and headings", () => {

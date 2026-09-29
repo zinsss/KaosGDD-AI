@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kaos-thermal-print-connector"
+version = "0.1.0"
+description = "Authenticated CUPS boundary for KaosGDD receipt printers"
+requires-python = ">=3.12"
+dependencies = ["pypdf>=5,<7"]
+
+[project.scripts]
+kaos-thermal-print-connector = "kaos_thermal_print_connector.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

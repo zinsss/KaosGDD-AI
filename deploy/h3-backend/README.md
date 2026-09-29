@@ -369,6 +369,14 @@ token. The PostgreSQL
 service is named `governor-postgres` and stores data under
 `/srv/kaosgdd/kaosgovernor/postgres`.
 
+Personal 80 mm printing follows the same boundary. Governor renders the
+receipt PDF and talks to destination-specific connectors; the PWA receives
+only destination labels and readiness. Configure H4 with
+`THERMAL_PRINT_HOME_URL` and its matching secret. A later office connector is
+added with `THERMAL_PRINT_OFFICE_URL` and a different token, at which point the
+same print dialog presents both destinations. With both URLs blank, receipt
+preview works but physical Print remains disabled.
+
 For an architecture release that changes Governor migrations, use this order:
 
 ```bash

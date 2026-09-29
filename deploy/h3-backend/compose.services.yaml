@@ -199,6 +199,13 @@ services:
       AI_TASKS_BRAIN_URL: "${AI_TASKS_BRAIN_URL:-}"
       AI_TASKS_BRAIN_TOKEN_FILE: "/run/secrets/governor_api_token"
       AI_TASKS_BRAIN_TIMEOUT_SECONDS: "${AI_TASKS_BRAIN_TIMEOUT_SECONDS:-60}"
+      THERMAL_PRINT_HOME_URL: "${THERMAL_PRINT_HOME_URL:-}"
+      THERMAL_PRINT_HOME_LABEL: "${THERMAL_PRINT_HOME_LABEL:-Home}"
+      THERMAL_PRINT_HOME_TOKEN_FILE: "/run/secrets/thermal_print_home_token"
+      THERMAL_PRINT_OFFICE_URL: "${THERMAL_PRINT_OFFICE_URL:-}"
+      THERMAL_PRINT_OFFICE_LABEL: "${THERMAL_PRINT_OFFICE_LABEL:-Office}"
+      THERMAL_PRINT_OFFICE_TOKEN_FILE: "/run/secrets/thermal_print_office_token"
+      THERMAL_PRINT_TIMEOUT_SECONDS: "${THERMAL_PRINT_TIMEOUT_SECONDS:-10}"
       WEB_PUSH_ENABLED: "${WEB_PUSH_ENABLED:-false}"
       WEB_PUSH_SUBSCRIPTIONS_PATH: "/data/notifications/web-push-subscriptions.json"
       WEB_PUSH_OUTBOX_PATH: "/data/notifications/web-push-outbox.json"
@@ -223,6 +230,8 @@ services:
       - paperless_api_token
       - naver_mail_password
       - governor_api_token
+      - thermal_print_home_token
+      - thermal_print_office_token
     group_add:
       - "${KAOS_HOST_GID:-1000}"
     ports:

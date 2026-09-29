@@ -1,5 +1,11 @@
+FROM python:3.12-slim AS fonts
+RUN apt-get update \
+    && apt-get install --no-install-recommends --yes fonts-nanum \
+    && rm -rf /var/lib/apt/lists/*
+
 FROM python:3.12-slim AS build
 WORKDIR /build
+COPY --from=fonts /usr/share/fonts/truetype/nanum/NanumGothic.ttf /usr/local/share/kaos-governor/fonts/NanumGothic.ttf
 COPY apps/governor ./governor
 RUN python -m pip install --no-cache-dir --prefix=/install ./governor
 
@@ -12,6 +18,7 @@ RUN apt-get update \
     && useradd --uid 10001 --gid kaos --no-create-home --shell /usr/sbin/nologin kaos
 COPY --from=build /install /usr/local
 COPY apps/governor/migrations /usr/local/share/kaos-governor/migrations
+COPY --from=fonts /usr/share/fonts/truetype/nanum/NanumGothic.ttf /usr/local/share/kaos-governor/fonts/NanumGothic.ttf
 COPY apps/family-portal/fonts/SymbolsNerdFontMono-Regular.ttf /usr/local/share/kaos-governor/fonts/SymbolsNerdFontMono-Regular.ttf
 RUN chmod -R a=rX /usr/local/share/kaos-governor/migrations
 USER 10001:10001

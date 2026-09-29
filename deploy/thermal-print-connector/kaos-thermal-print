@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DEPLOY_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(cd -- "${DEPLOY_DIR}/../.." && pwd)
+ENV_FILE="${DEPLOY_DIR}/.env"
+SECRETS_DIR="${DEPLOY_DIR}/secrets"
+TOKEN_FILE="${SECRETS_DIR}/thermal_connector_token"
+COMPOSE=(docker compose --project-directory "${DEPLOY_DIR}" --env-file "${ENV_FILE}" -f "${DEPLOY_DIR}/compose.yaml")
+
+die() {
+  printf 'ERROR: %s\n' "$*" >&2
+  exit 1
+}
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || die "$1 is required"
+}
+
+load_env() {
+  [[ -f "${ENV_FILE}" ]] || die "run: ${0} setup"
+  set -a
+  # shellcheck disable=SC1090
+  source "${ENV_FILE}"
+  set +a
+}
+
+setup() {
+  require_command docker
+  require_command openssl
+  docker compose version >/dev/null 2>&1 || die "Docker Compose v2 is required"
+  mkdir -p "${SECRETS_DIR}"
+  if [[ ! -f "${ENV_FILE}" ]]; then
+    cp "${DEPLOY_DIR}/.env.example" "${ENV_FILE}"
+    sed -i "s/^THERMAL_CONNECTOR_HOST_GID=.*/THERMAL_CONNECTOR_HOST_GID=$(id -g)/" "${ENV_FILE}"
+  fi
+  if [[ ! -s "${TOKEN_FILE}" ]]; then
+    openssl rand -hex 32 > "${TOKEN_FILE}"
+  fi
+  chmod 0640 "${TOKEN_FILE}"
+  if ! install -d -m 0770 -o "$(id -u)" -g "$(id -g)" /srv/kaos/data/kaosgdd-ai/thermal-print 2>/dev/null; then
+    require_command sudo
+    sudo install -d -m 0770 -o "$(id -u)" -g "$(id -g)" /srv/kaos/data/kaosgdd-ai/thermal-print
+  fi
+  printf 'Setup complete. Keep dry-run until CUPS and the printer queue are ready.\n'
+  printf 'Copy %s securely to H3 as thermal_print_home_token (or the office token).\n' "${TOKEN_FILE}"
+}
+
+preflight() {
+  require_command docker
+  require_command curl
+  load_env
+  [[ -s "${TOKEN_FILE}" ]] || die "missing secret: ${TOKEN_FILE}"
+  case "${THERMAL_CONNECTOR_MODE:-dry-run}" in
+    dry-run) ;;
+    cups)
+      require_command lpstat
+      [[ -n "${THERMAL_CONNECTOR_PRINTER:-}" ]] || die "THERMAL_CONNECTOR_PRINTER is required in cups mode"
+      lpstat -p "${THERMAL_CONNECTOR_PRINTER}" >/dev/null \
+        || die "CUPS queue is unavailable: ${THERMAL_CONNECTOR_PRINTER}"
+      ;;
+    *) die "THERMAL_CONNECTOR_MODE must be dry-run or cups" ;;
+  esac
+  "${COMPOSE[@]}" config --quiet
+  printf 'Preflight passed.\n'
+}
+
+test_image() {
+  require_command docker
+  docker build --target test \
+    --tag kaos-thermal-print-connector:test \
+    --file "${REPO_ROOT}/apps/thermal-print-connector/Dockerfile" \
+    "${REPO_ROOT}"
+  docker run --rm kaos-thermal-print-connector:test
+}
+
+smoke() {
+  load_env
+  local token address
+  token=$(tr -d '\r\n' < "${TOKEN_FILE}")
+  address=${THERMAL_CONNECTOR_HOST:-127.0.0.1}
+  for _attempt in $(seq 1 20); do
+    if curl --fail --silent --show-error \
+      -H "Authorization: Bearer ${token}" \
+      "http://${address}:${THERMAL_CONNECTOR_PORT:-8100}/health"; then
+      printf '\n'
+      return
+    fi
+    sleep 1
+  done
+  "${COMPOSE[@]}" logs --tail=80 thermal-print-connector >&2 || true
+  die "thermal print connector did not become reachable"
+}
+
+case "${1:-}" in
+  setup) setup ;;
+  preflight) preflight ;;
+  test) test_image ;;
+  up) preflight; "${COMPOSE[@]}" up --detach --build thermal-print-connector; smoke ;;
+  down) load_env; "${COMPOSE[@]}" down ;;
+  restart) preflight; "${COMPOSE[@]}" up --detach --build --force-recreate thermal-print-connector; smoke ;;
+  logs) load_env; "${COMPOSE[@]}" logs --follow --tail=100 thermal-print-connector ;;
+  *) die "usage: ${0} setup|preflight|test|up|down|restart|logs" ;;
+esac

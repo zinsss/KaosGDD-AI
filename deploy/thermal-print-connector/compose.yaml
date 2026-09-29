@@ -1,0 +1,40 @@
+name: kaos-thermal-print
+
+services:
+  thermal-print-connector:
+    build:
+      context: ../..
+      dockerfile: apps/thermal-print-connector/Dockerfile
+      target: runtime
+    image: kaos-thermal-print-connector:0.1.0
+    pull_policy: never
+    container_name: kaos-thermal-print-connector
+    restart: unless-stopped
+    init: true
+    network_mode: host
+    env_file:
+      - .env
+    secrets:
+      - thermal_connector_token
+    volumes:
+      - /srv/kaos/data/kaosgdd-ai/thermal-print:/data/connector
+    group_add:
+      - "${THERMAL_CONNECTOR_HOST_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777,noexec,nosuid
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
+    pids_limit: 60
+    logging:
+      driver: json-file
+      options:
+        max-size: 2m
+        max-file: "2"
+
+secrets:
+  thermal_connector_token:
+    file: ./secrets/thermal_connector_token

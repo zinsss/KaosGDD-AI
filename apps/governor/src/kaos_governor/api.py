@@ -26,7 +26,7 @@ import zipfile
 from html.parser import HTMLParser
 from typing import Callable
 
-from kaos_governor import ledger
+from kaos_governor import ledger, thermal_print
 from kaos_governor.ai_tasks import AITaskArchive, AITaskError
 from kaos_governor.calendar import GeneratedCalendarSettings
 from kaos_governor.database import connect, database_status, wait_for_database_and_migrate
@@ -122,6 +122,18 @@ def xlsx_response(handler: BaseHTTPRequestHandler, data: bytes, filename: str) -
     encoded_name = urllib.parse.quote(filename, safe="")
     handler.send_response(200)
     handler.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    handler.send_header("Content-Disposition", f"attachment; filename*=UTF-8''{encoded_name}")
+    handler.send_header("Cache-Control", "private, no-store")
+    handler.send_header("X-Content-Type-Options", "nosniff")
+    handler.send_header("Content-Length", str(len(data)))
+    handler.end_headers()
+    handler.wfile.write(data)
+
+
+def pdf_download_response(handler: BaseHTTPRequestHandler, data: bytes, filename: str) -> None:
+    encoded_name = urllib.parse.quote(filename, safe="")
+    handler.send_response(200)
+    handler.send_header("Content-Type", "application/pdf")
     handler.send_header("Content-Disposition", f"attachment; filename*=UTF-8''{encoded_name}")
     handler.send_header("Cache-Control", "private, no-store")
     handler.send_header("X-Content-Type-Options", "nosniff")
@@ -3787,6 +3799,32 @@ class Handler(BaseHTTPRequestHandler):
                 print(f"Ledger export failed: {type(exc).__name__}", flush=True)
                 json_response(self, 503, {"ok": False, "error": "ledger_export_unavailable"})
             return
+        if parsed.path == "/api/ledger/export.pdf":
+            try:
+                require_family_profile(self.headers)
+                filename = f"kaos-family-ledger-A4-landscape-{datetime.now().date().isoformat()}.pdf"
+                pdf_download_response(self, ledger.pdf_bytes(), filename)
+            except ValueError as exc:
+                json_response(self, ledger_status_for_error(exc), {"ok": False, "error": str(exc)})
+            except Exception as exc:
+                print(f"Ledger PDF export failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "ledger_pdf_export_unavailable"})
+            return
+        if parsed.path == "/api/thermal-print/destinations":
+            try:
+                require_main_access(self.headers)
+                json_response(self, 200, thermal_print.destinations_payload())
+            except (ValueError, thermal_print.ThermalPrintError, memos_relay.MemosRelayError) as exc:
+                if isinstance(exc, thermal_print.ThermalPrintError):
+                    json_response(self, exc.status, {"ok": False, "error": exc.code})
+                elif isinstance(exc, memos_relay.MemosRelayError):
+                    json_response(self, exc.status, {"ok": False, "error": exc.code})
+                else:
+                    json_response(self, 404, {"ok": False, "error": str(exc)})
+            except Exception as exc:
+                print(f"Thermal print destinations failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "thermal_print_unavailable"})
+            return
         if parsed.path == "/api/paperless/documents":
             try:
                 require_main_access(self.headers)
@@ -4157,6 +4195,39 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == "/api/thermal-print/preview":
+            try:
+                require_main_access(self.headers)
+                payload = json_request(self)
+                document = payload.get("document")
+                pdf = thermal_print.render_pdf(document)
+                inline_pdf_response(self, pdf, thermal_print.filename_for_document(document))
+            except (ValueError, thermal_print.ThermalPrintError, memos_relay.MemosRelayError) as exc:
+                if isinstance(exc, thermal_print.ThermalPrintError):
+                    json_response(self, exc.status, {"ok": False, "error": exc.code})
+                elif isinstance(exc, memos_relay.MemosRelayError):
+                    json_response(self, exc.status, {"ok": False, "error": exc.code})
+                else:
+                    json_response(self, 400, {"ok": False, "error": str(exc)})
+            except Exception as exc:
+                print(f"Thermal print preview failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "thermal_print_preview_unavailable"})
+            return
+        if parsed.path == "/api/thermal-print/jobs":
+            try:
+                require_main_access(self.headers)
+                json_response(self, 202, thermal_print.submit_payload(json_request(self)))
+            except (ValueError, thermal_print.ThermalPrintError, memos_relay.MemosRelayError) as exc:
+                if isinstance(exc, thermal_print.ThermalPrintError):
+                    json_response(self, exc.status, {"ok": False, "error": exc.code})
+                elif isinstance(exc, memos_relay.MemosRelayError):
+                    json_response(self, exc.status, {"ok": False, "error": exc.code})
+                else:
+                    json_response(self, 400, {"ok": False, "error": str(exc)})
+            except Exception as exc:
+                print(f"Thermal print submission failed: {type(exc).__name__}", flush=True)
+                json_response(self, 503, {"ok": False, "error": "thermal_print_unavailable"})
+            return
         if parsed.path == "/api/fax/send/proposals":
             try:
                 actor_id = require_main_access(self.headers)

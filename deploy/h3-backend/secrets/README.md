@@ -14,10 +14,16 @@
 - `pushover_app_token`
 - `pushover_user_key`
 - `web_push_vapid_private_key`
+- `thermal_print_home_token`
+- `thermal_print_office_token`
 
 They are mounted read-only into Governor and ignored by Git. Store one secret
 per file with no quotes. Empty optional files are allowed only while their
 corresponding feature is disabled.
+
+The two thermal-print tokens authenticate only their matching narrow receipt
+printer connectors. Use different values for Home (H4) and Office. Connector
+URLs and tokens are never returned to the browser.
 
 The retired H3 Discord token is not created or mounted. On the first `up`, an
 existing `secrets/discord_bot_token` is moved without being read to

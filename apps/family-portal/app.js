@@ -7436,6 +7436,164 @@ function renderFamilyAgenda() {
   `;
 }
 
+function thermalPrintAction(kind, label = "Print") {
+  if (portalProfile() !== "main") return "";
+  return `<button class="openButton thermalPrintAction" type="button" data-thermal-print="${escapeHtml(kind)}">${escapeHtml(label)}</button>`;
+}
+
+function thermalPrintCollectionLabel(collectionId) {
+  const collection = activeCalendarData().collections.find((item) => item.id === collectionId);
+  return collection?.name || collectionId || "";
+}
+
+function thermalPrintAgendaDocument() {
+  const today = ymd(new Date());
+  const endDate = addDaysToDateValue(today, 6);
+  const events = mockAdapter.getEvents()
+    .filter((event) => event.date >= today && event.date <= endDate)
+    .sort(sortByDateTime);
+  const tasks = mockAdapter.getTasks()
+    .filter((task) => !task.done && task.due && (
+      (task.due >= today && task.due <= endDate) || isRecurringTask(task)
+    ))
+    .sort(compareTasksByDue);
+  const grouped = familyAgendaMixedItems(events, tasks).reduce((result, entry) => {
+    if (!result[entry.date]) result[entry.date] = [];
+    result[entry.date].push(entry);
+    return result;
+  }, {});
+  return {
+    version: 1,
+    kind: "agenda",
+    title: "Agenda",
+    subtitle: `${today} - ${endDate}`,
+    meta: [
+      { label: "Events", value: String(events.length) },
+      { label: "Tasks", value: String(tasks.length) },
+    ],
+    sections: Object.keys(grouped).sort().map((date) => {
+      const weather = weatherForDate(date);
+      return {
+        heading: [date, weather ? tempRange(weather) : ""].filter(Boolean).join(" · "),
+        items: grouped[date].map((entry) => entry.kind === "event"
+          ? {
+              title: entry.event.title,
+              meta: entry.event.allDay ? "All day · Event" : `${familyAgendaEventTime(entry.event)} · Event`,
+              detail: entry.event.detail || "",
+            }
+          : {
+              title: entry.task.title,
+              meta: [entry.task.dueTime, "Task", entry.task.priorityMark].filter(Boolean).join(" · "),
+              detail: entry.task.subtasks.length ? `${entry.task.subtasks.length} subtasks` : "",
+              checked: false,
+            }),
+      };
+    }),
+  };
+}
+
+function thermalPrintTasksDocument() {
+  const tasks = mockAdapter.getTasks().filter((task) => taskMatchesMode(task, state.taskMode));
+  const groups = groupTasksByDue(tasks);
+  const collection = mockAdapter.getCurrentCollection();
+  return {
+    version: 1,
+    kind: "tasks",
+    title: state.taskMode === "done" ? "Completed Tasks" : "Tasks",
+    subtitle: collection?.name || "All collections",
+    meta: [{ label: "Total", value: String(tasks.length) }],
+    sections: Object.keys(groups).sort((left, right) => {
+      if (left === uiText("task.noDueDate", "No due date")) return 1;
+      if (right === uiText("task.noDueDate", "No due date")) return -1;
+      return left.localeCompare(right);
+    }).map((due) => ({
+      heading: due,
+      items: groups[due].map((task) => ({
+        title: task.title,
+        meta: [task.dueTime, task.priorityMark, thermalPrintCollectionLabel(task.collection)].filter(Boolean).join(" · "),
+        detail: task.subtasks.length ? `${task.subtasks.filter((item) => item.done).length}/${task.subtasks.length} subtasks` : "",
+        checked: task.done,
+      })),
+    })),
+  };
+}
+
+function thermalPrintEventDocument() {
+  const event = findEventById(hashParam("uid"));
+  if (!event) return null;
+  const time = event.allDay
+    ? `${event.startDate} · All day`
+    : `${event.startDate} ${event.startTime}${event.endDate || event.endTime ? ` - ${event.endDate || event.startDate} ${event.endTime || ""}`.trimEnd() : ""}`;
+  return {
+    version: 1,
+    kind: "event",
+    title: event.title,
+    subtitle: time,
+    meta: [
+      { label: "Calendar", value: thermalPrintCollectionLabel(event.collection) },
+      ...(event.detail && event.detail !== event.description ? [{ label: "Location", value: event.detail }] : []),
+      ...(event.repeat ? [{ label: "Repeat", value: event.repeat }] : []),
+      ...(event.alarmTime ? [{ label: "Alarm", value: event.alarmTime }] : []),
+    ],
+    body: event.description || "",
+  };
+}
+
+function thermalPrintTaskDocument() {
+  const task = findTaskById(hashParam("uid"));
+  if (!task) return null;
+  return {
+    version: 1,
+    kind: "task",
+    title: task.title,
+    subtitle: task.done ? "Completed" : "Active",
+    meta: [
+      { label: "Due", value: [task.due || "No due date", task.dueTime].filter(Boolean).join(" ") },
+      { label: "List", value: thermalPrintCollectionLabel(task.collection) },
+      ...(task.priorityLabel ? [{ label: "Priority", value: task.priorityLabel }] : []),
+    ],
+    sections: task.subtasks.length
+      ? [{ heading: "Subtasks", items: task.subtasks.map((item) => ({ title: item.text, checked: item.done })) }]
+      : [],
+    body: task.notes || "",
+  };
+}
+
+function thermalPrintMemoDocument() {
+  const memo = state.memos.selected;
+  if (!memo) return null;
+  const bodyLines = String(memo.content || "").split(/\r?\n/);
+  const firstContentLine = bodyLines.findIndex((line) => line.trim());
+  if (firstContentLine >= 0 && memoTitleFromContent(bodyLines[firstContentLine]) === memo.title) {
+    bodyLines.splice(firstContentLine, 1);
+  }
+  return {
+    version: 1,
+    kind: "memo",
+    title: memo.title || "Memo",
+    subtitle: `Memo #${memoDisplayNumber(memo)}`,
+    meta: [
+      ...(memo.updated ? [{ label: "Updated", value: formatDocumentDate(memo.updated) }] : []),
+      ...(memo.created ? [{ label: "Created", value: formatDocumentDate(memo.created) }] : []),
+      ...(memo.tags?.length ? [{ label: "Tags", value: memo.tags.slice(0, 20).join(", ") }] : []),
+    ],
+    sections: memo.attachments?.length
+      ? [{ heading: "Attachments", items: memo.attachments.map((item) => ({ title: item.filename, meta: item.type || "" })) }]
+      : [],
+    body: bodyLines.join("\n").trim(),
+  };
+}
+
+function thermalPrintDocument(kind) {
+  if (portalProfile() !== "main") return null;
+  if (kind === "agenda") return thermalPrintAgendaDocument();
+  if (kind === "tasks") return thermalPrintTasksDocument();
+  if (kind === "event") return thermalPrintEventDocument();
+  if (kind === "task") return thermalPrintTaskDocument();
+  if (kind === "memo") return thermalPrintMemoDocument();
+  return null;
+}
+
 function renderMainAgenda() {
   const today = ymd(new Date());
   state.selectedDate = today;
@@ -7463,6 +7621,7 @@ function renderMainAgenda() {
               ${weather ? `<span class="overviewWeatherGlyph">${escapeHtml(weatherGlyph(weather))}</span>` : ""}
             </h2>
           </div>
+          ${thermalPrintAction("agenda")}
         </div>
         <div class="panelBody">
           <div class="summaryGrid">
@@ -7612,6 +7771,12 @@ function renderTaskFilters() {
 function renderTaskListPanel(tasks) {
   return `
     <section class="panel taskListPanel">
+      ${portalProfile() === "main" ? `
+        <div class="panelHeader thermalPrintPanelHeader">
+          <h2>${uiText("task.label", "Tasks")}</h2>
+          ${thermalPrintAction("tasks")}
+        </div>
+      ` : ""}
       <div class="panelBody">${renderTaskRows(tasks)}</div>
     </section>
   `;
@@ -7687,7 +7852,7 @@ function renderAddEvent() {
   return `${renderCollectionRail()}${renderAddEventTabs()}${contextBody}`;
 }
 
-function renderContextHeader(label, title, closeHref) {
+function renderContextHeader(label, title, closeHref, actionHtml = "") {
   return `
     <section class="panel">
       <div class="panelHeader">
@@ -7695,7 +7860,10 @@ function renderContextHeader(label, title, closeHref) {
           <p class="label">${escapeHtml(label)}</p>
           <h2>${escapeHtml(title)}</h2>
         </div>
-        <a class="openButton" href="${escapeHtml(closeHref)}">${uiText("common.close", "Close")}</a>
+        <div class="contextHeaderActions">
+          ${actionHtml}
+          <a class="openButton" href="${escapeHtml(closeHref)}">${uiText("common.close", "Close")}</a>
+        </div>
       </div>
     </section>
   `;
@@ -7813,7 +7981,12 @@ function renderEditEvent() {
     state.selectedDate = calendarEvent.startDate || calendarEvent.date;
   }
 
-  const header = renderContextHeader(uiText("event.details", "Event details"), uiText("route.editEvent", "Edit Event"), "#/calendar");
+  const header = renderContextHeader(
+    uiText("event.details", "Event details"),
+    uiText("route.editEvent", "Edit Event"),
+    "#/calendar",
+    thermalPrintAction("event"),
+  );
   let body;
   if (!calendarEvent.editable) {
     body = `
@@ -7932,12 +8105,12 @@ function renderEditTask() {
   if (isDesktopLayout()) {
     return renderTaskWorkspace(`
       <aside class="desktopContextPane contextPaneStack">
-        ${renderContextHeader(uiText("task.details", "Task details"), uiText("route.editTask", "Edit Task"), "#/tasks")}
+        ${renderContextHeader(uiText("task.details", "Task details"), uiText("route.editTask", "Edit Task"), "#/tasks", thermalPrintAction("task"))}
         ${form}
       </aside>
     `);
   }
-  return `${renderCollectionRail()}${form}`;
+  return `${renderCollectionRail()}${renderContextHeader(uiText("task.details", "Task details"), uiText("route.editTask", "Edit Task"), "#/tasks", thermalPrintAction("task"))}${form}`;
 }
 
 function renderTaskEditorForm(task = null, draft = {}) {
@@ -9805,7 +9978,8 @@ function renderLedger() {
           <h2>${escapeHtml(uiText("ledger.title", "Medical association ledger"))}</h2>
         </div>
         <div class="ledgerToolbarActions">
-          <a class="openButton" href="/api/ledger/export.xlsx" download data-ledger-export>${escapeHtml(uiText("ledger.export", "XLSX"))}</a>
+          <a class="openButton" href="/api/ledger/export.xlsx" download data-ledger-export="xlsx">${escapeHtml(uiText("ledger.export", "XLSX"))}</a>
+          <a class="openButton" href="/api/ledger/export.pdf" download data-ledger-export="pdf">${escapeHtml(uiText("ledger.exportPdf", "PDF"))}</a>
           <button class="openButton" type="button" data-ledger-backup>${escapeHtml(uiText("ledger.backup", "Backup"))}</button>
           <button class="primaryButton" type="button" data-ledger-add>${escapeHtml(uiText("common.add", "Add"))}</button>
         </div>
@@ -9834,6 +10008,7 @@ function renderMemos() {
 function memosViewContext() {
   return {
     state,
+    portalProfile,
     uiText,
     escapeHtml,
     archiveDateParts,
@@ -10746,6 +10921,13 @@ document.addEventListener("click", async (event) => {
     event.stopPropagation();
     return;
   }
+  const thermalPrintButton = event.target.closest("[data-thermal-print]");
+  if (thermalPrintButton) {
+    event.preventDefault();
+    const printDocument = thermalPrintDocument(thermalPrintButton.dataset.thermalPrint || "");
+    if (printDocument) window.KAOS_THERMAL_PRINT?.open(printDocument);
+    return;
+  }
   const familyNavLink = event.target.closest("[data-nav]");
   if (familyNavLink && portalProfile() === "family") {
     event.preventDefault();
@@ -10914,7 +11096,12 @@ document.addEventListener("click", async (event) => {
   const exportLedger = event.target.closest("[data-ledger-export]");
   if (exportLedger) {
     event.preventDefault();
-    if (!window.confirm(uiText("dialog.ledgerExportConfirm", "Download the Excel file to this device?"))) return;
+    const exportFormat = exportLedger.dataset.ledgerExport || "xlsx";
+    const confirmKey = exportFormat === "pdf" ? "dialog.ledgerPdfExportConfirm" : "dialog.ledgerExportConfirm";
+    const confirmFallback = exportFormat === "pdf"
+      ? "Download the printable PDF file to this device?"
+      : "Download the Excel file to this device?";
+    if (!window.confirm(uiText(confirmKey, confirmFallback))) return;
     const link = document.createElement("a");
     link.href = exportLedger.href;
     link.download = "";

@@ -93,6 +93,7 @@ window.KAOS_MEMOS_VIEW = (() => {
                   <h3 id="memoDetailTitle">${deps.escapeHtml(selected.title)}</h3>
                 </div>
                 <div class="archiveActions memoDetailActions">
+                  ${deps.portalProfile() === "main" && !memos.editing ? `<button class="archiveAction" type="button" data-thermal-print="memo">${deps.escapeHtml(text(deps, "common.print", "PRINT"))}</button>` : ""}
                   ${memos.editing ? "" : `<button class="archiveAction isActive" type="button" data-memo-edit-start>${deps.escapeHtml(text(deps, "common.edit", "EDIT"))}</button>`}
                   <button class="archiveAction" type="button" data-memo-close ${memos.editSaving ? "disabled" : ""}>${deps.escapeHtml(text(deps, "common.back", "BACK"))}</button>
                 </div>

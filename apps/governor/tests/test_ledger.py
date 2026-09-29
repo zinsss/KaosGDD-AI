@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import io
 import importlib.util
 import importlib
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
+
+from pypdf import PdfReader
 
 
 def load_module(name: str, relative: str):
@@ -94,6 +98,37 @@ class LedgerServiceTests(unittest.TestCase):
         self.assertEqual(api.ledger_status_for_error(Exception("ledger_revision_conflict")), 409)
         self.assertEqual(api.ledger_status_for_error(ValueError("family_profile_required")), 404)
         self.assertEqual(api.ledger_status_for_error(ValueError("invalid_ledger_date")), 400)
+
+    def test_printable_pdf_matches_a4_landscape_pagination_contract(self) -> None:
+        service = load_module("kaos_ledger_service_pdf", "src/kaos_governor/ledger/service.py")
+        entries = [
+            {
+                "date": f"2026-09-{(index % 28) + 1:02d}",
+                "category": "계좌 지출",
+                "amount": 1000 + index,
+                "details": f"거래 내역 {index + 1}",
+                "account": 2_000_000 - index,
+                "cash": 300_000 + index,
+                "gift": 50_000,
+            }
+            for index in range(55)
+        ]
+        payload = {"ok": True, "entries": entries, "entryCount": len(entries)}
+
+        with patch.object(service, "list_ledger", return_value=payload):
+            data = service.pdf_bytes()
+
+        self.assertTrue(data.startswith(b"%PDF-"))
+        reader = PdfReader(io.BytesIO(data))
+        self.assertEqual(len(reader.pages), 3)
+        self.assertAlmostEqual(float(reader.pages[0].mediabox.width), 841.89, places=1)
+        self.assertAlmostEqual(float(reader.pages[0].mediabox.height), 595.28, places=1)
+        first_page = reader.pages[0].extract_text()
+        last_page = reader.pages[-1].extract_text()
+        self.assertIn("거래내역", first_page)
+        self.assertIn("총 55건 | 1-27건", first_page)
+        self.assertIn("총 55건 | 55-55건", last_page)
+        self.assertIn("3 / 3", last_page)
 
 
 if __name__ == "__main__":

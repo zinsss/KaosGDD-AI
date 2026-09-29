@@ -197,6 +197,12 @@ setup() {
   if [[ ! -s "$(secret_path ios_paperless_shortcut_token)" ]]; then
     openssl rand -hex 32 > "$(secret_path ios_paperless_shortcut_token)"
   fi
+  if [[ ! -s "$(secret_path thermal_print_home_token)" ]]; then
+    openssl rand -hex 32 > "$(secret_path thermal_print_home_token)"
+  fi
+  if [[ ! -s "$(secret_path thermal_print_office_token)" ]]; then
+    openssl rand -hex 32 > "$(secret_path thermal_print_office_token)"
+  fi
   if [[ ! -s "$(secret_path web_push_vapid_private_key)" ]]; then
     openssl ecparam -name prime256v1 -genkey -noout > "$(secret_path web_push_vapid_private_key)"
   fi
@@ -209,6 +215,8 @@ setup() {
     "${SECRETS_DIR}"/naver_mail_password \
     "${SECRETS_DIR}"/paperless_api_token \
     "${SECRETS_DIR}"/fax_connector_token \
+    "${SECRETS_DIR}"/thermal_print_home_token \
+    "${SECRETS_DIR}"/thermal_print_office_token \
     "${SECRETS_DIR}"/pushover_app_token \
     "${SECRETS_DIR}"/pushover_user_key \
     "${SECRETS_DIR}"/web_push_vapid_private_key
@@ -246,6 +254,12 @@ preflight() {
       || die "H3 fax must use FAX_TRANSPORT=connector; HylaFAX stays on Office Kaos"
     [[ -n "${FAX_CONNECTOR_BASE_URL:-}" ]] || die "FAX_CONNECTOR_BASE_URL is required when fax is enabled"
     require_secret fax_connector_token
+  fi
+  if [[ -n "${THERMAL_PRINT_HOME_URL:-}" ]]; then
+    require_secret thermal_print_home_token
+  fi
+  if [[ -n "${THERMAL_PRINT_OFFICE_URL:-}" ]]; then
+    require_secret thermal_print_office_token
   fi
   if [[ "${PUSHOVER_ENABLED:-false}" == "true" ]]; then
     require_secret pushover_app_token

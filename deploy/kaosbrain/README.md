@@ -314,6 +314,14 @@ separate user service explicitly:
 ./deploy/kaosbrain/kaosbrain openclaw-reauth-agent-up
 ```
 
+## Optional 80 mm receipt printer
+
+Receipt printing is deliberately not part of the KaosBrain container. Run the
+narrow companion in [`deploy/thermal-print-connector`](../thermal-print-connector/README.md)
+on H4 instead. That keeps CUPS and physical-printer access separate from AI
+routes and lets a future office connector use the same contract with its own
+token.
+
 ## Verify
 
 ```bash

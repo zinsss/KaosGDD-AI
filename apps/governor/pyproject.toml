@@ -16,6 +16,7 @@ dependencies = [
     "PyJWT[crypto]>=2.10,<3",
     "pypdf>=5,<7",
     "pywebpush>=2,<3",
+    "reportlab>=4.2,<5",
 ]
 
 [project.scripts]

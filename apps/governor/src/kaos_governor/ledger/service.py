@@ -35,6 +35,7 @@ LOCAL_TIMEZONE = ZoneInfo(os.environ.get("TZ", "Asia/Seoul"))
 
 _backup_lock = threading.Lock()
 _status_lock = threading.Lock()
+_pdf_font_lock = threading.Lock()
 _backup_status = {
     "enabled": True,
     "root": str(BACKUP_ROOT),
@@ -42,6 +43,15 @@ _backup_status = {
     "lastPath": "",
     "lastError": "",
 }
+
+PDF_ROWS_PER_PAGE = 27
+_PDF_FONT_NAME = "KaosLedgerNanumGothic"
+_PDF_FONT_CANDIDATES = (
+    "/usr/local/share/kaos-governor/fonts/NanumGothic.ttf",
+    "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
+    "/usr/share/fonts/opentype/nanum/NanumGothic.ttf",
+)
+_PDF_COLUMN_EDGES = (30.0, 109.0, 223.0, 305.0, 575.0, 654.0, 733.0, 812.0)
 
 
 class LedgerConflict(Exception):
@@ -447,6 +457,153 @@ def workbook_bytes(repository: LedgerRepository | None = None) -> bytes:
     data = stream.getvalue()
     load_workbook(io.BytesIO(data), read_only=True).close()
     return data
+
+
+def _ledger_pdf_font_path() -> Path:
+    configured = os.environ.get("LEDGER_PDF_FONT_PATH", "").strip()
+    candidates = (configured, *_PDF_FONT_CANDIDATES) if configured else _PDF_FONT_CANDIDATES
+    for candidate in candidates:
+        path = Path(candidate)
+        if path.is_file():
+            return path
+    raise RuntimeError("ledger_pdf_font_unavailable")
+
+
+def _register_ledger_pdf_font() -> str:
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+
+    with _pdf_font_lock:
+        if _PDF_FONT_NAME not in pdfmetrics.getRegisteredFontNames():
+            pdfmetrics.registerFont(TTFont(_PDF_FONT_NAME, str(_ledger_pdf_font_path())))
+    return _PDF_FONT_NAME
+
+
+def _fit_pdf_text(value: object, font_name: str, font_size: float, max_width: float) -> str:
+    from reportlab.pdfbase import pdfmetrics
+
+    text = " ".join(str(value or "").split())
+    if not text or pdfmetrics.stringWidth(text, font_name, font_size) <= max_width:
+        return text
+    ellipsis = "…"
+    if pdfmetrics.stringWidth(ellipsis, font_name, font_size) > max_width:
+        return ""
+    low = 0
+    high = len(text)
+    while low < high:
+        middle = (low + high + 1) // 2
+        candidate = f"{text[:middle]}{ellipsis}"
+        if pdfmetrics.stringWidth(candidate, font_name, font_size) <= max_width:
+            low = middle
+        else:
+            high = middle - 1
+    return f"{text[:low].rstrip()}{ellipsis}"
+
+
+def _pdf_money(value: object, *, blank_none: bool = False) -> str:
+    if value is None and blank_none:
+        return ""
+    return f"{int(value or 0):,}"
+
+
+def pdf_bytes(repository: LedgerRepository | None = None) -> bytes:
+    from reportlab.lib.colors import Color
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.pdfgen.canvas import Canvas
+
+    ledger = list_ledger(repository)
+    entries = list(ledger["entries"])
+    total_entries = len(entries)
+    page_count = max(1, (total_entries + PDF_ROWS_PER_PAGE - 1) // PDF_ROWS_PER_PAGE)
+    font_name = _register_ledger_pdf_font()
+    page_width, page_height = landscape(A4)
+    stream = io.BytesIO()
+    document = Canvas(stream, pagesize=(page_width, page_height), pageCompression=1)
+    document.setTitle("Kaos Family 거래내역")
+    document.setAuthor("KaosGDD")
+    document.setCreator("KaosGDD")
+
+    title_color = Color(0.12, 0.20, 0.28)
+    meta_color = Color(0.37, 0.43, 0.48)
+    header_color = Color(0.15, 0.23, 0.28)
+    body_color = Color(0.12, 0.16, 0.19)
+    footer_color = Color(0.40, 0.45, 0.49)
+    header_fill = Color(0.91, 0.94, 0.96)
+    alternate_fill = Color(0.976, 0.983, 0.987)
+    frame_color = Color(0.72, 0.78, 0.81)
+    row_line_color = Color(0.86, 0.89, 0.91)
+    table_left = _PDF_COLUMN_EDGES[0]
+    table_right = _PDF_COLUMN_EDGES[-1]
+    table_top = 526.0
+    header_height = 24.0
+    row_height = 17.0
+    body_top = table_top - header_height
+    headers = ("날짜", "사용 구분", "금액", "상세 내용", "계좌", "현금", "상품권")
+
+    for page_index in range(page_count):
+        start_index = page_index * PDF_ROWS_PER_PAGE
+        page_entries = entries[start_index : start_index + PDF_ROWS_PER_PAGE]
+        end_index = start_index + len(page_entries)
+        range_label = "0건" if total_entries == 0 else f"{start_index + 1}-{end_index}건"
+
+        document.setFillColor(title_color)
+        document.setFont(font_name, 15)
+        document.drawString(table_left, 548.3, "거래내역")
+        document.setFillColor(meta_color)
+        document.setFont(font_name, 8.5)
+        document.drawRightString(table_right, 550.3, f"총 {total_entries}건 | {range_label}")
+
+        document.setFillColor(header_fill)
+        document.rect(table_left, body_top, table_right - table_left, header_height, fill=1, stroke=0)
+        for row_index in range(len(page_entries)):
+            if row_index % 2 == 1:
+                row_bottom = body_top - ((row_index + 1) * row_height)
+                document.setFillColor(alternate_fill)
+                document.rect(table_left, row_bottom, table_right - table_left, row_height, fill=1, stroke=0)
+
+        document.setStrokeColor(frame_color)
+        document.setLineWidth(0.75)
+        document.line(table_left, body_top, table_right, body_top)
+        document.setStrokeColor(row_line_color)
+        document.setLineWidth(0.55)
+        for row_index in range(len(page_entries)):
+            row_bottom = body_top - ((row_index + 1) * row_height)
+            document.line(table_left, row_bottom, table_right, row_bottom)
+
+        table_bottom = body_top - (len(page_entries) * row_height)
+        document.setStrokeColor(frame_color)
+        document.setLineWidth(0.75)
+        for edge in _PDF_COLUMN_EDGES:
+            document.line(edge, table_top, edge, table_bottom)
+
+        document.setFillColor(header_color)
+        document.setFont(font_name, 9)
+        for column_index, header in enumerate(headers):
+            document.drawString(_PDF_COLUMN_EDGES[column_index] + 6, body_top + 8.1, header)
+
+        document.setFillColor(body_color)
+        document.setFont(font_name, 8.7)
+        for row_index, entry in enumerate(page_entries):
+            baseline = body_top - (row_index * row_height) - 12.35
+            date_text = _fit_pdf_text(entry.get("date"), font_name, 8.7, 67)
+            category_text = _fit_pdf_text(entry.get("category"), font_name, 8.7, 102)
+            details_text = _fit_pdf_text(entry.get("details"), font_name, 8.7, 258)
+            document.drawString(_PDF_COLUMN_EDGES[0] + 6, baseline, date_text)
+            document.drawString(_PDF_COLUMN_EDGES[1] + 6, baseline, category_text)
+            document.drawRightString(_PDF_COLUMN_EDGES[3] - 6, baseline, _pdf_money(entry.get("amount"), blank_none=True))
+            document.drawString(_PDF_COLUMN_EDGES[3] + 6, baseline, details_text)
+            document.drawRightString(_PDF_COLUMN_EDGES[5] - 6, baseline, _pdf_money(entry.get("account")))
+            document.drawRightString(_PDF_COLUMN_EDGES[6] - 6, baseline, _pdf_money(entry.get("cash")))
+            document.drawRightString(_PDF_COLUMN_EDGES[7] - 6, baseline, _pdf_money(entry.get("gift")))
+
+        document.setFillColor(footer_color)
+        document.setFont(font_name, 8)
+        document.drawString(table_left, 19.7, "Kaos Family | 거래내역")
+        document.drawRightString(table_right, 19.7, f"{page_index + 1} / {page_count}")
+        document.showPage()
+
+    document.save()
+    return stream.getvalue()
 
 
 def _set_backup_status(*, path: str = "", error: str = "") -> None:
