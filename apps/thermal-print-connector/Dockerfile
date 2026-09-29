@@ -6,7 +6,7 @@ RUN python -m pip install --no-cache-dir --prefix=/install ./thermal-print-conne
 FROM python:3.12-slim AS runtime
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 RUN apt-get update \
-    && apt-get install --no-install-recommends --yes cups-client \
+    && apt-get install --no-install-recommends --yes cups-client poppler-utils \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 kaos \
     && useradd --uid 10001 --gid kaos --no-create-home --shell /usr/sbin/nologin kaos

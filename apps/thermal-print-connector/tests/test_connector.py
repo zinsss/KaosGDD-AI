@@ -29,12 +29,13 @@ def receipt_pdf(width: float = 80 / 25.4 * 72, height: float = 400) -> bytes:
 
 
 class ThermalPrintConnectorTests(unittest.TestCase):
-    def config(self, root: Path, *, mode: str = "cups") -> ConnectorConfig:
+    def config(self, root: Path, *, mode: str = "cups", output_format: str = "pdf") -> ConnectorConfig:
         return ConnectorConfig(
             token="connector-secret",
             mode=mode,
             printer="receipt-home" if mode == "cups" else "",
             state_path=root / "jobs.json",
+            output_format=output_format,
         )
 
     def payload(self, pdf: bytes | None = None, job_id: str = "a" * 32) -> dict[str, object]:
@@ -77,6 +78,33 @@ class ThermalPrintConnectorTests(unittest.TestCase):
             self.assertEqual([command[0] for command in commands], ["lpstat", "lp"])
             self.assertNotIn("pdfBase64", config.state_path.read_text(encoding="utf-8"))
             self.assertEqual(job_status(config, "a" * 32)["status"], "submitted")
+
+    def test_escpos_mode_renders_pdf_and_submits_raw_raster_data(self) -> None:
+        commands = []
+        submitted = b""
+
+        def runner(command, **_kwargs):
+            nonlocal submitted
+            commands.append(command)
+            if command[0] == "lpstat":
+                return SimpleNamespace(returncode=0, stdout="printer receipt-home is idle", stderr="")
+            if command[0] == "pdftoppm":
+                prefix = Path(command[-1])
+                prefix.with_name(f"{prefix.name}-1.pbm").write_bytes(b"P4\n512 2\n" + b"\x80" + b"\x00" * 127)
+                return SimpleNamespace(returncode=0, stdout="", stderr="")
+            submitted = Path(command[-1]).read_bytes()
+            return SimpleNamespace(returncode=0, stdout="request id is receipt-home-43", stderr="")
+
+        with tempfile.TemporaryDirectory() as temporary, mock.patch(
+            "kaos_thermal_print_connector.server._run", side_effect=runner
+        ):
+            result = submit_job(self.config(Path(temporary), output_format="escpos"), self.payload())
+
+        self.assertEqual(result["printerJobId"], "receipt-home-43")
+        self.assertEqual([command[0] for command in commands], ["lpstat", "pdftoppm", "lp"])
+        self.assertEqual(commands[-1][-3:-1], ["-o", "raw"])
+        self.assertTrue(submitted.startswith(b"\x1b@\x1dv0\x00\x40\x00\x02\x00\x80"))
+        self.assertTrue(submitted.endswith(b"\n\n\n\x1dV\x01"))
 
     def test_rejects_pdf_wider_than_receipt_roll(self) -> None:
         with tempfile.TemporaryDirectory() as temporary, self.assertRaises(ConnectorError) as raised:

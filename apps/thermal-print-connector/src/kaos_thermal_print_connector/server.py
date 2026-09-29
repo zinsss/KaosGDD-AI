@@ -41,8 +41,12 @@ class ConnectorConfig:
     mode: str
     printer: str
     state_path: Path
+    output_format: str = "pdf"
+    raster_dpi: int = 180
+    raster_width: int = 512
     lp_binary: str = "lp"
     lpstat_binary: str = "lpstat"
+    pdftoppm_binary: str = "pdftoppm"
     max_pdf_bytes: int = MAX_PDF_BYTES
 
     @classmethod
@@ -57,13 +61,24 @@ class ConnectorConfig:
         printer = source.get("THERMAL_CONNECTOR_PRINTER", "").strip()
         if printer and not SAFE_PRINTER.fullmatch(printer):
             raise ConnectorError(HTTPStatus.INTERNAL_SERVER_ERROR, "invalid_printer_name")
+        output_format = source.get("THERMAL_CONNECTOR_OUTPUT_FORMAT", "pdf").strip().lower()
+        if output_format not in {"pdf", "escpos"}:
+            raise ConnectorError(HTTPStatus.INTERNAL_SERVER_ERROR, "invalid_output_format")
+        raster_dpi = int(source.get("THERMAL_CONNECTOR_RASTER_DPI", "180") or "180")
+        raster_width = int(source.get("THERMAL_CONNECTOR_RASTER_WIDTH", "512") or "512")
+        if not 72 <= raster_dpi <= 600 or not 64 <= raster_width <= 2_048:
+            raise ConnectorError(HTTPStatus.INTERNAL_SERVER_ERROR, "invalid_raster_geometry")
         return cls(
             token=token,
             mode=mode,
             printer=printer,
             state_path=Path(source.get("THERMAL_CONNECTOR_STATE_PATH", "/data/connector/jobs.json")),
+            output_format=output_format,
+            raster_dpi=raster_dpi,
+            raster_width=raster_width,
             lp_binary=source.get("THERMAL_CONNECTOR_LP", "lp").strip() or "lp",
             lpstat_binary=source.get("THERMAL_CONNECTOR_LPSTAT", "lpstat").strip() or "lpstat",
+            pdftoppm_binary=source.get("THERMAL_CONNECTOR_PDFTOPPM", "pdftoppm").strip() or "pdftoppm",
             max_pdf_bytes=max(1, int(source.get("THERMAL_CONNECTOR_MAX_PDF_MB", "8") or "8")) * 1024 * 1024,
         )
 
@@ -166,6 +181,7 @@ def health_payload(config: ConnectorConfig) -> dict[str, object]:
     return {
         "status": "ready" if ready else "awaiting_printer" if config.mode == "dry-run" else "printer_not_ready",
         "mode": config.mode,
+        "outputFormat": config.output_format,
         "ready": ready,
         "printer": config.printer if ready else "",
     }
@@ -223,6 +239,99 @@ def _save_state(path: Path, jobs: Mapping[str, Mapping[str, object]]) -> None:
         raise ConnectorError(HTTPStatus.SERVICE_UNAVAILABLE, "connector_state_unwritable") from exc
 
 
+def _read_pbm(path: Path, *, expected_width: int) -> tuple[int, bytes]:
+    try:
+        data = path.read_bytes()
+    except OSError as exc:
+        raise ConnectorError(HTTPStatus.SERVICE_UNAVAILABLE, "print_render_failed") from exc
+
+    position = 0
+
+    def next_token() -> bytes:
+        nonlocal position
+        while position < len(data):
+            if data[position] in b" \t\r\n":
+                position += 1
+                continue
+            if data[position] == ord("#"):
+                newline = data.find(b"\n", position)
+                if newline < 0:
+                    raise ConnectorError(HTTPStatus.SERVICE_UNAVAILABLE, "print_render_failed")
+                position = newline + 1
+                continue
+            break
+        start = position
+        while position < len(data) and data[position] not in b" \t\r\n":
+            position += 1
+        if start == position:
+            raise ConnectorError(HTTPStatus.SERVICE_UNAVAILABLE, "print_render_failed")
+        return data[start:position]
+
+    try:
+        magic = next_token()
+        width = int(next_token())
+        height = int(next_token())
+    except (ValueError, ConnectorError) as exc:
+        raise ConnectorError(HTTPStatus.SERVICE_UNAVAILABLE, "print_render_failed") from exc
+    if magic != b"P4" or width != expected_width or height <= 0 or height > 65_535:
+        raise ConnectorError(HTTPStatus.SERVICE_UNAVAILABLE, "print_render_failed")
+    if position >= len(data) or data[position] not in b" \t\r\n":
+        raise ConnectorError(HTTPStatus.SERVICE_UNAVAILABLE, "print_render_failed")
+    if data[position:position + 2] == b"\r\n":
+        position += 2
+    else:
+        position += 1
+    row_bytes = (width + 7) // 8
+    raster = data[position:]
+    if len(raster) != row_bytes * height:
+        raise ConnectorError(HTTPStatus.SERVICE_UNAVAILABLE, "print_render_failed")
+    return height, raster
+
+
+def _escpos_document(document: Path, output: Path, config: ConnectorConfig) -> None:
+    prefix = output.parent / "page"
+    render = _run(
+        [
+            config.pdftoppm_binary,
+            "-mono",
+            "-r",
+            str(config.raster_dpi),
+            "-scale-to-x",
+            str(config.raster_width),
+            "-scale-to-y",
+            "-1",
+            str(document),
+            str(prefix),
+        ],
+        timeout=60,
+    )
+    if render.returncode != 0:
+        raise ConnectorError(HTTPStatus.SERVICE_UNAVAILABLE, "print_render_failed")
+    pages = sorted(output.parent.glob("page-*.pbm"), key=lambda path: int(path.stem.split("-")[-1]))
+    if not pages:
+        raise ConnectorError(HTTPStatus.SERVICE_UNAVAILABLE, "print_render_failed")
+
+    row_bytes = (config.raster_width + 7) // 8
+    result = bytearray(b"\x1b@")
+    for page_index, page in enumerate(pages):
+        height, raster = _read_pbm(page, expected_width=config.raster_width)
+        for top in range(0, height, 256):
+            band_height = min(256, height - top)
+            start = top * row_bytes
+            end = start + band_height * row_bytes
+            result.extend(b"\x1dv0\x00")
+            result.extend((row_bytes & 0xFF, row_bytes >> 8, band_height & 0xFF, band_height >> 8))
+            result.extend(raster[start:end])
+        if page_index + 1 < len(pages):
+            result.extend(b"\n\n")
+    result.extend(b"\n\n\n\x1dV\x01")
+    try:
+        output.write_bytes(result)
+        os.chmod(output, 0o600)
+    except OSError as exc:
+        raise ConnectorError(HTTPStatus.SERVICE_UNAVAILABLE, "print_render_failed") from exc
+
+
 def submit_job(config: ConnectorConfig, payload: Mapping[str, Any]) -> dict[str, object]:
     if payload.get("version") != 1 or str(payload.get("kind") or "") not in ALLOWED_KINDS:
         raise ConnectorError(HTTPStatus.BAD_REQUEST, "invalid_print_contract")
@@ -241,7 +350,16 @@ def submit_job(config: ConnectorConfig, payload: Mapping[str, Any]) -> dict[str,
         with tempfile.TemporaryDirectory(prefix="kaos-receipt-") as temporary:
             document = Path(temporary) / "receipt.pdf"
             document.write_bytes(pdf)
-            result = _run([config.lp_binary, "-d", config.printer, "-t", title or "KaosGDD receipt", str(document)], timeout=30)
+            print_document = document
+            options: list[str] = []
+            if config.output_format == "escpos":
+                print_document = Path(temporary) / "receipt.escpos"
+                _escpos_document(document, print_document, config)
+                options = ["-o", "raw"]
+            result = _run(
+                [config.lp_binary, "-d", config.printer, "-t", title or "KaosGDD receipt", *options, str(print_document)],
+                timeout=30,
+            )
         if result.returncode != 0:
             raise ConnectorError(HTTPStatus.SERVICE_UNAVAILABLE, "print_submission_failed")
         output = "\n".join(part for part in (result.stdout, result.stderr) if part)
