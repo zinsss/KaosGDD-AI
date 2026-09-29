@@ -239,7 +239,7 @@ def _save_state(path: Path, jobs: Mapping[str, Mapping[str, object]]) -> None:
         raise ConnectorError(HTTPStatus.SERVICE_UNAVAILABLE, "connector_state_unwritable") from exc
 
 
-def _read_pbm(path: Path, *, expected_width: int) -> tuple[int, bytes]:
+def _read_pbm(path: Path) -> tuple[int, int, bytes]:
     try:
         data = path.read_bytes()
     except OSError as exc:
@@ -273,7 +273,7 @@ def _read_pbm(path: Path, *, expected_width: int) -> tuple[int, bytes]:
         height = int(next_token())
     except (ValueError, ConnectorError) as exc:
         raise ConnectorError(HTTPStatus.SERVICE_UNAVAILABLE, "print_render_failed") from exc
-    if magic != b"P4" or width != expected_width or height <= 0 or height > 65_535:
+    if magic != b"P4" or width <= 0 or width > 4_096 or height <= 0 or height > 65_535:
         raise ConnectorError(HTTPStatus.SERVICE_UNAVAILABLE, "print_render_failed")
     if position >= len(data) or data[position] not in b" \t\r\n":
         raise ConnectorError(HTTPStatus.SERVICE_UNAVAILABLE, "print_render_failed")
@@ -285,7 +285,33 @@ def _read_pbm(path: Path, *, expected_width: int) -> tuple[int, bytes]:
     raster = data[position:]
     if len(raster) != row_bytes * height:
         raise ConnectorError(HTTPStatus.SERVICE_UNAVAILABLE, "print_render_failed")
-    return height, raster
+    return width, height, raster
+
+
+def _fit_raster_width(width: int, height: int, raster: bytes, target_width: int) -> bytes:
+    """Center-crop or pad 1-bit PBM rows without resampling their pixels."""
+    source_row_bytes = (width + 7) // 8
+    target_row_bytes = (target_width + 7) // 8
+    if len(raster) != source_row_bytes * height:
+        raise ConnectorError(HTTPStatus.SERVICE_UNAVAILABLE, "print_render_failed")
+    if width == target_width:
+        return raster
+
+    source_padding = source_row_bytes * 8 - width
+    target_padding = target_row_bytes * 8 - target_width
+    target_mask = (1 << target_width) - 1
+    result = bytearray()
+    for row_index in range(height):
+        start = row_index * source_row_bytes
+        source_value = int.from_bytes(raster[start:start + source_row_bytes], "big") >> source_padding
+        if width > target_width:
+            right_crop = (width - target_width + 1) // 2
+            target_value = (source_value >> right_crop) & target_mask
+        else:
+            right_padding = (target_width - width + 1) // 2
+            target_value = source_value << right_padding
+        result.extend((target_value << target_padding).to_bytes(target_row_bytes, "big"))
+    return bytes(result)
 
 
 def _escpos_document(document: Path, output: Path, config: ConnectorConfig) -> None:
@@ -296,10 +322,6 @@ def _escpos_document(document: Path, output: Path, config: ConnectorConfig) -> N
             "-mono",
             "-r",
             str(config.raster_dpi),
-            "-scale-to-x",
-            str(config.raster_width),
-            "-scale-to-y",
-            "-1",
             str(document),
             str(prefix),
         ],
@@ -314,7 +336,8 @@ def _escpos_document(document: Path, output: Path, config: ConnectorConfig) -> N
     row_bytes = (config.raster_width + 7) // 8
     result = bytearray(b"\x1b@")
     for page_index, page in enumerate(pages):
-        height, raster = _read_pbm(page, expected_width=config.raster_width)
+        width, height, source_raster = _read_pbm(page)
+        raster = _fit_raster_width(width, height, source_raster, config.raster_width)
         for top in range(0, height, 256):
             band_height = min(256, height - top)
             start = top * row_bytes

@@ -6,6 +6,7 @@ RUN apt-get update \
 FROM python:3.12-slim AS build
 WORKDIR /build
 COPY --from=fonts /usr/share/fonts/truetype/nanum/NanumGothic.ttf /usr/local/share/kaos-governor/fonts/NanumGothic.ttf
+COPY --from=fonts /usr/share/fonts/truetype/nanum/NanumGothicBold.ttf /usr/local/share/kaos-governor/fonts/NanumGothicBold.ttf
 COPY apps/governor ./governor
 RUN python -m pip install --no-cache-dir --prefix=/install ./governor
 
@@ -19,6 +20,7 @@ RUN apt-get update \
 COPY --from=build /install /usr/local
 COPY apps/governor/migrations /usr/local/share/kaos-governor/migrations
 COPY --from=fonts /usr/share/fonts/truetype/nanum/NanumGothic.ttf /usr/local/share/kaos-governor/fonts/NanumGothic.ttf
+COPY --from=fonts /usr/share/fonts/truetype/nanum/NanumGothicBold.ttf /usr/local/share/kaos-governor/fonts/NanumGothicBold.ttf
 COPY apps/family-portal/fonts/SymbolsNerdFontMono-Regular.ttf /usr/local/share/kaos-governor/fonts/SymbolsNerdFontMono-Regular.ttf
 RUN chmod -R a=rX /usr/local/share/kaos-governor/migrations
 USER 10001:10001

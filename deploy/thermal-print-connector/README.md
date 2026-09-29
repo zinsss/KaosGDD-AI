@@ -33,9 +33,10 @@ paper.
 2. Set `THERMAL_CONNECTOR_MODE=cups` and `THERMAL_CONNECTOR_PRINTER=<queue>`.
    For an EPSON-compatible thermal printer registered as a raw queue, also set
    `THERMAL_CONNECTOR_OUTPUT_FORMAT=escpos` and match its native DPI/print-head
-   width. The connector rasterizes the validated PDF and sends bounded ESC/POS
-   bands, followed by a partial-cut command. The SAM4S GIANT-100 uses 180 dpi
-   and 512 dots.
+   width. The connector rasterizes the validated PDF at native resolution,
+   center-crops only the paper margins without resampling the text, and sends
+   bounded ESC/POS bands followed by a partial-cut command. The SAM4S
+   GIANT-100 uses 180 dpi and 512 dots.
 3. Set `CUPS_SERVER=127.0.0.1:631`; the container uses host networking but
    remains a non-root, read-only process.
 4. Bind `THERMAL_CONNECTOR_HOST` to H4's Tailscale address.

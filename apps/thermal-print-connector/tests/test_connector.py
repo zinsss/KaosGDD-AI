@@ -14,6 +14,7 @@ from pypdf import PdfWriter
 from kaos_thermal_print_connector.server import (
     ConnectorConfig,
     ConnectorError,
+    _fit_raster_width,
     health_payload,
     job_status,
     submit_job,
@@ -90,7 +91,7 @@ class ThermalPrintConnectorTests(unittest.TestCase):
                 return SimpleNamespace(returncode=0, stdout="printer receipt-home is idle", stderr="")
             if command[0] == "pdftoppm":
                 prefix = Path(command[-1])
-                prefix.with_name(f"{prefix.name}-1.pbm").write_bytes(b"P4\n512 2\n" + b"\x80" + b"\x00" * 127)
+                prefix.with_name(f"{prefix.name}-1.pbm").write_bytes(b"P4\n520 2\n" + b"\x08" + b"\x00" * 129)
                 return SimpleNamespace(returncode=0, stdout="", stderr="")
             submitted = Path(command[-1]).read_bytes()
             return SimpleNamespace(returncode=0, stdout="request id is receipt-home-43", stderr="")
@@ -102,9 +103,16 @@ class ThermalPrintConnectorTests(unittest.TestCase):
 
         self.assertEqual(result["printerJobId"], "receipt-home-43")
         self.assertEqual([command[0] for command in commands], ["lpstat", "pdftoppm", "lp"])
+        self.assertNotIn("-scale-to-x", commands[1])
         self.assertEqual(commands[-1][-3:-1], ["-o", "raw"])
         self.assertTrue(submitted.startswith(b"\x1b@\x1dv0\x00\x40\x00\x02\x00\x80"))
         self.assertTrue(submitted.endswith(b"\n\n\n\x1dV\x01"))
+
+    def test_native_raster_width_is_center_cropped_without_resampling(self) -> None:
+        self.assertEqual(_fit_raster_width(16, 1, b"\x0f\xf0", 8), b"\xff")
+
+    def test_narrow_native_raster_is_center_padded(self) -> None:
+        self.assertEqual(_fit_raster_width(4, 1, b"\xf0", 8), b"\x3c")
 
     def test_rejects_pdf_wider_than_receipt_roll(self) -> None:
         with tempfile.TemporaryDirectory() as temporary, self.assertRaises(ConnectorError) as raised:
