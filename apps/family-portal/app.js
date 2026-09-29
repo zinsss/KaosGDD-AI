@@ -6683,7 +6683,10 @@ function renderTaskRows(tasks) {
                   </span>
                   <span class="taskMeta">${escapeHtml(task.meta)}</span>
                 </a>
-                <small class="taskBadge">${escapeHtml(task.badge)}</small>
+                <div class="taskRowAside">
+                  <small class="taskBadge">${escapeHtml(task.badge)}</small>
+                  ${portalProfile() === "main" ? `<button class="taskRowPrint" type="button" data-thermal-print-task-id="${escapeHtml(task.id)}">${uiText("common.print", "Print")}</button>` : ""}
+                </div>
               </div>
               ${
                 task.subtasks.length
@@ -7436,9 +7439,9 @@ function renderFamilyAgenda() {
   `;
 }
 
-function thermalPrintAction(kind, label = "Print") {
+function thermalPrintAction(kind, label = uiText("common.print", "Print")) {
   if (portalProfile() !== "main") return "";
-  return `<button class="openButton thermalPrintAction" type="button" data-thermal-print="${escapeHtml(kind)}">${escapeHtml(label)}</button>`;
+  return `<button class="thermalPrintAction" type="button" data-thermal-print="${escapeHtml(kind)}">${escapeHtml(label)}</button>`;
 }
 
 function thermalPrintCollectionLabel(collectionId) {
@@ -7539,8 +7542,8 @@ function thermalPrintEventDocument() {
   };
 }
 
-function thermalPrintTaskDocument() {
-  const task = findTaskById(hashParam("uid"));
+function thermalPrintTaskDocument(taskId = hashParam("uid")) {
+  const task = findTaskById(taskId);
   if (!task) return null;
   return {
     version: 1,
@@ -10919,6 +10922,13 @@ document.addEventListener("click", async (event) => {
   if (suppressCalendarGridClick && event.target.closest(".calendarGrid")) {
     event.preventDefault();
     event.stopPropagation();
+    return;
+  }
+  const taskPrintButton = event.target.closest("[data-thermal-print-task-id]");
+  if (taskPrintButton) {
+    event.preventDefault();
+    const printDocument = thermalPrintTaskDocument(taskPrintButton.dataset.thermalPrintTaskId || "");
+    if (printDocument) window.KAOS_THERMAL_PRINT?.open(printDocument);
     return;
   }
   const thermalPrintButton = event.target.closest("[data-thermal-print]");

@@ -2025,15 +2025,55 @@ h3 {
   overflow-wrap: anywhere;
 }
 
-.thermalPrintClose {
-  min-width: 44px;
-  min-height: 44px;
-  border: 1px solid var(--line);
+.thermalPrintClose,
+.thermalPrintCommand,
+.thermalPrintAction {
+  min-width: 0;
+  min-height: 34px;
+  border: 0;
   border-radius: 0;
   background: transparent;
-  color: var(--text);
+  color: var(--nord8);
+  padding: 0 3px;
   font: inherit;
-  font-size: 1.35rem;
+  font-size: 0.78rem;
+  font-weight: 760;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.thermalPrintClose::before,
+.thermalPrintCommand::before,
+.thermalPrintAction::before {
+  content: "[";
+}
+
+.thermalPrintClose::after,
+.thermalPrintCommand::after,
+.thermalPrintAction::after {
+  content: "]";
+}
+
+.thermalPrintClose:hover,
+.thermalPrintClose:focus-visible,
+.thermalPrintCommand:hover,
+.thermalPrintCommand:focus-visible,
+.thermalPrintAction:hover,
+.thermalPrintAction:focus-visible {
+  background: transparent;
+  color: var(--nord13);
+}
+
+.thermalPrintCommand.isActive {
+  background: transparent;
+  color: var(--main-tab-active-text);
+}
+
+.thermalPrintCommand:disabled {
+  background: transparent;
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.56;
 }
 
 .thermalPrintBody {
@@ -2043,28 +2083,43 @@ h3 {
 }
 
 .thermalPrintDestinations {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
 }
 
 .thermalPrintDestination {
   display: grid;
-  gap: 5px;
-  min-height: 68px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
+  gap: 3px;
+  min-height: 44px;
+  padding: 3px;
+  border: 0;
   border-radius: 0;
-  background: var(--surface);
+  background: transparent;
   color: var(--text);
   font: inherit;
   text-align: left;
+  cursor: pointer;
+}
+
+.thermalPrintDestination strong::before {
+  content: "[";
+}
+
+.thermalPrintDestination strong::after {
+  content: "]";
 }
 
 .thermalPrintDestination.isSelected {
-  border-color: var(--main-tab-active-border);
-  background: var(--main-tab-active-bg);
+  border-color: transparent;
+  background: transparent;
   color: var(--main-tab-active-text);
+}
+
+.thermalPrintDestination:hover,
+.thermalPrintDestination:focus-visible {
+  background: transparent;
+  color: var(--nord13);
 }
 
 .thermalPrintDestination small,
@@ -2092,7 +2147,7 @@ h3 {
 }
 
 .thermalPrintActions > * {
-  flex: 1;
+  flex: 0 0 auto;
 }
 
 html.hasThermalPrintDialog {
@@ -3127,9 +3182,50 @@ html.hasThermalPrintDialog {
 
 .taskRowMain {
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) 34px;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
   align-items: start;
   gap: 8px;
+}
+
+.taskRowAside {
+  display: grid;
+  justify-items: end;
+  gap: 3px;
+  min-width: 42px;
+}
+
+.taskRowPrint {
+  min-width: 0;
+  min-height: 26px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--nord8);
+  padding: 0 2px;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 760;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.taskRowPrint::before,
+.taskRowPrint::after {
+  color: currentColor;
+}
+
+.taskRowPrint::before {
+  content: "[";
+}
+
+.taskRowPrint::after {
+  content: "]";
+}
+
+.taskRowPrint:hover,
+.taskRowPrint:focus-visible {
+  background: transparent;
+  color: var(--nord13);
 }
 
 .taskEditLink {

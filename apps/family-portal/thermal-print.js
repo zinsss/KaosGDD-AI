@@ -62,7 +62,7 @@ window.KAOS_THERMAL_PRINT = (() => {
             <p>80 MM RECEIPT</p>
             <h2 id="thermalPrintTitle">${escapeHtml(state.document.title || "Print")}</h2>
           </div>
-          <button class="thermalPrintClose" type="button" data-thermal-print-close aria-label="Close">×</button>
+          <button class="thermalPrintClose" type="button" data-thermal-print-close aria-label="Close">Close</button>
         </header>
         <div class="thermalPrintBody">
           ${destinations}
@@ -71,8 +71,8 @@ window.KAOS_THERMAL_PRINT = (() => {
           ${state.error ? `<p class="thermalPrintMessage isError" role="alert">${escapeHtml(state.error)}</p>` : ""}
         </div>
         <footer class="thermalPrintActions">
-          <button class="archiveAction" type="button" data-thermal-print-preview>Preview</button>
-          <button class="archiveAction isActive" type="button" data-thermal-print-submit ${!selected?.available || state.submitting ? "disabled" : ""}>
+          <button class="thermalPrintCommand" type="button" data-thermal-print-preview>Preview</button>
+          <button class="thermalPrintCommand isActive" type="button" data-thermal-print-submit ${!selected?.available || state.submitting ? "disabled" : ""}>
             ${state.submitting ? "Sending…" : selected?.available ? `Print at ${escapeHtml(selected.label)}` : "Printer unavailable"}
           </button>
         </footer>

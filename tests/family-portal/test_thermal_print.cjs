@@ -12,8 +12,8 @@ const moduleSource = fs.readFileSync(path.join(root, "thermal-print.js"), "utf8"
 const stylesSource = fs.readFileSync(path.join(root, "styles.css"), "utf8");
 
 test("loads the thermal print controller before the application", () => {
-  assert.match(indexSource, /src="\/thermal-print\.js\?v=2"/);
-  assert.ok(indexSource.indexOf('src="/thermal-print.js?v=2"') < indexSource.indexOf('src="/app.js?v=400"'));
+  assert.match(indexSource, /src="\/thermal-print\.js\?v=3"/);
+  assert.ok(indexSource.indexOf('src="/thermal-print.js?v=3"') < indexSource.indexOf('src="/app.js?v=400"'));
 });
 
 test("limits print actions to the requested personal surfaces", () => {
@@ -21,6 +21,8 @@ test("limits print actions to the requested personal surfaces", () => {
   assert.match(appSource, /thermalPrintAction\("event"\)/);
   assert.match(appSource, /thermalPrintAction\("tasks"\)/);
   assert.match(appSource, /thermalPrintAction\("task"\)/);
+  assert.match(appSource, /data-thermal-print-task-id=/);
+  assert.match(appSource, /thermalPrintTaskDocument\(taskPrintButton\.dataset\.thermalPrintTaskId/);
   assert.match(memosSource, /data-thermal-print="memo"/);
   assert.match(appSource, /if \(portalProfile\(\) !== "main"\) return "";/);
   assert.match(memosSource, /deps\.portalProfile\(\) === "main"/);
@@ -82,6 +84,9 @@ test("pressing Print alerts and leaves the selector closed while the printer is 
 
 test("renders the selector as a modal using the current PWA design tokens", () => {
   assert.match(stylesSource, /\.thermalPrintDialog/);
-  assert.match(stylesSource, /var\(--main-tab-active-border\)/);
+  assert.match(stylesSource, /\.thermalPrintDestination\.isSelected \{[\s\S]*?background: transparent;[\s\S]*?color: var\(--main-tab-active-text\);/);
+  assert.match(stylesSource, /\.thermalPrintCommand::before[\s\S]*?content: "\[";/);
+  assert.match(stylesSource, /\.thermalPrintCommand\.isActive \{[\s\S]*?background: transparent;[\s\S]*?color: var\(--main-tab-active-text\);/);
+  assert.doesNotMatch(moduleSource, /class="archiveAction[^\"]*"[^>]*data-thermal-print-(?:preview|submit)/);
   assert.match(stylesSource, /html\.hasThermalPrintDialog/);
 });
