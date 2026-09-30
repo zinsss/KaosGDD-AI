@@ -15,6 +15,7 @@ from kaos_thermal_print_connector.server import (
     ConnectorConfig,
     ConnectorError,
     _fit_raster_width,
+    _threshold_grayscale,
     health_payload,
     job_status,
     submit_job,
@@ -91,7 +92,8 @@ class ThermalPrintConnectorTests(unittest.TestCase):
                 return SimpleNamespace(returncode=0, stdout="printer receipt-home is idle", stderr="")
             if command[0] == "pdftoppm":
                 prefix = Path(command[-1])
-                prefix.with_name(f"{prefix.name}-1.pbm").write_bytes(b"P4\n520 2\n" + b"\x08" + b"\x00" * 129)
+                pixels = b"\xff" * 4 + b"\x00" + b"\xff" * (520 * 2 - 5)
+                prefix.with_name(f"{prefix.name}-1.pgm").write_bytes(b"P5\n520 2\n255\n" + pixels)
                 return SimpleNamespace(returncode=0, stdout="", stderr="")
             submitted = Path(command[-1]).read_bytes()
             return SimpleNamespace(returncode=0, stdout="request id is receipt-home-43", stderr="")
@@ -103,6 +105,9 @@ class ThermalPrintConnectorTests(unittest.TestCase):
 
         self.assertEqual(result["printerJobId"], "receipt-home-43")
         self.assertEqual([command[0] for command in commands], ["lpstat", "pdftoppm", "lp"])
+        self.assertIn("-gray", commands[1])
+        self.assertNotIn("-mono", commands[1])
+        self.assertEqual(commands[1][commands[1].index("-aa") + 1], "yes")
         self.assertNotIn("-scale-to-x", commands[1])
         self.assertEqual(commands[-1][-3:-1], ["-o", "raw"])
         self.assertTrue(submitted.startswith(b"\x1b@\x1dv0\x00\x40\x00\x02\x00\x80"))
@@ -113,6 +118,11 @@ class ThermalPrintConnectorTests(unittest.TestCase):
 
     def test_narrow_native_raster_is_center_padded(self) -> None:
         self.assertEqual(_fit_raster_width(4, 1, b"\xf0", 8), b"\x3c")
+
+    def test_antialiased_grayscale_uses_controlled_dark_threshold(self) -> None:
+        grayscale = bytes((0, 255, 167, 168, 32, 240, 100, 200))
+
+        self.assertEqual(_threshold_grayscale(8, 1, grayscale, 168), b"\xaa")
 
     def test_rejects_pdf_wider_than_receipt_roll(self) -> None:
         with tempfile.TemporaryDirectory() as temporary, self.assertRaises(ConnectorError) as raised:

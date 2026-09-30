@@ -96,6 +96,58 @@ class ThermalPrintTests(unittest.TestCase):
         ])
         self.assertEqual(sum(op["type"] == "rule" for op in ops), 3)
 
+    def test_all_receipt_kinds_use_the_same_content_first_layout(self) -> None:
+        printed_at = datetime(2026, 9, 30, 8, 47, tzinfo=ZoneInfo("Asia/Seoul"))
+        document = thermal_print.normalize_document({
+            "version": 1,
+            "kind": "agenda",
+            "title": "Agenda",
+            "subtitle": "2026-09-30 수 - 2026-10-06 화",
+            "meta": [
+                {"label": "Events", "value": "8"},
+                {"label": "Tasks", "value": "13"},
+            ],
+            "sections": [{
+                "heading": "2026-09-30 수",
+                "items": [
+                    {"title": "15:00 진료", "detail": "internal detail"},
+                    {"title": "22:00 청구하기", "checked": False},
+                ],
+            }],
+        })
+
+        ops = thermal_print._document_ops(document, printed_at)
+        text = [str(op["text"]) for op in ops if op["type"] == "text"]
+
+        self.assertEqual(text, [
+            "KaosGDD",
+            "Agenda 2026-09-30 수 - 2026-10-06 화",
+            "2026-09-30 수",
+            "- 15:00 진료",
+            "internal detail",
+            "[ ] 22:00 청구하기",
+            "Printed 2026-09-30 수 08:47 KST",
+        ])
+        self.assertNotIn("Events", text)
+        self.assertNotIn("Tasks", text)
+
+    def test_receipt_text_and_rules_are_sized_for_native_180_dpi_output(self) -> None:
+        document = thermal_print.normalize_document({
+            "version": 1,
+            "kind": "memo",
+            "title": "메모 제목",
+            "body": "본문 내용",
+        })
+
+        ops = thermal_print._document_ops(
+            document,
+            datetime(2026, 9, 30, 8, 47, tzinfo=ZoneInfo("Asia/Seoul")),
+        )
+        text_ops = [op for op in ops if op["type"] == "text"]
+
+        self.assertGreaterEqual(min(float(op["size"]) for op in text_ops), 8.0)
+        self.assertEqual(next(op for op in text_ops if op["text"] == "메모 제목")["size"], 14.5)
+
     def test_rejects_unknown_kinds_and_unbounded_item_lists(self) -> None:
         with self.assertRaisesRegex(thermal_print.ThermalPrintError, "invalid_print_kind"):
             thermal_print.normalize_document({"kind": "shell", "title": "No"})

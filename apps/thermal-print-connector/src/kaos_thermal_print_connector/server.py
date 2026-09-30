@@ -44,6 +44,7 @@ class ConnectorConfig:
     output_format: str = "pdf"
     raster_dpi: int = 180
     raster_width: int = 512
+    raster_threshold: int = 168
     lp_binary: str = "lp"
     lpstat_binary: str = "lpstat"
     pdftoppm_binary: str = "pdftoppm"
@@ -66,7 +67,12 @@ class ConnectorConfig:
             raise ConnectorError(HTTPStatus.INTERNAL_SERVER_ERROR, "invalid_output_format")
         raster_dpi = int(source.get("THERMAL_CONNECTOR_RASTER_DPI", "180") or "180")
         raster_width = int(source.get("THERMAL_CONNECTOR_RASTER_WIDTH", "512") or "512")
-        if not 72 <= raster_dpi <= 600 or not 64 <= raster_width <= 2_048:
+        raster_threshold = int(source.get("THERMAL_CONNECTOR_RASTER_THRESHOLD", "168") or "168")
+        if (
+            not 72 <= raster_dpi <= 600
+            or not 64 <= raster_width <= 2_048
+            or not 1 <= raster_threshold <= 254
+        ):
             raise ConnectorError(HTTPStatus.INTERNAL_SERVER_ERROR, "invalid_raster_geometry")
         return cls(
             token=token,
@@ -76,6 +82,7 @@ class ConnectorConfig:
             output_format=output_format,
             raster_dpi=raster_dpi,
             raster_width=raster_width,
+            raster_threshold=raster_threshold,
             lp_binary=source.get("THERMAL_CONNECTOR_LP", "lp").strip() or "lp",
             lpstat_binary=source.get("THERMAL_CONNECTOR_LPSTAT", "lpstat").strip() or "lpstat",
             pdftoppm_binary=source.get("THERMAL_CONNECTOR_PDFTOPPM", "pdftoppm").strip() or "pdftoppm",
@@ -239,7 +246,7 @@ def _save_state(path: Path, jobs: Mapping[str, Mapping[str, object]]) -> None:
         raise ConnectorError(HTTPStatus.SERVICE_UNAVAILABLE, "connector_state_unwritable") from exc
 
 
-def _read_pbm(path: Path) -> tuple[int, int, bytes]:
+def _read_pgm(path: Path) -> tuple[int, int, bytes]:
     try:
         data = path.read_bytes()
     except OSError as exc:
@@ -271,9 +278,10 @@ def _read_pbm(path: Path) -> tuple[int, int, bytes]:
         magic = next_token()
         width = int(next_token())
         height = int(next_token())
+        maximum = int(next_token())
     except (ValueError, ConnectorError) as exc:
         raise ConnectorError(HTTPStatus.SERVICE_UNAVAILABLE, "print_render_failed") from exc
-    if magic != b"P4" or width <= 0 or width > 4_096 or height <= 0 or height > 65_535:
+    if magic != b"P5" or maximum != 255 or width <= 0 or width > 4_096 or height <= 0 or height > 65_535:
         raise ConnectorError(HTTPStatus.SERVICE_UNAVAILABLE, "print_render_failed")
     if position >= len(data) or data[position] not in b" \t\r\n":
         raise ConnectorError(HTTPStatus.SERVICE_UNAVAILABLE, "print_render_failed")
@@ -281,11 +289,25 @@ def _read_pbm(path: Path) -> tuple[int, int, bytes]:
         position += 2
     else:
         position += 1
-    row_bytes = (width + 7) // 8
-    raster = data[position:]
-    if len(raster) != row_bytes * height:
+    grayscale = data[position:]
+    if len(grayscale) != width * height:
         raise ConnectorError(HTTPStatus.SERVICE_UNAVAILABLE, "print_render_failed")
-    return width, height, raster
+    return width, height, grayscale
+
+
+def _threshold_grayscale(width: int, height: int, grayscale: bytes, threshold: int) -> bytes:
+    """Convert antialiased native-resolution grayscale into a slightly darker 1-bit raster."""
+    if len(grayscale) != width * height or not 1 <= threshold <= 254:
+        raise ConnectorError(HTTPStatus.SERVICE_UNAVAILABLE, "print_render_failed")
+    row_bytes = (width + 7) // 8
+    raster = bytearray(row_bytes * height)
+    for y in range(height):
+        source_offset = y * width
+        target_offset = y * row_bytes
+        for x in range(width):
+            if grayscale[source_offset + x] < threshold:
+                raster[target_offset + (x // 8)] |= 0x80 >> (x % 8)
+    return bytes(raster)
 
 
 def _fit_raster_width(width: int, height: int, raster: bytes, target_width: int) -> bytes:
@@ -319,9 +341,17 @@ def _escpos_document(document: Path, output: Path, config: ConnectorConfig) -> N
     render = _run(
         [
             config.pdftoppm_binary,
-            "-mono",
+            "-gray",
             "-r",
             str(config.raster_dpi),
+            "-freetype",
+            "yes",
+            "-aa",
+            "yes",
+            "-aaVector",
+            "yes",
+            "-thinlinemode",
+            "solid",
             str(document),
             str(prefix),
         ],
@@ -329,14 +359,15 @@ def _escpos_document(document: Path, output: Path, config: ConnectorConfig) -> N
     )
     if render.returncode != 0:
         raise ConnectorError(HTTPStatus.SERVICE_UNAVAILABLE, "print_render_failed")
-    pages = sorted(output.parent.glob("page-*.pbm"), key=lambda path: int(path.stem.split("-")[-1]))
+    pages = sorted(output.parent.glob("page-*.pgm"), key=lambda path: int(path.stem.split("-")[-1]))
     if not pages:
         raise ConnectorError(HTTPStatus.SERVICE_UNAVAILABLE, "print_render_failed")
 
     row_bytes = (config.raster_width + 7) // 8
     result = bytearray(b"\x1b@")
     for page_index, page in enumerate(pages):
-        width, height, source_raster = _read_pbm(page)
+        width, height, grayscale = _read_pgm(page)
+        source_raster = _threshold_grayscale(width, height, grayscale, config.raster_threshold)
         raster = _fit_raster_width(width, height, source_raster, config.raster_width)
         for top in range(0, height, 256):
             band_height = min(256, height - top)

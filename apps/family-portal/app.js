@@ -7444,11 +7444,6 @@ function thermalPrintAction(kind, label = uiText("common.print", "Print")) {
   return `<button class="thermalPrintAction" type="button" data-thermal-print="${escapeHtml(kind)}">${escapeHtml(label)}</button>`;
 }
 
-function thermalPrintCollectionLabel(collectionId) {
-  const collection = activeCalendarData().collections.find((item) => item.id === collectionId);
-  return collection?.name || collectionId || "";
-}
-
 function thermalPrintAgendaDocument() {
   const today = ymd(new Date());
   const endDate = addDaysToDateValue(today, 6);
@@ -7469,25 +7464,17 @@ function thermalPrintAgendaDocument() {
     version: 1,
     kind: "agenda",
     title: "Agenda",
-    subtitle: `${today} - ${endDate}`,
-    meta: [
-      { label: "Events", value: String(events.length) },
-      { label: "Tasks", value: String(tasks.length) },
-    ],
+    subtitle: `${thermalPrintDateLabel(today)} - ${thermalPrintDateLabel(endDate)}`,
+    meta: [],
     sections: Object.keys(grouped).sort().map((date) => {
-      const weather = weatherForDate(date);
       return {
-        heading: [date, weather ? tempRange(weather) : ""].filter(Boolean).join(" · "),
+        heading: thermalPrintDateLabel(date),
         items: grouped[date].map((entry) => entry.kind === "event"
           ? {
-              title: entry.event.title,
-              meta: entry.event.allDay ? "All day · Event" : `${familyAgendaEventTime(entry.event)} · Event`,
-              detail: entry.event.detail || "",
+              title: [familyAgendaEventTime(entry.event), entry.event.title].filter(Boolean).join("  "),
             }
           : {
-              title: entry.task.title,
-              meta: [entry.task.dueTime, "Task", entry.task.priorityMark].filter(Boolean).join(" · "),
-              detail: entry.task.subtasks.length ? `${entry.task.subtasks.length} subtasks` : "",
+              title: [entry.task.dueTime, entry.task.title].filter(Boolean).join("  "),
               checked: false,
             }),
       };
@@ -7498,23 +7485,20 @@ function thermalPrintAgendaDocument() {
 function thermalPrintTasksDocument() {
   const tasks = mockAdapter.getTasks().filter((task) => taskMatchesMode(task, state.taskMode));
   const groups = groupTasksByDue(tasks);
-  const collection = mockAdapter.getCurrentCollection();
   return {
     version: 1,
     kind: "tasks",
-    title: state.taskMode === "done" ? "Completed Tasks" : "Tasks",
-    subtitle: collection?.name || "All collections",
-    meta: [{ label: "Total", value: String(tasks.length) }],
+    title: "Tasks",
+    subtitle: state.taskMode === "done" ? "Completed" : "",
+    meta: [],
     sections: Object.keys(groups).sort((left, right) => {
       if (left === uiText("task.noDueDate", "No due date")) return 1;
       if (right === uiText("task.noDueDate", "No due date")) return -1;
       return left.localeCompare(right);
     }).map((due) => ({
-      heading: due,
+      heading: thermalPrintDateLabel(due),
       items: groups[due].map((task) => ({
-        title: task.title,
-        meta: [task.dueTime, task.priorityMark, thermalPrintCollectionLabel(task.collection)].filter(Boolean).join(" · "),
-        detail: task.subtasks.length ? `${task.subtasks.filter((item) => item.done).length}/${task.subtasks.length} subtasks` : "",
+        title: [task.dueTime, task.title].filter(Boolean).join("  "),
         checked: task.done,
       })),
     })),
@@ -7523,7 +7507,7 @@ function thermalPrintTasksDocument() {
 
 const THERMAL_PRINT_KOREAN_WEEKDAYS = Object.freeze(["일", "월", "화", "수", "목", "금", "토"]);
 
-function thermalPrintEventDateLabel(dateValue) {
+function thermalPrintDateLabel(dateValue) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateValue || ""));
   if (!match) return String(dateValue || "");
   const [, year, month, day] = match;
@@ -7539,7 +7523,7 @@ function thermalPrintEventDateLabel(dateValue) {
 function thermalPrintEventDocument() {
   const event = findEventById(hashParam("uid"));
   if (!event) return null;
-  const startDate = thermalPrintEventDateLabel(event.startDate);
+  const startDate = thermalPrintDateLabel(event.startDate);
   const endDate = event.endDate || event.startDate;
   let time = `${startDate} All day KST`;
   if (!event.allDay) {
@@ -7548,7 +7532,7 @@ function thermalPrintEventDocument() {
     if (event.endTime || (endDate && endDate !== event.startDate)) {
       end = endDate === event.startDate
         ? String(event.endTime || "")
-        : `${thermalPrintEventDateLabel(endDate)} ${event.endTime || ""}`.trim();
+        : `${thermalPrintDateLabel(endDate)} ${event.endTime || ""}`.trim();
     }
     time = `${start}${end ? ` - ${end}` : ""} KST`;
   }
@@ -7566,18 +7550,17 @@ function thermalPrintEventDocument() {
 function thermalPrintTaskDocument(taskId = hashParam("uid")) {
   const task = findTaskById(taskId);
   if (!task) return null;
+  const due = task.due
+    ? [thermalPrintDateLabel(task.due), task.dueTime, task.dueTime ? "KST" : ""].filter(Boolean).join(" ")
+    : "";
   return {
     version: 1,
     kind: "task",
-    title: task.title,
-    subtitle: task.done ? "Completed" : "Active",
-    meta: [
-      { label: "Due", value: [task.due || "No due date", task.dueTime].filter(Boolean).join(" ") },
-      { label: "List", value: thermalPrintCollectionLabel(task.collection) },
-      ...(task.priorityLabel ? [{ label: "Priority", value: task.priorityLabel }] : []),
-    ],
+    title: `[${task.done ? "x" : " "}] ${task.title}`,
+    subtitle: due,
+    meta: [],
     sections: task.subtasks.length
-      ? [{ heading: "Subtasks", items: task.subtasks.map((item) => ({ title: item.text, checked: item.done })) }]
+      ? [{ heading: "", items: task.subtasks.map((item) => ({ title: item.text, checked: item.done })) }]
       : [],
     body: task.notes || "",
   };
@@ -7595,15 +7578,9 @@ function thermalPrintMemoDocument() {
     version: 1,
     kind: "memo",
     title: memo.title || "Memo",
-    subtitle: `Memo #${memoDisplayNumber(memo)}`,
-    meta: [
-      ...(memo.updated ? [{ label: "Updated", value: formatDocumentDate(memo.updated) }] : []),
-      ...(memo.created ? [{ label: "Created", value: formatDocumentDate(memo.created) }] : []),
-      ...(memo.tags?.length ? [{ label: "Tags", value: memo.tags.slice(0, 20).join(", ") }] : []),
-    ],
-    sections: memo.attachments?.length
-      ? [{ heading: "Attachments", items: memo.attachments.map((item) => ({ title: item.filename, meta: item.type || "" })) }]
-      : [],
+    subtitle: "",
+    meta: [],
+    sections: [],
     body: bodyLines.join("\n").trim(),
   };
 }

@@ -34,9 +34,12 @@ paper.
    For an EPSON-compatible thermal printer registered as a raw queue, also set
    `THERMAL_CONNECTOR_OUTPUT_FORMAT=escpos` and match its native DPI/print-head
    width. The connector rasterizes the validated PDF at native resolution,
+   preserves antialiased glyph shapes with a controlled 1-bit threshold,
    center-crops only the paper margins without resampling the text, and sends
    bounded ESC/POS bands followed by a partial-cut command. The SAM4S
-   GIANT-100 uses 180 dpi and 512 dots.
+   GIANT-100 uses 180 dpi and 512 dots. The default threshold of `168` makes
+   small strokes modestly darker without pretending the print head has a
+   higher physical resolution.
 3. Set `CUPS_SERVER=127.0.0.1:631`; the container uses host networking but
    remains a non-root, read-only process.
 4. Bind `THERMAL_CONNECTOR_HOST` to H4's Tailscale address.

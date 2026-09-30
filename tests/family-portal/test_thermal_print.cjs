@@ -13,7 +13,7 @@ const stylesSource = fs.readFileSync(path.join(root, "styles.css"), "utf8");
 
 test("loads the thermal print controller before the application", () => {
   assert.match(indexSource, /src="\/thermal-print\.js\?v=3"/);
-  assert.ok(indexSource.indexOf('src="/thermal-print.js?v=3"') < indexSource.indexOf('src="/app.js?v=402"'));
+  assert.ok(indexSource.indexOf('src="/thermal-print.js?v=3"') < indexSource.indexOf('src="/app.js?v=403"'));
 });
 
 test("limits print actions to the requested personal surfaces", () => {
@@ -43,7 +43,7 @@ test("single-event receipts use Korean weekdays and the compact event layout", (
   assert.ok(helperStart >= 0 && documentStart > helperStart && documentEnd > documentStart);
 
   const context = {};
-  vm.runInNewContext(`${appSource.slice(helperStart, documentStart)}\nresult = thermalPrintEventDateLabel("2026-10-03");`, context);
+  vm.runInNewContext(`${appSource.slice(helperStart, documentStart)}\nresult = thermalPrintDateLabel("2026-10-03");`, context);
   assert.equal(context.result, "2026-10-03 토");
 
   const eventDocumentSource = appSource.slice(documentStart, documentEnd);
@@ -52,6 +52,31 @@ test("single-event receipts use Korean weekdays and the compact event layout", (
   assert.match(eventDocumentSource, /sections: \[\]/);
   assert.match(eventDocumentSource, /body: event\.description \|\| ""/);
   assert.doesNotMatch(eventDocumentSource, /Calendar|Location|Repeat|Alarm/);
+});
+
+test("agenda, tasks, task details, and memos keep only printable content", () => {
+  const agendaStart = appSource.indexOf("function thermalPrintAgendaDocument");
+  const tasksStart = appSource.indexOf("function thermalPrintTasksDocument", agendaStart);
+  const eventStart = appSource.indexOf("function thermalPrintEventDocument", tasksStart);
+  const taskStart = appSource.indexOf("function thermalPrintTaskDocument", eventStart);
+  const memoStart = appSource.indexOf("function thermalPrintMemoDocument", taskStart);
+  const dispatcherStart = appSource.indexOf("function thermalPrintDocument", memoStart);
+  const agendaSource = appSource.slice(agendaStart, tasksStart);
+  const tasksSource = appSource.slice(tasksStart, eventStart);
+  const taskSource = appSource.slice(taskStart, memoStart);
+  const memoSource = appSource.slice(memoStart, dispatcherStart);
+
+  for (const source of [agendaSource, tasksSource, taskSource, memoSource]) {
+    assert.match(source, /meta: \[\]/);
+  }
+  assert.match(agendaSource, /thermalPrintDateLabel\(today\)/);
+  assert.doesNotMatch(agendaSource, /"Events"|"Task"|priorityMark|subtasks/);
+  assert.match(tasksSource, /thermalPrintDateLabel\(due\)/);
+  assert.doesNotMatch(tasksSource, /"Total"|All collections|priorityMark|subtasks|thermalPrintCollectionLabel/);
+  assert.match(taskSource, /KST/);
+  assert.doesNotMatch(taskSource, /"Due"|"List"|"Priority"|"Active"|"Completed"/);
+  assert.match(memoSource, /sections: \[\]/);
+  assert.doesNotMatch(memoSource, /Memo #|Updated|Created|Tags|Attachments/);
 });
 
 test("supports preview and destination-aware submission", () => {

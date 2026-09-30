@@ -269,7 +269,7 @@ def _wrap(text: str, width: float, font_name: str, size: float) -> list[str]:
     return result
 
 
-def _text_op(ops: list[dict[str, object]], text: str, *, size: float = 8.7, leading: float = 11.2,
+def _text_op(ops: list[dict[str, object]], text: str, *, size: float = 9.5, leading: float = 12.0,
              indent_mm: float = 0, before_mm: float = 0, after_mm: float = 0,
              tone: float = 0, bold: bool = False) -> None:
     if text:
@@ -295,15 +295,15 @@ def _append_markdown_ops(ops: list[dict[str, object]], body: str) -> None:
         elif style == "rule":
             ops.append({"type": "rule", "beforeMm": 1.0, "afterMm": 1.0})
         elif style == "heading":
-            _text_op(ops, text, size=9.7, leading=12.1, before_mm=1.3, after_mm=0.6, bold=True)
+            _text_op(ops, text, size=10.5, leading=13.0, before_mm=1.3, after_mm=0.6, bold=True)
         elif style == "item":
-            _text_op(ops, text, size=8.6, leading=10.9, indent_mm=2.0, after_mm=0.4)
+            _text_op(ops, text, size=9.4, leading=11.9, indent_mm=2.0, after_mm=0.4)
         elif style == "quote":
-            _text_op(ops, f"> {text}", size=8.4, leading=10.5, indent_mm=2.0, after_mm=0.5)
+            _text_op(ops, f"> {text}", size=9.2, leading=11.7, indent_mm=2.0, after_mm=0.5)
         elif style == "code":
-            _text_op(ops, text, size=7.7, leading=9.5, indent_mm=2.0, after_mm=0.3)
+            _text_op(ops, text, size=8.5, leading=10.7, indent_mm=2.0, after_mm=0.3)
         else:
-            _text_op(ops, text, size=8.7, leading=11.1, after_mm=0.6)
+            _text_op(ops, text, size=9.5, leading=12.0, after_mm=0.6)
 
 
 def _printed_text(printed_at: datetime) -> str:
@@ -312,67 +312,55 @@ def _printed_text(printed_at: datetime) -> str:
     return f"Printed {local:%Y-%m-%d} {weekday} {local:%H:%M} KST"
 
 
-def _event_document_ops(document: Mapping[str, object], printed_at: datetime) -> list[dict[str, object]]:
-    ops: list[dict[str, object]] = []
-    _text_op(ops, "KaosGDD", size=8.2, leading=9.8, after_mm=1.2, bold=True)
-    event_line = "Event"
-    if document["subtitle"]:
-        event_line = f"{event_line} {document['subtitle']}"
-    _text_op(ops, event_line, size=8.5, leading=10.8, after_mm=1.2, bold=True)
-    ops.append({"type": "rule", "beforeMm": 1.0, "afterMm": 1.8})
-    _text_op(ops, str(document["title"]), size=13.5, leading=16.3, after_mm=1.2, bold=True)
-    ops.append({"type": "rule", "beforeMm": 1.0, "afterMm": 1.8})
-    if document["body"]:
-        _append_markdown_ops(ops, str(document["body"]))
-        ops.append({"type": "rule", "beforeMm": 2.2, "afterMm": 1.5})
-    _text_op(ops, _printed_text(printed_at), size=7.2, leading=8.5)
-    return ops
-
-
 def _document_ops(document: Mapping[str, object], printed_at: datetime) -> list[dict[str, object]]:
-    if document["kind"] == "event":
-        return _event_document_ops(document, printed_at)
-
     kind_labels = {
-        "agenda": "AGENDA",
-        "tasks": "TASKS",
-        "task": "TASK",
-        "memo": "MEMO",
+        "agenda": "Agenda",
+        "event": "Event",
+        "tasks": "Tasks",
+        "task": "Task",
+        "memo": "Memo",
     }
-    ops: list[dict[str, object]] = []
-    _text_op(ops, "KaosGDD", size=8.2, leading=9.8, after_mm=1.2, bold=True)
-    _text_op(ops, kind_labels[str(document["kind"])], size=7.4, leading=8.8, bold=True)
-    _text_op(ops, str(document["title"]), size=13.5, leading=16.3, after_mm=1.2, bold=True)
+    kind_label = kind_labels[str(document["kind"])]
+    context_line = kind_label
     if document["subtitle"]:
-        _text_op(ops, str(document["subtitle"]), size=8.5, leading=10.8, after_mm=1.5)
+        context_line = f"{context_line} {document['subtitle']}"
+
+    ops: list[dict[str, object]] = []
+    _text_op(ops, "KaosGDD", size=9.0, leading=10.8, after_mm=1.1, bold=True)
+    _text_op(ops, context_line, size=9.4, leading=11.8, after_mm=1.1, bold=True)
     ops.append({"type": "rule", "beforeMm": 1.0, "afterMm": 1.8})
 
-    for row in document["meta"]:  # type: ignore[union-attr]
-        label = str(row["label"])
-        value = str(row["value"])
-        _text_op(ops, label.upper(), size=7.2, leading=8.5, bold=True)
-        _text_op(ops, value, size=8.8, leading=10.8, after_mm=1.1)
+    sections = document["sections"]  # type: ignore[assignment]
+    body = str(document["body"])
+    title = str(document["title"])
+    show_title = title.casefold() != kind_label.casefold()
+    if show_title:
+        _text_op(ops, title, size=14.5, leading=17.4, after_mm=1.2, bold=True)
+        if sections or body:
+            ops.append({"type": "rule", "beforeMm": 1.0, "afterMm": 1.8})
 
-    for section in document["sections"]:  # type: ignore[union-attr]
+    for section_index, section in enumerate(sections):
+        if section_index:
+            ops.append({"type": "rule", "beforeMm": 1.2, "afterMm": 1.2})
         heading = str(section["heading"])
         if heading:
-            _text_op(ops, heading, size=9.5, leading=11.8, before_mm=2.2, after_mm=0.8, bold=True)
+            _text_op(ops, heading, size=10.3, leading=13.0, before_mm=0.6, after_mm=0.8, bold=True)
         for item in section["items"]:
             checked = item.get("checked")
             prefix = "[x] " if checked is True else "[ ] " if checked is False else "- "
-            _text_op(ops, f"{prefix}{item['title']}", size=8.8, leading=11.1, indent_mm=1.0, bold=True)
+            _text_op(ops, f"{prefix}{item['title']}", size=9.6, leading=12.2, indent_mm=1.0, after_mm=0.3, bold=True)
             if item["meta"]:
-                _text_op(ops, str(item["meta"]), size=7.4, leading=9.1, indent_mm=4.0)
+                _text_op(ops, str(item["meta"]), size=8.6, leading=10.8, indent_mm=4.0)
             if item["detail"]:
-                _text_op(ops, str(item["detail"]), size=8.1, leading=10.1, indent_mm=4.0, after_mm=1.0)
+                _text_op(ops, str(item["detail"]), size=9.1, leading=11.5, indent_mm=4.0, after_mm=1.0)
 
-    if document["body"]:
-        if document["meta"] or document["sections"]:
+    if body:
+        if sections:
             ops.append({"type": "rule", "beforeMm": 1.5, "afterMm": 1.8})
-        _append_markdown_ops(ops, str(document["body"]))
+        _append_markdown_ops(ops, body)
 
     ops.append({"type": "rule", "beforeMm": 2.2, "afterMm": 1.5})
-    _text_op(ops, _printed_text(printed_at), size=7.2, leading=8.5)
+    _text_op(ops, _printed_text(printed_at), size=8.0, leading=9.6)
     return ops
 
 
@@ -425,7 +413,7 @@ def render_pdf(value: object, *, now: datetime | None = None) -> bytes:
         if op["type"] == "rule":
             y -= float(op["beforeMm"]) * mm
             canvas.setStrokeColorRGB(0, 0, 0)
-            canvas.setLineWidth(0.45)
+            canvas.setLineWidth(0.65)
             canvas.line(x, y, x + content_width, y)
             y -= (float(op["afterMm"]) + 0.2) * mm
             continue
