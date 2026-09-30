@@ -15,17 +15,20 @@ test("personal PWA renders the shared KaosToday briefing instead of an ACK list"
   assert.match(viewSource, /aria-label="KaosGDD Today"/);
   assert.match(viewSource, /class="archiveCommand kaosTodayToolbar"/);
   assert.match(viewSource, /data-notifications-refresh[^>]*>Reload<\/button>/);
-  assert.match(indexSource, /href="\/styles\.css\?v=431"/);
+  assert.match(indexSource, /href="\/styles\.css\?v=432"/);
   assert.match(fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8"), /\.notificationInbox\.kaosToday \{\s*gap: 4px;/);
   assert.match(viewSource, /payload\.plainText/);
   assert.match(viewSource, /class="kaosTodayText"/);
+  assert.match(viewSource, /class="kaosTodayContent"/);
   assert.match(viewSource, /class="kaosTodayCounters"/);
   assert.match(viewSource, /Tasks <strong>\$\{taskCount\}<\/strong> \(GDDZiN/);
   assert.match(viewSource, /Supplies <strong>\$\{supplyCount\}<\/strong>/);
   assert.doesNotMatch(viewSource, /data-notification-ack=/);
-  assert.match(indexSource, /src="\/notifications-view\.js\?v=8"/);
-  assert.ok(indexSource.indexOf('src="/notifications-view.js?v=8"') < indexSource.indexOf('src="/app.js?v=404"'));
-  assert.ok(viewSource.indexOf('class="kaosTodayText"') < viewSource.indexOf('class="archiveCommand kaosTodayToolbar"'));
+  assert.match(indexSource, /src="\/notifications-view\.js\?v=9"/);
+  assert.ok(indexSource.indexOf('src="/notifications-view.js?v=9"') < indexSource.indexOf('src="/app.js?v=404"'));
+  assert.ok(viewSource.indexOf('class="kaosTodayContent"') < viewSource.indexOf('class="kaosTodayText"'));
+  assert.ok(viewSource.indexOf('class="kaosTodayText"') < viewSource.indexOf('class="kaosTodayCounters"'));
+  assert.ok(viewSource.indexOf('class="kaosTodayCounters"') < viewSource.indexOf('class="archiveCommand kaosTodayToolbar"'));
 });
 
 test("main Today is a selectable briefing route while Agenda remains the default page", () => {

@@ -14,20 +14,22 @@ window.KAOS_NOTIFICATIONS_VIEW = (() => {
         : "TODAY";
     return `
       <section class="archiveTerminal notificationInbox kaosToday" aria-label="KaosGDD Today">
-        ${
-          briefing.error
-            ? `<div class="archiveError" role="alert"><p>${deps.escapeHtml(briefing.error)}</p><button class="archiveAction" type="button" data-notifications-refresh>RETRY</button></div>`
-            : briefing.loading && !briefing.checked
-              ? `<p class="archiveStatusMessage">Building today's briefing...</p>`
-              : payload.plainText
-                ? `<pre class="kaosTodayText">${deps.escapeHtml(payload.plainText)}</pre>`
-                : `<p class="archiveStatusMessage notificationEmpty">No briefing available.</p>`
-        }
-        <p class="kaosTodayCounters" aria-label="Today totals">
-          <span>Tasks <strong>${taskCount}</strong> (GDDZiN <strong>${gddzinCount}</strong>, Family <strong>${familyCount}</strong>)</span>
-          <span aria-hidden="true">/</span>
-          <span>Supplies <strong>${supplyCount}</strong></span>
-        </p>
+        <div class="kaosTodayContent">
+          ${
+            briefing.error
+              ? `<div class="archiveError" role="alert"><p>${deps.escapeHtml(briefing.error)}</p><button class="archiveAction" type="button" data-notifications-refresh>RETRY</button></div>`
+              : briefing.loading && !briefing.checked
+                ? `<p class="archiveStatusMessage kaosTodayLoading">Building today's briefing...</p>`
+                : payload.plainText
+                  ? `<pre class="kaosTodayText">${deps.escapeHtml(payload.plainText)}</pre>`
+                  : `<p class="archiveStatusMessage notificationEmpty">No briefing available.</p>`
+          }
+          <p class="kaosTodayCounters" aria-label="Today totals">
+            <span>Tasks <strong>${taskCount}</strong> (GDDZiN <strong>${gddzinCount}</strong>, Family <strong>${familyCount}</strong>)</span>
+            <span aria-hidden="true">/</span>
+            <span>Supplies <strong>${supplyCount}</strong></span>
+          </p>
+        </div>
         <div class="archiveCommand kaosTodayToolbar">
           <p class="archiveStatusMessage" role="status" aria-live="polite">${summary}</p>
           <button class="archiveAction" type="button" data-notifications-refresh aria-label="Reload KaosGDD Today" title="Reload KaosGDD Today" ${briefing.loading ? "disabled" : ""}>Reload</button>

@@ -9612,6 +9612,17 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   gap: 4px;
 }
 
+.app[data-profile="main"] .notificationInbox .kaosTodayContent {
+  min-width: 0;
+  border: 1px solid var(--archive-line);
+  background: var(--archive-surface);
+}
+
+.app[data-profile="main"] .notificationInbox .kaosTodayContent > :is(.archiveError, .kaosTodayLoading) {
+  margin: 0;
+  padding: 18px 16px;
+}
+
 .app[data-profile="main"] .notificationInbox .kaosTodayToolbar {
   display: flex;
   align-items: center;
@@ -9630,7 +9641,8 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   flex-wrap: wrap;
   gap: 4px 8px;
   margin: 0;
-  padding: 6px 3px 2px;
+  padding: 9px 16px 11px;
+  border-top: 1px solid var(--archive-line);
   color: var(--archive-muted);
   font-size: 0.76rem;
   line-height: 1.35;
@@ -9662,8 +9674,8 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 .kaosTodayText {
   margin: 0;
   padding: 18px 16px;
-  border: 1px solid var(--archive-line);
-  background: var(--archive-surface);
+  border: 0;
+  background: transparent;
   color: var(--archive-text);
   font: inherit;
   line-height: 1.75;
@@ -9672,8 +9684,9 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 }
 
 .notificationEmpty {
+  margin: 0;
   padding: 22px 16px;
-  border: 1px solid var(--archive-line);
+  border: 0;
 }
 
 .scribbleBoard {
