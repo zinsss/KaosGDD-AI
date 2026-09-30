@@ -40,13 +40,13 @@ class ThermalPrintConnectorTests(unittest.TestCase):
             output_format=output_format,
         )
 
-    def payload(self, pdf: bytes | None = None, job_id: str = "a" * 32) -> dict[str, object]:
+    def payload(self, pdf: bytes | None = None, job_id: str = "a" * 32, kind: str = "tasks") -> dict[str, object]:
         document = pdf or receipt_pdf()
         return {
             "version": 1,
             "jobId": job_id,
             "title": "오늘 할 일",
-            "kind": "tasks",
+            "kind": kind,
             "pdfSha256": hashlib.sha256(document).hexdigest(),
             "pdfBase64": base64.b64encode(document).decode("ascii"),
         }
@@ -80,6 +80,20 @@ class ThermalPrintConnectorTests(unittest.TestCase):
             self.assertEqual([command[0] for command in commands], ["lpstat", "lp"])
             self.assertNotIn("pdfBase64", config.state_path.read_text(encoding="utf-8"))
             self.assertEqual(job_status(config, "a" * 32)["status"], "submitted")
+
+    def test_accepts_today_receipts(self) -> None:
+        def runner(command, **_kwargs):
+            if command[0] == "lpstat":
+                return SimpleNamespace(returncode=0, stdout="printer receipt-home is idle", stderr="")
+            return SimpleNamespace(returncode=0, stdout="request id is receipt-home-today", stderr="")
+
+        with tempfile.TemporaryDirectory() as temporary, mock.patch(
+            "kaos_thermal_print_connector.server._run", side_effect=runner
+        ):
+            result = submit_job(self.config(Path(temporary)), self.payload(kind="today"))
+
+        self.assertEqual(result["status"], "submitted")
+        self.assertEqual(result["printerJobId"], "receipt-home-today")
 
     def test_escpos_mode_renders_pdf_and_submits_raw_raster_data(self) -> None:
         commands = []

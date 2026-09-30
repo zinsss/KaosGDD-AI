@@ -8,12 +8,13 @@ const root = path.join(__dirname, "../../apps/family-portal");
 const appSource = fs.readFileSync(path.join(root, "app.js"), "utf8");
 const indexSource = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const memosSource = fs.readFileSync(path.join(root, "memos-view.js"), "utf8");
+const notificationsSource = fs.readFileSync(path.join(root, "notifications-view.js"), "utf8");
 const moduleSource = fs.readFileSync(path.join(root, "thermal-print.js"), "utf8");
 const stylesSource = fs.readFileSync(path.join(root, "styles.css"), "utf8");
 
 test("loads the thermal print controller before the application", () => {
   assert.match(indexSource, /src="\/thermal-print\.js\?v=3"/);
-  assert.ok(indexSource.indexOf('src="/thermal-print.js?v=3"') < indexSource.indexOf('src="/app.js?v=404"'));
+  assert.ok(indexSource.indexOf('src="/thermal-print.js?v=3"') < indexSource.indexOf('src="/app.js?v=405"'));
 });
 
 test("limits print actions to the requested personal surfaces", () => {
@@ -21,6 +22,7 @@ test("limits print actions to the requested personal surfaces", () => {
   assert.match(appSource, /thermalPrintAction\("event"\)/);
   assert.match(appSource, /thermalPrintAction\("tasks"\)/);
   assert.match(appSource, /thermalPrintAction\("task"\)/);
+  assert.match(notificationsSource, /data-thermal-print="today"/);
   assert.match(appSource, /data-thermal-print-task-id=/);
   assert.match(appSource, /thermalPrintTaskDocument\(taskPrintButton\.dataset\.thermalPrintTaskId/);
   assert.match(memosSource, /data-thermal-print="memo"/);
@@ -29,7 +31,7 @@ test("limits print actions to the requested personal surfaces", () => {
 });
 
 test("builds structured documents instead of sending page html", () => {
-  for (const kind of ["agenda", "event", "tasks", "task", "memo"]) {
+  for (const kind of ["today", "agenda", "event", "tasks", "task", "memo"]) {
     assert.match(appSource, new RegExp(`kind: "${kind}"`));
   }
   assert.doesNotMatch(moduleSource, /innerHTML:\s*state\.document/);
@@ -54,21 +56,26 @@ test("single-event receipts use Korean weekdays and the compact event layout", (
   assert.doesNotMatch(eventDocumentSource, /Calendar|Location|Repeat|Alarm/);
 });
 
-test("agenda, tasks, task details, and memos keep only printable content", () => {
+test("Today, agenda, tasks, task details, and memos keep only printable content", () => {
   const agendaStart = appSource.indexOf("function thermalPrintAgendaDocument");
   const tasksStart = appSource.indexOf("function thermalPrintTasksDocument", agendaStart);
   const eventStart = appSource.indexOf("function thermalPrintEventDocument", tasksStart);
   const taskStart = appSource.indexOf("function thermalPrintTaskDocument", eventStart);
   const memoStart = appSource.indexOf("function thermalPrintMemoDocument", taskStart);
-  const dispatcherStart = appSource.indexOf("function thermalPrintDocument", memoStart);
+  const todayStart = appSource.indexOf("function thermalPrintTodayDocument", memoStart);
+  const dispatcherStart = appSource.indexOf("function thermalPrintDocument", todayStart);
   const agendaSource = appSource.slice(agendaStart, tasksStart);
   const tasksSource = appSource.slice(tasksStart, eventStart);
   const taskSource = appSource.slice(taskStart, memoStart);
-  const memoSource = appSource.slice(memoStart, dispatcherStart);
+  const memoSource = appSource.slice(memoStart, todayStart);
+  const todaySource = appSource.slice(todayStart, dispatcherStart);
 
-  for (const source of [agendaSource, tasksSource, taskSource, memoSource]) {
+  for (const source of [todaySource, agendaSource, tasksSource, taskSource, memoSource]) {
     assert.match(source, /meta: \[\]/);
   }
+  assert.match(todaySource, /briefingTextWithCounters\(plainText, todayCounters\(\)\)/);
+  assert.match(todaySource, /title: "Today"/);
+  assert.match(todaySource, /sections: \[\]/);
   assert.match(agendaSource, /thermalPrintDateLabel\(today\)/);
   assert.doesNotMatch(agendaSource, /"Events"|"Task"|priorityMark|subtasks/);
   assert.match(tasksSource, /thermalPrintDateLabel\(due\)/);

@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
+const vm = require("node:vm");
 
 const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
 const viewSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/notifications-view.js"), "utf8");
@@ -15,20 +16,38 @@ test("personal PWA renders the shared KaosToday briefing instead of an ACK list"
   assert.match(viewSource, /aria-label="KaosGDD Today"/);
   assert.match(viewSource, /class="archiveCommand kaosTodayToolbar"/);
   assert.match(viewSource, /data-notifications-refresh[^>]*>Reload<\/button>/);
-  assert.match(indexSource, /href="\/styles\.css\?v=432"/);
+  assert.match(indexSource, /href="\/styles\.css\?v=433"/);
   assert.match(fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8"), /\.notificationInbox\.kaosToday \{\s*gap: 4px;/);
   assert.match(viewSource, /payload\.plainText/);
   assert.match(viewSource, /class="kaosTodayText"/);
   assert.match(viewSource, /class="kaosTodayContent"/);
-  assert.match(viewSource, /class="kaosTodayCounters"/);
-  assert.match(viewSource, /Tasks <strong>\$\{taskCount\}<\/strong> \(GDDZiN/);
-  assert.match(viewSource, /Supplies <strong>\$\{supplyCount\}<\/strong>/);
+  assert.match(viewSource, /const countsLine = `Tasks \$\{taskCount\} \(GDDZiN \$\{gddzinCount\}, Family \$\{familyCount\}\) \/ Supplies \$\{supplyCount\}`/);
+  assert.match(viewSource, /lines\.splice\(1, 0, countsLine\)/);
+  assert.match(viewSource, /briefingTextWithCounters\(payload\.plainText, counters\)/);
+  assert.match(viewSource, /data-thermal-print="today"[^>]*>Print<\/button>/);
+  assert.doesNotMatch(viewSource, /class="kaosTodayCounters"/);
   assert.doesNotMatch(viewSource, /data-notification-ack=/);
-  assert.match(indexSource, /src="\/notifications-view\.js\?v=9"/);
-  assert.ok(indexSource.indexOf('src="/notifications-view.js?v=9"') < indexSource.indexOf('src="/app.js?v=404"'));
+  assert.match(indexSource, /src="\/notifications-view\.js\?v=10"/);
+  assert.ok(indexSource.indexOf('src="/notifications-view.js?v=10"') < indexSource.indexOf('src="/app.js?v=405"'));
   assert.ok(viewSource.indexOf('class="kaosTodayContent"') < viewSource.indexOf('class="kaosTodayText"'));
-  assert.ok(viewSource.indexOf('class="kaosTodayText"') < viewSource.indexOf('class="kaosTodayCounters"'));
-  assert.ok(viewSource.indexOf('class="kaosTodayCounters"') < viewSource.indexOf('class="archiveCommand kaosTodayToolbar"'));
+  assert.ok(viewSource.indexOf('class="kaosTodayText"') < viewSource.indexOf('class="archiveCommand kaosTodayToolbar"'));
+});
+
+test("Today totals become the second line of the briefing text", () => {
+  const context = { window: {} };
+  vm.runInNewContext(viewSource, context);
+
+  const rendered = context.window.KAOS_NOTIFICATIONS_VIEW.briefingTextWithCounters(
+    "### 2026년 9월 30일 (수) 🌤️\n• 📅 장날\n\n<시간표>",
+    { tasksReady: true, tasks: 3, gddzin: 2, family: 1, suppliesReady: true, supplies: 3 },
+  );
+
+  assert.equal(
+    rendered,
+    "### 2026년 9월 30일 (수) 🌤️\n"
+      + "Tasks 3 (GDDZiN 2, Family 1) / Supplies 3\n"
+      + "• 📅 장날\n\n<시간표>",
+  );
 });
 
 test("main Today is a selectable briefing route while Agenda remains the default page", () => {

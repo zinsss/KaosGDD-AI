@@ -21,7 +21,7 @@ from pypdf import PdfReader
 
 JOB_ID = re.compile(r"^[a-f0-9]{32}$")
 SAFE_PRINTER = re.compile(r"^[A-Za-z0-9_.-]{1,127}$")
-ALLOWED_KINDS = {"agenda", "event", "tasks", "task", "memo"}
+ALLOWED_KINDS = {"today", "agenda", "event", "tasks", "task", "memo"}
 MAX_PDF_BYTES = 8 * 1024 * 1024
 MAX_RECEIPT_WIDTH_POINTS = 82 / 25.4 * 72
 MAX_RECEIPT_HEIGHT_POINTS = 2_050 / 25.4 * 72

@@ -7583,8 +7583,23 @@ function thermalPrintMemoDocument() {
   };
 }
 
+function thermalPrintTodayDocument() {
+  const plainText = String(state.todayBriefing.data?.plainText || "");
+  if (!plainText) return null;
+  return {
+    version: 1,
+    kind: "today",
+    title: "Today",
+    subtitle: "",
+    meta: [],
+    sections: [],
+    body: window.KAOS_NOTIFICATIONS_VIEW.briefingTextWithCounters(plainText, todayCounters()),
+  };
+}
+
 function thermalPrintDocument(kind) {
   if (portalProfile() !== "main") return null;
+  if (kind === "today") return thermalPrintTodayDocument();
   if (kind === "agenda") return thermalPrintAgendaDocument();
   if (kind === "tasks") return thermalPrintTasksDocument();
   if (kind === "event") return thermalPrintEventDocument();

@@ -9635,24 +9635,6 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   padding: 0 3px;
 }
 
-.app[data-profile="main"] .notificationInbox .kaosTodayCounters {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 8px;
-  margin: 0;
-  padding: 9px 16px 11px;
-  border-top: 1px solid var(--archive-line);
-  color: var(--archive-muted);
-  font-size: 0.76rem;
-  line-height: 1.35;
-}
-
-.app[data-profile="main"] .notificationInbox .kaosTodayCounters strong {
-  color: var(--archive-cyan);
-  font-weight: inherit;
-}
-
 .app[data-profile="main"] .notificationInbox .kaosTodayToolbar .archiveStatusMessage {
   min-width: 0;
   margin: 0;
@@ -9664,6 +9646,13 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 .app[data-profile="main"] .notificationInbox .kaosTodayToolbar .archiveAction {
   flex: 0 0 auto;
   text-transform: none;
+}
+
+.app[data-profile="main"] .notificationInbox .kaosTodayActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
 }
 
 .notificationInbox .archiveCommand strong {
