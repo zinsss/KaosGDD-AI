@@ -74,6 +74,28 @@ class ThermalPrintTests(unittest.TestCase):
         self.assertGreater(height, 65 / 25.4 * 72)
         self.assertLessEqual(height, 2_000 / 25.4 * 72)
 
+    def test_event_receipt_uses_compact_kst_title_memo_layout(self) -> None:
+        printed_at = datetime(2026, 9, 30, 8, 47, tzinfo=ZoneInfo("Asia/Seoul"))
+        document = thermal_print.normalize_document({
+            "version": 1,
+            "kind": "event",
+            "title": "꿈꾸는 농부 캠핑장",
+            "subtitle": "2026-10-03 토 15:00 - 2026-10-04 일 11:00 KST",
+            "body": "메모",
+        })
+
+        ops = thermal_print._document_ops(document, printed_at)
+        text = [str(op["text"]) for op in ops if op["type"] == "text"]
+
+        self.assertEqual(text, [
+            "KaosGDD",
+            "Event 2026-10-03 토 15:00 - 2026-10-04 일 11:00 KST",
+            "꿈꾸는 농부 캠핑장",
+            "메모",
+            "Printed 2026-09-30 수 08:47 KST",
+        ])
+        self.assertEqual(sum(op["type"] == "rule" for op in ops), 3)
+
     def test_rejects_unknown_kinds_and_unbounded_item_lists(self) -> None:
         with self.assertRaisesRegex(thermal_print.ThermalPrintError, "invalid_print_kind"):
             thermal_print.normalize_document({"kind": "shell", "title": "No"})

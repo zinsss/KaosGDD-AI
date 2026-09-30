@@ -13,7 +13,7 @@ const stylesSource = fs.readFileSync(path.join(root, "styles.css"), "utf8");
 
 test("loads the thermal print controller before the application", () => {
   assert.match(indexSource, /src="\/thermal-print\.js\?v=3"/);
-  assert.ok(indexSource.indexOf('src="/thermal-print.js?v=3"') < indexSource.indexOf('src="/app.js?v=400"'));
+  assert.ok(indexSource.indexOf('src="/thermal-print.js?v=3"') < indexSource.indexOf('src="/app.js?v=402"'));
 });
 
 test("limits print actions to the requested personal surfaces", () => {
@@ -32,9 +32,26 @@ test("builds structured documents instead of sending page html", () => {
   for (const kind of ["agenda", "event", "tasks", "task", "memo"]) {
     assert.match(appSource, new RegExp(`kind: "${kind}"`));
   }
-  assert.match(appSource, /label: "Location", value: event\.detail/);
   assert.doesNotMatch(moduleSource, /innerHTML:\s*state\.document/);
   assert.match(moduleSource, /JSON\.stringify\(\{ document: state\.document \}\)/);
+});
+
+test("single-event receipts use Korean weekdays and the compact event layout", () => {
+  const helperStart = appSource.indexOf("const THERMAL_PRINT_KOREAN_WEEKDAYS");
+  const documentStart = appSource.indexOf("function thermalPrintEventDocument", helperStart);
+  const documentEnd = appSource.indexOf("function thermalPrintTaskDocument", documentStart);
+  assert.ok(helperStart >= 0 && documentStart > helperStart && documentEnd > documentStart);
+
+  const context = {};
+  vm.runInNewContext(`${appSource.slice(helperStart, documentStart)}\nresult = thermalPrintEventDateLabel("2026-10-03");`, context);
+  assert.equal(context.result, "2026-10-03 토");
+
+  const eventDocumentSource = appSource.slice(documentStart, documentEnd);
+  assert.match(eventDocumentSource, /KST/);
+  assert.match(eventDocumentSource, /meta: \[\]/);
+  assert.match(eventDocumentSource, /sections: \[\]/);
+  assert.match(eventDocumentSource, /body: event\.description \|\| ""/);
+  assert.doesNotMatch(eventDocumentSource, /Calendar|Location|Repeat|Alarm/);
 });
 
 test("supports preview and destination-aware submission", () => {

@@ -7521,23 +7521,44 @@ function thermalPrintTasksDocument() {
   };
 }
 
+const THERMAL_PRINT_KOREAN_WEEKDAYS = Object.freeze(["일", "월", "화", "수", "목", "금", "토"]);
+
+function thermalPrintEventDateLabel(dateValue) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateValue || ""));
+  if (!match) return String(dateValue || "");
+  const [, year, month, day] = match;
+  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+  if (
+    date.getUTCFullYear() !== Number(year)
+    || date.getUTCMonth() !== Number(month) - 1
+    || date.getUTCDate() !== Number(day)
+  ) return String(dateValue || "");
+  return `${dateValue} ${THERMAL_PRINT_KOREAN_WEEKDAYS[date.getUTCDay()]}`;
+}
+
 function thermalPrintEventDocument() {
   const event = findEventById(hashParam("uid"));
   if (!event) return null;
-  const time = event.allDay
-    ? `${event.startDate} · All day`
-    : `${event.startDate} ${event.startTime}${event.endDate || event.endTime ? ` - ${event.endDate || event.startDate} ${event.endTime || ""}`.trimEnd() : ""}`;
+  const startDate = thermalPrintEventDateLabel(event.startDate);
+  const endDate = event.endDate || event.startDate;
+  let time = `${startDate} All day KST`;
+  if (!event.allDay) {
+    const start = `${startDate} ${event.startTime || ""}`.trim();
+    let end = "";
+    if (event.endTime || (endDate && endDate !== event.startDate)) {
+      end = endDate === event.startDate
+        ? String(event.endTime || "")
+        : `${thermalPrintEventDateLabel(endDate)} ${event.endTime || ""}`.trim();
+    }
+    time = `${start}${end ? ` - ${end}` : ""} KST`;
+  }
   return {
     version: 1,
     kind: "event",
     title: event.title,
     subtitle: time,
-    meta: [
-      { label: "Calendar", value: thermalPrintCollectionLabel(event.collection) },
-      ...(event.detail && event.detail !== event.description ? [{ label: "Location", value: event.detail }] : []),
-      ...(event.repeat ? [{ label: "Repeat", value: event.repeat }] : []),
-      ...(event.alarmTime ? [{ label: "Alarm", value: event.alarmTime }] : []),
-    ],
+    meta: [],
+    sections: [],
     body: event.description || "",
   };
 }
