@@ -96,6 +96,28 @@ class ThermalPrintTests(unittest.TestCase):
         ])
         self.assertEqual(sum(op["type"] == "rule" for op in ops), 3)
 
+    def test_task_receipt_uses_due_title_memo_layout(self) -> None:
+        printed_at = datetime(2026, 9, 30, 8, 47, tzinfo=ZoneInfo("Asia/Seoul"))
+        document = thermal_print.normalize_document({
+            "version": 1,
+            "kind": "task",
+            "title": "청구하기",
+            "subtitle": "(Due 2026-09-30 수 22:00 KST)",
+            "body": "메모",
+        })
+
+        ops = thermal_print._document_ops(document, printed_at)
+        text = [str(op["text"]) for op in ops if op["type"] == "text"]
+
+        self.assertEqual(text, [
+            "KaosGDD",
+            "Task (Due 2026-09-30 수 22:00 KST)",
+            "청구하기",
+            "메모",
+            "Printed 2026-09-30 수 08:47 KST",
+        ])
+        self.assertEqual(sum(op["type"] == "rule" for op in ops), 3)
+
     def test_all_receipt_kinds_use_the_same_content_first_layout(self) -> None:
         printed_at = datetime(2026, 9, 30, 8, 47, tzinfo=ZoneInfo("Asia/Seoul"))
         document = thermal_print.normalize_document({

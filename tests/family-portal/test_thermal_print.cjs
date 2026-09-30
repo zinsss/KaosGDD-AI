@@ -13,7 +13,7 @@ const stylesSource = fs.readFileSync(path.join(root, "styles.css"), "utf8");
 
 test("loads the thermal print controller before the application", () => {
   assert.match(indexSource, /src="\/thermal-print\.js\?v=3"/);
-  assert.ok(indexSource.indexOf('src="/thermal-print.js?v=3"') < indexSource.indexOf('src="/app.js?v=403"'));
+  assert.ok(indexSource.indexOf('src="/thermal-print.js?v=3"') < indexSource.indexOf('src="/app.js?v=404"'));
 });
 
 test("limits print actions to the requested personal surfaces", () => {
@@ -73,8 +73,10 @@ test("agenda, tasks, task details, and memos keep only printable content", () =>
   assert.doesNotMatch(agendaSource, /"Events"|"Task"|priorityMark|subtasks/);
   assert.match(tasksSource, /thermalPrintDateLabel\(due\)/);
   assert.doesNotMatch(tasksSource, /"Total"|All collections|priorityMark|subtasks|thermalPrintCollectionLabel/);
-  assert.match(taskSource, /KST/);
-  assert.doesNotMatch(taskSource, /"Due"|"List"|"Priority"|"Active"|"Completed"/);
+  assert.match(taskSource, /`\(Due \$\{/);
+  assert.match(taskSource, /title: task\.title/);
+  assert.match(taskSource, /sections: \[\]/);
+  assert.doesNotMatch(taskSource, /task\.done|subtasks|"List"|"Priority"|"Active"|"Completed"/);
   assert.match(memoSource, /sections: \[\]/);
   assert.doesNotMatch(memoSource, /Memo #|Updated|Created|Tags|Attachments/);
 });

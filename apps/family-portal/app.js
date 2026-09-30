@@ -7551,17 +7551,15 @@ function thermalPrintTaskDocument(taskId = hashParam("uid")) {
   const task = findTaskById(taskId);
   if (!task) return null;
   const due = task.due
-    ? [thermalPrintDateLabel(task.due), task.dueTime, task.dueTime ? "KST" : ""].filter(Boolean).join(" ")
+    ? `(Due ${[thermalPrintDateLabel(task.due), task.dueTime, task.dueTime ? "KST" : ""].filter(Boolean).join(" ")})`
     : "";
   return {
     version: 1,
     kind: "task",
-    title: `[${task.done ? "x" : " "}] ${task.title}`,
+    title: task.title,
     subtitle: due,
     meta: [],
-    sections: task.subtasks.length
-      ? [{ heading: "", items: task.subtasks.map((item) => ({ title: item.text, checked: item.done })) }]
-      : [],
+    sections: [],
     body: task.notes || "",
   };
 }
