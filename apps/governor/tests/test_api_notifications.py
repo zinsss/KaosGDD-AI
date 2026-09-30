@@ -110,9 +110,11 @@ class NotificationInboxApiTests(unittest.TestCase):
 
     def test_today_proxy_uses_internal_governor_auth(self) -> None:
         requests: list[api.urllib.request.Request] = []
+        timeouts: list[float] = []
 
         def fake_urlopen(request: api.urllib.request.Request, timeout: float) -> FakeResponse:
             requests.append(request)
+            timeouts.append(timeout)
             return FakeResponse({"ok": True, "plainText": "KaosToday"})
 
         with (
@@ -128,6 +130,7 @@ class NotificationInboxApiTests(unittest.TestCase):
         self.assertEqual(result["plainText"], "KaosToday")
         self.assertTrue(requests[0].full_url.endswith("/tools/briefing?city=pohang"))
         self.assertEqual(requests[0].headers["Authorization"], "Bearer server-token")
+        self.assertEqual(timeouts, [api.TODAY_BRIEFING_TIMEOUT_SECONDS])
 
         with self.assertRaisesRegex(api.NotificationInboxAPIError, "main_profile_required"):
             api.today_briefing_payload("family", urlopen=fake_urlopen)

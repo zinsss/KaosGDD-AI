@@ -28,7 +28,7 @@ test("personal PWA renders the shared KaosToday briefing instead of an ACK list"
   assert.doesNotMatch(viewSource, /class="kaosTodayCounters"/);
   assert.doesNotMatch(viewSource, /data-notification-ack=/);
   assert.match(indexSource, /src="\/notifications-view\.js\?v=10"/);
-  assert.ok(indexSource.indexOf('src="/notifications-view.js?v=10"') < indexSource.indexOf('src="/app.js?v=405"'));
+  assert.ok(indexSource.indexOf('src="/notifications-view.js?v=10"') < indexSource.indexOf('src="/app.js?v=406"'));
   assert.ok(viewSource.indexOf('class="kaosTodayContent"') < viewSource.indexOf('class="kaosTodayText"'));
   assert.ok(viewSource.indexOf('class="kaosTodayText"') < viewSource.indexOf('class="archiveCommand kaosTodayToolbar"'));
 });
@@ -71,4 +71,11 @@ test("viewing KaosToday acknowledges only notification rows included in its brie
   assert.match(appSource, /!item\.acknowledged/);
   assert.match(nginxSource, /location \^~ \/api\/notifications/);
   assert.match(nginxSource, /location = \/api\/today/);
+});
+
+test("Today retry refreshes the notification inbox as well as the briefing", () => {
+  assert.match(
+    appSource,
+    /data-notifications-refresh[\s\S]*?Promise\.all\(\[\s*loadNotifications\(\{ force: true \}\),\s*loadTodayBriefing\(\{ force: true \}\)/,
+  );
 });

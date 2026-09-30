@@ -11056,6 +11056,7 @@ document.addEventListener("click", async (event) => {
     state.todayBriefing.checked = false;
     state.supplies.checked = false;
     await Promise.all([
+      loadNotifications({ force: true }),
       loadTodayBriefing({ force: true }),
       loadRemoteCalendar(),
       loadSupplies({ force: true }),

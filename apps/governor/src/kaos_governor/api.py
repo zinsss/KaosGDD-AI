@@ -69,6 +69,7 @@ CALENDAR_ADAPTER_INTERNAL_URL = os.environ.get("CALENDAR_ADAPTER_INTERNAL_URL", 
 CALENDAR_ADAPTER_TIMEOUT_SECONDS = float(os.environ.get("CALENDAR_ADAPTER_TIMEOUT_SECONDS", "20"))
 SYSTEM_STATUS_TOOLS_BASE_URL = os.environ.get("SYSTEM_STATUS_TOOLS_BASE_URL", "http://governor-tools:8098").rstrip("/")
 SYSTEM_STATUS_TIMEOUT_SECONDS = float(os.environ.get("SYSTEM_STATUS_TIMEOUT_SECONDS", "5"))
+TODAY_BRIEFING_TIMEOUT_SECONDS = float(os.environ.get("TODAY_BRIEFING_TIMEOUT_SECONDS", "30"))
 FAX_SEND_TIMEOUT_SECONDS = float(os.environ.get("FAX_SEND_TIMEOUT_SECONDS", "30"))
 GOVERNOR_WORKER_STATE_PATH = Path(os.environ.get("GOVERNOR_WORKER_STATE_PATH", "/data/notifications/governor-worker.json"))
 DOCUMENT_TAG_AI_URL = os.environ.get("DOCUMENT_TAG_AI_URL", "").strip()
@@ -289,6 +290,7 @@ def _notification_tool_payload(
     *,
     method: str = "GET",
     payload: dict[str, object] | None = None,
+    timeout_seconds: float = SYSTEM_STATUS_TIMEOUT_SECONDS,
     urlopen=urllib.request.urlopen,
 ) -> dict[str, object]:
     token = secret_value("GOVERNOR_API_TOKEN", default_file="/run/secrets/governor_api_token")
@@ -309,7 +311,7 @@ def _notification_tool_payload(
         headers=headers,
     )
     try:
-        with urlopen(request, timeout=SYSTEM_STATUS_TIMEOUT_SECONDS) as response:
+        with urlopen(request, timeout=timeout_seconds) as response:
             raw = response.read()
     except urllib.error.HTTPError as exc:
         try:
@@ -365,7 +367,11 @@ def today_briefing_payload(
         print(f"Today weather settings read failed: {type(exc).__name__}", flush=True)
         location = "pohang"
     query = urllib.parse.urlencode({"city": location})
-    return _notification_tool_payload(f"/tools/briefing?{query}", urlopen=urlopen)
+    return _notification_tool_payload(
+        f"/tools/briefing?{query}",
+        timeout_seconds=TODAY_BRIEFING_TIMEOUT_SECONDS,
+        urlopen=urlopen,
+    )
 
 
 def notification_acknowledge_id(path: str) -> str:

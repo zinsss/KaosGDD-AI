@@ -14,7 +14,7 @@ const stylesSource = fs.readFileSync(path.join(root, "styles.css"), "utf8");
 
 test("loads the thermal print controller before the application", () => {
   assert.match(indexSource, /src="\/thermal-print\.js\?v=3"/);
-  assert.ok(indexSource.indexOf('src="/thermal-print.js?v=3"') < indexSource.indexOf('src="/app.js?v=405"'));
+  assert.ok(indexSource.indexOf('src="/thermal-print.js?v=3"') < indexSource.indexOf('src="/app.js?v=406"'));
 });
 
 test("limits print actions to the requested personal surfaces", () => {
