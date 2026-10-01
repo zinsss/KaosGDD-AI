@@ -2089,7 +2089,7 @@ h3 {
 .thermalPrintPreviewPane {
   overflow: hidden;
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--surface);
 }
 
 .thermalPrintPreviewLoading {
@@ -2099,12 +2099,20 @@ h3 {
   background: var(--surface);
 }
 
-.thermalPrintPreviewFrame {
-  display: block;
+.thermalPrintPreviewStage {
+  position: relative;
   width: 100%;
-  height: min(52dvh, 520px);
+  min-height: 1px;
+  overflow: hidden;
+}
+
+.thermalPrintPreviewFrame {
+  position: absolute;
+  top: 0;
+  display: block;
   border: 0;
   background: #fff;
+  transform-origin: top left;
 }
 
 .thermalPrintLocation {
@@ -2205,8 +2213,7 @@ html.hasThermalPrintDialog {
     border-left: 0;
   }
 
-  .thermalPrintPreviewLoading,
-  .thermalPrintPreviewFrame {
+  .thermalPrintPreviewLoading {
     min-height: 46dvh;
     height: 46dvh;
   }

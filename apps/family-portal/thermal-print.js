@@ -6,6 +6,8 @@ window.KAOS_THERMAL_PRINT = (() => {
     loading: false,
     previewLoading: false,
     previewUrl: "",
+    previewWidthMm: 80,
+    previewHeightMm: 40,
     submitting: false,
     message: "",
     error: "",
@@ -67,12 +69,22 @@ window.KAOS_THERMAL_PRINT = (() => {
           <button class="thermalPrintClose" type="button" data-thermal-print-close aria-label="Close">Close</button>
         </header>
         <div class="thermalPrintBody">
-          <div class="thermalPrintPreviewPane">
+          <div class="thermalPrintPreviewPane" data-thermal-preview-pane>
             ${
               state.previewLoading
                 ? `<div class="thermalPrintPreviewLoading"><p class="thermalPrintStatus">Rendering 80 mm preview…</p></div>`
                 : state.previewUrl
-                  ? `<iframe class="thermalPrintPreviewFrame" src="${escapeHtml(state.previewUrl)}" title="80 mm receipt preview"></iframe>`
+                  ? `
+                    <div class="thermalPrintPreviewStage" data-thermal-preview-stage>
+                      <iframe
+                        class="thermalPrintPreviewFrame"
+                        data-thermal-preview-frame
+                        src="${escapeHtml(state.previewUrl)}#toolbar=0&amp;navpanes=0&amp;scrollbar=0"
+                        title="80 mm receipt preview"
+                        scrolling="no"
+                      ></iframe>
+                    </div>
+                  `
                   : `<div class="thermalPrintPreviewLoading"><p class="thermalPrintStatus">Preview unavailable.</p></div>`
             }
           </div>
@@ -91,11 +103,46 @@ window.KAOS_THERMAL_PRINT = (() => {
       </section>
     `;
     document.documentElement.classList.add("hasThermalPrintDialog");
+    if (state.previewUrl) window.requestAnimationFrame?.(fitPreview);
+  }
+
+  function previewPageSize(pdfText) {
+    const match = /\/MediaBox\s*\[\s*[-+]?\d*\.?\d+\s+[-+]?\d*\.?\d+\s+([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)\s*\]/.exec(pdfText);
+    const widthMm = Number(match?.[1]) * 25.4 / 72;
+    const heightMm = Number(match?.[2]) * 25.4 / 72;
+    if (!Number.isFinite(widthMm) || !Number.isFinite(heightMm) || widthMm <= 0 || heightMm <= 0) {
+      return { widthMm: 80, heightMm: 65 };
+    }
+    return {
+      widthMm: Math.min(82, Math.max(40, widthMm)),
+      heightMm: Math.min(2000, Math.max(30, heightMm)),
+    };
+  }
+
+  function fitPreview() {
+    const overlay = root();
+    if (!overlay || typeof overlay.querySelector !== "function") return;
+    const pane = overlay.querySelector("[data-thermal-preview-pane]");
+    const stage = overlay.querySelector("[data-thermal-preview-stage]");
+    const frame = overlay.querySelector("[data-thermal-preview-frame]");
+    if (!pane || !stage || !frame || !pane.clientWidth) return;
+    const pxPerMm = 96 / 25.4;
+    const nativeWidth = state.previewWidthMm * pxPerMm;
+    const nativeHeight = state.previewHeightMm * pxPerMm;
+    const scale = pane.clientWidth / nativeWidth;
+    const scaledWidth = nativeWidth * scale;
+    frame.style.width = `${nativeWidth}px`;
+    frame.style.height = `${nativeHeight}px`;
+    frame.style.left = `${Math.max(0, (pane.clientWidth - scaledWidth) / 2)}px`;
+    frame.style.transform = `scale(${scale})`;
+    stage.style.height = `${Math.ceil(nativeHeight * scale)}px`;
   }
 
   function releasePreviewUrl() {
     if (state.previewUrl) URL.revokeObjectURL(state.previewUrl);
     state.previewUrl = "";
+    state.previewWidthMm = 80;
+    state.previewHeightMm = 40;
   }
 
   function close() {
@@ -182,6 +229,7 @@ window.KAOS_THERMAL_PRINT = (() => {
       });
       if (!response.ok) throw new Error(await responseError(response));
       const blob = await response.blob();
+      const pageSize = previewPageSize(await blob.text());
       const url = URL.createObjectURL(blob);
       if (state.document !== requestedDocument) {
         URL.revokeObjectURL(url);
@@ -189,6 +237,8 @@ window.KAOS_THERMAL_PRINT = (() => {
       }
       releasePreviewUrl();
       state.previewUrl = url;
+      state.previewWidthMm = pageSize.widthMm;
+      state.previewHeightMm = pageSize.heightMm;
     } catch (error) {
       state.error = `Could not render preview: ${error.message || "unknown error"}`;
     } finally {
@@ -242,6 +292,10 @@ window.KAOS_THERMAL_PRINT = (() => {
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && state.document) close();
+  });
+
+  window.addEventListener?.("resize", () => {
+    if (state.previewUrl) fitPreview();
   });
 
   return { open, close };

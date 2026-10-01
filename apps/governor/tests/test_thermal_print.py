@@ -71,8 +71,26 @@ class ThermalPrintTests(unittest.TestCase):
         height = float(reader.pages[0].mediabox.height)
         self.assertTrue(pdf.startswith(b"%PDF-"))
         self.assertAlmostEqual(width, 80 / 25.4 * 72, places=1)
-        self.assertGreater(height, 65 / 25.4 * 72)
+        self.assertGreaterEqual(height, 40 / 25.4 * 72)
         self.assertLessEqual(height, 2_000 / 25.4 * 72)
+
+    def test_short_receipt_does_not_waste_a_long_blank_tail(self) -> None:
+        pdf = thermal_print.render_pdf(
+            {
+                "version": 1,
+                "kind": "task",
+                "title": "여권 신청하기",
+                "subtitle": "",
+                "meta": [],
+                "sections": [],
+                "body": "",
+            },
+            now=datetime(2026, 10, 1, 18, 50, tzinfo=ZoneInfo("Asia/Seoul")),
+        )
+
+        height_mm = float(PdfReader(io.BytesIO(pdf)).pages[0].mediabox.height) * 25.4 / 72
+        self.assertGreaterEqual(height_mm, 39.9)
+        self.assertLess(height_mm, 42)
 
     def test_event_receipt_uses_compact_kst_title_memo_layout(self) -> None:
         printed_at = datetime(2026, 9, 30, 8, 47, tzinfo=ZoneInfo("Asia/Seoul"))

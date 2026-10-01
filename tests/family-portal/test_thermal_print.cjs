@@ -13,8 +13,8 @@ const moduleSource = fs.readFileSync(path.join(root, "thermal-print.js"), "utf8"
 const stylesSource = fs.readFileSync(path.join(root, "styles.css"), "utf8");
 
 test("loads the thermal print controller before the application", () => {
-  assert.match(indexSource, /src="\/thermal-print\.js\?v=4"/);
-  assert.ok(indexSource.indexOf('src="/thermal-print.js?v=4"') < indexSource.indexOf('src="/app.js?v=406"'));
+  assert.match(indexSource, /src="\/thermal-print\.js\?v=5"/);
+  assert.ok(indexSource.indexOf('src="/thermal-print.js?v=5"') < indexSource.indexOf('src="/app.js?v=406"'));
 });
 
 test("limits print actions to the requested personal surfaces", () => {
@@ -156,20 +156,26 @@ test("pressing Print opens one preview with location selector and final Print bu
           }),
         };
       }
-      return { ok: true, blob: async () => ({ type: "application/pdf" }) };
+      return {
+        ok: true,
+        blob: async () => ({
+          type: "application/pdf",
+          text: async () => "%PDF-1.4\n/MediaBox [ 0 0 226.7717 113.3858 ]",
+        }),
+      };
     },
     URL: {
       createObjectURL: () => "blob:kaos-receipt-preview",
       revokeObjectURL() {},
     },
-    window: { alert() {} },
+    window: { alert() {}, addEventListener() {}, requestAnimationFrame() {} },
   };
   vm.runInNewContext(moduleSource, context);
 
   await context.window.KAOS_THERMAL_PRINT.open({ version: 1, kind: "task", title: "Test task" });
 
   assert.deepEqual(requests, ["/api/thermal-print/destinations", "/api/thermal-print/preview"]);
-  assert.match(overlay.innerHTML, /class="thermalPrintPreviewFrame"[^>]*src="blob:kaos-receipt-preview"/);
+  assert.match(overlay.innerHTML, /class="thermalPrintPreviewFrame"[\s\S]*?src="blob:kaos-receipt-preview#toolbar=0&amp;navpanes=0&amp;scrollbar=0"/);
   assert.match(overlay.innerHTML, /role="radiogroup" aria-label="Print destination"/);
   assert.match(overlay.innerHTML, /data-thermal-destination="home"/);
   const printButton = overlay.innerHTML.match(/<button class="thermalPrintCommand isActive"[^>]*data-thermal-print-submit[^>]*>/)?.[0] || "";
@@ -182,6 +188,8 @@ test("renders the selector as a modal using the current PWA design tokens", () =
   assert.match(stylesSource, /\.thermalPrintDialog/);
   assert.match(stylesSource, /\.thermalPrintDialog \{[\s\S]*?grid-template-rows: auto minmax\(0, 1fr\) auto;/);
   assert.match(stylesSource, /\.thermalPrintPreviewFrame \{[\s\S]*?background: #fff;/);
+  assert.match(moduleSource, /previewPageSize\(await blob\.text\(\)\)/);
+  assert.match(moduleSource, /frame\.style\.transform = `scale\(\$\{scale\}\)`/);
   assert.match(stylesSource, /\.thermalPrintDestination\.isSelected \{[\s\S]*?background: transparent;[\s\S]*?color: var\(--main-tab-active-text\);/);
   assert.match(stylesSource, /\.thermalPrintCommand::before[\s\S]*?content: "\[";/);
   assert.match(stylesSource, /\.thermalPrintCommand\.isActive \{[\s\S]*?background: transparent;[\s\S]*?color: var\(--main-tab-active-text\);/);
