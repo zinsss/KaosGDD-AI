@@ -21,7 +21,7 @@ from pypdf import PdfReader
 
 JOB_ID = re.compile(r"^[a-f0-9]{32}$")
 SAFE_PRINTER = re.compile(r"^[A-Za-z0-9_.-]{1,127}$")
-ALLOWED_KINDS = {"today", "agenda", "event", "tasks", "task", "memo"}
+ALLOWED_KINDS = {"today", "agenda", "event", "tasks", "task", "memo", "image"}
 MAX_PDF_BYTES = 8 * 1024 * 1024
 MAX_RECEIPT_WIDTH_POINTS = 82 / 25.4 * 72
 MAX_RECEIPT_HEIGHT_POINTS = 2_050 / 25.4 * 72
@@ -45,6 +45,7 @@ class ConnectorConfig:
     raster_dpi: int = 180
     raster_width: int = 512
     raster_threshold: int = 168
+    photo_threshold: int = 128
     lp_binary: str = "lp"
     lpstat_binary: str = "lpstat"
     pdftoppm_binary: str = "pdftoppm"
@@ -68,10 +69,12 @@ class ConnectorConfig:
         raster_dpi = int(source.get("THERMAL_CONNECTOR_RASTER_DPI", "180") or "180")
         raster_width = int(source.get("THERMAL_CONNECTOR_RASTER_WIDTH", "512") or "512")
         raster_threshold = int(source.get("THERMAL_CONNECTOR_RASTER_THRESHOLD", "168") or "168")
+        photo_threshold = int(source.get("THERMAL_CONNECTOR_PHOTO_THRESHOLD", "128") or "128")
         if (
             not 72 <= raster_dpi <= 600
             or not 64 <= raster_width <= 2_048
             or not 1 <= raster_threshold <= 254
+            or not 1 <= photo_threshold <= 254
         ):
             raise ConnectorError(HTTPStatus.INTERNAL_SERVER_ERROR, "invalid_raster_geometry")
         return cls(
@@ -83,6 +86,7 @@ class ConnectorConfig:
             raster_dpi=raster_dpi,
             raster_width=raster_width,
             raster_threshold=raster_threshold,
+            photo_threshold=photo_threshold,
             lp_binary=source.get("THERMAL_CONNECTOR_LP", "lp").strip() or "lp",
             lpstat_binary=source.get("THERMAL_CONNECTOR_LPSTAT", "lpstat").strip() or "lpstat",
             pdftoppm_binary=source.get("THERMAL_CONNECTOR_PDFTOPPM", "pdftoppm").strip() or "pdftoppm",
@@ -310,6 +314,51 @@ def _threshold_grayscale(width: int, height: int, grayscale: bytes, threshold: i
     return bytes(raster)
 
 
+def _dither_grayscale(width: int, height: int, grayscale: bytes, threshold: int) -> bytes:
+    """Dither a native-resolution photo once, using alternating scan directions."""
+    if len(grayscale) != width * height or not 1 <= threshold <= 254:
+        raise ConnectorError(HTTPStatus.SERVICE_UNAVAILABLE, "print_render_failed")
+    row_bytes = (width + 7) // 8
+    raster = bytearray(row_bytes * height)
+    current_error = [0] * (width + 2)
+    next_error = [0] * (width + 2)
+    threshold_scaled = threshold * 16
+    white_scaled = 255 * 16
+
+    for y in range(height):
+        source_offset = y * width
+        target_offset = y * row_bytes
+        if y % 2 == 0:
+            columns = range(width)
+            forward = True
+        else:
+            columns = range(width - 1, -1, -1)
+            forward = False
+
+        for x in columns:
+            value = max(
+                0,
+                min(white_scaled, grayscale[source_offset + x] * 16 + current_error[x + 1]),
+            )
+            black = value < threshold_scaled
+            if black:
+                raster[target_offset + (x // 8)] |= 0x80 >> (x % 8)
+            error = value - (0 if black else white_scaled)
+            if forward:
+                current_error[x + 2] += error * 7 // 16
+                next_error[x] += error * 3 // 16
+                next_error[x + 1] += error * 5 // 16
+                next_error[x + 2] += error // 16
+            else:
+                current_error[x] += error * 7 // 16
+                next_error[x + 2] += error * 3 // 16
+                next_error[x + 1] += error * 5 // 16
+                next_error[x] += error // 16
+
+        current_error, next_error = next_error, [0] * (width + 2)
+    return bytes(raster)
+
+
 def _fit_raster_width(width: int, height: int, raster: bytes, target_width: int) -> bytes:
     """Center-crop or pad 1-bit PBM rows without resampling their pixels."""
     source_row_bytes = (width + 7) // 8
@@ -336,7 +385,13 @@ def _fit_raster_width(width: int, height: int, raster: bytes, target_width: int)
     return bytes(result)
 
 
-def _escpos_document(document: Path, output: Path, config: ConnectorConfig) -> None:
+def _escpos_document(
+    document: Path,
+    output: Path,
+    config: ConnectorConfig,
+    *,
+    photo: bool = False,
+) -> None:
     prefix = output.parent / "page"
     render = _run(
         [
@@ -367,7 +422,10 @@ def _escpos_document(document: Path, output: Path, config: ConnectorConfig) -> N
     result = bytearray(b"\x1b@")
     for page_index, page in enumerate(pages):
         width, height, grayscale = _read_pgm(page)
-        source_raster = _threshold_grayscale(width, height, grayscale, config.raster_threshold)
+        if photo:
+            source_raster = _dither_grayscale(width, height, grayscale, config.photo_threshold)
+        else:
+            source_raster = _threshold_grayscale(width, height, grayscale, config.raster_threshold)
         raster = _fit_raster_width(width, height, source_raster, config.raster_width)
         for top in range(0, height, 256):
             band_height = min(256, height - top)
@@ -387,7 +445,8 @@ def _escpos_document(document: Path, output: Path, config: ConnectorConfig) -> N
 
 
 def submit_job(config: ConnectorConfig, payload: Mapping[str, Any]) -> dict[str, object]:
-    if payload.get("version") != 1 or str(payload.get("kind") or "") not in ALLOWED_KINDS:
+    kind = str(payload.get("kind") or "")
+    if payload.get("version") != 1 or kind not in ALLOWED_KINDS:
         raise ConnectorError(HTTPStatus.BAD_REQUEST, "invalid_print_contract")
     job_id = str(payload.get("jobId") or "")
     if not JOB_ID.fullmatch(job_id):
@@ -408,7 +467,7 @@ def submit_job(config: ConnectorConfig, payload: Mapping[str, Any]) -> dict[str,
             options: list[str] = []
             if config.output_format == "escpos":
                 print_document = Path(temporary) / "receipt.escpos"
-                _escpos_document(document, print_document, config)
+                _escpos_document(document, print_document, config, photo=kind == "image")
                 options = ["-o", "raw"]
             result = _run(
                 [config.lp_binary, "-d", config.printer, "-t", title or "KaosGDD receipt", *options, str(print_document)],

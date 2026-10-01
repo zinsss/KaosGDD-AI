@@ -39,7 +39,10 @@ paper.
    bounded ESC/POS bands followed by a partial-cut command. The SAM4S
    GIANT-100 uses 180 dpi and 512 dots. The default threshold of `168` makes
    small strokes modestly darker without pretending the print head has a
-   higher physical resolution.
+   higher physical resolution. Jobs with kind `image` instead keep the PDF
+   grayscale until this final native-resolution step and apply serpentine
+   error diffusion once; this avoids moire from re-rasterizing a pre-dithered
+   image. `THERMAL_CONNECTOR_PHOTO_THRESHOLD` defaults to `128`.
 3. Set `CUPS_SERVER=127.0.0.1:631`; the container uses host networking but
    remains a non-root, read-only process.
 4. Bind `THERMAL_CONNECTOR_HOST` to H4's Tailscale address.

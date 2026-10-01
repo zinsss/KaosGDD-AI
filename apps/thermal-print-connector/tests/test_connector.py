@@ -14,6 +14,7 @@ from pypdf import PdfWriter
 from kaos_thermal_print_connector.server import (
     ConnectorConfig,
     ConnectorError,
+    _dither_grayscale,
     _fit_raster_width,
     _threshold_grayscale,
     health_payload,
@@ -137,6 +138,44 @@ class ThermalPrintConnectorTests(unittest.TestCase):
         grayscale = bytes((0, 255, 167, 168, 32, 240, 100, 200))
 
         self.assertEqual(_threshold_grayscale(8, 1, grayscale, 168), b"\xaa")
+
+    def test_photo_dither_preserves_midtones_as_mixed_dots(self) -> None:
+        raster = _dither_grayscale(16, 16, bytes([128] * (16 * 16)), 128)
+        black_dots = sum(byte.bit_count() for byte in raster)
+
+        self.assertGreater(black_dots, 96)
+        self.assertLess(black_dots, 160)
+
+    def test_image_kind_uses_photo_dither_after_pdf_rendering(self) -> None:
+        commands = []
+
+        def runner(command, **_kwargs):
+            commands.append(command)
+            if command[0] == "lpstat":
+                return SimpleNamespace(returncode=0, stdout="printer receipt-home is idle", stderr="")
+            if command[0] == "pdftoppm":
+                prefix = Path(command[-1])
+                prefix.with_name(f"{prefix.name}-1.pgm").write_bytes(
+                    b"P5\n512 1\n255\n" + bytes([128] * 512)
+                )
+                return SimpleNamespace(returncode=0, stdout="", stderr="")
+            return SimpleNamespace(returncode=0, stdout="request id is receipt-home-photo", stderr="")
+
+        with tempfile.TemporaryDirectory() as temporary, mock.patch(
+            "kaos_thermal_print_connector.server._run", side_effect=runner
+        ), mock.patch(
+            "kaos_thermal_print_connector.server._dither_grayscale", wraps=_dither_grayscale
+        ) as dither, mock.patch(
+            "kaos_thermal_print_connector.server._threshold_grayscale", wraps=_threshold_grayscale
+        ) as threshold:
+            result = submit_job(
+                self.config(Path(temporary), output_format="escpos"),
+                self.payload(kind="image"),
+            )
+
+        self.assertEqual(result["printerJobId"], "receipt-home-photo")
+        dither.assert_called_once()
+        threshold.assert_not_called()
 
     def test_rejects_pdf_wider_than_receipt_roll(self) -> None:
         with tempfile.TemporaryDirectory() as temporary, self.assertRaises(ConnectorError) as raised:
