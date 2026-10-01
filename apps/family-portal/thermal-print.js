@@ -4,6 +4,8 @@ window.KAOS_THERMAL_PRINT = (() => {
     destinations: [],
     selectedId: "",
     loading: false,
+    previewLoading: false,
+    previewUrl: "",
     submitting: false,
     message: "",
     error: "",
@@ -65,31 +67,47 @@ window.KAOS_THERMAL_PRINT = (() => {
           <button class="thermalPrintClose" type="button" data-thermal-print-close aria-label="Close">Close</button>
         </header>
         <div class="thermalPrintBody">
-          ${destinations}
-          <p class="thermalPrintHint">Preview uses the exact 80 mm server renderer. A job is sent only when its destination reports a ready printer.</p>
+          <div class="thermalPrintPreviewPane">
+            ${
+              state.previewLoading
+                ? `<div class="thermalPrintPreviewLoading"><p class="thermalPrintStatus">Rendering 80 mm preview…</p></div>`
+                : state.previewUrl
+                  ? `<iframe class="thermalPrintPreviewFrame" src="${escapeHtml(state.previewUrl)}" title="80 mm receipt preview"></iframe>`
+                  : `<div class="thermalPrintPreviewLoading"><p class="thermalPrintStatus">Preview unavailable.</p></div>`
+            }
+          </div>
+          <div class="thermalPrintLocation">
+            <p class="thermalPrintSectionLabel">Print location</p>
+            ${destinations}
+          </div>
           ${state.message ? `<p class="thermalPrintMessage" role="status">${escapeHtml(state.message)}</p>` : ""}
           ${state.error ? `<p class="thermalPrintMessage isError" role="alert">${escapeHtml(state.error)}</p>` : ""}
         </div>
         <footer class="thermalPrintActions">
-          <button class="thermalPrintCommand" type="button" data-thermal-print-preview>Preview</button>
-          <button class="thermalPrintCommand isActive" type="button" data-thermal-print-submit ${!selected?.available || state.submitting ? "disabled" : ""}>
-            ${state.submitting ? "Sending…" : selected?.available ? `Print at ${escapeHtml(selected.label)}` : "Printer unavailable"}
+          <button class="thermalPrintCommand isActive" type="button" data-thermal-print-submit ${!selected?.available || !state.previewUrl || state.previewLoading || state.submitting ? "disabled" : ""}>
+            ${state.submitting ? "Printing…" : "Print"}
           </button>
         </footer>
       </section>
     `;
     document.documentElement.classList.add("hasThermalPrintDialog");
-    overlay.querySelector("[data-thermal-print-preview]")?.focus();
+  }
+
+  function releasePreviewUrl() {
+    if (state.previewUrl) URL.revokeObjectURL(state.previewUrl);
+    state.previewUrl = "";
   }
 
   function close() {
     const overlay = root();
     if (overlay) overlay.innerHTML = "";
     document.documentElement.classList.remove("hasThermalPrintDialog");
+    releasePreviewUrl();
     state.document = null;
     state.destinations = [];
     state.selectedId = "";
     state.loading = false;
+    state.previewLoading = false;
     state.submitting = false;
     state.message = "";
     state.error = "";
@@ -133,12 +151,16 @@ window.KAOS_THERMAL_PRINT = (() => {
 
   async function open(printDocument) {
     if (!printDocument || typeof printDocument !== "object") return;
+    releasePreviewUrl();
     state.document = printDocument;
     state.destinations = [];
     state.selectedId = "";
+    state.previewLoading = true;
     state.message = "";
     state.error = "";
-    await loadDestinations({ notifyUnavailable: true });
+    const destinationsReady = await loadDestinations({ notifyUnavailable: true });
+    if (!destinationsReady || state.document !== printDocument) return;
+    await loadPreview();
   }
 
   async function responseError(response) {
@@ -146,12 +168,12 @@ window.KAOS_THERMAL_PRINT = (() => {
     return payload.error || `HTTP ${response.status}`;
   }
 
-  async function preview() {
+  async function loadPreview() {
     if (!state.document) return;
+    const requestedDocument = state.document;
     state.error = "";
-    state.message = "Rendering 80 mm preview…";
+    state.previewLoading = true;
     render();
-    const previewWindow = window.open("about:blank", "_blank");
     try {
       const response = await fetch("/api/thermal-print/preview", {
         method: "POST",
@@ -161,27 +183,25 @@ window.KAOS_THERMAL_PRINT = (() => {
       if (!response.ok) throw new Error(await responseError(response));
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
-      if (previewWindow) previewWindow.location.replace(url);
-      else {
-        const link = document.createElement("a");
-        link.href = url;
-        link.target = "_blank";
-        link.rel = "noopener";
-        link.click();
+      if (state.document !== requestedDocument) {
+        URL.revokeObjectURL(url);
+        return;
       }
-      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      state.message = "Preview opened. No paper was used.";
+      releasePreviewUrl();
+      state.previewUrl = url;
     } catch (error) {
-      if (previewWindow) previewWindow.close();
-      state.message = "";
       state.error = `Could not render preview: ${error.message || "unknown error"}`;
+    } finally {
+      if (state.document === requestedDocument) {
+        state.previewLoading = false;
+        render();
+      }
     }
-    render();
   }
 
   async function submit() {
     const destination = state.destinations.find((item) => item.id === state.selectedId);
-    if (!state.document || !destination?.available || state.submitting) return;
+    if (!state.document || !destination?.available || !state.previewUrl || state.submitting) return;
     state.submitting = true;
     state.message = "";
     state.error = "";
@@ -215,10 +235,6 @@ window.KAOS_THERMAL_PRINT = (() => {
       state.message = "";
       state.error = "";
       render();
-      return;
-    }
-    if (event.target.closest("[data-thermal-print-preview]")) {
-      void preview();
       return;
     }
     if (event.target.closest("[data-thermal-print-submit]")) void submit();

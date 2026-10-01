@@ -1981,11 +1981,13 @@ h3 {
 .thermalPrintDialog {
   position: fixed;
   z-index: 1301;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   top: 50%;
   left: 50%;
   width: min(520px, calc(100vw - 28px));
   max-height: calc(100dvh - 40px);
-  overflow: auto;
+  overflow: hidden;
   transform: translate(-50%, -50%);
   border: 1px solid var(--line);
   background: var(--panel);
@@ -2079,7 +2081,42 @@ h3 {
 .thermalPrintBody {
   display: grid;
   gap: 12px;
+  min-height: 0;
+  overflow: auto;
   padding: 14px;
+}
+
+.thermalPrintPreviewPane {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+
+.thermalPrintPreviewLoading {
+  display: grid;
+  min-height: min(52dvh, 520px);
+  place-items: center;
+  background: var(--surface);
+}
+
+.thermalPrintPreviewFrame {
+  display: block;
+  width: 100%;
+  height: min(52dvh, 520px);
+  border: 0;
+  background: #fff;
+}
+
+.thermalPrintLocation {
+  display: grid;
+  gap: 7px;
+}
+
+.thermalPrintSectionLabel {
+  color: var(--nord8);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .thermalPrintDestinations {
@@ -2143,6 +2180,7 @@ h3 {
 }
 
 .thermalPrintActions {
+  justify-content: flex-end;
   border-top: 1px solid var(--line);
 }
 
@@ -2165,6 +2203,12 @@ html.hasThermalPrintDialog {
     border-right: 0;
     border-bottom: 0;
     border-left: 0;
+  }
+
+  .thermalPrintPreviewLoading,
+  .thermalPrintPreviewFrame {
+    min-height: 46dvh;
+    height: 46dvh;
   }
 
   .contextHeaderActions {
