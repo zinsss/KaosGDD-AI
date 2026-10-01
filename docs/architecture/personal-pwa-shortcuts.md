@@ -203,6 +203,49 @@ https://kaosgdd.net/#/documents
 https://kaosgdd.net/#/scribble
 ```
 
+### Unified `KaosGDD` Share Sheet router
+
+Plan one iOS Shortcut named `KaosGDD`. It inspects the shared input, presents
+only compatible destinations, and asks the user to choose before uploading or
+printing anything.
+
+| Shared input | Scribble | Paperless | Fax | Thermal print |
+| --- | --- | --- | --- | --- |
+| Text or URL | yes | no | no | no |
+| One PDF | yes | yes | yes | follow-up after image printing |
+| One image | yes | convert to PDF | convert to PDF | yes |
+| Multiple images | yes | one ordered multipage PDF | one ordered multipage PDF | one ordered print job |
+| Other single file | yes | no | no | no |
+
+Reject unrelated multi-file batches so partial routing cannot produce an
+ambiguous result. Multiple images are the deliberate exception: preserve their
+Share Sheet order and convert them once to a single multipage PDF for
+Paperless or fax.
+
+The first thermal-printing slice is image-only:
+
+1. The Shortcut accepts one image or an ordered group of images and sends it
+   to a narrowly scoped Shortcut endpoint with an idempotency key. It never
+   receives a Home/Office connector token.
+2. H3 applies EXIF rotation, a printer-calibrated shadow-lift tone curve,
+   low-ink 1-bit dithering, and fit-without-cropping to the configured 80 mm
+   printer width (512 dots for the current Home printer). Photo rendering must
+   not use generic auto-contrast: thermal dot gain otherwise crushes faces and
+   other midtones even when the screen preview looks acceptable.
+3. Multiple images become one ordered print job with an explicit separator
+   between images.
+4. The response opens a short-lived proposal in the personal PWA. It uses the
+   existing 80 mm preview, Home/Office selector, readiness result, and explicit
+   `[ Print ]` action. A Share Sheet action must never print automatically.
+5. If the selected destination is unavailable, the proposal stays unprinted
+   and reports `printer_not_ready`; it is not silently rerouted or retried.
+6. H3 removes temporary source images and rendered receipts after the bounded
+   proposal/job window. Only idempotency and print-job metadata may remain.
+
+Arbitrary PDF-to-thermal printing is a follow-up after image rendering is
+proven. H3 owns authentication and normalization; H4 remains only the narrow
+hardware connector.
+
 ### Current-location weather comparison
 
 Calendar weather remains unchanged. An on-demand Shortcut may instead send the
@@ -424,8 +467,9 @@ through Governor and ETag-safe adapters.
 2. Document Home Screen installation and Shortcut launch actions.
 3. Expose scoped read APIs and deterministic create/update actions one domain
    at a time.
-4. Add Share Sheet capture for Paperless and fax only after upload,
-   confirmation, and cleanup contracts are tested.
+4. Add the unified Share Sheet router for Scribble, Paperless, fax, and
+   thermal image printing only after upload, preview/confirmation,
+   idempotency, and cleanup contracts are tested.
 5. Add the first read-only Kaos Feed/card API and render existing attention
    sources as cards.
 6. Observe each PWA/Shortcut/feed replacement before retiring its Discord
