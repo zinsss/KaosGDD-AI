@@ -28,7 +28,7 @@ MAX_TOTAL_CHARS = 32_000
 MAX_META_ROWS = 24
 MAX_SECTIONS = 64
 MAX_ITEMS = 240
-ALLOWED_KINDS = {"today", "agenda", "event", "tasks", "task", "memo"}
+ALLOWED_KINDS = {"today", "agenda", "event", "tasks", "task", "memo", "scribble"}
 DESTINATION_IDS = ("home", "office")
 FONT_NAME = "KaosReceiptNanumGothic"
 BOLD_FONT_NAME = "KaosReceiptNanumGothicBold"
@@ -320,6 +320,7 @@ def _document_ops(document: Mapping[str, object], printed_at: datetime) -> list[
         "tasks": "Tasks",
         "task": "Task",
         "memo": "Memo",
+        "scribble": "Scribble",
     }
     kind_label = kind_labels[str(document["kind"])]
     context_line = kind_label

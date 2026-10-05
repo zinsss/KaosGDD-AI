@@ -16,7 +16,7 @@ test("personal PWA renders the shared KaosToday briefing instead of an ACK list"
   assert.match(viewSource, /aria-label="KaosGDD Today"/);
   assert.match(viewSource, /class="archiveCommand kaosTodayToolbar"/);
   assert.match(viewSource, /data-notifications-refresh[^>]*>Reload<\/button>/);
-  assert.match(indexSource, /href="\/styles\.css\?v=436"/);
+  assert.match(indexSource, /href="\/styles\.css\?v=437"/);
   assert.match(fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8"), /\.notificationInbox\.kaosToday \{\s*gap: 4px;/);
   assert.match(viewSource, /payload\.plainText/);
   assert.match(viewSource, /class="kaosTodayText"/);
@@ -28,7 +28,7 @@ test("personal PWA renders the shared KaosToday briefing instead of an ACK list"
   assert.doesNotMatch(viewSource, /class="kaosTodayCounters"/);
   assert.doesNotMatch(viewSource, /data-notification-ack=/);
   assert.match(indexSource, /src="\/notifications-view\.js\?v=10"/);
-  assert.ok(indexSource.indexOf('src="/notifications-view.js?v=10"') < indexSource.indexOf('src="/app.js?v=406"'));
+  assert.ok(indexSource.indexOf('src="/notifications-view.js?v=10"') < indexSource.indexOf('src="/app.js?v=407"'));
   assert.ok(viewSource.indexOf('class="kaosTodayContent"') < viewSource.indexOf('class="kaosTodayText"'));
   assert.ok(viewSource.indexOf('class="kaosTodayText"') < viewSource.indexOf('class="archiveCommand kaosTodayToolbar"'));
 });

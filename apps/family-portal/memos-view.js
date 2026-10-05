@@ -93,9 +93,10 @@ window.KAOS_MEMOS_VIEW = (() => {
                   <h3 id="memoDetailTitle">${deps.escapeHtml(selected.title)}</h3>
                 </div>
                 <div class="archiveActions memoDetailActions">
-                  ${deps.portalProfile() === "main" && !memos.editing ? `<button class="archiveAction" type="button" data-thermal-print="memo">${deps.escapeHtml(text(deps, "common.print", "PRINT"))}</button>` : ""}
-                  ${memos.editing ? "" : `<button class="archiveAction isActive" type="button" data-memo-edit-start>${deps.escapeHtml(text(deps, "common.edit", "EDIT"))}</button>`}
-                  <button class="archiveAction" type="button" data-memo-close ${memos.editSaving ? "disabled" : ""}>${deps.escapeHtml(text(deps, "common.back", "BACK"))}</button>
+                  ${deps.portalProfile() === "main" && !memos.editing ? `<button class="archiveAction" type="button" data-thermal-print="memo" ${memos.deleting ? "disabled" : ""}>${deps.escapeHtml(text(deps, "common.print", "PRINT"))}</button>` : ""}
+                  ${memos.editing ? "" : `<button class="archiveAction isActive" type="button" data-memo-edit-start ${memos.deleting ? "disabled" : ""}>${deps.escapeHtml(text(deps, "common.edit", "EDIT"))}</button>`}
+                  ${memos.editing ? "" : `<button class="archiveAction memoDeleteAction" type="button" data-memo-delete ${memos.deleting ? "disabled" : ""}>${deps.escapeHtml(text(deps, "common.delete", "DELETE"))}</button>`}
+                  <button class="archiveAction" type="button" data-memo-close ${memos.editSaving || memos.deleting ? "disabled" : ""}>${deps.escapeHtml(text(deps, "common.back", "BACK"))}</button>
                 </div>
               </header>
               ${
@@ -130,7 +131,7 @@ window.KAOS_MEMOS_VIEW = (() => {
                     ${renderAttachmentList(deps, selected.attachments)}
                     <div class="archiveOcrRegion" role="region" aria-label="${deps.escapeHtml(text(deps, "memos.contentAria", "Memo content"))}" tabindex="0">
                       <p>${deps.escapeHtml(text(deps, "memos.memoText", "MEMO TEXT"))}</p>
-                      <article class="memoMarkdown">${deps.renderMarkdown(selected.content)}</article>
+                      <article class="memoContent">${deps.renderMemoContent(selected.content)}</article>
                     </div>
                   `
               }

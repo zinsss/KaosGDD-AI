@@ -245,6 +245,7 @@ const state = {
     editBaseUpdated: "",
     editSaving: false,
     editError: "",
+    deleting: false,
   },
   scribble: {
     checked: false,
@@ -2277,6 +2278,30 @@ async function updateMemoContent(name, content, expectedUpdated = "", attachment
   return normalizeMemo(payload);
 }
 
+async function deleteMemoRecord(name) {
+  const id = memoNameId(name);
+  if (!id) throw new Error("memo_name_invalid");
+  const response = await fetch(`/api/memos/api/v1/memos/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { Accept: "application/json" },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || payload.message || `HTTP ${response.status}`);
+  state.memos.selectedName = "";
+  state.memos.selected = null;
+  state.memos.detailLoading = false;
+  state.memos.detailError = "";
+  state.memos.editing = false;
+  state.memos.editDraft = "";
+  state.memos.editAttachments = [];
+  state.memos.editBaseUpdated = "";
+  state.memos.editSaving = false;
+  state.memos.editError = "";
+  state.memos.deleting = false;
+  state.memos.checked = false;
+  await loadMemos({ force: true });
+}
+
 function scribbleMeta(item) {
   const date = archiveDateParts(item.createdAt);
   const source = item.source === "shortcut" ? "SHORTCUT" : "PWA";
@@ -3550,6 +3575,7 @@ async function refreshMemos() {
   state.memos.editBaseUpdated = "";
   state.memos.editSaving = false;
   state.memos.editError = "";
+  state.memos.deleting = false;
   await loadMemos({ force: true });
 }
 
@@ -3566,6 +3592,7 @@ async function searchMemos(query) {
   state.memos.editBaseUpdated = "";
   state.memos.editSaving = false;
   state.memos.editError = "";
+  state.memos.deleting = false;
   render();
   await loadMemos({ force: true });
 }
@@ -3584,6 +3611,7 @@ async function loadMemoDetail(name) {
   state.memos.editBaseUpdated = "";
   state.memos.editSaving = false;
   state.memos.editError = "";
+  state.memos.deleting = false;
   if (getRoute() === "memos") render();
 }
 
@@ -3599,6 +3627,7 @@ function closeMemoDetail() {
   state.memos.editBaseUpdated = "";
   state.memos.editSaving = false;
   state.memos.editError = "";
+  state.memos.deleting = false;
   render();
   if (selectedName) document.querySelector(`[data-memo-open="${cssIdentifier(selectedName)}"]`)?.focus();
 }
@@ -7583,6 +7612,23 @@ function thermalPrintMemoDocument() {
   };
 }
 
+function thermalPrintScribbleDocument(form) {
+  const selected = state.scribble.items.find((item) => item.id === state.scribble.selectedId) || null;
+  if (!selected || !form) return null;
+  const formData = new FormData(form);
+  const title = String(formData.get("title") || selected.title || "Scribble").trim() || "Scribble";
+  const text = String(formData.get("text") || "").trim();
+  return {
+    version: 1,
+    kind: "scribble",
+    title,
+    subtitle: "",
+    meta: [],
+    sections: [],
+    body: text || (selected.hasFile ? selected.filename : ""),
+  };
+}
+
 function thermalPrintTodayDocument() {
   const plainText = String(state.todayBriefing.data?.plainText || "");
   if (!plainText) return null;
@@ -10032,7 +10078,7 @@ function memosViewContext() {
     memoAttachmentUrl,
     isMemoImageAttachment,
     formatBytes,
-    renderMarkdown: window.KAOS_MARKDOWN_EDITOR.renderMarkdown,
+    renderMemoContent: window.KAOS_MEMO_CONTENT.render,
   };
 }
 
@@ -10843,7 +10889,6 @@ function render() {
   else view.innerHTML = portalProfile() === "family" ? renderFamilyAgenda() : renderMainAgenda();
   applyFamilyTitleFontElements();
   if (enteringRoute) view.scrollTop = 0;
-  window.KAOS_MARKDOWN_EDITOR?.enhanceAll(view);
   if (overlayRoot) overlayRoot.innerHTML = route === "rouny" ? renderRounyOverlay() : "";
   updateOverlayMetrics();
   if (route === "calendar" || isAgendaRoute(route) || ((route === "add-event" || route === "edit-event") && isDesktopLayout())) {
@@ -10938,6 +10983,13 @@ document.addEventListener("click", async (event) => {
   if (taskPrintButton) {
     event.preventDefault();
     const printDocument = thermalPrintTaskDocument(taskPrintButton.dataset.thermalPrintTaskId || "");
+    if (printDocument) window.KAOS_THERMAL_PRINT?.open(printDocument);
+    return;
+  }
+  const scribblePrintButton = event.target.closest("[data-scribble-print]");
+  if (scribblePrintButton) {
+    event.preventDefault();
+    const printDocument = thermalPrintScribbleDocument(scribblePrintButton.closest("[data-scribble-edit]"));
     if (printDocument) window.KAOS_THERMAL_PRINT?.open(printDocument);
     return;
   }
@@ -11445,6 +11497,22 @@ document.addEventListener("click", async (event) => {
 
   if (event.target.closest("[data-memo-edit-cancel]")) {
     cancelMemoEdit();
+    return;
+  }
+
+  if (event.target.closest("[data-memo-delete]")) {
+    const selected = state.memos.selected;
+    if (!selected || state.memos.deleting) return;
+    if (!window.confirm(uiText("memos.deleteConfirm", "Delete this memo?"))) return;
+    state.memos.deleting = true;
+    render();
+    try {
+      await deleteMemoRecord(selected.name);
+    } catch (error) {
+      state.memos.deleting = false;
+      render();
+      window.alert(memoErrorMessage(error, "memos.deleteFailed", "Could not delete memo"));
+    }
     return;
   }
 

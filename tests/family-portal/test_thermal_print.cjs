@@ -8,13 +8,14 @@ const root = path.join(__dirname, "../../apps/family-portal");
 const appSource = fs.readFileSync(path.join(root, "app.js"), "utf8");
 const indexSource = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const memosSource = fs.readFileSync(path.join(root, "memos-view.js"), "utf8");
+const scribbleSource = fs.readFileSync(path.join(root, "scribble-view.js"), "utf8");
 const notificationsSource = fs.readFileSync(path.join(root, "notifications-view.js"), "utf8");
 const moduleSource = fs.readFileSync(path.join(root, "thermal-print.js"), "utf8");
 const stylesSource = fs.readFileSync(path.join(root, "styles.css"), "utf8");
 
 test("loads the thermal print controller before the application", () => {
   assert.match(indexSource, /src="\/thermal-print\.js\?v=5"/);
-  assert.ok(indexSource.indexOf('src="/thermal-print.js?v=5"') < indexSource.indexOf('src="/app.js?v=406"'));
+  assert.ok(indexSource.indexOf('src="/thermal-print.js?v=5"') < indexSource.indexOf('src="/app.js?v=407"'));
 });
 
 test("limits print actions to the requested personal surfaces", () => {
@@ -26,12 +27,14 @@ test("limits print actions to the requested personal surfaces", () => {
   assert.match(appSource, /data-thermal-print-task-id=/);
   assert.match(appSource, /thermalPrintTaskDocument\(taskPrintButton\.dataset\.thermalPrintTaskId/);
   assert.match(memosSource, /data-thermal-print="memo"/);
+  assert.match(scribbleSource, /data-scribble-print/);
+  assert.match(appSource, /thermalPrintScribbleDocument\(scribblePrintButton\.closest/);
   assert.match(appSource, /if \(portalProfile\(\) !== "main"\) return "";/);
   assert.match(memosSource, /deps\.portalProfile\(\) === "main"/);
 });
 
 test("builds structured documents instead of sending page html", () => {
-  for (const kind of ["today", "agenda", "event", "tasks", "task", "memo"]) {
+  for (const kind of ["today", "agenda", "event", "tasks", "task", "memo", "scribble"]) {
     assert.match(appSource, new RegExp(`kind: "${kind}"`));
   }
   assert.doesNotMatch(moduleSource, /innerHTML:\s*state\.document/);

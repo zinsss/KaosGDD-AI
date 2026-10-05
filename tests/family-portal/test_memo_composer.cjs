@@ -42,6 +42,16 @@ test("memo details preview, download, add, and remove attachments", () => {
   assert.match(stylesSource, /\.memoAttachmentList \{/);
 });
 
+test("memo detail offers confirmed deletion through the scoped Memos endpoint", () => {
+  assert.match(memosViewSource, /data-memo-delete/);
+  assert.match(memosViewSource, /text\(deps, "common\.delete", "DELETE"\)/);
+  assert.match(appSource, /async function deleteMemoRecord\(name\)/);
+  assert.match(appSource, /fetch\(`\/api\/memos\/api\/v1\/memos\/\$\{encodeURIComponent\(id\)\}`/);
+  assert.match(appSource, /method: "DELETE"/);
+  assert.match(appSource, /uiText\("memos\.deleteConfirm", "Delete this memo\?"\)/);
+  assert.match(stylesSource, /\.memoDeleteAction \{[\s\S]*?color: var\(--archive-error\);/);
+});
+
 test("main and family memos routes render native archive board controls", () => {
   assert.match(memosViewSource, /data-archive-kind="memos"/);
   assert.match(memosViewSource, /data-memo-search/);

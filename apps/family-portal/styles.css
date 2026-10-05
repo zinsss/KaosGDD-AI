@@ -9261,7 +9261,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   overflow-wrap: anywhere;
 }
 
-.app:is([data-profile="main"], [data-profile="family"][data-route="memos"]) .archiveOcrRegion .memoMarkdown {
+.app:is([data-profile="main"], [data-profile="family"][data-route="memos"]) .archiveOcrRegion .memoContent {
   min-width: 0;
   margin: 0;
   padding: 12px;
@@ -9273,61 +9273,61 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   overflow-wrap: anywhere;
 }
 
-.memoMarkdown > :first-child {
+.memoContent > :first-child {
   margin-top: 0;
 }
 
-.memoMarkdown > :last-child {
+.memoContent > :last-child {
   margin-bottom: 0;
 }
 
-.memoMarkdown h1,
-.memoMarkdown h2,
-.memoMarkdown h3,
-.memoMarkdown h4,
-.memoMarkdown h5,
-.memoMarkdown h6 {
+.memoContent h1,
+.memoContent h2,
+.memoContent h3,
+.memoContent h4,
+.memoContent h5,
+.memoContent h6 {
   margin: 1.15em 0 0.45em;
   color: var(--archive-amber);
   line-height: 1.3;
 }
 
-.memoMarkdown h1 {
+.memoContent h1 {
   font-size: 1.76rem;
 }
 
-.memoMarkdown p,
-.memoMarkdown ul,
-.memoMarkdown ol,
-.memoMarkdown blockquote,
-.memoMarkdown pre {
+.memoContent p,
+.memoContent ul,
+.memoContent ol,
+.memoContent blockquote,
+.memoContent pre {
   margin: 0.65em 0;
 }
 
-.memoMarkdown ul,
-.memoMarkdown ol {
+.memoContent ul,
+.memoContent ol {
   padding-left: 1.5em;
 }
 
-.memoMarkdown blockquote {
+.memoContent blockquote {
   padding-left: 0.85em;
   border-left: 3px solid var(--archive-line-strong);
   color: var(--archive-muted);
 }
 
-.memoMarkdown a {
+.memoContent a {
   color: var(--archive-cyan);
   text-underline-offset: 0.16em;
 }
 
-.memoMarkdown code {
+.memoContent code {
   padding: 0.12em 0.32em;
   background: var(--nord0);
   color: var(--archive-cyan);
   font-family: "Sarasa Gothic Mono", ui-monospace, monospace !important;
 }
 
-.memoMarkdown pre {
+.memoContent pre {
   padding: 10px;
   overflow-x: auto;
   border: 1px solid var(--archive-line);
@@ -9335,12 +9335,12 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   white-space: pre;
 }
 
-.memoMarkdown pre code {
+.memoContent pre code {
   padding: 0;
   background: transparent;
 }
 
-.memoMarkdown .memoCopyToken {
+.memoContent .memoCopyToken {
   display: inline;
   margin: 0;
   padding: 0;
@@ -9356,14 +9356,14 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   cursor: copy;
 }
 
-.memoMarkdown .memoCopyToken:hover,
-.memoMarkdown .memoCopyToken:focus-visible {
+.memoContent .memoCopyToken:hover,
+.memoContent .memoCopyToken:focus-visible {
   color: var(--nord6);
   outline: 1px dotted currentColor;
   outline-offset: 2px;
 }
 
-.memoMarkdown .memoCopyToken.isCopied {
+.memoContent .memoCopyToken.isCopied {
   color: var(--nord14);
 }
 
@@ -9435,7 +9435,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
     overflow: auto;
   }
 
-  .app:is([data-profile="main"], [data-profile="family"][data-route="memos"]) .archiveOcrRegion .memoMarkdown {
+  .app:is([data-profile="main"], [data-profile="family"][data-route="memos"]) .archiveOcrRegion .memoContent {
     max-height: 52dvh;
     overflow: auto;
   }
@@ -9635,7 +9635,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   font-family: inherit;
 }
 
-.app[data-profile="family"][data-route="memos"] .archiveOcrRegion .memoMarkdown {
+.app[data-profile="family"][data-route="memos"] .archiveOcrRegion .memoContent {
   border-color: rgba(122, 96, 132, 0.16);
   border-radius: 12px;
   background: var(--archive-raised);
@@ -9758,7 +9758,16 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 .scribbleCapture textarea,
 .scribbleEditor textarea {
   resize: vertical;
+  font-family: inherit !important;
   line-height: 1.55;
+}
+
+.scribbleCapture textarea {
+  min-height: 124px;
+}
+
+.scribbleEditor textarea {
+  min-height: min(44dvh, 360px);
 }
 
 .scribbleCaptureFooter {
@@ -10127,171 +10136,6 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   }
 }
 
-/* Source-level Markdown editor for Scribble. The native
-   textarea remains the input surface so Korean IME behavior stays native. */
-.markdownEditor {
-  --markdown-editor-bg: var(--nord0);
-  --markdown-editor-raised: var(--nord1);
-  --markdown-editor-line: var(--nord3);
-  --markdown-editor-text: var(--nord6);
-  --markdown-editor-muted: var(--nord4);
-  --markdown-editor-red: var(--nord11);
-  --markdown-editor-orange: var(--nord12);
-  --markdown-editor-yellow: var(--nord13);
-  --markdown-editor-green: var(--nord14);
-  --markdown-editor-purple: var(--nord15);
-  --markdown-editor-blue: var(--nord9);
-  --markdown-editor-cyan: var(--nord8);
-  display: grid;
-  gap: 6px;
-  width: 100%;
-  min-width: 0;
-}
-
-.archiveTerminal .markdownEditor {
-  --markdown-editor-bg: var(--nord0);
-  --markdown-editor-raised: var(--nord1);
-  --markdown-editor-line: var(--nord3);
-  --markdown-editor-text: var(--nord6);
-  --markdown-editor-muted: var(--nord4);
-}
-
-.app[data-profile="family"] .markdownEditor {
-  --markdown-editor-bg: var(--nord6);
-  --markdown-editor-raised: var(--nord5);
-  --markdown-editor-line: color-mix(in srgb, var(--nord3) 42%, var(--nord5));
-  --markdown-editor-text: var(--nord0);
-  --markdown-editor-muted: var(--nord3);
-  --markdown-editor-red: color-mix(in srgb, var(--nord11) 82%, var(--nord0));
-  --markdown-editor-orange: color-mix(in srgb, var(--nord12) 78%, var(--nord0));
-  --markdown-editor-yellow: color-mix(in srgb, var(--nord13) 68%, var(--nord0));
-  --markdown-editor-green: color-mix(in srgb, var(--nord14) 72%, var(--nord0));
-  --markdown-editor-purple: color-mix(in srgb, var(--nord15) 80%, var(--nord0));
-  --markdown-editor-blue: color-mix(in srgb, var(--nord9) 82%, var(--nord0));
-  --markdown-editor-cyan: color-mix(in srgb, var(--nord8) 72%, var(--nord0));
-}
-
-.markdownEditorToolbar {
-  display: flex;
-  justify-content: flex-end;
-  gap: 5px;
-}
-
-.markdownEditorToolbar button {
-  display: grid;
-  place-items: center;
-  width: 38px;
-  min-width: 38px;
-  min-height: 34px;
-  border: 1px solid var(--markdown-editor-line);
-  border-radius: 5px;
-  background: var(--markdown-editor-raised);
-  color: var(--markdown-editor-muted);
-  font: 700 1rem/1 "Sarasa Gothic Mono", ui-monospace, monospace;
-  cursor: pointer;
-}
-
-.markdownEditorToolbar button:active,
-.markdownEditorToolbar button:focus-visible {
-  border-color: var(--markdown-editor-cyan);
-  color: var(--markdown-editor-cyan);
-  outline: none;
-}
-
-.markdownEditorSurface {
-  position: relative;
-  width: 100%;
-  min-width: 0;
-}
-
-.markdownEditorHighlight,
-.markdownEditorInput {
-  box-sizing: border-box;
-  width: 100%;
-  min-width: 0;
-  min-height: 124px;
-  margin: 0;
-  border: 1px solid var(--markdown-editor-line);
-  border-radius: 0;
-  padding: 9px 10px;
-  font: 16px/1.55 "Sarasa Gothic Mono", ui-monospace, monospace;
-  font-variant-ligatures: none;
-  letter-spacing: normal;
-  tab-size: 2;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
-.markdownEditorHighlight {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  height: 100%;
-  overflow: auto;
-  background: var(--markdown-editor-bg);
-  color: var(--markdown-editor-text);
-  pointer-events: none;
-  scrollbar-width: none;
-}
-
-.markdownEditorHighlight::-webkit-scrollbar {
-  display: none;
-}
-
-.markdownEditorInput {
-  position: relative;
-  z-index: 1;
-  display: block;
-  resize: vertical;
-  background: transparent !important;
-  color: transparent !important;
-  -webkit-text-fill-color: transparent;
-  caret-color: var(--markdown-editor-text);
-  outline: none;
-}
-
-.markdownEditorInput:focus {
-  border-color: var(--markdown-editor-cyan);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--markdown-editor-cyan) 24%, transparent);
-}
-
-.markdownEditorInput::placeholder {
-  color: var(--markdown-editor-muted);
-  -webkit-text-fill-color: var(--markdown-editor-muted);
-}
-
-/* The four-row Scribble textarea can otherwise be shorter than its 124px
-   highlight mirror, leaving the mirror visible as an empty strip below it. */
-.scribbleCapture .markdownEditorInput {
-  min-height: 124px !important;
-}
-
-.markdownEditorHighlight .mdHeading {
-  font-weight: 700;
-}
-
-.markdownEditorHighlight .mdH1 { color: var(--markdown-editor-red); }
-.markdownEditorHighlight .mdH2 { color: var(--markdown-editor-orange); }
-.markdownEditorHighlight .mdH3 { color: var(--markdown-editor-yellow); }
-.markdownEditorHighlight .mdH4 { color: var(--markdown-editor-green); }
-.markdownEditorHighlight .mdH5 { color: var(--markdown-editor-purple); }
-.markdownEditorHighlight .mdH6 { color: var(--markdown-editor-blue); }
-.markdownEditorHighlight .mdListMarker { color: var(--markdown-editor-yellow); font-weight: 700; }
-.markdownEditorHighlight .mdQuote { color: var(--markdown-editor-muted); font-style: italic; }
-.markdownEditorHighlight .mdRule { color: var(--markdown-editor-line); }
-.markdownEditorHighlight .mdCodeFence,
-.markdownEditorHighlight .mdCodeBlock,
-.markdownEditorHighlight .mdInlineCode { color: var(--markdown-editor-cyan); }
-.markdownEditorHighlight .mdStrong { color: var(--markdown-editor-yellow); font-weight: 700; }
-.markdownEditorHighlight .mdLink { color: var(--markdown-editor-purple); text-decoration: underline; }
-
-.memoComposer .markdownEditorInput,
-.memoEditForm .markdownEditorInput,
-.scribbleEditor .markdownEditorInput {
-  min-height: min(44dvh, 360px);
-}
-
 .memoEditForm {
   display: grid;
   gap: 12px;
@@ -10337,6 +10181,10 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.memoDeleteAction {
+  color: var(--archive-error);
 }
 
 .memoEditForm .formNote {
@@ -10431,12 +10279,6 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 }
 
 @media (max-width: 640px) {
-  .markdownEditorToolbar button {
-    width: 42px;
-    min-width: 42px;
-    min-height: 38px;
-  }
-
   .memoEditForm {
     padding: 10px;
   }

@@ -218,6 +218,22 @@ class ThermalPrintTests(unittest.TestCase):
         self.assertGreaterEqual(min(float(op["size"]) for op in text_ops), 8.0)
         self.assertEqual(next(op for op in text_ops if op["text"] == "메모 제목")["size"], 14.5)
 
+    def test_scribble_is_a_supported_compact_receipt(self) -> None:
+        document = thermal_print.normalize_document({
+            "version": 1,
+            "kind": "scribble",
+            "title": "전화 메모",
+            "body": "오후에 다시 전화",
+        })
+
+        ops = thermal_print._document_ops(
+            document,
+            datetime(2026, 10, 5, 21, 30, tzinfo=ZoneInfo("Asia/Seoul")),
+        )
+        text = [str(op["text"]) for op in ops if op["type"] == "text"]
+
+        self.assertEqual(text[:4], ["KaosGDD", "Scribble", "전화 메모", "오후에 다시 전화"])
+
     def test_rejects_unknown_kinds_and_unbounded_item_lists(self) -> None:
         with self.assertRaisesRegex(thermal_print.ThermalPrintError, "invalid_print_kind"):
             thermal_print.normalize_document({"kind": "shell", "title": "No"})

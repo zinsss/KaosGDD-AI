@@ -31,7 +31,7 @@ window.KAOS_SCRIBBLE_VIEW = (() => {
         </label>
         <label class="archiveCommandLine scribbleTextLine">
           <span>TEXT</span>
-          <textarea name="text" rows="10" placeholder="Add a note or edit the captured text" data-markdown-editor>${deps.escapeHtml(selected.text)}</textarea>
+          <textarea name="text" rows="10" placeholder="Add a note or edit the captured text">${deps.escapeHtml(selected.text)}</textarea>
         </label>
         ${selected.hasFile ? `
           <div class="scribbleFile">
@@ -42,6 +42,7 @@ window.KAOS_SCRIBBLE_VIEW = (() => {
           </div>
         ` : ""}
         <div class="archiveActions scribbleActions">
+          <button class="archiveAction" type="button" data-scribble-print>PRINT</button>
           <button class="archiveAction isActive" type="submit" ${board.saving ? "disabled" : ""}>SAVE</button>
           ${selected.text ? `<button class="archiveAction isActive" type="button" data-scribble-to-memo>TO MEMOS</button>` : ""}
           ${selected.hasFile ? `<button class="archiveAction ${selected.contentType === "application/pdf" || selected.filename.toLowerCase().endsWith(".pdf") ? "isActive" : ""}" type="button" data-scribble-to-paperless ${selected.contentType === "application/pdf" || selected.filename.toLowerCase().endsWith(".pdf") ? "" : "disabled title=\"Convert to PDF first\""}>TO PAPERLESS</button>` : ""}
@@ -58,7 +59,7 @@ window.KAOS_SCRIBBLE_VIEW = (() => {
           </label>
           <label class="archiveCommandLine scribbleTextLine">
             <span>TEXT</span>
-            <textarea name="text" rows="4" placeholder="Write something to sort out later…" data-scribble-capture-text data-markdown-editor></textarea>
+            <textarea name="text" rows="4" placeholder="Write something to sort out later…" data-scribble-capture-text></textarea>
           </label>
           <div class="archiveCommandLine scribbleFilePicker">
             <span>FILE</span>

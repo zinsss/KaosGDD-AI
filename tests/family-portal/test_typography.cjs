@@ -99,7 +99,7 @@ test("Family title font choices stay selectable before separate-title mode is en
 
 test("typography asset loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  assert.ok(index.indexOf('src="/typography.js?v=5"') < index.indexOf('src="/app.js?v=406"'));
+  assert.ok(index.indexOf('src="/typography.js?v=5"') < index.indexOf('src="/app.js?v=407"'));
 });
 
 test("every textual UI element follows the profile global font", () => {

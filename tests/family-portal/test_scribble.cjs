@@ -40,14 +40,17 @@ test("Scribble is a small staging inbox with both handoff actions", () => {
   assert.match(navigation, /route: "scribble", label: "Scribble"/);
   assert.match(index, /src="\/navigation\.js\?v=11"/);
   assert.match(index, /src="\/scribble\.js\?v=1"/);
-  assert.match(index, /href="\/styles\.css\?v=436"/);
-  assert.match(index, /src="\/scribble-view\.js\?v=5"/);
-  assert.ok(index.indexOf('src="/scribble-view.js?v=5"') < index.indexOf('src="/app.js?v=406"'));
+  assert.match(index, /href="\/styles\.css\?v=437"/);
+  assert.match(index, /src="\/scribble-view\.js\?v=6"/);
+  assert.ok(index.indexOf('src="/scribble-view.js?v=6"') < index.indexOf('src="/app.js?v=407"'));
   assert.match(view, /class="archiveTerminal scribbleBoard"/);
   assert.doesNotMatch(view, /QUICK CAPTURE|Scribble Inbox/);
   assert.match(view, /STAGING QUEUE/);
   assert.match(view, /name="file" type="file" data-app-file/);
   assert.match(view, /class="appFileControl"/);
+  assert.match(view, /data-scribble-print>PRINT<\/button>/);
+  assert.match(app, /function thermalPrintScribbleDocument\(form\)/);
+  assert.match(app, /scribblePrintButton\.closest\("\[data-scribble-edit\]"\)/);
   assert.doesNotMatch(view, /input::file-selector-button/);
 });
 
