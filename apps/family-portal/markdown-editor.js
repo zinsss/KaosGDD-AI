@@ -300,7 +300,9 @@
 
   function enhanceAll(scope) {
     const root = scope && typeof scope.querySelectorAll === "function" ? scope : document;
-    root.querySelectorAll("textarea[data-markdown-editor]").forEach(enhance);
+    root
+      .querySelectorAll("textarea[data-markdown-editor]:not([data-memo-content]):not([data-memo-edit-content])")
+      .forEach(enhance);
   }
 
   return Object.freeze({ editText, enhanceAll, highlightMarkdown, renderMarkdown });

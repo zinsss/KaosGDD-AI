@@ -10127,7 +10127,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   }
 }
 
-/* Shared source-level Markdown editor for Memos and Scribble. The native
+/* Source-level Markdown editor for Scribble. The native
    textarea remains the input surface so Korean IME behavior stays native. */
 .markdownEditor {
   --markdown-editor-bg: var(--nord0);
@@ -10307,6 +10307,28 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   color: var(--archive-amber);
   font-size: 0.76rem;
   font-weight: 850;
+}
+
+.memoEditForm textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: min(44dvh, 360px);
+  margin: 0;
+  border: 1px solid var(--archive-line);
+  border-radius: 0;
+  padding: 9px 10px;
+  resize: vertical;
+  background: var(--archive-panel);
+  color: var(--archive-text);
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.55;
+  outline: none;
+}
+
+.memoEditForm textarea:focus {
+  border-color: var(--archive-cyan);
 }
 
 .memoDetailActions,

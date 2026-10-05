@@ -10078,7 +10078,6 @@ function renderAddMemo() {
             autocomplete="off"
             placeholder="# Title&#10;memo body&#10;#tag"
             data-memo-content
-            data-markdown-editor
           >${escapeHtml(composer.content)}</textarea>
         </label>
         <div class="memoFilePicker">

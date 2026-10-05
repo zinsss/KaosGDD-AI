@@ -61,16 +61,22 @@ test("memo Markdown renders copy tokens outside code as safe buttons", () => {
   assert.equal((html.match(/class="memoCopyToken"/g) || []).length, 1);
 });
 
-test("Memos and Scribble share the lightweight editor", () => {
-  assert.match(index, /src="\/markdown-editor\.js\?v=4"/);
-  assert.ok(index.indexOf('src="/markdown-editor.js?v=4"') < index.indexOf('src="/app.js?v=406"'));
+test("Scribble uses the lightweight Markdown editor while Memos use plain textareas", () => {
+  assert.match(index, /src="\/markdown-editor\.js\?v=5"/);
+  assert.ok(index.indexOf('src="/markdown-editor.js?v=5"') < index.indexOf('src="/app.js?v=406"'));
   assert.match(app, /KAOS_MARKDOWN_EDITOR\?\.enhanceAll\(view\)/);
-  assert.match(app, /data-memo-content[\s\S]*data-markdown-editor/);
+  assert.match(app, /data-memo-content/);
+  assert.doesNotMatch(app, /data-memo-content[\s\S]{0,120}data-markdown-editor/);
   assert.match(memosView, /data-memo-edit-start/);
-  assert.match(memosView, /data-memo-edit-content data-markdown-editor/);
+  assert.match(memosView, /data-memo-edit-content/);
+  assert.doesNotMatch(memosView, /data-memo-edit-content data-markdown-editor/);
   assert.match(memosView, /class="memoMarkdown">\$\{deps\.renderMarkdown\(selected\.content\)\}<\/article>/);
   assert.match(scribbleView, /data-scribble-capture-text data-markdown-editor/);
   assert.match(scribbleView, /name="text" rows="10"[\s\S]*data-markdown-editor/);
+  assert.match(
+    fs.readFileSync(path.join(root, "apps/family-portal/markdown-editor.js"), "utf8"),
+    /textarea\[data-markdown-editor\]:not\(\[data-memo-content\]\):not\(\[data-memo-edit-content\]\)/,
+  );
   assert.match(styles, /--markdown-editor-red: var\(--nord11\);/);
   assert.match(styles, /\.markdownEditorHighlight \.mdH1 \{ color: var\(--markdown-editor-red\); \}/);
   assert.match(styles, /\.app\[data-profile="family"\] \.markdownEditor/);
@@ -82,6 +88,7 @@ test("Memos and Scribble share the lightweight editor", () => {
   assert.match(app, /writeTextToClipboard\(copyText\)/);
   assert.match(app, /navigator\.clipboard\?\.writeText[\s\S]*?catch \(_error\)[\s\S]*?document\.execCommand\("copy"\)/);
   assert.match(styles, /\.scribbleCapture \.markdownEditorInput \{[\s\S]*?min-height: 124px !important;/);
+  assert.match(styles, /\.memoEditForm textarea \{[\s\S]*?font: inherit;/);
 });
 
 test("Memo edits use the scoped Memos PATCH endpoint", () => {

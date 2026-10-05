@@ -103,8 +103,8 @@ window.KAOS_MEMOS_VIEW = (() => {
                   ? `
                     <form class="memoEditForm" data-memo-edit="${deps.escapeHtml(selected.name)}">
                       <label>
-                        <span>${deps.escapeHtml(text(deps, "memos.markdown", "MARKDOWN"))}</span>
-                        <textarea name="content" rows="16" data-memo-edit-content data-markdown-editor>${deps.escapeHtml(memos.editDraft)}</textarea>
+                        <span>${deps.escapeHtml(text(deps, "memos.memoText", "MEMO TEXT"))}</span>
+                        <textarea name="content" rows="16" data-memo-edit-content>${deps.escapeHtml(memos.editDraft)}</textarea>
                       </label>
                       ${renderAttachmentList(deps, memos.editAttachments, { editing: true })}
                       <div class="memoFilePicker">

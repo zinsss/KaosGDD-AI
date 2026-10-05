@@ -109,8 +109,8 @@ test("memos archive rendering is delegated to the view module", () => {
   assert.match(memosViewSource, /data-memos-refresh/);
   assert.match(memosViewSource, /data-memos-clear/);
   assert.match(memosViewSource, /data-memo-detail/);
-  assert.match(indexSource, /src="\/memos-view\.js\?v=13"/);
-  assert.ok(indexSource.indexOf('src="/memos-view.js?v=13"') < indexSource.indexOf('src="/app.js?v=406"'));
+  assert.match(indexSource, /src="\/memos-view\.js\?v=14"/);
+  assert.ok(indexSource.indexOf('src="/memos-view.js?v=14"') < indexSource.indexOf('src="/app.js?v=406"'));
 });
 
 test("documents archive rendering is delegated to the view module", () => {
