@@ -43,6 +43,7 @@ test("Memos and Scribble use ordinary textareas with no enhanced editor", () => 
   assert.match(memosView, /class="memoContent">\$\{deps\.renderMemoContent\(selected\.content\)\}<\/article>/);
   assert.doesNotMatch(styles, /\.markdownEditor|--markdown-editor/);
   assert.match(styles, /\.memoEditForm textarea \{[\s\S]*?font: inherit;/);
+  assert.match(styles, /\.archiveOcrRegion \.memoContent \{[\s\S]*?font-size: 1\.2rem;/);
   assert.match(styles, /\.scribbleCapture textarea,[\s\S]*?font-family: inherit !important;/);
   assert.match(styles, /\.scribbleCapture textarea \{[\s\S]*?min-height: 124px;/);
   assert.match(styles, /\.scribbleEditor textarea \{[\s\S]*?min-height: min\(44dvh, 360px\);/);
