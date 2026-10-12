@@ -44,8 +44,8 @@ test("Family routes and refreshed assets cannot fall back to stale English label
   assert.equal(translations["route.aiTasks"], "AI 작업");
   assert.match(indexSource, /src="\/translations\.js\?v=198"/);
   assert.match(indexSource, /src="\/ai-tasks-view\.js\?v=6"/);
-  assert.match(indexSource, /src="\/memos-view\.js\?v=15"/);
-  assert.match(indexSource, /src="\/app\.js\?v=407"/);
+  assert.match(indexSource, /src="\/memos-view\.js\?v=16"/);
+  assert.match(indexSource, /src="\/app\.js\?v=408"/);
 });
 
 test("Family memo board renders Korean controls and headings", () => {
@@ -70,6 +70,7 @@ test("Family memo board renders Korean controls and headings", () => {
       },
     },
     uiText: koreanText,
+    portalProfile: () => "family",
     escapeHtml: (value) => String(value),
     archiveDateParts: () => ({ raw: "", label: "" }),
     memoDisplayNumber: () => "",
@@ -81,7 +82,7 @@ test("Family memo board renders Korean controls and headings", () => {
     renderMemoContent: () => "",
   });
 
-  for (const label of ["검색", "태그", "새로고침", "메모 목록", "메모 0개", "번호", "날짜", "제목", "일치하는 메모가 없습니다."]) {
+  for (const label of ["추가", "검색", "태그", "새로고침", "메모 목록", "메모 0개", "번호", "날짜", "제목", "일치하는 메모가 없습니다."]) {
     assert.match(html, new RegExp(label));
   }
   for (const label of ["RECORD BOARD", "MEMO BOARD STANDBY", ">Search<", ">Tags<", ">Reload<"]) {

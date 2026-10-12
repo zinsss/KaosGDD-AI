@@ -88,6 +88,17 @@ test("main and family memos routes render native archive board controls", () => 
   assert.doesNotMatch(appSource, /portalProfile\(\) === "family"[\s\S]*memosFrame/);
 });
 
+test("Family memos render a Korean add action that opens the existing memo composer", () => {
+  assert.match(
+    memosViewSource,
+    /deps\.portalProfile\(\) === "family" \? `<a class="archiveAction archiveTopAction memoAddAction" href="#\/add-memo" aria-label="\$\{deps\.escapeHtml\(text\(deps, "route\.addMemo", "Add Memo"\)\)\}">\$\{deps\.escapeHtml\(text\(deps, "common\.add", "Add"\)\)\}<\/a>` : ""/,
+  );
+  assert.match(translationsSource, /"common\.add": "추가"/);
+  assert.match(translationsSource, /"route\.addMemo": "메모 추가"/);
+  assert.match(appSource, /else if \(route === "add-memo"\) view\.innerHTML = renderAddMemo\(\);/);
+  assert.match(stylesSource, /\.app\[data-profile="family"\]\[data-route="memos"\][\s\S]*\.memoArchiveCommands\.hasFamilyAdd \{\s*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\);/);
+});
+
 test("family memos receive the shared archive layout and light family theme", () => {
   assert.match(
     stylesSource,

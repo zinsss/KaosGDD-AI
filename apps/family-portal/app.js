@@ -7831,12 +7831,17 @@ function renderTaskFilters() {
 function renderTaskListPanel(tasks) {
   return `
     <section class="panel taskListPanel">
-      ${portalProfile() === "main" ? `
+      ${portalProfile() === "family" ? `
+        <div class="panelHeader familyViewHeader">
+          <h2>${uiText("task.label", "Tasks")}</h2>
+          <a class="openButton familyViewAddAction" href="#/add-task" aria-label="${uiText("route.addTask", "Add Task")}">${uiText("common.add", "Add")}</a>
+        </div>
+      ` : `
         <div class="panelHeader thermalPrintPanelHeader">
           <h2>${uiText("task.label", "Tasks")}</h2>
           ${thermalPrintAction("tasks")}
         </div>
-      ` : ""}
+      `}
       <div class="panelBody">${renderTaskRows(tasks)}</div>
     </section>
   `;

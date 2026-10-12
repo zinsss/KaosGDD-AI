@@ -19,7 +19,7 @@ test("family ledger offers separate Excel and printable PDF downloads", () => {
 
 test("ledger export actions stay usable as a four-button mobile row", () => {
   assert.match(stylesSource, /\.ledgerToolbarActions\s*\{[\s\S]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);
-  assert.match(indexSource, /href="\/styles\.css\?v=438"/);
+  assert.match(indexSource, /href="\/styles\.css\?v=439"/);
   assert.match(indexSource, /src="\/translations\.js\?v=198"/);
-  assert.match(indexSource, /src="\/app\.js\?v=407"/);
+  assert.match(indexSource, /src="\/app\.js\?v=408"/);
 });

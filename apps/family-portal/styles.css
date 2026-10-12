@@ -8303,6 +8303,10 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   gap: 8px;
 }
 
+.app[data-profile="family"][data-route="memos"] [data-archive-kind="memos"] .memoArchiveCommands.hasFamilyAdd {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .app[data-profile="main"] [data-archive-kind="mail"] .mailArchiveCommands {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

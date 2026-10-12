@@ -52,3 +52,13 @@ test("task add and edit forms can select and safely move between Family and GDDZ
   assert.match(adapterSource, /select_collection\(collections, target_collection_id, "VTODO"\)/);
   assert.match(adapterSource, /return \{"ok": True, "uid": uid, "collection": target_collection\["id"\], "moved": True\}/);
 });
+
+test("Family tasks render a Korean add action that opens the existing task composer", () => {
+  assert.match(
+    appSource,
+    /portalProfile\(\) === "family" \? `[\s\S]*class="openButton familyViewAddAction" href="#\/add-task" aria-label="\$\{uiText\("route\.addTask", "Add Task"\)\}">\$\{uiText\("common\.add", "Add"\)\}<\/a>/,
+  );
+  assert.match(translations, /"common\.add": "추가"/);
+  assert.match(translations, /"route\.addTask": "할 일 추가"/);
+  assert.match(appSource, /else if \(route === "add-task"\) \{[\s\S]*view\.innerHTML = renderAddTask\(\);/);
+});

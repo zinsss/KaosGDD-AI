@@ -141,7 +141,8 @@ window.KAOS_MEMOS_VIEW = (() => {
     return `
       <section class="archiveTerminal" data-archive-kind="memos" aria-label="${deps.escapeHtml(text(deps, "memos.archiveAria", "Memo archive"))}">
         <form class="archiveCommand memoArchiveToolbar" data-memo-search role="search">
-          <div class="memoArchiveCommands">
+          <div class="memoArchiveCommands ${deps.portalProfile() === "family" ? "hasFamilyAdd" : ""}">
+            ${deps.portalProfile() === "family" ? `<a class="archiveAction archiveTopAction memoAddAction" href="#/add-memo" aria-label="${deps.escapeHtml(text(deps, "route.addMemo", "Add Memo"))}">${deps.escapeHtml(text(deps, "common.add", "Add"))}</a>` : ""}
             <button class="archiveAction archiveTopAction ${memos.toolbarPanel === "search" ? "isActive" : ""}" type="button" data-memos-toolbar="search" aria-expanded="${memos.toolbarPanel === "search"}">${deps.escapeHtml(text(deps, "memos.search", "Search"))}</button>
             <button class="archiveAction archiveTopAction ${memos.toolbarPanel === "tags" ? "isActive" : ""}" type="button" data-memos-toolbar="tags" aria-expanded="${memos.toolbarPanel === "tags"}">${deps.escapeHtml(text(deps, "memos.tags", "Tags"))}</button>
             <button class="archiveAction archiveTopAction" type="button" data-memos-refresh aria-label="${deps.escapeHtml(text(deps, "memos.reloadAria", "Reload memos"))}" title="${deps.escapeHtml(text(deps, "memos.reloadAria", "Reload memos"))}" ${memos.loading ? "disabled" : ""}>${deps.escapeHtml(text(deps, "memos.reload", "Reload"))}</button>
