@@ -33,7 +33,7 @@ test("memo copy tokens remain available outside code", () => {
 
 test("Memos and Scribble use ordinary textareas with no enhanced editor", () => {
   assert.match(index, /src="\/memo-content\.js\?v=1"/);
-  assert.ok(index.indexOf('src="/memo-content.js?v=1"') < index.indexOf('src="/app.js?v=408"'));
+  assert.ok(index.indexOf('src="/memo-content.js?v=1"') < index.indexOf('src="/app.js?v=409"'));
   assert.doesNotMatch(index, /markdown-editor\.js/);
   assert.equal(fs.existsSync(path.join(root, "apps/family-portal/markdown-editor.js")), false);
   assert.doesNotMatch(app, /KAOS_MARKDOWN_EDITOR|enhanceAll\(view\)|data-markdown-editor/);

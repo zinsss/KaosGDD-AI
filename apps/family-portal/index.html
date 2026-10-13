@@ -13,19 +13,103 @@
     <link rel="icon" id="appFavicon16" type="image/png" sizes="16x16" href="/icons/main/favicon-16x16.png?v=93" />
     <link rel="apple-touch-icon" id="appAppleIcon" href="/icons/main/kaos-master-1024.png?v=97" />
     <link rel="manifest" id="appManifest" href="/manifest.webmanifest?v=101" crossorigin="use-credentials" />
-    <script>
-      if (window.location.hostname === "family.kaosgdd.net") {
-        document.documentElement.lang = "ko";
-        document.title = "Kaos Family";
-        document.getElementById("themeColor").content = "#FBF7FC";
-        document.getElementById("appleStatusBarStyle").content = "default";
-        document.getElementById("appleAppTitle").content = "Kaos Family";
-        document.getElementById("appFavicon").href = "/icons/family/favicon.ico?v=99";
-        document.getElementById("appFavicon32").href = "/icons/family/favicon-32x32.png?v=99";
-        document.getElementById("appFavicon16").href = "/icons/family/favicon-16x16.png?v=99";
-        document.getElementById("appAppleIcon").href = "/icons/family/apple-touch-icon.png?v=99";
-        document.getElementById("appManifest").href = "/manifest-family.webmanifest?v=102";
-      }
+    <script id="portalBoot">
+      (() => {
+        const isFamily = window.location.hostname === "family.kaosgdd.net";
+        const recoveryParam = "kaos-boot-recovery";
+        let recoveryTimer = 0;
+        let recovering = false;
+
+        if (isFamily) {
+          document.documentElement.lang = "ko";
+          document.title = "Kaos Family";
+          document.getElementById("themeColor").content = "#FBF7FC";
+          document.getElementById("appleStatusBarStyle").content = "default";
+          document.getElementById("appleAppTitle").content = "Kaos Family";
+          document.getElementById("appFavicon").href = "/icons/family/favicon.ico?v=99";
+          document.getElementById("appFavicon32").href = "/icons/family/favicon-32x32.png?v=99";
+          document.getElementById("appFavicon16").href = "/icons/family/favicon-16x16.png?v=99";
+          document.getElementById("appAppleIcon").href = "/icons/family/apple-touch-icon.png?v=99";
+          document.getElementById("appManifest").href = "/manifest-family.webmanifest?v=102";
+        }
+
+        function recoveryUrl() {
+          const url = new URL(window.location.href);
+          url.searchParams.set(recoveryParam, String(Date.now()));
+          return url;
+        }
+
+        function prepare() {
+          const app = document.querySelector(".app");
+          const title = document.getElementById("routeTitle");
+          const kicker = document.querySelector(".kicker");
+          const nav = document.getElementById("topNav");
+          const view = document.getElementById("view");
+          if (!app || !view) return;
+          app.dataset.profile = isFamily ? "family" : "main";
+          if (!isFamily) return;
+          if (title) title.textContent = "오늘";
+          if (kicker) kicker.textContent = "";
+          if (nav) nav.setAttribute("aria-label", "가족 메뉴");
+          if (!view.textContent.trim()) {
+            view.innerHTML = '<p class="taskMeta" role="status" aria-live="polite">Family 불러오는 중…</p>';
+          }
+        }
+
+        function showRecovery() {
+          prepare();
+          const view = document.getElementById("view");
+          if (!view) return;
+          const retryHref = recoveryUrl().href.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+          const title = isFamily ? "Family를 시작하지 못했습니다" : "KaosGDD could not start";
+          const detail = isFamily
+            ? "로그인 세션 또는 네트워크 연결을 확인한 뒤 다시 시도해 주세요."
+            : "Check your sign-in session or network connection, then try again.";
+          const action = isFamily ? "다시 로그인" : "Reconnect";
+          view.innerHTML = `
+            <section class="panel" role="alert">
+              <div class="panelHeader"><h2>${title}</h2></div>
+              <div class="panelBody">
+                <p class="taskMeta">${detail}</p>
+                <a class="primaryButton" href="${retryHref}">${action}</a>
+              </div>
+            </section>
+          `;
+        }
+
+        function fail() {
+          if (window.KAOS_PORTAL_BOOT.ready || recovering) return;
+          recovering = true;
+          window.clearTimeout(recoveryTimer);
+          const url = new URL(window.location.href);
+          if (!url.searchParams.has(recoveryParam)) {
+            window.location.replace(recoveryUrl().href);
+            return;
+          }
+          showRecovery();
+        }
+
+        function markReady() {
+          window.KAOS_PORTAL_BOOT.ready = true;
+          recovering = false;
+          window.clearTimeout(recoveryTimer);
+          const url = new URL(window.location.href);
+          if (!url.searchParams.has(recoveryParam)) return;
+          url.searchParams.delete(recoveryParam);
+          try {
+            window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+          } catch (_error) {
+            // The portal is already usable; a stale recovery query is harmless.
+          }
+        }
+
+        window.KAOS_PORTAL_BOOT = { profile: isFamily ? "family" : "main", ready: false, prepare, fail, markReady };
+        window.addEventListener("error", (event) => {
+          const tagName = String(event.target?.tagName || "").toUpperCase();
+          if (!tagName || tagName === "SCRIPT") fail();
+        }, true);
+        recoveryTimer = window.setTimeout(fail, 12_000);
+      })();
     </script>
     <link rel="preload" href="/fonts/sarasa-mono-k-regular.woff2?v=47" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/fonts/Pretendard-Regular.woff2?v=1" as="font" type="font/woff2" crossorigin />
@@ -44,6 +128,8 @@
       <main id="view" class="view" tabindex="-1"></main>
       <div id="overlayRoot"></div>
     </div>
+
+    <script>window.KAOS_PORTAL_BOOT.prepare();</script>
 
     <script src="/translations.js?v=198"></script>
     <script src="/typography.js?v=5"></script>
@@ -71,6 +157,6 @@
     <script src="/text-presets.js?v=1"></script>
     <script src="/smart-events.js?v=1"></script>
     <script src="/gratitude-journal.js?v=4"></script>
-    <script src="/app.js?v=408"></script>
+    <script src="/app.js?v=409"></script>
   </body>
 </html>

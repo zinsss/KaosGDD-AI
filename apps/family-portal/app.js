@@ -10853,6 +10853,7 @@ function render() {
     view.innerHTML = renderCalendarTasksSuppliesEmbed();
     if (overlayRoot) overlayRoot.innerHTML = "";
     if (state.embedView === "supplies") loadSupplies();
+    window.KAOS_PORTAL_BOOT?.markReady();
     return;
   }
   delete app.dataset.embed;
@@ -10961,6 +10962,7 @@ function render() {
   document.querySelector(".ledgerDetailsScroller")?.addEventListener("scroll", updateTopBarShadow, { passive: true });
   updateTopBarShadow();
   renderedRoute = route;
+  window.KAOS_PORTAL_BOOT?.markReady();
 }
 
 function updateOverlayMetrics() {
