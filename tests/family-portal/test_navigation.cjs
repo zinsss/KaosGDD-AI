@@ -67,13 +67,13 @@ test("notification categories point at the selector destination that can acknowl
 
 test("the navigation contract loads before the portal application", () => {
   const index = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/index.html"), "utf8");
-  const styleIndex = index.indexOf('href="/styles.css?v=440"');
+  const styleIndex = index.indexOf('href="/styles.css?v=441"');
   const navigationIndex = index.indexOf('src="/navigation.js?v=11"');
   const calendarViewIndex = index.indexOf('src="/calendar-view.js?v=2"');
   const documentsIndex = index.indexOf('src="/documents.js?v=7"');
   const faxIndex = index.indexOf('src="/fax.js?v=3"');
   const mailIndex = index.indexOf('src="/mail.js?v=7"');
-  const applicationIndex = index.indexOf('src="/app.js?v=410"');
+  const applicationIndex = index.indexOf('src="/app.js?v=411"');
   assert.ok(styleIndex >= 0);
   assert.ok(navigationIndex >= 0);
   assert.ok(calendarViewIndex > navigationIndex);
@@ -104,7 +104,7 @@ test("all PWA pages end with scrollable flow space independent of the iOS safe a
 
 test("mobile layout scrolls without a visible desktop scrollbar", () => {
   const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
-  assert.match(styles, /@media \(max-width: 1179px\) \{\s*\.view \{\s*scrollbar-width: none;/);
+  assert.match(styles, /@media \(max-width: 1279px\) \{\s*\.view \{\s*scrollbar-width: none;/);
   assert.match(styles, /\.view::\-webkit-scrollbar \{\s*display: none;\s*width: 0;\s*height: 0;/);
 });
 
@@ -199,7 +199,7 @@ test("calendar month panel rendering is delegated to the view module", () => {
   assert.match(calendarViewSource, /data-date="\$\{cell\.value\}"/);
   assert.match(calendarViewSource, /data-calendar-add-event/);
   assert.match(index, /src="\/calendar-view\.js\?v=2"/);
-  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=410"'));
+  assert.ok(index.indexOf('src="/calendar-view.js?v=2"') < index.indexOf('src="/app.js?v=411"'));
   assert.match(calendarViewSource, /dayCaregiverMark" role="img"/);
   assert.match(calendarViewSource, /hasMarket \|\| eventCount \|\| taskCount/);
 });
@@ -311,11 +311,11 @@ test("main desktop navigation renders an open list while preserving the mobile p
   assert.match(appSource, /class="desktopMainMenuList"/);
   assert.match(appSource, /data-desktop-main-menu/);
   assert.match(styles, /\.desktopMainMenuList \{\n  display: none;/);
-  assert.match(styles, /@media \(min-width: 1180px\)/);
+  assert.match(styles, /@media \(min-width: 1280px\)/);
   assert.match(styles, /\.app\[data-profile="main"\] \.mainMenuPicker \{\n    display: block;\n    position: static;/);
   assert.match(styles, /\.app\[data-profile="main"\] \.mainMenuPicker select \{\n    display: none;/);
   assert.match(styles, /\.app\[data-profile="main"\] \.desktopMainMenuList \{\n    display: grid;/);
-  assert.match(styles, /\.app\[data-profile="main"\] \.appTop \{\n    border-radius: 0;/);
+  assert.match(styles, /\.app\[data-profile="main"\] \.appTop \{\n    border-radius: 8px;/);
   assert.match(styles, /\.topAddButton \{[\s\S]*display: inline-flex;[\s\S]*width: auto;[\s\S]*height: 36px;[\s\S]*border-radius: 0;/);
   assert.match(styles, /\.topHeaderActions \{[\s\S]*grid-row: 1;[\s\S]*align-self: end;/);
   assert.match(styles, /:is\(\[data-route="calendar"\], \[data-route="tasks"\]\) \.collectionRail button,[\s\S]*?justify-content: center;[\s\S]*?text-align: center;/);
@@ -323,8 +323,8 @@ test("main desktop navigation renders an open list while preserving the mobile p
   assert.match(appSource, /if \(enteringRoute\) view\.scrollTop = 0;/);
   assert.match(styles, /\.app\[data-profile="main"\] \.appIdentity \{\n    padding-right: 140px;/);
   assert.match(styles, /\.app\[data-profile="main"\] \.topNav \{\n    margin-top: 28px;/);
-  assert.match(styles, /@media \(min-width: 1180px\) \{[\s\S]*\.app\[data-profile="main"\] \.view \{[\s\S]*padding-top: 0;[\s\S]*padding-bottom: 40px;/);
-  assert.match(styles, /@media \(min-width: 1180px\) \{[\s\S]*\.app\[data-profile="main"\]\[data-route="memos"\] \.view \{[\s\S]*padding-top: 0;[\s\S]*padding-bottom: 40px;/);
+  assert.match(styles, /@media \(min-width: 1280px\) \{[\s\S]*\.app\[data-profile="main"\] \.view \{[\s\S]*padding-top: 0;[\s\S]*padding-bottom: 40px;/);
+  assert.match(styles, /@media \(min-width: 1280px\) \{[\s\S]*\.app\[data-profile="main"\]\[data-route="memos"\] \.view \{[\s\S]*padding-top: 0;[\s\S]*padding-bottom: 40px;/);
   assert.match(styles, /\.app\[data-profile="main"\] \.topHeaderActions \{\n    position: absolute;\n    top: 16px;\n    right: 16px;/);
 });
 
@@ -332,7 +332,7 @@ test("narrow browser layout uses the themed compact menu", () => {
   const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
   const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
 
-  assert.match(styles, /@media \(max-width: 1179px\) and \(display-mode: browser\)/);
+  assert.match(styles, /@media \(max-width: 1279px\) and \(display-mode: browser\)/);
   assert.match(styles, /\.app\[data-profile="main"\] \.mainMenuPicker select \{\s*display: none;/);
   assert.match(styles, /\.compactMainMenuPopup \{[\s\S]*background: rgba\(37, 43, 54, 0\.98\);/);
   assert.match(styles, /\.compactMainMenuPopup a\.isActive \{[\s\S]*color: var\(--nord13\);/);
@@ -362,7 +362,7 @@ test("family mobile navigation stays on one horizontal row", () => {
   const appSource = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/app.js"), "utf8");
   const styles = fs.readFileSync(path.join(__dirname, "../../apps/family-portal/styles.css"), "utf8");
 
-  assert.match(styles, /@media \(max-width: 1179px\) \{[\s\S]*\.app\[data-profile="family"\] \.topNav \{[\s\S]*display: flex;[\s\S]*flex-wrap: nowrap;[\s\S]*overflow-x: auto;/);
+  assert.match(styles, /@media \(max-width: 1279px\) \{[\s\S]*\.app\[data-profile="family"\] \.topNav \{[\s\S]*display: flex;[\s\S]*flex-wrap: nowrap;[\s\S]*overflow-x: auto;/);
   assert.match(styles, /\.app\[data-profile="family"\] \.topNav a \{[\s\S]*touch-action: manipulation;/);
   assert.match(styles, /\.app\[data-profile="family"\] \.topNav a \{[\s\S]*flex: 0 0 auto;/);
   assert.match(appSource, /const familyNavLink = event\.target\.closest\("\[data-nav\]"\);[\s\S]*?if \(window\.location\.hash === nextHash\) render\(\);[\s\S]*?window\.location\.hash = nextHash;[\s\S]*?render\(\);/);

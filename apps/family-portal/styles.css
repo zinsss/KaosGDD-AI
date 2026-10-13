@@ -504,7 +504,7 @@ html.isAgendaSuppliesEmbed body {
     0 8px 16px rgba(9, 12, 18, 0.33);
 }
 
-@media (max-width: 1179px) {
+@media (max-width: 1279px) {
   .app[data-profile="main"] .appTop {
     box-shadow:
       0 2px 5px rgba(9, 12, 18, 0.22),
@@ -758,7 +758,7 @@ html.isAgendaSuppliesEmbed body {
   color: var(--nord11);
 }
 
-@media (max-width: 1179px) {
+@media (max-width: 1279px) {
   .app[data-profile="main"] .appTop {
     align-items: center;
     grid-template-columns: auto minmax(148px, 1fr);
@@ -805,7 +805,7 @@ html.isAgendaSuppliesEmbed body {
   }
 }
 
-@media (max-width: 1179px) and (display-mode: browser) {
+@media (max-width: 1279px) and (display-mode: browser) {
   .app[data-profile="main"] .appTop {
     gap: 7px;
   }
@@ -956,7 +956,7 @@ h3 {
   outline: none;
 }
 
-@media (max-width: 1179px) {
+@media (max-width: 1279px) {
   .view {
     scrollbar-width: none;
   }
@@ -6336,7 +6336,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   grid-template-columns: repeat(9, auto);
 }
 
-@media (max-width: 1179px) {
+@media (max-width: 1279px) {
   .app[data-profile="family"] .topNav {
     display: flex;
     flex-wrap: nowrap;
@@ -7158,7 +7158,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   }
 }
 
-@media (min-width: 1180px) {
+@media (min-width: 1280px) {
   html,
   body {
     height: 100%;
@@ -7200,6 +7200,8 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
     border-radius: 8px;
     background: var(--panel);
     box-shadow: 0 12px 28px var(--shadow);
+    scrollbar-gutter: stable;
+    overflow-x: hidden;
     overflow-y: auto;
   }
 
@@ -7237,8 +7239,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   }
 
   .app[data-profile="main"] .appTop {
-    border-radius: 0;
-    overflow: visible;
+    border-radius: 8px;
   }
 
   .app[data-profile="main"] .appIdentity {
@@ -7386,6 +7387,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
     padding: 0 0 40px;
     overflow-y: auto;
     overflow-x: hidden;
+    scrollbar-gutter: stable;
     -webkit-overflow-scrolling: touch;
   }
 
@@ -7433,7 +7435,8 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 
   .ledgerDesktopTableWrap {
     display: block;
-    overflow: visible;
+    overflow-x: auto;
+    overflow-y: visible;
   }
 
   .ledgerMobileList {
@@ -7442,6 +7445,7 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
 
   .ledgerTable {
     width: 100%;
+    min-width: 1120px;
     border-collapse: separate;
     border-spacing: 0;
     table-layout: fixed;
@@ -7664,9 +7668,8 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   .desktopContextPane {
     position: sticky;
     top: 0;
-    max-height: calc(100dvh - 48px);
-    overflow-y: auto;
-    overflow-x: hidden;
+    max-height: none;
+    overflow: visible;
   }
 
   .calendarGrid {
@@ -8475,6 +8478,27 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   border-color: var(--main-tab-active-border);
   background: var(--main-tab-active-bg);
   color: var(--main-tab-active-text);
+}
+
+@media (min-width: 1280px) {
+  .app:is([data-profile="main"], [data-profile="family"][data-route="memos"]) [data-archive-kind="memos"] .memoArchiveCommands,
+  .app[data-profile="main"] [data-archive-kind="mail"] .mailArchiveCommands,
+  .app[data-profile="main"] [data-archive-kind="fax"] .faxArchiveCommands,
+  .app[data-profile="main"] [data-archive-kind="documents"] .documentArchiveCommands {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    width: auto;
+  }
+
+  .app:is([data-profile="main"], [data-profile="family"][data-route="memos"]) [data-archive-kind="memos"] .memoArchiveCommands .archiveTopAction,
+  .app[data-profile="main"] [data-archive-kind="mail"] .mailArchiveCommands .archiveTopAction,
+  .app[data-profile="main"] [data-archive-kind="fax"] .faxArchiveCommands .archiveTopAction,
+  .app[data-profile="main"] [data-archive-kind="documents"] .documentArchiveCommands .archiveTopAction {
+    width: auto;
+    min-height: 36px;
+    padding: 6px 10px;
+  }
 }
 
 .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"], [data-profile="family"][data-route="memos"]) .archiveAction:hover,
@@ -9381,13 +9405,13 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   color: var(--nord14);
 }
 
-@media (max-width: 1179px) {
+@media (max-width: 1279px) {
   .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"], [data-profile="family"][data-route="memos"]) .archiveWorkspace.hasDetail .archiveIndex {
     display: none;
   }
 }
 
-@media (min-width: 1180px) {
+@media (min-width: 1280px) {
   .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"], [data-profile="family"][data-route="memos"]) .archiveTerminal {
     gap: 14px;
   }
@@ -9440,8 +9464,8 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"], [data-profile="family"][data-route="memos"]) .archiveDetail {
     position: sticky;
     top: 0;
-    max-height: calc(100dvh - 32px);
-    overflow: auto;
+    max-height: none;
+    overflow: visible;
   }
 
   .app:is([data-profile="main"], [data-profile="family"][data-route="ai-tasks"], [data-profile="family"][data-route="memos"]) .archiveOcrRegion pre {

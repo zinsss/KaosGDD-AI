@@ -26,6 +26,17 @@ test("main shell shows markers in mobile dropdown and desktop open list", () => 
   assert.match(appSource, /<span>\$\{escapeHtml\(item\.label\)\}<\/span>\n              \$\{renderMainMenuAttentionDot\(item\.route\)\}/);
 });
 
+test("attention refresh updates existing navigation markers without replacing focused navigation", () => {
+  assert.match(appSource, /function syncMainMenuAttentionDot\(element, route\) \{/);
+  assert.match(appSource, /nav\.querySelectorAll\("\[data-compact-main-menu-route\]"\)\.forEach/);
+  assert.match(appSource, /nav\.querySelectorAll\("\[data-desktop-main-menu\]"\)\.forEach/);
+  assert.match(appSource, /nav\.querySelectorAll\("select\[data-main-menu\] option"\)\.forEach/);
+  assert.match(appSource, /if \(!nav\?\.childElementCount\) \{\s*renderTopNav\(getRoute\(\)\);\s*return;\s*\}/);
+  const refreshSource = appSource.slice(appSource.indexOf("function refreshMainAttentionShell"), appSource.indexOf("async function loadMainAttention"));
+  assert.equal((refreshSource.match(/renderTopNav\(getRoute\(\)\)/g) || []).length, 1);
+  assert.doesNotMatch(refreshSource, /nav\.innerHTML/);
+});
+
 test("viewing a loaded dotted notification destination acknowledges only that route", () => {
   assert.match(appSource, /function pendingNotificationsForRoute\(route\) \{/);
   assert.match(appSource, /notificationRoute\(item\) === selectedRoute/);

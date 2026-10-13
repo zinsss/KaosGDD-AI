@@ -56,7 +56,7 @@ const TASK_MEMO_PLACEHOLDER = "Plain memos or;\n-- active subtasks\n-x done subt
 const DEFAULT_EVENT_START_TIME = "09:00";
 const DEFAULT_EVENT_END_TIME = "10:00";
 const MEMOS_URL = "https://memos.kaosgdd.net";
-const DESKTOP_MEDIA_QUERY = "(min-width: 1180px)";
+const DESKTOP_MEDIA_QUERY = "(min-width: 1280px)";
 const PERSONAL_MAIL_FOLDERS = Object.freeze(["영덕군보건소", "세무사"]);
 const LEDGER_VIEWS = new Set(["all", "expense", "income"]);
 const LEDGER_RANGES = new Set(["all", "year", "month", "week", "custom"]);
@@ -6113,6 +6113,22 @@ function renderMainMenuAttentionDot(route) {
   return severity ? `<span class="mainMenuAttentionDot is-${escapeHtml(severity)}" aria-hidden="true">•</span>` : "";
 }
 
+function syncMainMenuAttentionDot(element, route) {
+  if (!element) return;
+  const marker = Array.from(element.children).find((child) => child.classList.contains("mainMenuAttentionDot"));
+  const severity = mainAttentionMarkers()[route];
+  if (!severity) {
+    marker?.remove();
+    return;
+  }
+  if (marker) {
+    marker.className = `mainMenuAttentionDot is-${severity}`;
+    return;
+  }
+  const chevron = element.querySelector(".compactMainMenuChevron");
+  (chevron || element).insertAdjacentHTML(chevron ? "beforebegin" : "beforeend", renderMainMenuAttentionDot(route));
+}
+
 function refreshMainAttentionShell() {
   if (portalProfile() !== "main") return;
   const app = document.querySelector(".app");
@@ -6121,7 +6137,23 @@ function refreshMainAttentionShell() {
     if (severity) app.dataset.attention = severity;
     else delete app.dataset.attention;
   }
-  renderTopNav(getRoute());
+  const nav = document.getElementById("topNav");
+  if (!nav?.childElementCount) {
+    renderTopNav(getRoute());
+    return;
+  }
+  nav.querySelectorAll("[data-compact-main-menu-route]").forEach((item) => {
+    syncMainMenuAttentionDot(item, item.dataset.compactMainMenuRoute);
+  });
+  nav.querySelectorAll("[data-desktop-main-menu]").forEach((item) => {
+    syncMainMenuAttentionDot(item, item.dataset.desktopMainMenu);
+  });
+  const selectedRoute = window.KAOS_PORTAL_NAVIGATION?.selectedPersonalRoute(activeNavRoute(getRoute())) || "agenda";
+  syncMainMenuAttentionDot(nav.querySelector("[data-compact-main-menu-toggle]"), selectedRoute);
+  nav.querySelectorAll("select[data-main-menu] option").forEach((option) => {
+    const item = profileConfig().nav.find((candidate) => candidate.route === option.value);
+    if (item) option.textContent = mainMenuLabelWithAttention(item);
+  });
 }
 
 async function loadMainAttention({ force = false } = {}) {
