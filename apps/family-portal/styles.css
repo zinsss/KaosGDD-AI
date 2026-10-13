@@ -1320,7 +1320,7 @@ h3 {
 
 .ledgerMobileRow {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 10px;
   width: 100%;
@@ -1335,10 +1335,6 @@ h3 {
 
 .ledgerMobileRow:last-child {
   border-bottom: 0;
-}
-
-.ledgerMobileRow:disabled {
-  opacity: 0.68;
 }
 
 .ledgerMobileDate,
@@ -1363,6 +1359,27 @@ h3 {
 .ledgerMobileMain small {
   color: var(--dim);
   font-size: 0.74rem;
+}
+
+.ledgerEditButton,
+.ledgerLockedAction {
+  min-width: 48px;
+  min-height: 32px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  color: #7d4f75;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.ledgerLockedAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dim);
 }
 
 .app[data-profile="family"][data-route="ledger"] {
@@ -7463,36 +7480,22 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
   .ledgerTable th:nth-child(5),
   .ledgerTable th:nth-child(6),
   .ledgerTable th:nth-child(7) { width: 118px; }
-  .ledgerTable th:nth-child(8) { width: 76px; }
-
-  .ledgerTable input,
-  .ledgerTable select {
-    min-height: 34px;
-    padding: 5px 7px;
-    border-color: transparent;
-    border-radius: 3px;
-    background: transparent;
-    font-size: 0.84rem;
-  }
-
-  .ledgerTable input:focus,
-  .ledgerTable select:focus {
-    border-color: #b474a6;
-    background: var(--surface);
-    outline: 2px solid rgba(180, 116, 166, 0.16);
-  }
+  .ledgerTable th:nth-child(8) { width: 112px; }
 
   .ledgerTable tr.isLocked td {
     background: color-mix(in srgb, var(--panel) 92%, var(--line));
   }
 
-  .ledgerLockedValue {
+  .ledgerRowValue {
     display: block;
     overflow: hidden;
-    color: var(--dim);
     font-size: 0.82rem;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .ledgerRowAmount {
+    text-align: right;
   }
 
   .ledgerMoney {
@@ -7508,15 +7511,22 @@ html.kaosWeatherIconsReady .weatherLocationGlyph {
     white-space: nowrap;
   }
 
-  .ledgerSaveButton,
+  .ledgerEditButton,
   .ledgerDeleteButton {
-    width: 28px;
+    min-width: 28px;
     height: 28px;
     padding: 0;
     border: 1px solid var(--line);
     border-radius: 4px;
     background: var(--surface);
     color: #7b9e72;
+  }
+
+  .ledgerEditButton {
+    width: auto;
+    padding: 0 6px;
+    color: #7d4f75;
+    font-size: 0.72rem;
   }
 
   .ledgerDeleteButton {

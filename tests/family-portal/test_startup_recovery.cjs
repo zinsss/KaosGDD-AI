@@ -109,7 +109,7 @@ test("successful render cancels recovery and removes its transient query", () =>
   assert.equal(boot.window.KAOS_PORTAL_BOOT.ready, true);
   assert.deepEqual(boot.history, ["/#/today"]);
   assert.match(appSource, /window\.KAOS_PORTAL_BOOT\?\.markReady\(\);/);
-  assert.match(indexSource, /src="\/app\.js\?v=409"/);
+  assert.match(indexSource, /src="\/app\.js\?v=410"/);
 });
 
 test("Family cannot inherit the Main service worker cache", () => {

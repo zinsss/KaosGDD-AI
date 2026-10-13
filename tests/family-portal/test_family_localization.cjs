@@ -45,7 +45,7 @@ test("Family routes and refreshed assets cannot fall back to stale English label
   assert.match(indexSource, /src="\/translations\.js\?v=198"/);
   assert.match(indexSource, /src="\/ai-tasks-view\.js\?v=6"/);
   assert.match(indexSource, /src="\/memos-view\.js\?v=16"/);
-  assert.match(indexSource, /src="\/app\.js\?v=409"/);
+  assert.match(indexSource, /src="\/app\.js\?v=410"/);
 });
 
 test("Family memo board renders Korean controls and headings", () => {

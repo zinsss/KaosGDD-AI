@@ -4867,11 +4867,19 @@ function ledgerPayloadFromContainer(container) {
   };
 }
 
+function setLedgerEditorBusy(container, busy) {
+  container.setAttribute("aria-busy", busy ? "true" : "false");
+  container.querySelectorAll("input, select, button").forEach((control) => {
+    control.disabled = busy;
+  });
+}
+
 async function saveLedgerEntry(container) {
   if (state.ledger.saving) return;
   const entryId = container.dataset.ledgerId || "";
   const payload = ledgerPayloadFromContainer(container);
   state.ledger.saving = true;
+  setLedgerEditorBusy(container, true);
   try {
     const result = await ledgerRequest(
       entryId ? `/api/ledger/entries/${encodeURIComponent(entryId)}` : "/api/ledger/entries",
@@ -4883,6 +4891,7 @@ async function saveLedgerEntry(container) {
     render();
   } catch (error) {
     state.ledger.saving = false;
+    setLedgerEditorBusy(container, false);
     if (error.message === "ledger_revision_conflict") await loadLedger({ force: true });
     throw error;
   }
@@ -9952,13 +9961,13 @@ function renderLedgerEditor(entry = null) {
           <p class="label">${escapeHtml(uiText("ledger.entry", "Entry"))}</p>
           <h2>${escapeHtml(entry ? uiText("ledger.edit", "Edit entry") : uiText("ledger.add", "Add entry"))}</h2>
         </div>
-        <button class="openButton" type="button" data-ledger-cancel>${escapeHtml(uiText("common.close", "Close"))}</button>
+        <button class="openButton" type="button" data-ledger-cancel>${escapeHtml(uiText("common.cancel", "Cancel"))}</button>
       </div>
       <div class="ledgerEditorFields">
         <label><span>${escapeHtml(uiText("ledger.date", "Date"))}</span><input name="date" type="date" value="${escapeHtml(draft.date)}" required /></label>
         <label><span>${escapeHtml(uiText("ledger.category", "Category"))}</span><select name="category">${ledgerCategoryOptions(draft.category)}</select></label>
-        <label><span>${escapeHtml(uiText("ledger.amount", "Amount"))}</span><input name="amount" type="text" inputmode="numeric" value="${draft.amount ?? ""}" required /></label>
-        <label class="ledgerDetailsField"><span>${escapeHtml(uiText("ledger.details", "Details"))}</span><input name="details" type="text" value="${escapeHtml(draft.details || "")}" /></label>
+        <label><span>${escapeHtml(uiText("ledger.amount", "Amount"))}</span><input name="amount" type="text" inputmode="numeric" pattern="[0-9]+(,[0-9]{3})*" value="${draft.amount ?? ""}" required /></label>
+        <label class="ledgerDetailsField"><span>${escapeHtml(uiText("ledger.details", "Details"))}</span><input name="details" type="text" maxlength="10000" value="${escapeHtml(draft.details || "")}" /></label>
       </div>
       <div class="ledgerEditorActions">
         ${entry && !entry.locked ? `<button class="dangerButton" type="button" data-ledger-delete="${escapeHtml(entry.id)}">${escapeHtml(uiText("common.delete", "Delete"))}</button>` : ""}
@@ -9986,22 +9995,16 @@ function renderLedgerDesktopTable(entries) {
         </thead>
         <tbody>
           ${entries.map((entry) => `
-            <tr data-ledger-row data-ledger-id="${escapeHtml(entry.id)}" data-ledger-revision="${entry.revision}" class="${entry.locked ? "isLocked" : ""}">
-              <td><input name="date" type="date" value="${escapeHtml(entry.date)}" ${entry.locked ? "disabled" : ""} /></td>
-              <td>${entry.locked
-                ? `<span class="ledgerLockedValue">${escapeHtml(entry.category)}</span>`
-                : `<select name="category">${ledgerCategoryOptions(entry.category)}</select>`}</td>
-              <td>${entry.locked
-                ? `<span class="ledgerLockedValue">-</span>`
-                : `<input name="amount" type="text" inputmode="numeric" value="${entry.amount ?? ""}" />`}</td>
-              <td>${entry.locked
-                ? `<span class="ledgerLockedValue">${escapeHtml(entry.details || "")}</span>`
-                : `<input name="details" type="text" value="${escapeHtml(entry.details || "")}" />`}</td>
+            <tr class="${entry.locked ? "isLocked" : ""}">
+              <td><span class="ledgerRowValue">${escapeHtml(entry.date)}</span></td>
+              <td><span class="ledgerRowValue">${escapeHtml(entry.category)}</span></td>
+              <td><span class="ledgerRowValue ledgerRowAmount">${entry.amount === null ? "-" : formatLedgerMoney(entry.amount)}</span></td>
+              <td><span class="ledgerRowValue">${escapeHtml(entry.details || uiText("ledger.noDetails", "No details"))}</span></td>
               <td class="ledgerMoney">${formatLedgerMoney(entry.account)}</td>
               <td class="ledgerMoney">${formatLedgerMoney(entry.cash)}</td>
               <td class="ledgerMoney">${formatLedgerMoney(entry.gift)}</td>
               <td class="ledgerRowActions">${entry.locked ? `<span title="${escapeHtml(uiText("ledger.openingLocked", "Opening balance is locked"))}">${escapeHtml(uiText("ledger.locked", "Locked"))}</span>` : `
-                <button type="button" class="ledgerSaveButton" data-ledger-save-row title="${escapeHtml(uiText("common.save", "Save"))}">✓</button>
+                <button type="button" class="ledgerEditButton" data-ledger-edit="${escapeHtml(entry.id)}">${escapeHtml(uiText("common.edit", "Edit"))}</button>
                 <button type="button" class="ledgerDeleteButton" data-ledger-delete="${escapeHtml(entry.id)}" title="${escapeHtml(uiText("common.delete", "Delete"))}">×</button>
               `}</td>
             </tr>
@@ -10016,11 +10019,14 @@ function renderLedgerMobileList(entries) {
   return `
     <div class="ledgerMobileList">
       ${entries.length ? [...entries].reverse().map((entry) => `
-        <button class="ledgerMobileRow" type="button" data-ledger-edit="${escapeHtml(entry.id)}" ${entry.locked ? "disabled" : ""}>
+        <div class="ledgerMobileRow">
           <span class="ledgerMobileDate">${escapeHtml(entry.date)}</span>
           <span class="ledgerMobileMain"><strong>${escapeHtml(entry.category)}</strong><small>${escapeHtml(entry.details || uiText("ledger.noDetails", "No details"))}</small></span>
           <span class="ledgerMobileAmount">${entry.amount === null ? "-" : formatLedgerMoney(entry.amount)}</span>
-        </button>
+          ${entry.locked
+            ? `<span class="ledgerLockedAction" title="${escapeHtml(uiText("ledger.openingLocked", "Opening balance is locked"))}">${escapeHtml(uiText("ledger.locked", "Locked"))}</span>`
+            : `<button type="button" class="ledgerEditButton" data-ledger-edit="${escapeHtml(entry.id)}" aria-label="${escapeHtml(`${uiText("common.edit", "Edit")}: ${entry.date} ${entry.category}`)}">${escapeHtml(uiText("common.edit", "Edit"))}</button>`}
+        </div>
       `).join("") : `<p class="ledgerEmpty">${escapeHtml(uiText("ledger.noMatchingEntries", "No matching entries"))}</p>`}
     </div>
   `;
@@ -11228,20 +11234,6 @@ document.addEventListener("click", async (event) => {
     state.ledger.checked = false;
     state.ledger.error = "";
     await loadLedger({ force: true });
-    return;
-  }
-
-  const saveLedgerRow = event.target.closest("[data-ledger-save-row]");
-  if (saveLedgerRow) {
-    const row = saveLedgerRow.closest("[data-ledger-row]");
-    if (!row) return;
-    try {
-      await saveLedgerEntry(row);
-    } catch (error) {
-      window.alert(uiText("dialog.ledgerSaveError", "Could not save ledger entry: {error}", {
-        error: error.message || uiText("dialog.unknownError", "unknown error"),
-      }));
-    }
     return;
   }
 
