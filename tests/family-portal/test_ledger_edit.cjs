@@ -28,7 +28,7 @@ test("ledger edit reuses the validated revision-aware PUT form with cancel and e
   assert.match(appSource, /window\.alert\(uiText\("dialog\.ledgerSaveError"/);
 });
 
-test("ledger JavaScript and CSS cache versions are bumped together", () => {
-  assert.match(indexSource, /href="\/styles\.css\?v=441"/);
+test("ledger CSS cache version includes the latest readability styles", () => {
+  assert.match(indexSource, /href="\/styles\.css\?v=442"/);
   assert.match(indexSource, /src="\/app\.js\?v=411"/);
 });
