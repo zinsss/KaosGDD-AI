@@ -20,7 +20,8 @@ from zoneinfo import ZoneInfo
 
 KST = ZoneInfo("Asia/Seoul")
 RECEIPT_WIDTH_MM = 80
-PRINTABLE_WIDTH_MM = 70
+PRINTABLE_WIDTH_MM = 72
+RECEIPT_SIDE_MARGIN_MM = (RECEIPT_WIDTH_MM - PRINTABLE_WIDTH_MM) / 2
 MIN_RECEIPT_HEIGHT_MM = 40
 MAX_RECEIPT_HEIGHT_MM = 2_000
 MAX_BODY_CHARS = 16_000
@@ -406,7 +407,7 @@ def render_pdf(value: object, *, now: datetime | None = None) -> bytes:
 
     output = io.BytesIO()
     canvas = Canvas(output, pagesize=(RECEIPT_WIDTH_MM * mm, height), pageCompression=1)
-    x = 5 * mm
+    x = RECEIPT_SIDE_MARGIN_MM * mm
     y = height - 5 * mm
     for op in measured:
         if op["type"] == "space":

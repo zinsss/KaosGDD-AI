@@ -74,6 +74,15 @@ class ThermalPrintTests(unittest.TestCase):
         self.assertGreaterEqual(height, 40 / 25.4 * 72)
         self.assertLessEqual(height, 2_000 / 25.4 * 72)
 
+    def test_receipt_content_uses_almost_the_full_native_print_head(self) -> None:
+        native_width_mm = 512 / 180 * 25.4
+
+        self.assertEqual(thermal_print.RECEIPT_WIDTH_MM, 80)
+        self.assertEqual(thermal_print.PRINTABLE_WIDTH_MM, 72)
+        self.assertEqual(thermal_print.RECEIPT_SIDE_MARGIN_MM, 4)
+        self.assertLessEqual(thermal_print.PRINTABLE_WIDTH_MM, native_width_mm)
+        self.assertLess((native_width_mm - thermal_print.PRINTABLE_WIDTH_MM) / 2, 0.13)
+
     def test_short_receipt_does_not_waste_a_long_blank_tail(self) -> None:
         pdf = thermal_print.render_pdf(
             {

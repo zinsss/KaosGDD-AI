@@ -39,7 +39,10 @@ paper.
    bounded ESC/POS bands followed by a partial-cut command. The SAM4S
    GIANT-100 uses 180 dpi and 512 dots. The default threshold of `168` makes
    small strokes modestly darker without pretending the print head has a
-   higher physical resolution. Jobs with kind `image` instead keep the PDF
+   higher physical resolution. The 80 mm receipt PDF keeps its content within
+   72 mm, leaving about 0.12 mm per side after the native-width center crop so
+   text uses almost the entire 512-dot print head without being rescaled or
+   clipped. Jobs with kind `image` instead keep the PDF
    grayscale until this final native-resolution step and apply serpentine
    error diffusion once; this avoids moire from re-rasterizing a pre-dithered
    image. `THERMAL_CONNECTOR_PHOTO_THRESHOLD` defaults to `128`.
