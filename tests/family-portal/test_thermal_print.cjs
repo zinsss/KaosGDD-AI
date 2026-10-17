@@ -14,8 +14,8 @@ const moduleSource = fs.readFileSync(path.join(root, "thermal-print.js"), "utf8"
 const stylesSource = fs.readFileSync(path.join(root, "styles.css"), "utf8");
 
 test("loads the thermal print controller before the application", () => {
-  assert.match(indexSource, /src="\/thermal-print\.js\?v=5"/);
-  assert.ok(indexSource.indexOf('src="/thermal-print.js?v=5"') < indexSource.indexOf('src="/app.js?v=411"'));
+  assert.match(indexSource, /src="\/thermal-print\.js\?v=6"/);
+  assert.ok(indexSource.indexOf('src="/thermal-print.js?v=6"') < indexSource.indexOf('src="/app.js?v=411"'));
 });
 
 test("limits print actions to the requested personal surfaces", () => {
@@ -198,4 +198,64 @@ test("renders the selector as a modal using the current PWA design tokens", () =
   assert.match(stylesSource, /\.thermalPrintCommand\.isActive \{[\s\S]*?background: transparent;[\s\S]*?color: var\(--main-tab-active-text\);/);
   assert.doesNotMatch(moduleSource, /class="archiveAction[^\"]*"[^>]*data-thermal-print-(?:preview|submit)/);
   assert.match(stylesSource, /html\.hasThermalPrintDialog/);
+});
+
+test("fits the PDF page coordinate width to the preview pane without a 72-to-96 dpi gutter", async () => {
+  const pane = { clientWidth: 540 };
+  const stage = { style: {} };
+  const frame = { style: {} };
+  const overlay = {
+    innerHTML: "",
+    querySelector(selector) {
+      return {
+        "[data-thermal-preview-pane]": pane,
+        "[data-thermal-preview-stage]": stage,
+        "[data-thermal-preview-frame]": frame,
+      }[selector] || null;
+    },
+  };
+  const context = {
+    document: {
+      documentElement: { classList: { add() {}, remove() {} } },
+      addEventListener() {},
+      getElementById: () => overlay,
+    },
+    fetch: async (url) => {
+      if (String(url).endsWith("/destinations")) {
+        return {
+          ok: true,
+          json: async () => ({
+            ok: true,
+            destinations: [{ id: "home", label: "Home", available: true, status: "ready" }],
+          }),
+        };
+      }
+      return {
+        ok: true,
+        blob: async () => ({
+          text: async () => "%PDF-1.4\n/MediaBox [ 0 0 226.7717 113.3858 ]",
+        }),
+      };
+    },
+    URL: {
+      createObjectURL: () => "blob:kaos-receipt-preview",
+      revokeObjectURL() {},
+    },
+    window: {
+      alert() {},
+      addEventListener() {},
+      requestAnimationFrame(callback) { callback(); },
+    },
+  };
+  vm.runInNewContext(moduleSource, context);
+
+  await context.window.KAOS_THERMAL_PRINT.open({ version: 1, kind: "task", title: "Test task" });
+
+  const pdfPageWidth = 80 * 72 / 25.4;
+  const scale = pane.clientWidth / pdfPageWidth;
+  assert.ok(Math.abs(Number.parseFloat(frame.style.width) - pdfPageWidth) < 0.001);
+  assert.ok(Math.abs(Number.parseFloat(frame.style.height) - (40 * 72 / 25.4)) < 0.001);
+  assert.ok(Math.abs(Number.parseFloat(frame.style.transform.slice(6)) - scale) < 0.001);
+  assert.ok(Math.abs(Number.parseFloat(frame.style.width) * scale - pane.clientWidth) < 0.001);
+  assert.equal(stage.style.height, "270px");
 });

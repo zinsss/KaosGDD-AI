@@ -126,9 +126,12 @@ window.KAOS_THERMAL_PRINT = (() => {
     const stage = overlay.querySelector("[data-thermal-preview-stage]");
     const frame = overlay.querySelector("[data-thermal-preview-frame]");
     if (!pane || !stage || !frame || !pane.clientWidth) return;
-    const pxPerMm = 96 / 25.4;
-    const nativeWidth = state.previewWidthMm * pxPerMm;
-    const nativeHeight = state.previewHeightMm * pxPerMm;
+    // Inline PDF viewers lay out a PDF point as one CSS pixel before transforms.
+    // Use the PDF's 72 pt/in coordinate space so the page itself, rather than
+    // the iframe's white background, fills the preview pane on mobile WebKit.
+    const pdfPointsPerMm = 72 / 25.4;
+    const nativeWidth = state.previewWidthMm * pdfPointsPerMm;
+    const nativeHeight = state.previewHeightMm * pdfPointsPerMm;
     const scale = pane.clientWidth / nativeWidth;
     const scaledWidth = nativeWidth * scale;
     frame.style.width = `${nativeWidth}px`;
